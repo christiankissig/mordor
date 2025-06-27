@@ -1,0 +1,82 @@
+# OCaml compiled files
+*.cmo
+*.cmi
+*.cma
+*.cmx
+*.cmxa
+*.cmxs
+*.o
+*.a
+*.so
+*.obj
+*.lib
+*.dll
+
+# Native code compilation
+*.opt
+*.native
+
+# Bytecode compilation
+*.byte
+
+# Build directories
+_build/
+_opam/
+
+# Dune build artifacts
+.install
+*.install
+
+# OCaml documentation
+*.odoc
+_doc/
+doc/
+
+# Merlin configuration
+.merlin
+
+# OCaml REPL history
+.ocamlinit_history
+
+# Opam files (uncomment if you want to ignore local opam files)
+# *.opam
+# opam
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Dependencies
+node_modules/
+
+# Coverage reports
+coverage/
+bisect*.coverage
+_coverage/
+
+# Profiling
+gmon.out
+*.prof
+
+# Backup files
+*.bak
+*.orig
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
