@@ -23,6 +23,9 @@
 _build/
 _opam/
 
+# Binary files
+bin/act
+
 # Dune build artifacts
 .install
 *.install
