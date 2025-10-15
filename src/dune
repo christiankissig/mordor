@@ -1,0 +1,13 @@
+(library
+ (name smrd_lib)
+ (wrapped false)  ; Add this line
+ (modules types uset expr rewrite solver symmrd interpret parse)
+ (flags (:standard -w -26-27))
+ (libraries lwt lwt.unix z3 zarith)
+ (preprocess (pps lwt_ppx)))
+
+(executable
+ (name main)
+ (modules main)
+ (libraries smrd_lib lwt lwt.unix)
+ (preprocess (pps lwt_ppx)))

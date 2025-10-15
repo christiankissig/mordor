@@ -1,8 +1,0 @@
-(executable
- (public_name test-smrd-parser)
- (name test_smrd_parser)
- (libraries mordor))
-
-(rule
- (alias runtest)
- (action (run ./test_smrd_parser.exe)))

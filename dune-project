@@ -1,26 +1,22 @@
-(lang dune 3.19)
-
-(name mordor)
-
+(lang dune 3.7)
+(name smrd)
 (generate_opam_files true)
 
-(source
- (github username/reponame))
-
-(authors "Author Name <author@example.com>")
-
-(maintainers "Maintainer Name <maintainer@example.com>")
-
-(license LICENSE)
-
-(documentation https://url/to/documentation)
+(source (github username/smrd))
+(authors "sMRD Contributors")
+(maintainers "maintainer@example.com")
+(license MIT)
 
 (package
- (name mordor)
- (synopsis "A short synopsis")
- (description "A longer description")
- (depends ocaml)
- (tags
-  ("add topics" "to describe" your project)))
-
-; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
+ (name smrd)
+ (allow_empty)
+ (synopsis "Symbolic Memory Relaxation Dependency analyzer")
+ (description "OCaml implementation of sMRD memory model verifier")
+ (depends
+  (ocaml (>= 4.14))
+  (dune (>= 3.7))
+  (lwt (>= 5.6.0))
+  (lwt_ppx (>= 2.0.0))
+  (z3 (>= 4.8.0))
+  (zarith (>= 1.12))
+  (containers (>= 3.0))))
