@@ -15,6 +15,7 @@ depends: [
   "z3" {>= "4.8.0"}
   "zarith" {>= "1.12"}
   "containers" {>= "3.0"}
+  "alcotest" {with-test}
   "odoc" {with-doc}
 ]
 build: [

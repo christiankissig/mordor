@@ -4,10 +4,12 @@
  (modules types uset expr rewrite solver symmrd interpret parse)
  (flags (:standard -w -26-27))
  (libraries lwt lwt.unix z3 zarith)
- (preprocess (pps lwt_ppx)))
+ (preprocess (pps lwt_ppx))
+ (public_name smrd))
 
 (executable
  (name main)
+ (public_name smrd)
  (modules main)
  (libraries smrd_lib lwt lwt.unix)
  (preprocess (pps lwt_ppx)))

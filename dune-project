@@ -19,4 +19,5 @@
   (lwt_ppx (>= 2.0.0))
   (z3 (>= 4.8.0))
   (zarith (>= 1.12))
-  (containers (>= 3.0))))
+  (containers (>= 3.0))
+  (alcotest :with-test)))
