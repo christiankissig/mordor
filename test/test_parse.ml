@@ -8,8 +8,8 @@ let test_parse_complex () =
   Alcotest.(check bool) "parse complex expression" true true
 
 let suite =
-  (
-    "Parser", [
+  ( "Parser",
+    [
       Alcotest.test_case "Parse simple input" `Quick test_parse_simple;
       Alcotest.test_case "Parse complex input" `Quick test_parse_complex;
     ]

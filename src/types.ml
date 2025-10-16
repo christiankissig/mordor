@@ -2,22 +2,23 @@
 
 (** Options *)
 type options = {
-  dependencies: bool;
-  just_structure: bool;
-  exhaustive: bool;
-  forcerc11: bool;
-  forceimm: bool;
-  forcenocoh: bool;
+  dependencies : bool;
+  just_structure : bool;
+  exhaustive : bool;
+  forcerc11 : bool;
+  forceimm : bool;
+  forcenocoh : bool;
 }
 
-let default_options = {
-  dependencies = true;
-  just_structure = false;
-  exhaustive = false;
-  forcerc11 = false;
-  forceimm = false;
-  forcenocoh = false;
-}
+let default_options =
+  {
+    dependencies = true;
+    just_structure = false;
+    exhaustive = false;
+    forcerc11 = false;
+    forceimm = false;
+    forcenocoh = false;
+  }
 
 (** Event types *)
 type event_type =
@@ -49,14 +50,7 @@ let event_type_to_string = function
   | CRMW -> ""
 
 (** Memory ordering modes *)
-type mode =
-  | Relaxed
-  | Acquire
-  | Release
-  | SC
-  | Normal
-  | Strong
-  | Nonatomic
+type mode = Relaxed | Acquire | Release | SC | Normal | Strong | Nonatomic
 
 let mode_to_string = function
   | Relaxed -> "rlx"
@@ -94,9 +88,9 @@ module Unicode = struct
 end
 
 (** Greek alphabet for symbolic values *)
-let greek_alpha = 
+let greek_alpha =
   let upper = "ΑΒΓΔΕΖΗΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ" in
-  String.lowercase_ascii upper ^ upper
+    String.lowercase_ascii upper ^ upper
 
 (** Chinese numerals for allocation symbols *)
 let zh_alpha = "一二三四五六七八九十"
@@ -121,23 +115,23 @@ and expr =
 
 (** Event structure *)
 type event = {
-  label: int;
-  van: int;
-  typ: event_type;
-  id: value_type option;
-  rval: value_type option;
-  wval: value_type option;
-  rmod: mode;
-  wmod: mode;
-  fmod: mode;
-  cond: value_type option;
-  volatile: bool;
-  strong: mode option;
-  lhs: int option;
-  rhs: int option;
-  pc: int option;
-  hide: bool;
-  quot: int option;
+  label : int;
+  van : int;
+  typ : event_type;
+  id : value_type option;
+  rval : value_type option;
+  wval : value_type option;
+  rmod : mode;
+  wmod : mode;
+  fmod : mode;
+  cond : value_type option;
+  volatile : bool;
+  strong : mode option;
+  lhs : int option;
+  rhs : int option;
+  pc : int option;
+  hide : bool;
+  quot : int option;
 }
 
 (** Create default event *)
@@ -163,61 +157,53 @@ let make_event typ label =
   }
 
 type justification = {
-  p: expr list;                      (* Predicates/conditions *)
-  d: string uset;                    (* Dependency symbols *)
-  fwd: (int * int) uset;            (* Forwarding edges (event pairs) *)
-  we: (int * int) uset;             (* Write-elision edges (event pairs) *)
-  w: event;                          (* The write event being justified *)
-  op: string * justification option * expr option;  (* Operation tag *)
+  p : expr list; (* Predicates/conditions *)
+  d : string uset; (* Dependency symbols *)
+  fwd : (int * int) uset; (* Forwarding edges (event pairs) *)
+  we : (int * int) uset; (* Write-elision edges (event pairs) *)
+  w : event; (* The write event being justified *)
+  op : string * justification option * expr option; (* Operation tag *)
 }
 
 (** Symbolic Event Structure *)
 type symbolic_event_structure = {
-  e: int uset;                                      (* Set of event IDs *)
-  po: (int * int) uset;                            (* Program order relation *)
-  rmw: (int * int) uset;                           (* Read-modify-write pairs *)
-  lo: (int * int) uset;                            (* Lock order *)
-  restrict: (int, expr list) Hashtbl.t;            (* Event restrictions *)
-  cas_groups: (int, int list * expr list uset) Hashtbl.t;  (* CAS groupings *)
-  pwg: expr list;                                  (* Per-write guarantees *)
-  fj: (int * int) uset;                            (* Fork-join edges *)
-  p: (string * string) uset;                       (* Register mappings *)
-  constraint_: expr list;                          (* Constraints *)
+  e : int uset; (* Set of event IDs *)
+  po : (int * int) uset; (* Program order relation *)
+  rmw : (int * int) uset; (* Read-modify-write pairs *)
+  lo : (int * int) uset; (* Lock order *)
+  restrict : (int, expr list) Hashtbl.t; (* Event restrictions *)
+  cas_groups : (int, int list * expr list uset) Hashtbl.t; (* CAS groupings *)
+  pwg : expr list; (* Per-write guarantees *)
+  fj : (int * int) uset; (* Fork-join edges *)
+  p : (string * string) uset; (* Register mappings *)
+  constraint_ : expr list; (* Constraints *)
 }
 
 (** Symbolic Execution *)
 type symbolic_execution = {
-  ex_e: int uset;                                  (* Event set *)
-  rf: (int * int) uset;                            (* Reads-from relation *)
-  dp: (int * int) uset;                            (* Dependencies *)
-  ppo: (int * int) uset;                           (* Preserved program order *)
-  ex_rmw: (int * int) uset;                        (* RMW pairs *)
-  ex_p: expr list;                                 (* Predicates *)
-  conds: expr list;                                (* Conditions *)
-  fix_rf_map: (string, value_type) Hashtbl.t;     (* Fixed RF mappings *)
-  justs: justification list;                       (* Justifications *)
-  pointer_map: (int, value_type) Hashtbl.t option; (* Pointer mappings *)
+  ex_e : int uset; (* Event set *)
+  rf : (int * int) uset; (* Reads-from relation *)
+  dp : (int * int) uset; (* Dependencies *)
+  ppo : (int * int) uset; (* Preserved program order *)
+  ex_rmw : (int * int) uset; (* RMW pairs *)
+  ex_p : expr list; (* Predicates *)
+  conds : expr list; (* Conditions *)
+  fix_rf_map : (string, value_type) Hashtbl.t; (* Fixed RF mappings *)
+  justs : justification list; (* Justifications *)
+  pointer_map : (int, value_type) Hashtbl.t option; (* Pointer mappings *)
 }
 
 (** Continuation type *)
-type ('a, 'b) continuation = {
-  lines: 'a list ref;
-  default: unit -> 'b Lwt.t;
-}
+type ('a, 'b) continuation = { lines : 'a list ref; default : unit -> 'b Lwt.t }
 
 (** Function map type *)
-type ('a, 'b) func = {
-  map: ('a, 'b) Hashtbl.t;
-  default: unit -> 'b;
-}
+type ('a, 'b) func = { map : ('a, 'b) Hashtbl.t; default : unit -> 'b }
 
 (** Create function map *)
 let make_func ?(default = fun () -> failwith "No default") () =
   { map = Hashtbl.create 16; default }
 
-let func_find f key =
-  try Some (Hashtbl.find f.map key)
-  with Not_found -> None
+let func_find f key = try Some (Hashtbl.find f.map key) with Not_found -> None
 
 let func_add f key value =
   Hashtbl.replace f.map key value;
@@ -229,10 +215,10 @@ let func_get f key =
   | None -> f.default ()
 
 type result = {
-  ast: expr list;  (* Simplified AST *)
-  structure: symbolic_event_structure;
-  events: (int, event) Hashtbl.t;
-  executions: symbolic_execution list;
-  valid: bool;
-  ub: bool;  (* undefined behavior *)
+  ast : expr list; (* Simplified AST *)
+  structure : symbolic_event_structure;
+  events : (int, event) Hashtbl.t;
+  executions : symbolic_execution list;
+  valid : bool;
+  ub : bool; (* undefined behavior *)
 }

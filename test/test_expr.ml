@@ -10,8 +10,8 @@ let test_expr_equality () =
   Alcotest.(check bool) "expr equality" true true
 
 let suite =
-  (
-    "Expressions", [
+  ( "Expressions",
+    [
       Alcotest.test_case "Expression creation" `Quick test_expr_creation;
       Alcotest.test_case "Expression equality" `Quick test_expr_equality;
     ]
