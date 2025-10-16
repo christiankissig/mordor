@@ -1,0 +1,22 @@
+version=0.27.0
+profile=conventional
+
+# Indentation
+margin=80
+indent-after-in=2
+
+# Breaking
+break-cases=fit-or-vertical
+break-infix=fit-or-vertical
+break-fun-decl=wrap
+
+# Spacing
+# space-around-collection-expressions=false
+sequence-style=terminator
+
+# Documentation
+doc-comments=before
+parse-docstrings=true
+
+# Type annotations
+indicate-multiline-delimiters=closing-on-separate-line
