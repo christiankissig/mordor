@@ -1,0 +1,16 @@
+// Needs sync+lwsync+sync or sync+sync+RRdep
+x := 0;
+y := 0;
+z := 0;
+{{
+  x := 1;
+  y := 1
+} ||| {
+  y := 2;
+  z := 1
+}} ||| {
+  r1 := z;
+  r2 := x
+}
+%%
+allow (r1 = 1 && r2 = 0) [Power]

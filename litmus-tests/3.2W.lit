@@ -1,0 +1,25 @@
+// Needs lwsync+lwsync+lwsync
+x := 0;
+y := 0;
+z := 0;
+{{{
+  x := 2;
+  y := 1
+} ||| {
+  y := 2;
+  z := 1
+}} ||| {
+  z := 2;
+  x := 1
+}} ||| { {{
+  r1 := x;
+  r2 := x
+} ||| {
+  r3 := y;
+  r4 := y
+}} ||| {
+  r5 := z;
+  r6 := z
+}}
+%%
+allow (r1 = 2 && r2 = 1 && r3 = 2 && r4 = 1 && r5 = 2 && r6 = 1) [Power] "Observation threads for co"

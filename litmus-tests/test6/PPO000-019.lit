@@ -1,0 +1,18 @@
+x := 0;
+y := 0;
+z := 0;
+{
+  x := 1;
+  // missing lwsync
+  y := 1
+} ||| {
+  r1 := y;
+  z := r1;
+  r2 := z;
+  // ctrl dependency instead of addr below.
+  if (r2 = 1) {
+    r3 := x
+  } else { skip }
+}
+%%
+allow (r1 = 1 && r2 = 1 && r3 = 0) [Power]

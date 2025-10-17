@@ -1,0 +1,14 @@
+x.store(0, na);
+y.store(0, na);
+{{
+  x.store(2, rlx)
+} ||| {
+  y.store(1, rlx);
+  x.store(1, rel);
+  x.store(3, rlx);
+}} ||| {
+  r1 := x.load(acquire);
+  r2 := y.load(rlx)
+}
+%%
+allow (r1=3 && r2 =0) []

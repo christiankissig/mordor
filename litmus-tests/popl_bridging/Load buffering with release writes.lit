@@ -1,0 +1,12 @@
+// Section 3.3: Global Ordering Constraint
+x := 0;
+y := 0;
+{
+  r1 := x;
+  y.store(1, rel)
+} ||| {
+  r2 := y;
+  x.store(1, rel)
+}
+%%
+forbid (r1 = 1 && r2 = 1) [Bridging]

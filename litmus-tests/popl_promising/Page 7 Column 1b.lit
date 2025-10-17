@@ -1,0 +1,15 @@
+// Section 4.1: Release/Acquire Synchronization; Page 7, Column 1 (b)
+x := 0;
+y := 0;
+{{
+  x := 1;
+  y.store(1, rel);
+  y := 2
+} ||| {
+  r1 := FADD(y, rlx, rlx, 1)
+}} ||| {
+  r2 := y.load(acq); // 3
+  r3 := x // <> 0
+}
+%%
+forbid (r2 = 3 && r3 = 0) [Promising=allow] "Release sequence"

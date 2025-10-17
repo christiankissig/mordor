@@ -1,0 +1,25 @@
+globalfoop := malloc 2; rglob := globalfoop
+*rglob := 0; *(rglob + 1) := 0
+{
+  rfp := globalfoop.load(acq);
+  ra := *(rfp + 0);
+  // rfp := globalfoop.load(acq);
+  rb := *(rfp + 1);
+}|||{
+  rfp2 := malloc 2;
+  *(rfp2 + 0) := 1; *(rfp2 + 1) := 1
+  globalfoop := rfp2;
+}
+%% ~~> [_=forbid] %%
+globalfoop := malloc 2; rglob := globalfoop
+*rglob := 0; *(rglob + 1) := 0
+{
+  rfp := globalfoop.load(acq);
+  ra := *(rfp + 0);
+  rfp := globalfoop.load(acq);
+  rb := *(rfp + 1);
+}|||{
+  rfp2 := malloc 2;
+  *(rfp2 + 0) := 1; *(rfp2 + 1) := 1
+  globalfoop := rfp2;
+}

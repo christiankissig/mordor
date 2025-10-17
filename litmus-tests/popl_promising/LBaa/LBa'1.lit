@@ -1,0 +1,12 @@
+// Section 4.1: Release/Acquire Synchronization; LBa' (right)
+{
+  y := 1;
+  r2 := 1;
+  y := 2;
+  r1 := x
+} ||| {
+  r1 := y;
+  x := r1
+}
+%%
+allow (r1 = 2) [Promising]

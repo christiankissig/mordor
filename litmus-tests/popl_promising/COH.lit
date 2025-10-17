@@ -1,0 +1,11 @@
+// Section 2.1: Main Ideas; COH
+x := 0;
+{
+  x := 1;
+  r1 := x // 2
+} ||| {
+  x := 2;
+  r2 := x // 1
+}
+%%
+forbid (r1 = 2 && r2 = 1) [Promising] ""

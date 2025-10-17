@@ -1,0 +1,16 @@
+x := 0;
+y := 0;
+{{
+  r1 := x;
+  r2 := x;
+  if (r1 = r2) {
+    y := 1
+  } else { skip }
+} ||| {
+  r3 := y;
+  x := r3
+}} ||| {
+  x := 2
+}
+%%
+allow (r1 = 1 && r2 = 1 && r3 = 1) [] "Allowed, since redundant read elimination could result in simplification of r1 == r2 to true, allowing y = 1 to be moved early."

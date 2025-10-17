@@ -1,0 +1,21 @@
+[rr != rp]
+%%
+//A := 0; B := 0; G := 0;
+//Result := 0;
+
+{
+	rx := B;
+	A := rx;
+}|||{
+	rp := A;
+	rr := malloc 1;
+	B := rr;
+	rq := &G;
+	*rr := 2;
+	*rp := 1;
+	rr1 := *rr;
+	*rq := rr1;
+	r1 := *rq;
+	r2 := *rr;
+	Result := r1 - r2;
+}

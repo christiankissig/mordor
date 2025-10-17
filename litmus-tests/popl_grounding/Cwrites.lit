@@ -1,0 +1,23 @@
+x := 0;
+y := 0;
+z := 0;
+{{
+  z := 1;
+} ||| {
+  r1 := z;
+  if (r1 > 0) {
+    y.store(1, rel)
+  } else {
+    x.store(1, rel)
+  }
+}} ||| {
+   r2 := x.load(acq);
+   if (r2 > 0) {
+     r3 := y.load(acq);
+     if (r3 > 0) {
+       z := 2
+     }
+   }
+}
+%%
+forbid (r2 > 0 && r3 > 0) [Grounding]

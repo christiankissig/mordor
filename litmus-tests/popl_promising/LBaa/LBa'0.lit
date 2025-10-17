@@ -1,0 +1,12 @@
+// Section 4.1: Release/Acquire Synchronization; LBa' (left)
+{
+  r1 := x; // 2
+  y := 1;
+  r2 := y.load(acq);
+  y := 2
+} ||| {
+  r1 := y;
+  x := r1
+}
+%%
+allow (r1 = 2) [Promising]

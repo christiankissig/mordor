@@ -1,0 +1,15 @@
+x := 0;
+y := 0;
+{
+  r3 := x;
+  if (r3 != 42) {
+    x := 42
+  } else { skip };
+  r1 := x;
+  y := r1
+} ||| {
+  r2 := y;
+  x := r2
+}
+%%
+allow (r1 = 42 && r2 = 42 && r3 = 42) [] "A compiler could determine that at r1 = x in thread 1, is must be legal for to read x and see the value 42. Changing r1 = x to r1 = 42 would allow y = r1 to be transformed to y = 42 and performed earlier, resulting in the behavior in question."

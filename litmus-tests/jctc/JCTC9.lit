@@ -1,0 +1,14 @@
+x := 0;
+y := 0;
+{{
+  r1 := x;
+//  r2 := 1 + r1*r1 - r1;
+  y := 1 + r1*r1 - r1
+} ||| {
+  r3 := y;
+  x := r3
+}} ||| {
+  x := 2
+}
+%%
+forbid (r1 = 1 && r3 = 1) [] "Allowed. Similar to test case 8, except that the x is not always 0 or 1. However, a compiler might determine that the read of x by thread 2 will never see the write by thread 3 (perhaps because thread 3 will be scheduled after thread 1).  Thus, the compilercan determine that r1 will always be 0 or 1."

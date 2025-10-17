@@ -1,0 +1,13 @@
+x := 0;
+y := 0;
+{ lock;
+  x := 1;
+  x := 0;
+  unlock
+} ||| {
+  lock;  
+  r1 := x;
+  unlock
+}
+%%
+forbid (r1 = 1) [JR]

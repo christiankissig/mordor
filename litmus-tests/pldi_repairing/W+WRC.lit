@@ -1,0 +1,17 @@
+x := 0;
+y := 0;
+z := 0;
+{
+  x := 1;
+  z.store(1, rel)
+} ||| {{
+  r1 := z.load(acq);
+  fence(sc);
+  r2 := y
+} ||| {
+  y := 1;
+  fence(sc);
+  r3 := x;
+}}
+%%
+forbid (r1 = 1 && r2 = 0 && r3 = 0) [RC11]

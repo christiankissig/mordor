@@ -1,0 +1,16 @@
+//SPRingRoll
+r1 := y
+r2 := z
+ra := a
+if (r1 = r2) {
+  rb := b
+  rc := c
+  x := (ra + rb) / rc;
+}
+else {
+  rb := b
+  rc := c
+  x := (ra + rc) / rb;
+}
+%%
+forbid (r1 = r2 && [1,7] \notin .dp) []

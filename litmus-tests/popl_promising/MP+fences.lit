@@ -1,0 +1,14 @@
+// Section 4.1: Release/Acquire Synchronization; MP+fences
+x := 0;
+y := 0;
+{
+  x := 1;
+  fence(rel);
+  y := 1
+} ||| {
+  r1 := y; // 1
+  fence(acq);
+  r2 := x // <> 0
+}
+%%
+forbid (r1 = 1 && r2 = 0) [Promising]

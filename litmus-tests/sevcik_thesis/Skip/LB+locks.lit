@@ -1,0 +1,21 @@
+x := 0;
+y := 0;
+{
+  lock;
+  r1 := x;
+  unlock;
+
+  lock;
+  y := r1;
+  unlock;
+} ||| {
+  lock;
+  r2 := y;
+  unlock;
+
+  lock;
+  x := 1;
+  unlock;
+}
+%%
+forbid (r1 = 1 && r2 = 1) [Sevcik]

@@ -1,0 +1,12 @@
+// Section 2.1: Main Ideas; 2+2W
+{
+  x := 2;
+  y := 1;
+  r1 := y // 2
+} ||| {
+  y := 2;
+  x := 1;
+  r2 := x // 2
+}
+%%
+allow (r1 = 2 && r2 = 2) [Promising] ""

@@ -1,0 +1,13 @@
+name=ctrl subsumed by data
+%%
+r1 := x;
+if (r1 = 1) {
+	y := 1;
+	ry := y;
+	z := ry;
+} else {
+	y := r1;
+	ry := y;
+	z := ry;
+}
+// z := ry, we are left with a control dependency which is _really_ a data dependency

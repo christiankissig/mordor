@@ -1,0 +1,13 @@
+x := 0;
+y := 0;
+z := 0;
+{
+  r1 := y;
+  z := r1
+} ||| {
+  r2 := z;
+  r3 := FADD(x, strong, rlx, rel, 1);
+  y := r3 + 1
+}
+%%
+forbid (r1 = 1 && r2 = 1 && r3 = 0) [Bridging]

@@ -1,0 +1,24 @@
+x := 0;
+y := 0;
+z := 0;
+{
+  r1 := x;
+  if (r1 = 1) {
+    y := 1
+  } else { skip }
+} ||| { {
+{
+  r2 := y;
+  if (r2 = 1) {
+    x := 1
+  } else { skip }
+} ||| {
+  z := 1
+} } ||| {
+  r3 := z;
+  if (r3 = 1) {
+    x := 1
+  } else { skip }
+} }
+%%
+forbid (r1 = 1 && r2 = 1 && r3 = 0) [] "Forbidden. This is the same as test case 5, except using control dependences rather than data dependences."

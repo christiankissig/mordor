@@ -1,0 +1,12 @@
+// Section 3.3: Global Ordering Constraint
+x := 0;
+y := 0;
+{
+  r1 := x.load(acq);
+  y := 1
+} ||| {
+  r2 := y.load(acq);
+  x := 1
+}
+%%
+forbid (r1 = 1 && r2 = 1) [Bridging]

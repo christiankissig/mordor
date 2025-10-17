@@ -1,0 +1,7 @@
+x := 103998123
+y := 2012139032
+r0 := x
+r1 := y
+r2 := z
+%%
+allow (r2 = 129213998) [] "The domain is only restricted to ℤ"

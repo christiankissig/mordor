@@ -1,0 +1,12 @@
+x := 0;
+y := 0;
+{
+  r1 := x;
+//  r2 := 1 + r1*r1 - r1;
+  y :=  1 + r1*r1 - r1
+} ||| {
+  r3 := y;
+  x := r3
+}
+%%
+allow (r1 = 1 && r3 = 1) [] "Allowed. Interthread analysis could determine that x and y are always either 0 or 1, and thus determine that r2 is always 1. Once this determination is made, the write of 1 to y could be moved early in thread 1."

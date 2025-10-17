@@ -1,0 +1,12 @@
+// Section 3.1: Coherence; MP+rel+acq
+x := 0;
+y := 0;
+{
+  x := 1;
+  y.store(1, rel)
+} ||| {
+  r1 := y.load(acq);
+  r2 := x;
+}
+%%
+forbid (r1 = 1 && r2 = 0) [Bridging]

@@ -1,0 +1,19 @@
+z := 0;
+x := 0;
+{
+  ra := z;
+  if(ra != 0)
+  {
+    x := 2;
+    x := 3;
+  }
+  else {
+    x.store(3, rel); // remove me
+    x := 2;
+  }
+} ||| {
+  rb := x;
+  if (rb = 2) { z := 1; }
+}
+%%
+forbid (rb = 2 && ra = 1) [RC11]

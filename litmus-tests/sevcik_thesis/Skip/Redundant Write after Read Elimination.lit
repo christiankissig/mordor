@@ -1,0 +1,20 @@
+x := 0;
+{
+  lock;
+  x := 2;
+  unlock;
+} ||| {{
+  lock;
+  x := 1;
+  unlock;
+} ||| {
+  lock;
+    lock;
+      r1 := x;
+      x := r1;
+      r2 := x;
+    unlock;
+  unlock;
+}}
+%%
+allow (r1 = 1 && r2 = 2) [Sevcik]

@@ -1,0 +1,9 @@
+x := 0;
+{
+  r1 := FADD(x, rlx, 1)
+} ||| {
+  x := 2;
+  r2 := x; // 1
+}
+%%
+forbid (r1 = 0 && r2 = 1) [IMM] "The following behavior violates the fetch and add atomicity, and is disallowed by all known weak memory models"

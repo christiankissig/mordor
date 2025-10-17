@@ -1,0 +1,11 @@
+x := 0;
+y := 0;
+{
+  x := 1;
+  y.store(1, release)
+} ||| {
+  r1 := y.load(acquire);
+  r2 := x
+}
+%%
+forbid (r1 = 1 && r2 = 0) [Power]

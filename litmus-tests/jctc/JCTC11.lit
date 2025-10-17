@@ -1,0 +1,17 @@
+w := 0;
+x := 0;
+y := 0;
+z := 0;
+{
+  r1 := z;
+  w := r1;
+  r2 := x;
+  y := r2
+} ||| {
+  r4 := w;
+  r3 := y;
+  z := r3;
+  x := 1
+}
+%%
+allow (r1 = 1 && r2 = 1 && r3 = 1 && r4 = 1) [] "Allowed. Reordering of independent statements can transform the code, after which the behavior in question is SC."

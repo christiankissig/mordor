@@ -1,0 +1,17 @@
+x := 0;
+y := 0;
+z := 0;
+{
+  r1 := x;
+  y := r1
+} ||| {{
+  r2 := y;
+  x := r2
+} ||| {{
+  z := 1
+} ||| {
+  r3 := z;
+  x := r3
+}}}
+%%
+forbid (r1 = 1 && r2 = 1 && r3 = 0) [] "Forbidden: values are not allowed to come out of thin air, even if there are other executions in which the thin-air value would have been written to that variable by some not out-of-thin air means."

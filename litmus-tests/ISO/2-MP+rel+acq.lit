@@ -1,0 +1,13 @@
+x.store(0, nonatomic);
+y.store(0, nonatomic);
+{
+  x.store(1, relaxed);
+  y.store(1, release)
+} ||| {
+  r1 := y.load(acquire);
+  if (r1 = 1) {
+    r2 := x.load(relaxed);
+  }
+}
+%%
+forbid (r1 = 1 && r2 = 0) [Power]

@@ -1,0 +1,15 @@
+x := 0;
+y := 0;
+{
+  r1 := x;
+  if (r1 = 1) {
+    y := 1
+  } else { skip }
+} ||| {
+  r2 := y;
+  if (r2 = 1) {
+    x := 1
+  } else { skip }
+}
+%%
+forbid (r1 = 1 && r2 = 1) [] "Disallowed. In all sequentially consistent executions, no writes to x or y occur and the program is correctly synchronized. The only SC behavior is r1 == r2 == 0."

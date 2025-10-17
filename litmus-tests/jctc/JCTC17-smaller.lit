@@ -1,0 +1,4 @@
+// Checking upclosure in JCTC17
+x := 42;
+r1 := x;
+y := r1

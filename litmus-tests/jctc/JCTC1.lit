@@ -1,0 +1,13 @@
+x := 0;
+y := 0;
+{
+  r1 := x;
+  if (r1 >= 0) {
+    y := 1
+  } else { skip }
+} ||| {
+  r2 := y;
+  x := r2
+}
+%%
+allow (r1 = 1 && r2 = 1) [] "Allowed, since interthread compiler analysis could determine that x and y are always non-negative, allowing simplification of r1 >= 0 to true, and allowing write y = 1 to be moved early."

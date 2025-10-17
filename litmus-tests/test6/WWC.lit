@@ -1,0 +1,13 @@
+x := 0;
+y := 0;
+{{
+  x := 2
+} ||| {
+  r1 := x;
+  y := 1
+}} ||| {
+  r2 := y;
+  x := 1
+}
+%%
+allow (r1 = 2 && r2 = 1) [Power] "We are not filtering for the co"

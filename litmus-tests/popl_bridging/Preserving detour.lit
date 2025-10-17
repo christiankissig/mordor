@@ -1,0 +1,17 @@
+// Section 3.3: Global Ordering Constraint
+x := 0;
+y := 0;
+z := 0;
+{
+  x := 1
+} ||| {{
+  r1 := z;
+  x := r1 - 1;
+  r2 := x;
+  y := r2
+} ||| {
+  r3 := y;
+  z := r3
+}}
+%%
+forbid (r1 = 1 && r2 = 1 && r3 = 1) [Bridging]

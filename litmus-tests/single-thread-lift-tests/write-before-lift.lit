@@ -1,0 +1,18 @@
+y := 1;
+r1 := x;
+if (r1 = 0) {
+    y := 1;
+    r2 := y;
+    if(r2 = 0){
+        z := 1;
+    }else{
+        skip
+    }
+} else {
+    r2 := y;
+    if(r2 = 0){
+        z := 1;
+    }else{
+        skip
+    }
+}

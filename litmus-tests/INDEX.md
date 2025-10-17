@@ -1,0 +1,274 @@
+# Litmus Tests Index
+
+Total tests: 267
+Generated: 2025-10-17T09:41:48.288Z
+
+## Test Files
+
+- own/sync/rel1lift.lit
+- own/sync/rel2lift.lit
+- own/sync/fence0lift.lit
+- own/sync/fence1lift.lit
+- own/sync/fence2lift.lit
+- own/sync/writeElision.lit
+- own/sync/writeElisionRel.lit
+- own/LF.lit
+- own/ORI.lit
+- own/ORI2.lit
+- own/DOMAIN.lit
+- own/paper108.lit
+- own/paper109.lit
+- own/paper112F.lit
+- own/paper113.lit
+- own/paper115.lit
+- own/FWD-STRENGTHEN-LIFT.lit
+- own/VRA-JCTC1.lit
+- own/OOTA7.lit
+- own/hotspot_optimisation.lit
+- own/JCTC12.lit
+- own/FreeRace.lit
+- own/FreeRace2.lit
+- own/expressionPreservingSubstitution.lit
+- own/coproductReorder.lit
+- own/elideanddontobserve.lit
+- own/ctrl_subsumed_by_data.lit
+- 3.2W.lit
+- ISO/1-MP.lit
+- ISO/2-MP+rel+acq.lit
+- ISO/3-LB.lit
+- ISO/4-LB+deps.lit
+- ISO/5-LB+false-dep.lit
+- MP/MP+rel+acq.lit
+- MP/MP.lit
+- atomics/mp-atomic.lit
+- atomics/mp-atomic2.lit
+- basic/coproduct-exns.lit
+- basic/lb.lit
+- basic/par-comp.lit
+- basic/rw.lit
+- c20/rs-example.lit
+- esop_problem/RRE.lit
+- esop_problem/cse.lit
+- esop_problem/lb+ctrldat+ctrl-single.lit
+- esop_problem/lb+ctrldata+ctrl-double.lit
+- esop_problem/lb+ctrldata+po.lit
+- esop_problem/lb+datas.lit
+- esop_problem/lb.lit
+- esop_problem/mp.lit
+- esop_problem/sb.lit
+- imm/FADD RMW Atomicity.lit
+- imm/LB+falsedep+Fsc.lit
+- jctc/JCTC1.lit
+- jctc/JCTC2.lit
+- jctc/JCTC3.lit
+- jctc/JCTC4.lit
+- jctc/JCTC5.lit
+- jctc/JCTC6.lit
+- jctc/JCTC7.lit
+- jctc/JCTC8.lit
+- jctc/JCTC8b.lit
+- jctc/JCTC9.lit
+- jctc/JCTC9b.lit
+- jctc/JCTC10.lit
+- jctc/JCTC11.lit
+- jctc/JCTC12.lit
+- jctc/JCTC13.lit
+- jctc/JCTC14.lit
+- jctc/JCTC15.lit
+- jctc/JCTC16.lit
+- jctc/JCTC17.lit
+- jctc/JCTC17-left.lit
+- jctc/JCTC17-smaller.lit
+- jctc/JCTC18.lit
+- jctc/JCTC19.lit
+- jctc/JCTC20.lit
+- on_thin_air_reads19/P1.lit
+- on_thin_air_reads19/P2.lit
+- on_thin_air_reads19/P3.lit
+- on_thin_air_reads19/P4.lit
+- on_thin_air_reads19/P5.lit
+- on_thin_air_reads19/P6.lit
+- on_thin_air_reads19/TC7.lit
+- on_thin_air_reads19/TC9a.lit
+- on_thin_air_reads19/ex3.5.lit
+- on_thin_air_reads19/s5.3.2.lit
+- opts/store-forward.lit
+- pldi_repairing/W+WRC.lit
+- pldi_repairing/IRIW+acq+sc.lit
+- pldi_repairing/LB+deps.lit
+- pldi_repairing/LB.lit
+- pldi_repairing/RWC+syncs.lit
+- popl_bridging/IRIW+Fsc+Fsc.lit
+- popl_bridging/ARM FADD.lit
+- popl_bridging/Preserving detour.lit
+- popl_bridging/FADD Example.lit
+- popl_bridging/Load buffering with acquire reads.lit
+- popl_bridging/Load buffering with release writes.lit
+- popl_bridging/LB.lit
+- popl_bridging/MP+rel+acq.lit
+- popl_bridging/PSC.lit
+- popl_bridging/rfi is not always preserved.lit
+- popl_bridging/RMW Atomicity.lit
+- popl_bubbly/LB+deps.lit
+- popl_bubbly/LB.lit
+- popl_bubbly/LB+false-deps.lit
+- popl_grounding/Coh-CYC (Promising).lit
+- popl_grounding/Coh-CYC (Soham).lit
+- popl_grounding/Coh.lit
+- popl_grounding/Cwrites.lit
+- popl_grounding/CYC.lit
+- popl_grounding/FADD.lit
+- popl_grounding/LB.lit
+- popl_grounding/LBfd.lit
+- popl_grounding/RNG.lit
+- popl_grounding/RNGb.lit
+- popl_promising/2+2W.lit
+- popl_promising/LBaa/LBa'0.lit
+- popl_promising/LBaa/LBa'1.lit
+- popl_promising/ARM-weak.lit
+- popl_promising/COH.lit
+- popl_promising/CYC.lit
+- popl_promising/LB.lit
+- popl_promising/LBa'.lit
+- popl_promising/LBa.lit
+- popl_promising/LBd.lit
+- popl_promising/LBfd.lit
+- popl_promising/LBr.lit
+- popl_promising/MP+fences.lit
+- popl_promising/Page 7 Column 1.lit
+- popl_promising/Page 7 Column 1b.lit
+- popl_promising/Par-Inc.lit
+- popl_promising/SB+fences.lit
+- popl_promising/SB.lit
+- popl_promising/Upd-Stuck.lit
+- requests/0nONvMSw7 (MP).lit
+- requests/1MR_opBNP (2+2W with obs thread).lit
+- requests/2zm8LRQsJ (LB).lit
+- requests/Aj1vSoVpE (MP).lit
+- requests/E8OKvIVLN (2+2W with obs thread).lit
+- requests/XXLpA6s8E (LB).lit
+- requests/ZcUmGBDR9 (MP).lit
+- requests/leb0OUCUM (LB).lit
+- requests/oEk0xQtQy (CoWR).lit
+- requests/ptmsQeW4i (CoWR).lit
+- sevcik_thesis/Irrelevant Read Introduction.lit
+- sevcik_thesis/Irrelevant Read Introduction (b).lit
+- sevcik_thesis/LB.lit
+- sevcik_thesis/MP.lit
+- sevcik_thesis/Redundant Read after Read Elimination.lit
+- sevcik_thesis/Roach Motel Semantics.lit
+- sevcik_thesis/Irrelevant Read Elimination/IREA.lit
+- sevcik_thesis/Irrelevant Read Elimination/IREB.lit
+- sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit
+- sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPB.lit
+- sevcik_thesis/Reordering (f1.3)/RA.lit
+- sevcik_thesis/Reordering (f1.3)/RB.lit
+- sevcik_thesis/Redundant Read Elimination (f1.4)/RRERA.lit
+- sevcik_thesis/Redundant Read Elimination (f1.4)/RRERB.lit
+- sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit
+- sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit
+- sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIA.lit
+- sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIB.lit
+- sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIC.lit
+- sevcik_thesis/Skip/LB+locks.lit
+- sevcik_thesis/Skip/Redundant Write after Read Elimination.lit
+- sevcik_thesis/Skip/Reordering with external actions.lit
+- single-thread-lift-tests/basic-lift.lit
+- single-thread-lift-tests/basic-not-lift.lit
+- single-thread-lift-tests/lift-above-read.lit
+- single-thread-lift-tests/lift-above-read-2.lit
+- single-thread-lift-tests/lift-with-read-freezing.lit
+- single-thread-lift-tests/lift-with-write-freezing.lit
+- single-thread-lift-tests/lock-test.lit
+- single-thread-lift-tests/one-sided-lift.lit
+- single-thread-lift-tests/read-freezing.lit
+- single-thread-lift-tests/write-after-read-elim.lit
+- single-thread-lift-tests/write-before-lift.lit
+- single-thread-lift-tests/write-chain.lit
+- single-thread-lift-tests/write-freezing.lit
+- test6/2+2W with obs thread.lit
+- test6/2+2W.lit
+- test6/3.2W.lit
+- test6/3.LB.lit
+- test6/3.SB.lit
+- test6/CoRR1.lit
+- test6/CoRW.lit
+- test6/CoWR.lit
+- test6/CoWW.lit
+- test6/IRIW.lit
+- test6/IRRWIW.lit
+- test6/IRWIW.lit
+- test6/ISA2.lit
+- test6/ISA2+Fsc+Fsc.lit
+- test6/LB.lit
+- test6/MP.lit
+- test6/PPO000-019.lit
+- test6/R.lit
+- test6/RW.lit
+- test6/RWC.lit
+- test6/S.lit
+- test6/S with obs thread.lit
+- test6/SB.lit
+- test6/W+RWC.lit
+- test6/WRC.lit
+- test6/WRR+2W.lit
+- test6/WRW+2W.lit
+- test6/WRW+WR.lit
+- test6/WWC.lit
+- test6/Z6.0.lit
+- test6/Z6.1.lit
+- test6/Z6.2.lit
+- test6/Z6.3.lit
+- test6/Z6.4.lit
+- test6/Z6.5.lit
+- avoidoota/listing1.lit
+- avoidoota/listing2_5.lit
+- avoidoota/listing2_5pwg.lit
+- avoidoota/listing3.lit
+- avoidoota/listing7.lit
+- avoidoota/listing8.lit
+- avoidoota/listing9.lit
+- avoidoota/listing10.lit
+- avoidoota/listing11.lit
+- avoidoota/listing12.lit
+- avoidoota/listing13.lit
+- avoidoota/listing14.lit
+- avoidoota/listing15.lit
+- avoidoota/listing16.lit
+- avoidoota/listing17.lit
+- avoidoota/listing18.lit
+- avoidoota/listing19.lit
+- avoidoota/listing20.lit
+- avoidoota/listing21.lit
+- avoidoota/listing22.lit
+- avoidoota/listing23.lit
+- avoidoota/listing24.lit
+- avoidoota/listing25.lit
+- avoidoota/listing26.lit
+- avoidoota/listing27_forbid.lit
+- avoidoota/listing27_allow.lit
+- avoidoota/additional_twosource.lit
+- avoidoota/additional_nonlb.lit
+- avoidoota/additional_inventintload.lit
+- symmrd/LB+UB+data.lit
+- symmrd/LB+UB+data-forbid.lit
+- symmrd/LB+UB+data+z.lit
+- symmrd/LB+UB+data+arr.lit
+- symmrd/alignment.lit
+- symmrd/no-alignment.lit
+- symmrd/LB+alias+data.lit
+- symmrd/refinement/LB+UB+data.lit
+- symmrd/refinement/LB+UBoff+data.lit
+- symmrd/refinement/LB+UB+data+z.lit
+- fwd/rlx/lift.lit
+- fwd/rlx/lift_F2w.lit
+- fwd/rlx/lift_F1r.lit
+- fwd/rlx/lift_F1w.lit
+- fwd/rlx/lift_F1wr.lit
+- fwd/ra/lift_rel.lit
+- fwd/ra/lift_relrel.lit
+- fowm2024/nullptr - no use.lit
+- fowm2024/nullptr - use.lit
+- fowm2024/load intro - potential aliasing.lit
+- fowm2024/load intro - no aliasing.lit
+- basic.lit.lit

@@ -1,0 +1,12 @@
+// Section 1.2: The "Out of Thin Air" Problem; LBd
+x := 0;
+y := 0;
+{
+  r1 := x;
+  y := r1
+} ||| {
+  r2 := y;
+  x := r2
+}
+%%
+forbid (r1 = 1) [Promising]

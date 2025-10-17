@@ -1,0 +1,14 @@
+// Section 4.2: Sequentially Consistent Fences; SB+fences
+x := 0;
+y := 0;
+{
+  x := 1;
+  fence(sc);
+  r1 := y // 0
+} ||| {
+  y := 1;
+  fence(sc);
+  r2 := x // <> 0
+}
+%%
+forbid (r1 = 0 && r2 = 0) [Promising]

@@ -1,0 +1,17 @@
+x := 0
+w := 0
+{
+  rx := x
+  if (rx = 1) {
+    w.store(1, rel)
+    y := 1
+  } else {
+    w.store(1, rel)
+    y := 1
+  }
+}|||{
+  ry := w
+  if (ry = 1) { x := 2 }
+}
+%%
+forbid (rx = 2) []

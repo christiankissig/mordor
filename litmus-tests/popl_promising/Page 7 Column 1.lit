@@ -1,0 +1,17 @@
+// Section 4.1: Release/Acquire Synchronization; Page 7, Column 1
+x := 0;
+y := 0;
+z := 0;
+{{
+  x := 1;
+  y.store(1, rel);
+  z := 1;
+} ||| {
+  r1 := y.load(acq); // 1
+  r2 := x // <> 0
+}} ||| {
+  r3 := z.load(acq); // 1
+  r4 := x // 0
+}
+%%
+forbid (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [Promising]

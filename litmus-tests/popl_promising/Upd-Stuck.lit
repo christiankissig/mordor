@@ -1,0 +1,16 @@
+// Section 3: Supporting Atomic Updates; Upd-Stuck
+x := 0;
+y := 0;
+z := 0;
+{{
+  r1 := x; // 1
+  r2 := FADD(z, rlx, rlx, 1); // 0
+  y := r2 + 1
+} ||| {
+  r3 := y;
+  x := r3
+}} ||| {
+  r4 := FADD(z, rlx, rlx, 1)
+}
+%%
+allow (r1 = 1 && r2 = 0) [Promising]

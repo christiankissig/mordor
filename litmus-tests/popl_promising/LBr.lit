@@ -1,0 +1,12 @@
+// Section 4.1: Release/Acquire Synchronization; LBr
+x := 0;
+y := 0;
+{
+  r1 := x; // <> 1
+  y.store(1, rel)
+} ||| {
+  r2 := y;
+  x := r2
+}
+%%
+forbid (r1 = 1) [Promising]
