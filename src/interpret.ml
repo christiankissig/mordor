@@ -14,10 +14,11 @@ let next_event_id () =
 let greek_counter = ref 0
 
 let next_greek () =
-  let idx = !greek_counter mod String.length greek_alpha in
-  let suffix = !greek_counter / String.length greek_alpha in
+  let idx = !greek_counter mod (String.length greek_alpha / 2) in
+  let suffix = !greek_counter / String.length greek_alpha in  (* divide by byte length *)
     incr greek_counter;
-    let base = String.make 1 greek_alpha.[idx] in
+    (* Greek characters are 2 bytes in UTF-8 *)
+    let base = String.sub greek_alpha (idx * 2) 2 in
       if suffix = 0 then base else base ^ string_of_int suffix
 
 let zh_counter = ref 0

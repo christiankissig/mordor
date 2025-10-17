@@ -88,9 +88,7 @@ module Unicode = struct
 end
 
 (** Greek alphabet for symbolic values *)
-let greek_alpha =
-  let upper = "ΑΒΓΔΕΖΗΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ" in
-    String.lowercase_ascii upper ^ upper
+let greek_alpha = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
 
 (** Chinese numerals for allocation symbols *)
 let zh_alpha = "一二三四五六七八九十"

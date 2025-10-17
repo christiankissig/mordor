@@ -1157,10 +1157,10 @@ let parse_config p =
   if !name <> "" || !values <> [] || !defacto <> [] || !constraint_ <> [] then (
     while (current_token p).typ <> PERCENT do
       advance_parser p
-    done;
-    let _ = expect p PERCENT in
-      ()
+    done
   );
+  (* Always consume %% if present *)
+  let _ = expect_opt p PERCENT in ();
 
   {
     name = !name;
@@ -1199,6 +1199,13 @@ and parse_assertion p =
         let model =
           match (current_token p).typ with
           | GLOBAL g | REGISTER g -> Some g
+          | SC -> Some "sc"
+          | RELAXED -> Some "relaxed"
+          | RELEASE -> Some "release"
+          | ACQUIRE -> Some "acquire"
+          | NONATOMIC -> Some "nonatomic"
+          | NORMAL -> Some "normal"
+          | STRONG -> Some "strong"
           | _ -> None
         in
           if model <> None then advance_parser p;
