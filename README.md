@@ -1,27 +1,38 @@
-# sMRD - Symbolic Memory Relaxation Dependencies (OCaml)
+[![CI](https://github.com/christiankissig/mordor/actions/workflows/ci.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/ci.yml)
+
+# MoRDor - Symbolic Modular Relaxed Dependencies (in OCaml)
 
 OCaml implementation of the sMRD memory model verifier, translated from JavaScript.
 
 ## Overview
 
-This is a translation of the JavaScript sMRD project to OCaml. sMRD analyzes weak memory models by calculating symbolic dependencies between memory operations.
+This is a translation of the JavaScript Symbolic Mrder project to OCaml. Mordor
+analyzes weak memory models by calculating symbolic dependencies between memory
+operations.
 
 ## Project Structure
 
 ```
-smrd/
-├── dune-project          # Dune project configuration
-├── src/
-│   ├── dune             # Build configuration
-│   ├── types.ml         # Core type definitions
-│   ├── uset.ml          # Unordered set implementation
-│   ├── expr.ml          # Expression and value types
-│   ├── rewrite.ml       # Expression rewriting
-│   ├── solver.ml        # Z3-based constraint solver
-│   ├── interpret.ml     # Program interpreter
-│   ├── symmrd.ml        # Main dependency calculation
-│   └── main.ml          # Entry point
-└── README.md
+mordor/
+├── dune-project
+├── litmus-tests
+│   ├── ...
+├── src
+│   ├── dune
+│   ├── expr.ml
+│   ├── interpret.ml
+│   ├── main.ml
+│   ├── parse.ml
+│   ├── rewrite.ml
+│   ├── solver.ml
+│   ├── symmrd.ml
+│   ├── types.ml
+│   └── uset.ml
+├── SUMMARY.md
+├── test
+│   ├── ...
+├── README.md
+└── TRANSLATION_PATTERNS.md
 ```
 
 ## Key Modules
