@@ -8,4 +8,5 @@ let () =
       Test_parse.suite;
       Test_interpret.suite;
       Test_solver.suite;
+      Test_forwardingcontext.suite;
     ]
