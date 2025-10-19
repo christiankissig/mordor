@@ -137,8 +137,12 @@ let init params =
   (* Filter events by mode *)
   let filter_by_mode events mode_fn =
     Uset.filter (fun e ->
-      let ev = Hashtbl.find !(State.events) e in
-      mode_fn ev
+      try
+        let ev = Hashtbl.find !(State.events) e in
+        mode_fn ev
+      with Not_found ->
+        (* Event ID in E but not in events hashtable - skip it *)
+        false
     ) events
   in
 
@@ -156,14 +160,18 @@ let init params =
   let b = filter_by_mode !(State.e) is_branch in
 
   let e_vol = Uset.filter (fun e ->
-    (Hashtbl.find !(State.events) e).volatile
+    try
+      (Hashtbl.find !(State.events) e).volatile
+    with Not_found -> false
   ) !(State.e) in
 
   let po_nf = Uset.filter (fun (from, to_) ->
-    let from_ev = Hashtbl.find !(State.events) from in
-    let to_ev = Hashtbl.find !(State.events) to_ in
-    from_ev.typ <> Fence && to_ev.typ <> Fence &&
-    from_ev.typ <> Branch && to_ev.typ <> Branch
+    try
+      let from_ev = Hashtbl.find !(State.events) from in
+      let to_ev = Hashtbl.find !(State.events) to_ in
+      from_ev.typ <> Fence && to_ev.typ <> Fence &&
+      from_ev.typ <> Branch && to_ev.typ <> Branch
+    with Not_found -> false
   ) po in
 
   (* Mode filters *)
@@ -225,9 +233,11 @@ let init params =
 
   (* Location-based ppo *)
   State.ppo_loc_baseA := Uset.filter (fun (from, to_) ->
-    let from_ev = Hashtbl.find !(State.events) from in
-    let to_ev = Hashtbl.find !(State.events) to_ in
-    from_ev.id <> None && to_ev.id <> None
+    try
+      let from_ev = Hashtbl.find !(State.events) from in
+      let to_ev = Hashtbl.find !(State.events) to_ in
+      from_ev.id <> None && to_ev.id <> None
+    with Not_found -> false
   ) po_nf;
 
   (* Async filtering with semantic equality - simplified for now *)

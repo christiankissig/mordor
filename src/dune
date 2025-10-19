@@ -5,15 +5,15 @@
           forwardingcontext)
  (flags
   (:standard -w -26-27))
- (libraries lwt lwt.unix z3 zarith)
+ (libraries lwt lwt.unix z3 zarith landmarks)
  (preprocess
-  (pps lwt_ppx))
+  (pps lwt_ppx landmarks-ppx))
  (public_name smrd))
 
 (executable
  (name main)
  (public_name smrd)
  (modules main)
- (libraries smrd_lib lwt lwt.unix)
+ (libraries smrd_lib lwt lwt.unix landmarks)
  (preprocess
-  (pps lwt_ppx)))
+  (pps lwt_ppx landmarks-ppx)))

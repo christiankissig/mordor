@@ -1,12 +1,10 @@
 (lang dune 3.7)
 (name smrd)
 (generate_opam_files true)
-
 (source (github username/smrd))
 (authors "sMRD Contributors")
 (maintainers "maintainer@example.com")
 (license MIT)
-
 (package
  (name smrd)
  (allow_empty)
@@ -20,4 +18,6 @@
   (z3 (>= 4.8.0))
   (zarith (>= 1.12))
   (containers (>= 3.0))
+  (landmarks (>= 1.4))
+  (landmarks-ppx (>= 1.4))
   (alcotest :with-test)))

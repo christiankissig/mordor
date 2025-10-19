@@ -108,13 +108,8 @@ mordor/
 ## Dependencies
 
 ```bash
-opam install lwt z3 zarith containers
+opam install . --deps-only
 ```
-
-- **lwt**: Asynchronous programming
-- **z3**: SMT solver bindings
-- **zarith**: Arbitrary precision integers
-- **containers**: Extended standard library
 
 ## Building
 
@@ -122,10 +117,22 @@ opam install lwt z3 zarith containers
 dune build
 ```
 
+## Profiling
+
+```bash
+OCAML_LANDMARKS=on dune exec smrd
+```
+
 ## Running
 
 ```bash
 dune exec smrd
+```
+
+with stacktraces
+
+```bash
+OCAMLRUNPARAM=b dune exec smrd
 ```
 
 ## Usage Example

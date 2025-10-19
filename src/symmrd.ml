@@ -5,12 +5,6 @@ open Parse (* order with open Types important *)
 open Types
 open Lwt.Syntax
 
-(** Statistics tracking (simplified) *)
-let stats_count _ = ()
-
-let stats_start _ = ()
-let stats_stop _ = ()
-
 (** Helper functions *)
 let loc events e =
   try
@@ -29,15 +23,18 @@ let val_ events e =
 (** Calculate dependencies *)
 let calculate_dependencies ast structure events ~exhaustive
     ~include_dependencies ~just_structure ~restrictions =
-  Printf.printf "[DEBUG] Calculating dependencies...\n";
-  flush stdout;
-
-  stats_start "dp.misc";
+  let landmark = Landmark.register "calculate_dependencies" in
+  Landmark.enter landmark;
 
   let e_set = structure.e in
   let restrict = structure.restrict in
   let rmw = structure.rmw in
   let po = structure.po in
+
+  (* Filter to only events that exist in the hashtable *)
+  let e_set_filtered =
+    Uset.filter (fun id -> Hashtbl.mem events id) structure.e
+  in
 
   (* Event type filters *)
   let filter_events typ =
@@ -86,7 +83,7 @@ let calculate_dependencies ast structure events ~exhaustive
 
   (* Initialize ForwardingContext *)
   let* () = Forwardingcontext.init {
-    init_e = e_set;
+    init_e = e_set_filtered;
     init_po = po;
     init_events = events;
     init_val = val_fn;
@@ -122,16 +119,12 @@ let calculate_dependencies ast structure events ~exhaustive
     else Uset.create ()
   in
 
-  stats_stop "dp.misc";
-
   (* Justification elaboration *)
   let elaborate =
     object
       method filter (justs : justification list) =
-        stats_count "dp.filter";
-        stats_start "dp.filter";
-        Printf.printf "[DEBUG] Filtering justifications...\n";
-        flush stdout;
+        let landmark = Landmark.register "dp.filter" in
+        Landmark.enter landmark;
 
         let* (justs' : justification option list) =
           Lwt_list.map_p
@@ -167,14 +160,12 @@ let calculate_dependencies ast structure events ~exhaustive
           |> Uset.of_list
         in
 
-        stats_stop "dp.filter";
+        Landmark.exit landmark;
         Lwt.return result
 
       method value_assign justs =
-        stats_count "dp.va";
-        stats_start "dp.va";
-        Printf.printf "[DEBUG] Performing value assignment...\n";
-        flush stdout;
+        let landmark = Landmark.register "dp.va" in
+        Landmark.enter landmark;
 
         let* results =
           Lwt_list.map_p
@@ -202,41 +193,35 @@ let calculate_dependencies ast structure events ~exhaustive
             justs
         in
 
-        stats_stop "dp.va";
+        Landmark.exit landmark;
         Lwt.return (Uset.of_list results)
 
       method forward justs =
-        stats_count "dp.forward";
-        stats_start "dp.forward";
-        Printf.printf "[DEBUG] Performing forwarding...\n";
-        flush stdout;
+        let landmark = Landmark.register "dp.forward" in
+        Landmark.enter landmark;
 
         let ctx = Forwardingcontext.create () in
         let* ppo = Forwardingcontext.ppo ctx [] in
 
         (* Simplified forwarding *)
-        stats_stop "dp.forward";
+        Landmark.exit landmark;
         Lwt.return justs
 
       method lift justs =
-        stats_count "dp.lift";
-        stats_start "dp.lift";
-        Printf.printf "[DEBUG] Performing lifting...\n";
-        flush stdout;
+        let landmark = Landmark.register "dp.lift" in
+        Landmark.enter landmark;
 
         let ctx = Forwardingcontext.create () in
 
         (* Simplified lifting *)
-        stats_stop "dp.lift";
+        Landmark.exit landmark;
         Lwt.return justs
 
       method weaken justs =
-        stats_count "dp.weaken";
-        stats_start "dp.weaken";
-        Printf.printf "[DEBUG] Performing weakening...\n";
-        flush stdout;
+        let landmark = Landmark.register "dp.weaken" in
+        Landmark.enter landmark;
         (* Simplified weakening *)
-        stats_stop "dp.weaken";
+        Landmark.exit landmark;
         Lwt.return justs
     end
   in
@@ -286,6 +271,7 @@ let calculate_dependencies ast structure events ~exhaustive
         Lwt.return [ exec ]
   in
 
+  Landmark.exit landmark;
   Lwt.return (structure, final_justs, executions)
 
 (** Convert parsed AST to interpreter format *)
