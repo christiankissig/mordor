@@ -24,255 +24,265 @@ let val_ events e =
 let calculate_dependencies ast structure events ~exhaustive
     ~include_dependencies ~just_structure ~restrictions =
   let landmark = Landmark.register "calculate_dependencies" in
-  Landmark.enter landmark;
+    Landmark.enter landmark;
 
-  let e_set = structure.e in
-  let restrict = structure.restrict in
-  let rmw = structure.rmw in
-  let po = structure.po in
+    let e_set = structure.e in
+    let restrict = structure.restrict in
+    let rmw = structure.rmw in
+    let po = structure.po in
 
-  (* Filter to only events that exist in the hashtable *)
-  let e_set_filtered =
-    Uset.filter (fun id -> Hashtbl.mem events id) structure.e
-  in
+    (* Filter to only events that exist in the hashtable *)
+    let e_set_filtered =
+      Uset.filter (fun id -> Hashtbl.mem events id) structure.e
+    in
 
-  (* Event type filters *)
-  let filter_events typ =
-    Uset.filter
-      (fun e ->
-        try
-          let event = Hashtbl.find events e in
-            event.typ = typ
-        with Not_found -> false
-      )
-      e_set
-  in
-
-  let branch_events = filter_events Branch in
-  let read_events = filter_events Read in
-  let write_events = filter_events Write in
-  let fence_events = filter_events Fence in
-  let malloc_events = filter_events Malloc in
-  let free_events = filter_events Free in
-
-  (* Build tree for program order *)
-  let build_tree rel =
-    let tree = Hashtbl.create 256 in
-      Uset.iter (fun e -> Hashtbl.add tree e (Uset.create ())) e_set;
-      Uset.iter
-        (fun (from, to_) ->
-          let set = Hashtbl.find tree from in
-            Uset.add set to_ |> ignore
+    (* Event type filters *)
+    let filter_events typ =
+      Uset.filter
+        (fun e ->
+          try
+            let event = Hashtbl.find events e in
+              event.typ = typ
+          with Not_found -> false
         )
-        rel;
-      tree
-  in
+        e_set
+    in
 
-  let po_tree = build_tree po in
+    let branch_events = filter_events Branch in
+    let read_events = filter_events Read in
+    let write_events = filter_events Write in
+    let fence_events = filter_events Fence in
+    let malloc_events = filter_events Malloc in
+    let free_events = filter_events Free in
 
-  (* Define the val function that extracts values from events *)
-  let val_fn event_id =
-    let ev = Hashtbl.find events event_id in
-    match ev.wval with
-    | Some v -> v
-    | None ->
-        (match ev.rval with
-         | Some v -> v
-         | None -> VSymbol (Printf.sprintf "v%d" event_id))
-  in
+    (* Build tree for program order *)
+    let build_tree rel =
+      let tree = Hashtbl.create 256 in
+        Uset.iter (fun e -> Hashtbl.add tree e (Uset.create ())) e_set;
+        Uset.iter
+          (fun (from, to_) ->
+            let set = Hashtbl.find tree from in
+              Uset.add set to_ |> ignore
+          )
+          rel;
+        tree
+    in
 
-  (* Initialize ForwardingContext *)
-  let* () = Forwardingcontext.init {
-    init_e = e_set_filtered;
-    init_po = po;
-    init_events = events;
-    init_val = val_fn;
-    init_rmw = rmw;
-  } in
+    let po_tree = build_tree po in
 
-  (* Initialize justifications for writes *)
-  let init_justs =
-    Uset.map
-      (fun w ->
-        try
-          let event = Hashtbl.find events w in
-            {
-              p = [];
-              d = Uset.create ();
-              fwd = Uset.create ();
-              we = Uset.create ();
-              w = event;
-              op = ("init", None, None);
-            }
-        with Not_found -> failwith "Event not found"
-      )
-      write_events
-  in
+    (* Define the val function that extracts values from events *)
+    let val_fn event_id =
+      let ev = Hashtbl.find events event_id in
+        match ev.wval with
+        | Some v -> v
+        | None -> (
+            match ev.rval with
+            | Some v -> v
+            | None -> VSymbol (Printf.sprintf "v%d" event_id)
+          )
+    in
 
-  let init_ppo =
-    if Hashtbl.mem events 0 then
-      Uset.cross
-        (Uset.singleton 0)
-        (Uset.set_minus
-          (Uset.of_list (Hashtbl.fold (fun k _ acc -> k :: acc) events []))
-          (Uset.singleton 0))
-    else Uset.create ()
-  in
-
-  (* Justification elaboration *)
-  let elaborate =
-    object
-      method filter (justs : justification list) =
-        let landmark = Landmark.register "dp.filter" in
-        Landmark.enter landmark;
-
-        let* (justs' : justification option list) =
-          Lwt_list.map_p
-            (fun (just : justification) ->
-              let* p' = Rewrite.rewrite_pred just.p in
-                match p' with
-                | Some p -> Lwt.return_some { just with p }
-                | None -> Lwt.return_none
-            )
-            justs
-        in
-
-        let (justs'' : justification list) = List.filter_map Fun.id justs' in
-
-        (* Remove covered justifications *)
-        let indexed = List.mapi (fun i j -> (i, j)) justs'' in
-        let result =
-          indexed
-          |> List.filter (fun (i, (j : justification)) ->
-                 (* Keep j if it's NOT covered by any later justification *)
-                 not
-                   (List.exists
-                      (fun (i', (j' : justification)) ->
-                        i' > i
-                        (* Only check justifications that come after *)
-                        && List.length j'.p < List.length j.p
-                        && List.for_all (fun e -> List.mem e j.p) j'.p
-                      )
-                      indexed
-                   )
-             )
-          |> List.map snd
-          |> Uset.of_list
-        in
-
-        Landmark.exit landmark;
-        Lwt.return result
-
-      method value_assign justs =
-        let landmark = Landmark.register "dp.va" in
-        Landmark.enter landmark;
-
-        let* results =
-          Lwt_list.map_p
-            (fun (just : justification) ->
-              (* Simplified value assignment *)
-              let solver = Solver.create just.p in
-                let* model = Solver.solve solver in
-                  match model with
-                  | Some bindings ->
-                      (* Apply concrete values to write value *)
-                      let new_wval =
-                        match just.w.wval with
-                        | Some (VVar v) -> (
-                            match Solver.concrete_value bindings v with
-                            | Some value -> Some value
-                            | None -> just.w.wval
-                          )
-                        | _ -> just.w.wval
-                      in
-                      let new_w = { just.w with wval = new_wval } in
-                        Lwt.return
-                          { just with w = new_w; op = ("va", Some just, None) }
-                  | None -> Lwt.return just
-            )
-            justs
-        in
-
-        Landmark.exit landmark;
-        Lwt.return (Uset.of_list results)
-
-      method forward justs =
-        let landmark = Landmark.register "dp.forward" in
-        Landmark.enter landmark;
-
-        let ctx = Forwardingcontext.create () in
-        let* ppo = Forwardingcontext.ppo ctx [] in
-
-        (* Simplified forwarding *)
-        Landmark.exit landmark;
-        Lwt.return justs
-
-      method lift justs =
-        let landmark = Landmark.register "dp.lift" in
-        Landmark.enter landmark;
-
-        let ctx = Forwardingcontext.create () in
-
-        (* Simplified lifting *)
-        Landmark.exit landmark;
-        Lwt.return justs
-
-      method weaken justs =
-        let landmark = Landmark.register "dp.weaken" in
-        Landmark.enter landmark;
-        (* Simplified weakening *)
-        Landmark.exit landmark;
-        Lwt.return justs
-    end
-  in
-
-  (* Main justification computation *)
-  let* final_justs =
-    if include_dependencies then
-      let rec fixed_point justs =
-        let* va = elaborate#value_assign justs in
-          let* lift = elaborate#lift va in
-            let* weak = elaborate#weaken lift in
-              let* fwd = elaborate#forward weak in
-                let* filtered =
-                  elaborate#filter
-                    (Uset.values (Uset.union (Uset.of_list justs) fwd))
-                in
-
-                if Uset.equal filtered (Uset.of_list justs) then
-                  Lwt.return filtered
-                else fixed_point (Uset.values filtered)
-      in
-
-      let* filtered_init = elaborate#filter (Uset.values init_justs) in
-        fixed_point (Uset.values filtered_init)
-    else Lwt.return init_justs
-  in
-
-  (* Build executions if not just structure *)
-  let* executions =
-    if just_structure then Lwt.return []
-    else
-      (* Simplified execution generation *)
-      let exec =
+    (* Initialize ForwardingContext *)
+    let* () =
+      Forwardingcontext.init
         {
-          ex_e = e_set;
-          rf = Uset.create ();
-          dp = Uset.create ();
-          ppo = Uset.create ();
-          ex_rmw = rmw;
-          ex_p = [];
-          conds = [];
-          fix_rf_map = Hashtbl.create 16;
-          justs = Uset.values final_justs;
-          pointer_map = None;
+          init_e = e_set_filtered;
+          init_po = po;
+          init_events = events;
+          init_val = val_fn;
+          init_rmw = rmw;
         }
-      in
-        Lwt.return [ exec ]
-  in
+    in
 
-  Landmark.exit landmark;
-  Lwt.return (structure, final_justs, executions)
+    (* Initialize justifications for writes *)
+    let init_justs =
+      Uset.map
+        (fun w ->
+          try
+            let event = Hashtbl.find events w in
+              {
+                p = [];
+                d = Uset.create ();
+                fwd = Uset.create ();
+                we = Uset.create ();
+                w = event;
+                op = ("init", None, None);
+              }
+          with Not_found -> failwith "Event not found"
+        )
+        write_events
+    in
+
+    let init_ppo =
+      if Hashtbl.mem events 0 then
+        Uset.cross (Uset.singleton 0)
+          (Uset.set_minus
+             (Uset.of_list (Hashtbl.fold (fun k _ acc -> k :: acc) events []))
+             (Uset.singleton 0)
+          )
+      else Uset.create ()
+    in
+
+    (* Justification elaboration *)
+    let elaborate =
+      object
+        method filter (justs : justification list) =
+          let landmark = Landmark.register "dp.filter" in
+            Landmark.enter landmark;
+
+            let* (justs' : justification option list) =
+              Lwt_list.map_p
+                (fun (just : justification) ->
+                  let* p' = Rewrite.rewrite_pred just.p in
+                    match p' with
+                    | Some p -> Lwt.return_some { just with p }
+                    | None -> Lwt.return_none
+                )
+                justs
+            in
+
+            let (justs'' : justification list) =
+              List.filter_map Fun.id justs'
+            in
+
+            (* Remove covered justifications *)
+            let indexed = List.mapi (fun i j -> (i, j)) justs'' in
+            let result =
+              indexed
+              |> List.filter (fun (i, (j : justification)) ->
+                     (* Keep j if it's NOT covered by any later justification *)
+                     not
+                       (List.exists
+                          (fun (i', (j' : justification)) ->
+                            i' > i
+                            (* Only check justifications that come after *)
+                            && List.length j'.p < List.length j.p
+                            && List.for_all (fun e -> List.mem e j.p) j'.p
+                          )
+                          indexed
+                       )
+                 )
+              |> List.map snd
+              |> Uset.of_list
+            in
+
+            Landmark.exit landmark;
+            Lwt.return result
+
+        method value_assign justs =
+          let landmark = Landmark.register "dp.va" in
+            Landmark.enter landmark;
+
+            let* results =
+              Lwt_list.map_p
+                (fun (just : justification) ->
+                  (* Simplified value assignment *)
+                  let solver = Solver.create just.p in
+                    let* model = Solver.solve solver in
+                      match model with
+                      | Some bindings ->
+                          (* Apply concrete values to write value *)
+                          let new_wval =
+                            match just.w.wval with
+                            | Some (VVar v) -> (
+                                match Solver.concrete_value bindings v with
+                                | Some value -> Some value
+                                | None -> just.w.wval
+                              )
+                            | _ -> just.w.wval
+                          in
+                          let new_w = { just.w with wval = new_wval } in
+                            Lwt.return
+                              {
+                                just with
+                                w = new_w;
+                                op = ("va", Some just, None);
+                              }
+                      | None -> Lwt.return just
+                )
+                justs
+            in
+
+            Landmark.exit landmark;
+            Lwt.return (Uset.of_list results)
+
+        method forward justs =
+          let landmark = Landmark.register "dp.forward" in
+            Landmark.enter landmark;
+
+            let ctx = Forwardingcontext.create () in
+              let* ppo = Forwardingcontext.ppo ctx [] in
+
+              (* Simplified forwarding *)
+              Landmark.exit landmark;
+              Lwt.return justs
+
+        method lift justs =
+          let landmark = Landmark.register "dp.lift" in
+            Landmark.enter landmark;
+
+            let ctx = Forwardingcontext.create () in
+
+            (* Simplified lifting *)
+            Landmark.exit landmark;
+            Lwt.return justs
+
+        method weaken justs =
+          let landmark = Landmark.register "dp.weaken" in
+            Landmark.enter landmark;
+            (* Simplified weakening *)
+            Landmark.exit landmark;
+            Lwt.return justs
+      end
+    in
+
+    (* Main justification computation *)
+    let* final_justs =
+      if include_dependencies then
+        let rec fixed_point justs =
+          let* va = elaborate#value_assign justs in
+            let* lift = elaborate#lift va in
+              let* weak = elaborate#weaken lift in
+                let* fwd = elaborate#forward weak in
+                  let* filtered =
+                    elaborate#filter
+                      (Uset.values (Uset.union (Uset.of_list justs) fwd))
+                  in
+
+                  if Uset.equal filtered (Uset.of_list justs) then
+                    Lwt.return filtered
+                  else fixed_point (Uset.values filtered)
+        in
+
+        let* filtered_init = elaborate#filter (Uset.values init_justs) in
+          fixed_point (Uset.values filtered_init)
+      else Lwt.return init_justs
+    in
+
+    (* Build executions if not just structure *)
+    let* executions =
+      if just_structure then Lwt.return []
+      else
+        (* Simplified execution generation *)
+        let exec =
+          {
+            ex_e = e_set;
+            rf = Uset.create ();
+            dp = Uset.create ();
+            ppo = Uset.create ();
+            ex_rmw = rmw;
+            ex_p = [];
+            conds = [];
+            fix_rf_map = Hashtbl.create 16;
+            justs = Uset.values final_justs;
+            pointer_map = None;
+          }
+        in
+          Lwt.return [ exec ]
+    in
+
+    Landmark.exit landmark;
+    Lwt.return (structure, final_justs, executions)
 
 (** Convert parsed AST to interpreter format *)
 let rec convert_stmt = function

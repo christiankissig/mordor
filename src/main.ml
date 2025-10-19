@@ -74,10 +74,13 @@ let () =
     Landmark.start_profiling ();
 
   (* Handle Ctrl+C to dump profile *)
-  Sys.set_signal Sys.sigint (Sys.Signal_handle (fun _ ->
-    Printf.eprintf "\nSaving profile...\n%!";
-    ignore (Landmark.export());
-    exit 0
-  ));
+  Sys.set_signal Sys.sigint
+    (Sys.Signal_handle
+       (fun _ ->
+         Printf.eprintf "\nSaving profile...\n%!";
+         ignore (Landmark.export ());
+         exit 0
+       )
+    );
 
   Lwt_main.run (main ())
