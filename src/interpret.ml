@@ -15,7 +15,8 @@ let greek_counter = ref 0
 
 let next_greek () =
   let idx = !greek_counter mod (String.length greek_alpha / 2) in
-  let suffix = !greek_counter / String.length greek_alpha in  (* divide by byte length *)
+  let suffix = !greek_counter / String.length greek_alpha in
+    (* divide by byte length *)
     incr greek_counter;
     (* Greek characters are 2 bytes in UTF-8 *)
     let base = String.sub greek_alpha (idx * 2) 2 in
@@ -164,6 +165,9 @@ and interpret_stmt stmt env phi events =
 
 (** Main interpret function *)
 let interpret ast defacto restrictions constraint_ =
+  Printf.printf "[DEBUG] Interpreting program...\n";
+  flush stdout;
+
   let events = create_events () in
   let env = Hashtbl.create 32 in
 

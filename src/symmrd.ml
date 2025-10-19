@@ -29,6 +29,9 @@ let val_ events e =
 (** Calculate dependencies *)
 let calculate_dependencies ast structure events ~exhaustive
     ~include_dependencies ~just_structure ~restrictions =
+  Printf.printf "[DEBUG] Calculating dependencies...\n";
+  flush stdout;
+
   stats_start "dp.misc";
 
   let e_set = structure.e in
@@ -70,6 +73,26 @@ let calculate_dependencies ast structure events ~exhaustive
 
   let po_tree = build_tree po in
 
+  (* Define the val function that extracts values from events *)
+  let val_fn event_id =
+    let ev = Hashtbl.find events event_id in
+    match ev.wval with
+    | Some v -> v
+    | None ->
+        (match ev.rval with
+         | Some v -> v
+         | None -> VSymbol (Printf.sprintf "v%d" event_id))
+  in
+
+  (* Initialize ForwardingContext *)
+  let* () = Forwardingcontext.init {
+    init_e = e_set;
+    init_po = po;
+    init_events = events;
+    init_val = val_fn;
+    init_rmw = rmw;
+  } in
+
   (* Initialize justifications for writes *)
   let init_justs =
     Uset.map
@@ -89,6 +112,16 @@ let calculate_dependencies ast structure events ~exhaustive
       write_events
   in
 
+  let init_ppo =
+    if Hashtbl.mem events 0 then
+      Uset.cross
+        (Uset.singleton 0)
+        (Uset.set_minus
+          (Uset.of_list (Hashtbl.fold (fun k _ acc -> k :: acc) events []))
+          (Uset.singleton 0))
+    else Uset.create ()
+  in
+
   stats_stop "dp.misc";
 
   (* Justification elaboration *)
@@ -97,6 +130,8 @@ let calculate_dependencies ast structure events ~exhaustive
       method filter (justs : justification list) =
         stats_count "dp.filter";
         stats_start "dp.filter";
+        Printf.printf "[DEBUG] Filtering justifications...\n";
+        flush stdout;
 
         let* (justs' : justification option list) =
           Lwt_list.map_p
@@ -138,6 +173,8 @@ let calculate_dependencies ast structure events ~exhaustive
       method value_assign justs =
         stats_count "dp.va";
         stats_start "dp.va";
+        Printf.printf "[DEBUG] Performing value assignment...\n";
+        flush stdout;
 
         let* results =
           Lwt_list.map_p
@@ -171,6 +208,12 @@ let calculate_dependencies ast structure events ~exhaustive
       method forward justs =
         stats_count "dp.forward";
         stats_start "dp.forward";
+        Printf.printf "[DEBUG] Performing forwarding...\n";
+        flush stdout;
+
+        let ctx = Forwardingcontext.create () in
+        let* ppo = Forwardingcontext.ppo ctx [] in
+
         (* Simplified forwarding *)
         stats_stop "dp.forward";
         Lwt.return justs
@@ -178,6 +221,11 @@ let calculate_dependencies ast structure events ~exhaustive
       method lift justs =
         stats_count "dp.lift";
         stats_start "dp.lift";
+        Printf.printf "[DEBUG] Performing lifting...\n";
+        flush stdout;
+
+        let ctx = Forwardingcontext.create () in
+
         (* Simplified lifting *)
         stats_stop "dp.lift";
         Lwt.return justs
@@ -185,6 +233,8 @@ let calculate_dependencies ast structure events ~exhaustive
       method weaken justs =
         stats_count "dp.weaken";
         stats_start "dp.weaken";
+        Printf.printf "[DEBUG] Performing weakening...\n";
+        flush stdout;
         (* Simplified weakening *)
         stats_stop "dp.weaken";
         Lwt.return justs
@@ -252,6 +302,8 @@ let rec convert_stmt = function
 
 (** Parse program *)
 let parse_program program =
+  Printf.printf "[DEBUG] Parsing program...\n";
+  flush stdout;
   try
     let litmus = Parse.parse program in
     let constraints =
@@ -299,5 +351,8 @@ let create_symbolic_event_structure program options =
       ub = false;
     }
   in
+
+  Printf.printf "[DEBUG] Verification complete.\n";
+  flush stdout;
 
   Lwt.return result

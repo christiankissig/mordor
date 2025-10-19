@@ -1154,20 +1154,20 @@ let parse_config p =
   done;
 
   (* Skip to %% if we parsed config *)
-  if !name <> "" || !values <> [] || !defacto <> [] || !constraint_ <> [] then (
+  if !name <> "" || !values <> [] || !defacto <> [] || !constraint_ <> [] then
     while (current_token p).typ <> PERCENT do
       advance_parser p
-    done
-  );
+    done;
   (* Always consume %% if present *)
-  let _ = expect_opt p PERCENT in ();
+  let _ = expect_opt p PERCENT in
+    ();
 
-  {
-    name = !name;
-    values = List.rev !values;
-    defacto = List.rev !defacto;
-    constraint_ = List.rev !constraint_;
-  }
+    {
+      name = !name;
+      values = List.rev !values;
+      defacto = List.rev !defacto;
+      constraint_ = List.rev !constraint_;
+    }
 
 (** Parse litmus test *)
 let rec parse_litmus p =

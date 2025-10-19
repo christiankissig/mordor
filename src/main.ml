@@ -15,7 +15,8 @@ let print_results result =
   Printf.printf "Undefined Behavior: %b\n" result.ub;
   Printf.printf "Executions: %d\n" (List.length result.executions);
   Printf.printf "Events: %d\n" (Hashtbl.length result.structure.e);
-  Printf.printf "===========================\n"
+  Printf.printf "===========================\n";
+  flush stdout
 
 (** Example programs *)
 let example_programs =
@@ -50,6 +51,7 @@ name = LB
 let run_example name program =
   Printf.printf "\n=== Running: %s ===\n" name;
   Printf.printf "Program:\n%s\n\n" program;
+  flush stdout;
 
   let* result = verify_program program default_options in
     print_results result;
@@ -57,13 +59,13 @@ let run_example name program =
 
 (** Main *)
 let main () =
-  Printf.printf "sMRD - Symbolic Memory Relaxation Dependencies\n";
-  Printf.printf "OCaml Implementation\n\n";
+  Printf.printf "MoRDor - Symbolic Modular Relaxed Dependencies\n";
+  flush stdout;
 
   let* () =
     Lwt_list.iter_s (fun (name, prog) -> run_example name prog) example_programs
   in
-
-  Lwt.return_unit
+    flush stdout;
+    Lwt.return_unit
 
 let () = Lwt_main.run (main ())
