@@ -94,6 +94,67 @@ let calculate_dependencies ast structure events ~exhaustive
         }
     in
 
+    let pred (ctx : Forwardingcontext.t option) (p : expr list option) ?ppo () =
+      let* ppo_result =
+        match ppo with
+        | Some ppo_val -> ppo_val
+        | None -> (
+            match (ctx, p) with
+            | Some ctx_val, Some p_val -> Forwardingcontext.ppo ctx_val p_val
+            | _ -> failwith "ctx and p must be provided when ppo is not given"
+          )
+      in
+      let inversed = Uset.inverse_relation ppo_result in
+      let tree = build_tree inversed in
+        Lwt.return (fun e -> Hashtbl.find tree e)
+    in
+
+    let fprime pred_fn ppo_loc =
+      let w_cross_r = Uset.cross write_events read_events in
+      let r_cross_r = Uset.cross read_events read_events in
+      let w_cross_w = Uset.cross write_events write_events in
+      let combined = Uset.union w_cross_r r_cross_r in
+      let combined = Uset.union combined w_cross_w in
+      let in_po = Uset.intersection combined po in
+        Uset.filter
+          (fun (e1, e2) -> Uset.mem ppo_loc (e1, e2) && Uset.mem (pred_fn e2) e1)
+          in_po
+    in
+
+    (* Define fwd function *)
+    let fwd pred_fn ctx ppo_loc =
+      let edges = fprime pred_fn ppo_loc in
+        Uset.filter
+          (fun (e1, e2) ->
+            try
+              let ev2 = Hashtbl.find events e2 in
+                (not ev2.volatile)
+                &&
+                if ev2.typ = Write then
+                  let remapped = Forwardingcontext.remap ctx e2 in
+                  let ev_remapped = Hashtbl.find events remapped in
+                    ev_remapped.wmod = Relaxed
+                else true
+            with Not_found -> false
+          )
+          edges
+    in
+
+    (* Define we function *)
+    let we pred_fn ctx ppo_loc =
+      let edges = fprime pred_fn ppo_loc in
+        Uset.filter
+          (fun (e1, e2) ->
+            try
+              let ev1 = Hashtbl.find events e1 in
+              let ev2 = Hashtbl.find events e2 in
+                (not ev1.volatile) && ev1.typ = Write && ev2.typ = Write
+            with Not_found -> false
+          )
+          edges
+        |> Uset.map (fun (e1, e2) -> (e2, e1))
+    in
+
     (* Initialize justifications for writes *)
     let init_justs =
       Uset.map
@@ -122,6 +183,8 @@ let calculate_dependencies ast structure events ~exhaustive
           )
       else Uset.create ()
     in
+
+    let fj = Uset.union structure.fj init_ppo in
 
     (* Justification elaboration *)
     let elaborate =
@@ -210,12 +273,142 @@ let calculate_dependencies ast structure events ~exhaustive
           let landmark = Landmark.register "dp.forward" in
             Landmark.enter landmark;
 
-            let ctx = Forwardingcontext.create () in
-              let* ppo = Forwardingcontext.ppo ctx [] in
+            let* out =
+              (* Map over justifications *)
+              let* results =
+                Lwt_list.map_p
+                  (fun (just : justification) ->
+                    (* Determine paths to check *)
+                    let ps =
+                      if structure.pwg <> [] then
+                        [ just.p; just.p @ structure.pwg ]
+                      else [ just.p ]
+                    in
 
-              (* Simplified forwarding *)
-              Landmark.exit landmark;
-              Lwt.return justs
+                    (* Map over each path *)
+                    let* path_results =
+                      Lwt_list.map_p
+                        (fun p ->
+                          let ctx =
+                            Forwardingcontext.create ~fwd:just.fwd ~we:just.we
+                              ()
+                          in
+                            let* ppo = Forwardingcontext.ppo ctx p in
+                              let* ppo_loc = Forwardingcontext.ppo_loc ctx p in
+                                let* _pred =
+                                  pred None None ~ppo:(Lwt.return ppo) ()
+                                in
+
+                                (* Subtract fj from ppo_loc *)
+                                let _ppo_loc = Uset.set_minus ppo_loc fj in
+
+                                (* Compute fwd and we edges *)
+                                let _fwd = fwd _pred ctx _ppo_loc in
+                                let _we = we _pred ctx _ppo_loc in
+
+                                (* Filter edges by label *)
+                                let _fwd =
+                                  Uset.filter
+                                    (fun (_, e2) -> e2 <> just.w.label)
+                                    _fwd
+                                in
+                                let _we =
+                                  Uset.filter
+                                    (fun (_, e2) -> e2 <> just.w.label)
+                                    _we
+                                in
+
+                                (* Filter edge function *)
+                                let filtedge (edge, new_fwd, new_we) =
+                                  if Forwardingcontext.is_bad new_fwd new_we
+                                  then Lwt.return_false
+                                  else if
+                                    Forwardingcontext.is_good new_fwd new_we
+                                  then Lwt.return_true
+                                  else
+                                    let con =
+                                      Forwardingcontext.create ~fwd:new_fwd
+                                        ~we:new_we ()
+                                    in
+                                      Forwardingcontext.check con
+                                in
+
+                                (* Create fwd edges with contexts *)
+                                let fwdedges =
+                                  Uset.values _fwd
+                                  |> List.map (fun edge ->
+                                         ( edge,
+                                           Uset.union just.fwd
+                                             (Uset.singleton edge),
+                                           just.we
+                                         )
+                                     )
+                                in
+
+                                (* Create we edges with contexts *)
+                                let weedges =
+                                  Uset.values _we
+                                  |> List.map (fun edge ->
+                                         ( edge,
+                                           just.fwd,
+                                           Uset.union just.we
+                                             (Uset.singleton edge)
+                                         )
+                                     )
+                                in
+
+                                (* Filter both edge types *)
+                                let* filtered_fwd =
+                                  Lwt_list.filter_p filtedge fwdedges
+                                in
+                                  let* filtered_we =
+                                    Lwt_list.filter_p filtedge weedges
+                                  in
+
+                                  (* Remap justifications *)
+                                  let fwd_justs =
+                                    List.map
+                                      (fun (edge, new_fwd, new_we) ->
+                                        let con =
+                                          Forwardingcontext.create ~fwd:new_fwd
+                                            ~we:new_we ()
+                                        in
+                                          Forwardingcontext.remap_just con just
+                                            (Some ("fwd", Some just, None))
+                                      )
+                                      filtered_fwd
+                                  in
+
+                                  let we_justs =
+                                    List.map
+                                      (fun (edge, new_fwd, new_we) ->
+                                        let con =
+                                          Forwardingcontext.create ~fwd:new_fwd
+                                            ~we:new_we ()
+                                        in
+                                          Forwardingcontext.remap_just con just
+                                            (Some ("we", Some just, None))
+                                      )
+                                      filtered_we
+                                  in
+
+                                  Lwt.return (fwd_justs @ we_justs)
+                        )
+                        ps
+                    in
+                      Lwt.return (List.concat path_results)
+                  )
+                  (Uset.values justs)
+              in
+
+              (* Flatten results and convert to USet *)
+              let flattened = List.concat results in
+                Lwt.return (Uset.of_list flattened)
+            in
+
+            (* Simplified forwarding *)
+            Landmark.exit landmark;
+            Lwt.return out
 
         method lift justs =
           let landmark = Landmark.register "dp.lift" in

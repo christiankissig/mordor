@@ -730,369 +730,380 @@ let parse_params p parse_elem =
 
 (** Parse program statements *)
 let rec parse_program p =
-  let rec parse_stmts acc labels =
-    let tok = current_token p in
-    let pc = tok.line in
+  let landmark = Landmark.register "parse_program" in
+    Landmark.enter landmark;
+    let rec parse_stmts acc labels =
+      let tok = current_token p in
+      let pc = tok.line in
 
-    match tok.typ with
-    | BACKTICK label ->
-        advance_parser p;
-        parse_stmts acc (label :: labels)
-    | LBRACE ->
-        advance_parser p;
-        let lhs = parse_program p in
-        let _ = expect p RBRACE in
-        let _ = expect p PARALLEL in
-        let _ = expect p LBRACE in
-        let rhs = parse_program p in
-        let _ = expect p RBRACE in
-        let stmt = SThread { lhs; rhs } in
-          parse_stmts (stmt :: acc) []
-    | STAR ->
-        advance_parser p;
-        let pointer = parse_expr p () in
-        let assign = parse_assign p in
-        let expr = parse_expr p () in
-        let stmt = SDerefStore { pointer; expr; assign } in
-        let stmt =
-          if labels <> [] then SLabeled { label = List.rev labels; stmt }
-          else stmt
-        in
-          parse_stmts (stmt :: acc) []
-    | GLOBAL g -> (
-        advance_parser p;
-        match (current_token p).typ with
-        | COLONRLX
-        | COLONREL
-        | COLONACQ
-        | COLONSC
-        | COLONV
-        | COLONVRLX
-        | COLONVREL
-        | COLONVACQ
-        | COLONVSC
-        | ASSIGN ->
-            let assign = parse_assign p in
-            let expr = parse_expr p () in
-            let stmt = SGlobalStore { global = g; expr; assign } in
-            let stmt =
-              if labels <> [] then SLabeled { label = List.rev labels; stmt }
-              else stmt
-            in
-              parse_stmts (stmt :: acc) []
-        | DOT -> (
-            advance_parser p;
+      match tok.typ with
+      | BACKTICK label ->
+          advance_parser p;
+          parse_stmts acc (label :: labels)
+      | LBRACE ->
+          advance_parser p;
+          let lhs = parse_program p in
+          let _ = expect p RBRACE in
+          let _ = expect p PARALLEL in
+          let _ = expect p LBRACE in
+          let rhs = parse_program p in
+          let _ = expect p RBRACE in
+          let stmt = SThread { lhs; rhs } in
+            parse_stmts (stmt :: acc) []
+      | STAR ->
+          advance_parser p;
+          let pointer = parse_expr p () in
+          let assign = parse_assign p in
+          let expr = parse_expr p () in
+          let stmt = SDerefStore { pointer; expr; assign } in
+          let stmt =
+            if labels <> [] then SLabeled { label = List.rev labels; stmt }
+            else stmt
+          in
+            parse_stmts (stmt :: acc) []
+      | GLOBAL g -> (
+          advance_parser p;
+          match (current_token p).typ with
+          | COLONRLX
+          | COLONREL
+          | COLONACQ
+          | COLONSC
+          | COLONV
+          | COLONVRLX
+          | COLONVREL
+          | COLONVACQ
+          | COLONVSC
+          | ASSIGN ->
+              let assign = parse_assign p in
+              let expr = parse_expr p () in
+              let stmt = SGlobalStore { global = g; expr; assign } in
+              let stmt =
+                if labels <> [] then SLabeled { label = List.rev labels; stmt }
+                else stmt
+              in
+                parse_stmts (stmt :: acc) []
+          | DOT -> (
+              advance_parser p;
+              match (current_token p).typ with
+              | STORE ->
+                  advance_parser p;
+                  let params = parse_params p (fun () -> parse_expr p ()) in
+                  let expr = List.nth params 0 in
+                  let mode =
+                    if List.length params > 1 then
+                      match List.nth params 1 with
+                      | _ -> Relaxed (* Would need to parse mode from expr *)
+                    else Relaxed
+                  in
+                  let assign = { mode; volatile = false } in
+                  let stmt = SGlobalStore { global = g; expr; assign } in
+                  let stmt =
+                    if labels <> [] then
+                      SLabeled { label = List.rev labels; stmt }
+                    else stmt
+                  in
+                    parse_stmts (stmt :: acc) []
+              | _ -> failwith "Expected store after ."
+            )
+          | _ -> failwith "Expected assignment after global"
+        )
+      | REGISTER r -> (
+          advance_parser p;
+          let assign = parse_assign p in
             match (current_token p).typ with
-            | STORE ->
+            | GLOBAL g ->
                 advance_parser p;
-                let params = parse_params p (fun () -> parse_expr p ()) in
-                let expr = List.nth params 0 in
                 let mode =
-                  if List.length params > 1 then
-                    match List.nth params 1 with
-                    | _ -> Relaxed (* Would need to parse mode from expr *)
-                  else Relaxed
+                  match (current_token p).typ with
+                  | DOT ->
+                      advance_parser p;
+                      let _ = expect p LOAD in
+                      let _ = expect p LPAREN in
+                      let m = parse_memory_order p in
+                      let _ = expect p RPAREN in
+                        m
+                  | _ -> assign.mode
                 in
-                let assign = { mode; volatile = false } in
-                let stmt = SGlobalStore { global = g; expr; assign } in
+                let assign = { assign with mode } in
+                let stmt = SGlobalLoad { register = r; global = g; assign } in
                 let stmt =
                   if labels <> [] then
                     SLabeled { label = List.rev labels; stmt }
                   else stmt
                 in
                   parse_stmts (stmt :: acc) []
-            | _ -> failwith "Expected store after ."
-          )
-        | _ -> failwith "Expected assignment after global"
-      )
-    | REGISTER r -> (
-        advance_parser p;
-        let assign = parse_assign p in
-          match (current_token p).typ with
-          | GLOBAL g ->
-              advance_parser p;
-              let mode =
-                match (current_token p).typ with
-                | DOT ->
-                    advance_parser p;
-                    let _ = expect p LOAD in
-                    let _ = expect p LPAREN in
-                    let m = parse_memory_order p in
-                    let _ = expect p RPAREN in
-                      m
-                | _ -> assign.mode
-              in
-              let assign = { assign with mode } in
-              let stmt = SGlobalLoad { register = r; global = g; assign } in
-              let stmt =
-                if labels <> [] then SLabeled { label = List.rev labels; stmt }
-                else stmt
-              in
-                parse_stmts (stmt :: acc) []
-          | STAR ->
-              advance_parser p;
-              let pointer = parse_expr p () in
-              let stmt = SDeref { register = r; pointer; assign } in
-              let stmt =
-                if labels <> [] then SLabeled { label = List.rev labels; stmt }
-                else stmt
-              in
-                parse_stmts (stmt :: acc) []
-          | CAS ->
-              advance_parser p;
-              let all_params =
-                parse_params p (fun () ->
-                    match parse_memory_order_opt p with
-                    | Some m -> `Mode m
-                    | None -> `Expr (parse_expr p ())
-                )
-              in
-              let modes =
-                List.filter_map
-                  (function
-                    | `Mode m -> Some m
-                    | _ -> None
-                    )
-                  all_params
-              in
-              let params =
-                List.filter_map
-                  (function
-                    | `Expr e -> Some e
-                    | _ -> None
-                    )
-                  all_params
-              in
-              let stmt = SCas { register = r; params; modes; assign } in
-              let stmt =
-                if labels <> [] then SLabeled { label = List.rev labels; stmt }
-                else stmt
-              in
-                parse_stmts (stmt :: acc) []
-          | FADD ->
-              advance_parser p;
-              let all_params =
-                parse_params p (fun () ->
-                    match parse_memory_order_opt p with
-                    | Some m -> `Mode m
-                    | None -> `Expr (parse_expr p ())
-                )
-              in
-              let modes =
-                List.filter_map
-                  (function
-                    | `Mode m -> Some m
-                    | _ -> None
-                    )
-                  all_params
-              in
-              let params =
-                List.filter_map
-                  (function
-                    | `Expr e -> Some e
-                    | _ -> None
-                    )
-                  all_params
-              in
-              let stmt = SFAdd { register = r; params; modes; assign } in
-              let stmt =
-                if labels <> [] then SLabeled { label = List.rev labels; stmt }
-                else stmt
-              in
-                parse_stmts (stmt :: acc) []
-          | _ ->
-              let expr = parse_expr p () in
-              let stmt = SRegisterStore { register = r; expr } in
-              let stmt =
-                if labels <> [] then SLabeled { label = List.rev labels; stmt }
-                else stmt
-              in
-                parse_stmts (stmt :: acc) []
-      )
-    | IF ->
-        advance_parser p;
-        let _ = expect p LPAREN in
-        let condition = parse_expr p () in
-        let _ = expect p RPAREN in
-        let _ = expect p LBRACE in
-        let body = parse_program p in
-        let _ = expect p RBRACE in
-        let else_body =
-          match expect_opt p ELSE with
-          | Some _ ->
-              let _ = expect p LBRACE in
-              let else_stmts = parse_program p in
-              let _ = expect p RBRACE in
-                if else_stmts = [] then None else Some else_stmts
-          | None -> None
-        in
-        let stmt = SIf { condition; body; else_body } in
-        let stmt =
-          if labels <> [] then SLabeled { label = List.rev labels; stmt }
-          else stmt
-        in
-          parse_stmts (stmt :: acc) []
-    | WHILE ->
-        advance_parser p;
-        let _ = expect p LPAREN in
-        let condition = parse_expr p () in
-        let _ = expect p RPAREN in
-        let _ = expect p LBRACE in
-        let body = parse_program p in
-        let _ = expect p RBRACE in
-        let stmt = SWhile { condition; body } in
-        let stmt =
-          if labels <> [] then SLabeled { label = List.rev labels; stmt }
-          else stmt
-        in
-          parse_stmts (stmt :: acc) []
-    | QWHILE ->
-        advance_parser p;
-        let _ = expect p LPAREN in
-        let condition = parse_expr p () in
-        let _ = expect p RPAREN in
-        let _ = expect p LBRACE in
-        let body = parse_program p in
-        let _ = expect p RBRACE in
-        let stmt = SQWhile { condition; body } in
-        let stmt =
-          if labels <> [] then SLabeled { label = List.rev labels; stmt }
-          else stmt
-        in
-          parse_stmts (stmt :: acc) []
-    | DO ->
-        advance_parser p;
-        let _ = expect p LBRACE in
-        let body = parse_program p in
-        let _ = expect p RBRACE in
-        let _ = expect p WHILE in
-        let _ = expect p LPAREN in
-        let condition = parse_expr p () in
-        let _ = expect p RPAREN in
-        let stmt = SDo { body; condition } in
-          parse_stmts (stmt :: acc) []
-    | QDO ->
-        advance_parser p;
-        let _ = expect p LBRACE in
-        let body = parse_program p in
-        let _ = expect p RBRACE in
-        let _ = expect p QWHILE in
-        let _ = expect p LPAREN in
-        let condition = parse_expr p () in
-        let _ = expect p RPAREN in
-        let stmt = SQDo { body; condition } in
-          parse_stmts (stmt :: acc) []
-    | FENCE ->
-        advance_parser p;
-        let _ = expect p LPAREN in
-        let mode = parse_memory_order p in
-        let _ = expect p RPAREN in
-        let stmt = SFence { mode } in
-        let stmt =
-          if labels <> [] then SLabeled { label = List.rev labels; stmt }
-          else stmt
-        in
-          parse_stmts (stmt :: acc) []
-    | LOCK ->
-        advance_parser p;
-        let global =
-          match (current_token p).typ with
-          | GLOBAL g ->
-              advance_parser p;
-              Some g
-          | _ -> None
-        in
-        let stmt = SLock { global } in
-        let stmt =
-          if labels <> [] then SLabeled { label = List.rev labels; stmt }
-          else stmt
-        in
-          parse_stmts (stmt :: acc) []
-    | UNLOCK ->
-        advance_parser p;
-        let global =
-          match (current_token p).typ with
-          | GLOBAL g ->
-              advance_parser p;
-              Some g
-          | _ -> None
-        in
-        let stmt = SUnlock { global } in
-        let stmt =
-          if labels <> [] then SLabeled { label = List.rev labels; stmt }
-          else stmt
-        in
-          parse_stmts (stmt :: acc) []
-    | FREE -> (
-        advance_parser p;
-        let _ = expect p LPAREN in
-          match (current_token p).typ with
-          | GLOBAL g ->
-              advance_parser p;
-              let _ = expect p RPAREN in
-                (* Generate load from global *)
-                p.malloc_index <- p.malloc_index - 1;
-                let reg = Printf.sprintf "r%d" p.malloc_index in
-                let load_stmt =
-                  SGlobalLoad
-                    {
-                      register = reg;
-                      global = g;
-                      assign = { mode = Relaxed; volatile = false };
-                    }
+            | STAR ->
+                advance_parser p;
+                let pointer = parse_expr p () in
+                let stmt = SDeref { register = r; pointer; assign } in
+                let stmt =
+                  if labels <> [] then
+                    SLabeled { label = List.rev labels; stmt }
+                  else stmt
                 in
-                let free_stmt = SFree { register = reg } in
-                  parse_stmts (free_stmt :: load_stmt :: acc) []
-          | REGISTER r ->
-              advance_parser p;
-              let _ = expect p RPAREN in
-              let stmt = SFree { register = r } in
-              let stmt =
-                if labels <> [] then SLabeled { label = List.rev labels; stmt }
-                else stmt
+                  parse_stmts (stmt :: acc) []
+            | CAS ->
+                advance_parser p;
+                let all_params =
+                  parse_params p (fun () ->
+                      match parse_memory_order_opt p with
+                      | Some m -> `Mode m
+                      | None -> `Expr (parse_expr p ())
+                  )
+                in
+                let modes =
+                  List.filter_map
+                    (function
+                      | `Mode m -> Some m
+                      | _ -> None
+                      )
+                    all_params
+                in
+                let params =
+                  List.filter_map
+                    (function
+                      | `Expr e -> Some e
+                      | _ -> None
+                      )
+                    all_params
+                in
+                let stmt = SCas { register = r; params; modes; assign } in
+                let stmt =
+                  if labels <> [] then
+                    SLabeled { label = List.rev labels; stmt }
+                  else stmt
+                in
+                  parse_stmts (stmt :: acc) []
+            | FADD ->
+                advance_parser p;
+                let all_params =
+                  parse_params p (fun () ->
+                      match parse_memory_order_opt p with
+                      | Some m -> `Mode m
+                      | None -> `Expr (parse_expr p ())
+                  )
+                in
+                let modes =
+                  List.filter_map
+                    (function
+                      | `Mode m -> Some m
+                      | _ -> None
+                      )
+                    all_params
+                in
+                let params =
+                  List.filter_map
+                    (function
+                      | `Expr e -> Some e
+                      | _ -> None
+                      )
+                    all_params
+                in
+                let stmt = SFAdd { register = r; params; modes; assign } in
+                let stmt =
+                  if labels <> [] then
+                    SLabeled { label = List.rev labels; stmt }
+                  else stmt
+                in
+                  parse_stmts (stmt :: acc) []
+            | _ ->
+                let expr = parse_expr p () in
+                let stmt = SRegisterStore { register = r; expr } in
+                let stmt =
+                  if labels <> [] then
+                    SLabeled { label = List.rev labels; stmt }
+                  else stmt
+                in
+                  parse_stmts (stmt :: acc) []
+        )
+      | IF ->
+          advance_parser p;
+          let _ = expect p LPAREN in
+          let condition = parse_expr p () in
+          let _ = expect p RPAREN in
+          let _ = expect p LBRACE in
+          let body = parse_program p in
+          let _ = expect p RBRACE in
+          let else_body =
+            match expect_opt p ELSE with
+            | Some _ ->
+                let _ = expect p LBRACE in
+                let else_stmts = parse_program p in
+                let _ = expect p RBRACE in
+                  if else_stmts = [] then None else Some else_stmts
+            | None -> None
+          in
+          let stmt = SIf { condition; body; else_body } in
+          let stmt =
+            if labels <> [] then SLabeled { label = List.rev labels; stmt }
+            else stmt
+          in
+            parse_stmts (stmt :: acc) []
+      | WHILE ->
+          advance_parser p;
+          let _ = expect p LPAREN in
+          let condition = parse_expr p () in
+          let _ = expect p RPAREN in
+          let _ = expect p LBRACE in
+          let body = parse_program p in
+          let _ = expect p RBRACE in
+          let stmt = SWhile { condition; body } in
+          let stmt =
+            if labels <> [] then SLabeled { label = List.rev labels; stmt }
+            else stmt
+          in
+            parse_stmts (stmt :: acc) []
+      | QWHILE ->
+          advance_parser p;
+          let _ = expect p LPAREN in
+          let condition = parse_expr p () in
+          let _ = expect p RPAREN in
+          let _ = expect p LBRACE in
+          let body = parse_program p in
+          let _ = expect p RBRACE in
+          let stmt = SQWhile { condition; body } in
+          let stmt =
+            if labels <> [] then SLabeled { label = List.rev labels; stmt }
+            else stmt
+          in
+            parse_stmts (stmt :: acc) []
+      | DO ->
+          advance_parser p;
+          let _ = expect p LBRACE in
+          let body = parse_program p in
+          let _ = expect p RBRACE in
+          let _ = expect p WHILE in
+          let _ = expect p LPAREN in
+          let condition = parse_expr p () in
+          let _ = expect p RPAREN in
+          let stmt = SDo { body; condition } in
+            parse_stmts (stmt :: acc) []
+      | QDO ->
+          advance_parser p;
+          let _ = expect p LBRACE in
+          let body = parse_program p in
+          let _ = expect p RBRACE in
+          let _ = expect p QWHILE in
+          let _ = expect p LPAREN in
+          let condition = parse_expr p () in
+          let _ = expect p RPAREN in
+          let stmt = SQDo { body; condition } in
+            parse_stmts (stmt :: acc) []
+      | FENCE ->
+          advance_parser p;
+          let _ = expect p LPAREN in
+          let mode = parse_memory_order p in
+          let _ = expect p RPAREN in
+          let stmt = SFence { mode } in
+          let stmt =
+            if labels <> [] then SLabeled { label = List.rev labels; stmt }
+            else stmt
+          in
+            parse_stmts (stmt :: acc) []
+      | LOCK ->
+          advance_parser p;
+          let global =
+            match (current_token p).typ with
+            | GLOBAL g ->
+                advance_parser p;
+                Some g
+            | _ -> None
+          in
+          let stmt = SLock { global } in
+          let stmt =
+            if labels <> [] then SLabeled { label = List.rev labels; stmt }
+            else stmt
+          in
+            parse_stmts (stmt :: acc) []
+      | UNLOCK ->
+          advance_parser p;
+          let global =
+            match (current_token p).typ with
+            | GLOBAL g ->
+                advance_parser p;
+                Some g
+            | _ -> None
+          in
+          let stmt = SUnlock { global } in
+          let stmt =
+            if labels <> [] then SLabeled { label = List.rev labels; stmt }
+            else stmt
+          in
+            parse_stmts (stmt :: acc) []
+      | FREE -> (
+          advance_parser p;
+          let _ = expect p LPAREN in
+            match (current_token p).typ with
+            | GLOBAL g ->
+                advance_parser p;
+                let _ = expect p RPAREN in
+                  (* Generate load from global *)
+                  p.malloc_index <- p.malloc_index - 1;
+                  let reg = Printf.sprintf "r%d" p.malloc_index in
+                  let load_stmt =
+                    SGlobalLoad
+                      {
+                        register = reg;
+                        global = g;
+                        assign = { mode = Relaxed; volatile = false };
+                      }
+                  in
+                  let free_stmt = SFree { register = reg } in
+                    parse_stmts (free_stmt :: load_stmt :: acc) []
+            | REGISTER r ->
+                advance_parser p;
+                let _ = expect p RPAREN in
+                let stmt = SFree { register = r } in
+                let stmt =
+                  if labels <> [] then
+                    SLabeled { label = List.rev labels; stmt }
+                  else stmt
+                in
+                  parse_stmts (stmt :: acc) []
+            | _ -> failwith "Expected register or global in free"
+        )
+      | SKIP ->
+          advance_parser p;
+          parse_stmts acc []
+      | SEMICOLON ->
+          advance_parser p;
+          parse_stmts acc labels
+      | RBRACE | PARALLEL | PERCENT | EOF ->
+          (* End of block *)
+          List.rev acc
+      | _ ->
+          failwith
+            (Printf.sprintf "Unexpected token in program at line %d" tok.line)
+    in
+
+    let stmts = parse_stmts [] [] in
+
+    (* Post-process malloc expressions *)
+    let process_malloc stmts =
+      List.fold_right
+        (fun stmt acc ->
+          match stmt with
+          | SGlobalStore { global; expr = EMalloc size; assign } ->
+              p.malloc_index <- p.malloc_index - 1;
+              let reg = Printf.sprintf "r%d" p.malloc_index in
+              let malloc_stmt =
+                SMalloc { register = reg; size; pc = 0; label = [] }
               in
-                parse_stmts (stmt :: acc) []
-          | _ -> failwith "Expected register or global in free"
-      )
-    | SKIP ->
-        advance_parser p;
-        parse_stmts acc []
-    | SEMICOLON ->
-        advance_parser p;
-        parse_stmts acc labels
-    | RBRACE | PARALLEL | PERCENT | EOF ->
-        (* End of block *)
-        List.rev acc
-    | _ ->
-        failwith
-          (Printf.sprintf "Unexpected token in program at line %d" tok.line)
-  in
-
-  let stmts = parse_stmts [] [] in
-
-  (* Post-process malloc expressions *)
-  let process_malloc stmts =
-    List.fold_right
-      (fun stmt acc ->
-        match stmt with
-        | SGlobalStore { global; expr = EMalloc size; assign } ->
-            p.malloc_index <- p.malloc_index - 1;
-            let reg = Printf.sprintf "r%d" p.malloc_index in
-            let malloc_stmt =
-              SMalloc { register = reg; size; pc = 0; label = [] }
-            in
-            let store_stmt =
-              SGlobalStore { global; expr = ERegister reg; assign }
-            in
-              malloc_stmt :: store_stmt :: acc
-        | SRegisterStore { register; expr = EMalloc size } ->
-            let malloc_stmt = SMalloc { register; size; pc = 0; label = [] } in
-              malloc_stmt :: acc
-        | _ -> stmt :: acc
-      )
-      stmts []
-  in
-    process_malloc stmts
+              let store_stmt =
+                SGlobalStore { global; expr = ERegister reg; assign }
+              in
+                malloc_stmt :: store_stmt :: acc
+          | SRegisterStore { register; expr = EMalloc size } ->
+              let malloc_stmt =
+                SMalloc { register; size; pc = 0; label = [] }
+              in
+                malloc_stmt :: acc
+          | _ -> stmt :: acc
+        )
+        stmts []
+    in
+      Landmark.exit landmark;
+      process_malloc stmts
 
 (** Parse configuration *)
 let parse_config p =
