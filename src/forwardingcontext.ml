@@ -7,7 +7,7 @@ open Lwt.Syntax
 module State = struct
   let e : int uset ref = ref (Hashtbl.create 0)
   let events : (int, event) Hashtbl.t ref = ref (Hashtbl.create 0)
-  let val_fn : (int -> value_type) ref = ref (fun _ -> VNumber Z.zero)
+  let val_fn : (int -> value_type option) ref = ref (fun _ -> None)
   let ppo_loc_base : (int * int) uset ref = ref (Hashtbl.create 0)
   let ppo_base : (int * int) uset ref = ref (Hashtbl.create 0)
   let ppo_sync : (int * int) uset ref = ref (Hashtbl.create 0)
@@ -121,7 +121,7 @@ type init_params = {
   init_e : int uset;
   init_po : (int * int) uset;
   init_events : (int, event) Hashtbl.t;
-  init_val : int -> value_type;
+  init_val : int -> value_type option;
   init_rmw : (int * int) uset;
 }
 
@@ -313,11 +313,20 @@ type t = {
 (** Create forwarding context *)
 let create ?(fwd = Hashtbl.create 0) ?(we = Hashtbl.create 0) () =
   let fwdwe = Uset.union fwd we in
+
+  (* valmap is filtered by non-None values *)
   let valmap =
     Uset.values fwd
-    |> List.map (fun (e1, e2) -> (!State.val_fn e1, !State.val_fn e2))
+    |> List.filter_map (fun (e1, e2) ->
+           match (!State.val_fn e1, !State.val_fn e2) with
+           | Some v1, Some v2 -> Some (v1, v2)
+           | _ -> None
+       )
   in
-  let psi = List.map (fun (v1, v2) -> EBinOp (v1, "=", v2)) valmap in
+
+  let psi =
+    List.filter_map (fun (v1, v2) -> Some (EBinOp (v1, "=", v2))) valmap
+  in
 
   (* Build remap map *)
   let remap_map = Hashtbl.create 16 in

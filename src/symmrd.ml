@@ -1,7 +1,8 @@
 (** sMRD - Symbolic Memory Relaxation Dependencies Main dependency calculation
     algorithm *)
 
-open Parse (* order with open Types important *)
+open Expr
+open Parse (* must come before open Types *)
 open Types
 open Lwt.Syntax
 
@@ -70,16 +71,41 @@ let calculate_dependencies ast structure events ~exhaustive
 
     let po_tree = build_tree po in
 
+    (* Build ebranch mapping *)
+    let ebranch =
+      let tbl = Hashtbl.create 16 in
+        Uset.iter
+          (fun e ->
+            let branches =
+              Uset.filter (fun (f, t) -> Uset.mem branch_events f && t = e) po
+              |> Uset.map (fun (f, _) -> f)
+            in
+              Hashtbl.add tbl e branches
+          )
+          e_set;
+        tbl
+    in
+
+    let conflicting_branch e1 e2 =
+      let branches1 =
+        try Hashtbl.find ebranch e1 with Not_found -> Uset.create ()
+      in
+      let branches2 =
+        try Hashtbl.find ebranch e2 with Not_found -> Uset.create ()
+      in
+      let common = Uset.intersection branches1 branches2 in
+      let values = Uset.values common in
+        match values with
+        | [] -> failwith "No conflicting branch found"
+        | hd :: tl -> List.fold_left max hd tl
+    in
+
     (* Define the val function that extracts values from events *)
     let val_fn event_id =
       let ev = Hashtbl.find events event_id in
         match ev.wval with
-        | Some v -> v
-        | None -> (
-            match ev.rval with
-            | Some v -> v
-            | None -> VSymbol (Printf.sprintf "v%d" event_id)
-          )
+        | Some v -> ev.wval
+        | None -> ev.rval
     in
 
     (* Initialize ForwardingContext *)
@@ -407,6 +433,201 @@ let calculate_dependencies ast structure events ~exhaustive
             in
 
             (* Simplified forwarding *)
+            Landmark.exit landmark;
+            Lwt.return out
+
+        method strengthen (just_1 : justification) (just_2 : justification) ppo
+            con =
+          let landmark = Landmark.register "dp.strengthen" in
+            Landmark.enter landmark;
+
+            let p_1 = Uset.of_list just_1.p in
+            let p_2 = Uset.of_list just_2.p in
+            let w_1 = just_1.w in
+            let w_2 = just_2.w in
+            let e_1 = w_1.label in
+            let e_2 = w_2.label in
+
+            (* Get symbols for an event *)
+            let gsyms e =
+              let po_neighbors =
+                Uset.filter (fun (f, t) -> f = e || t = e) po
+                |> Uset.map (fun (f, t) -> [ f; t ])
+                |> fun s ->
+                Uset.fold (fun acc pairs -> pairs @ acc) s [] |> Uset.of_list
+              in
+              let r_union_a = Uset.union read_events malloc_events in
+                Uset.intersection po_neighbors r_union_a
+                |> Uset.filter (fun ep -> not (Uset.mem ppo (e, ep)))
+                |> Uset.map (fun ep ->
+                       let remapped = Forwardingcontext.remap con ep in
+                         match val_fn remapped with
+                         | Some (VSymbol s) when is_symbol s -> Some s
+                         | _ -> None
+                   )
+                |> Uset.filter (fun x -> x <> None)
+                |> Uset.map (fun x ->
+                       match x with
+                       | Some s -> s
+                       | None -> ""
+                   )
+            in
+
+            let syms_1 = gsyms e_1 in
+            let syms_2 = gsyms e_2 in
+            let cs = Uset.intersection syms_1 syms_2 in
+            let syms_1 = Uset.set_minus syms_1 cs in
+            let syms_2 = Uset.set_minus syms_2 cs in
+            let pos_rp = Uset.cross syms_1 syms_2 in
+
+            (* Get necessary symbols *)
+            let get_expr_symbols exprs =
+              List.map Expr.get_symbols exprs |> List.concat |> Uset.of_list
+            in
+
+            let w1_syms =
+              match val_fn w_1.label with
+              | Some v -> Value.get_symbols v
+              | None -> []
+            in
+            let w2_syms =
+              match val_fn w_2.label with
+              | Some v -> Value.get_symbols v
+              | None -> []
+            in
+
+            let ness_1 =
+              let p1_syms = get_expr_symbols just_1.p in
+                Uset.union p1_syms (Uset.of_list w1_syms) |> fun s ->
+                Uset.intersection s syms_1
+            in
+            let ness_2 =
+              let p2_syms = get_expr_symbols just_2.p in
+                Uset.union p2_syms (Uset.of_list w2_syms) |> fun s ->
+                Uset.intersection s syms_2
+            in
+            let ness = Uset.union ness_1 ness_2 in
+
+            (* Get branch predicate *)
+            let bp_event = Hashtbl.find events (conflicting_branch e_1 e_2) in
+            let bp =
+              match bp_event.cond with
+              | Some (VExpression e) -> e
+              | _ -> failwith "Expected expression in cond"
+            in
+            let bpi = Expr.inverse bp in
+
+            (* Compute uncommon predicates *)
+            let uncommon = Uset.difference p_1 p_2 in
+            let uncommonstr =
+              Uset.filter
+                (fun x -> not (Uset.mem uncommon (Expr.inverse x)))
+                uncommon
+            in
+
+            let notcommon_1 = Uset.set_minus uncommonstr p_2 in
+            let notcommon_2 = Uset.set_minus uncommonstr p_1 in
+
+            (* Iterator function *)
+            let it n_1 n_2 =
+              let ncs_1 =
+                Uset.values n_1
+                |> List.map Expr.get_symbols
+                |> List.concat
+                |> Uset.of_list
+                |> fun s -> Uset.set_minus s cs
+              in
+              let ncs_2 =
+                Uset.values n_2
+                |> List.map Expr.get_symbols
+                |> List.concat
+                |> Uset.of_list
+                |> fun s -> Uset.set_minus s cs
+              in
+              let rls = ref (Uset.values (Uset.union ncs_1 ncs_2)) in
+
+              let str_1 = ref (Uset.union p_1 n_2) in
+              let str_2 = ref (Uset.union p_2 n_1) in
+              let i = ref 0 in
+
+              let rp =
+                let filter1 =
+                  Uset.filter
+                    (fun (f, t) ->
+                      not
+                        (Uset.exists (fun (f2, t2) -> f2 = f && t <> t2) pos_rp)
+                    )
+                    pos_rp
+                in
+                let filter2 =
+                  Uset.filter
+                    (fun (f, t) ->
+                      not
+                        (Uset.exists (fun (f2, t2) -> t2 = t && f <> f2) pos_rp)
+                    )
+                    pos_rp
+                in
+                  ref (Uset.union filter1 filter2)
+              in
+
+              while !rls <> [] && !i < 10 do
+                incr i;
+                let s = List.hd !rls in
+                  rls := List.tl !rls;
+
+                  let relabels =
+                    Uset.filter (fun (a, b) -> a = s || b = s) pos_rp
+                  in
+                    if Uset.size relabels = 0 then rls := []
+                    else if Uset.size relabels <> 1 then
+                      assert
+                        (* debugger - assertion failure *)
+                        false
+                    else
+                      let values = Uset.values relabels in
+                      let f, t = List.hd values in
+                        rp := Uset.add !rp (f, t);
+
+                        str_1 :=
+                          Uset.map
+                            (fun x -> Expr.subst x (VSymbol t) (VSymbol f))
+                            !str_1;
+                        str_2 :=
+                          Uset.map
+                            (fun x -> Expr.subst x (VSymbol f) (VSymbol t))
+                            !str_2;
+
+                        rls := List.filter (fun x -> x <> f && x <> t) !rls
+              done;
+
+              if !rls = [] || !i >= 10 then
+                [ (Uset.values !str_1, Uset.values !str_2, !rp) ]
+              else []
+            in
+
+            (* Generate all combinations *)
+            let empty_set = Uset.create () in
+            let results =
+              [
+                it notcommon_1 notcommon_2;
+                it empty_set empty_set;
+                it empty_set notcommon_2;
+                it notcommon_1 empty_set;
+              ]
+            in
+
+            let out =
+              List.filter (fun x -> x <> []) results
+              |> List.concat
+              |> List.filter (fun (_, _, r) ->
+                     Uset.for_all
+                       (fun x ->
+                         Uset.exists (fun (y0, y1) -> x = y0 || x = y1) r
+                       )
+                       ness
+                 )
+            in
+
             Landmark.exit landmark;
             Lwt.return out
 

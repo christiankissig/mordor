@@ -59,7 +59,7 @@ module TestUtil = struct
       rmw
 
   (** Value function for tests *)
-  let test_val_fn e = VSymbol (Printf.sprintf "v%d" e)
+  let test_val_fn e = Some (VSymbol (Printf.sprintf "v%d" e))
 
   (** Create init params *)
   let make_init_params () =
