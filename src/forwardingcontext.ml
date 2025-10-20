@@ -1,6 +1,7 @@
 (** Forwarding Context for symbolic execution *)
 
 open Types
+open Justifications
 open Lwt.Syntax
 
 (** Global state - mutable references *)
@@ -359,7 +360,7 @@ let remap_expr ctx expr =
   expr
 
 (** Remap justification *)
-let remap_just ctx just op =
+let remap_just ctx (just : justification) op =
   let w =
     {
       just.w with

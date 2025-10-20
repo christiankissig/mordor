@@ -10,7 +10,10 @@
   symmrd
   interpret
   parse
-  forwardingcontext)
+  forwardingcontext
+  justifications
+  executions
+  elaborations)
  (flags
   (:standard -w -26-27))
  (libraries lwt lwt.unix z3 zarith landmarks)

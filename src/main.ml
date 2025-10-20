@@ -2,14 +2,15 @@
 open Lwt.Syntax
 
 open Types
+open Symmrd
 
 (** Run verification *)
 let verify_program program options =
-  let* result = Symmrd.create_symbolic_event_structure program options in
+  let* result = create_symbolic_event_structure program options in
     Lwt.return result
 
 (** Pretty print results *)
-let print_results result =
+let print_results (result : result) =
   Printf.printf "=== Verification Results ===\n";
   Printf.printf "Valid: %b\n" result.valid;
   Printf.printf "Undefined Behavior: %b\n" result.ub;
