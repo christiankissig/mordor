@@ -15,15 +15,24 @@ type context = {
   rmw : (int * int) Uset.t;
   fj : (int * int) Uset.t;
   val_fn : int -> value_type option;
-  pred :
-    Forwardingcontext.t option ->
-    expr list option ->
-    ?ppo:(int * int) Uset.t Lwt.t ->
-    unit ->
-    (int -> int Uset.t) Lwt.t;
   build_tree : (int * int) Uset.t -> (int, int Uset.t) Hashtbl.t;
   conflicting_branch : int -> int -> int;
 }
+
+let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
+    (p : expr list option) ?ppo () =
+  let* ppo_result =
+    match ppo with
+    | Some ppo_val -> ppo_val
+    | None -> (
+        match (ctx, p) with
+        | Some ctx_val, Some p_val -> Forwardingcontext.ppo ctx_val p_val
+        | _ -> failwith "ctx and p must be provided when ppo is not given"
+      )
+  in
+  let inversed = Uset.inverse_relation ppo_result in
+  let tree = elab_ctx.build_tree inversed in
+    Lwt.return (fun e -> Hashtbl.find tree e)
 
 let filter elab_ctx (justs : justification list) =
   let landmark = Landmark.register "dp.filter" in
@@ -164,7 +173,7 @@ let forward elab_ctx justs =
                     let* ppo = Forwardingcontext.ppo ctx p in
                       let* ppo_loc = Forwardingcontext.ppo_loc ctx p in
                         let* _pred =
-                          elab_ctx.pred None None ~ppo:(Lwt.return ppo) ()
+                          pred elab_ctx None None ~ppo:(Lwt.return ppo) ()
                         in
 
                         (* Subtract fj from ppo_loc *)

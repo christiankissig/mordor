@@ -128,21 +128,6 @@ let calculate_dependencies ast structure events ~exhaustive
         }
     in
 
-    let pred (ctx : Forwardingcontext.t option) (p : expr list option) ?ppo () =
-      let* ppo_result =
-        match ppo with
-        | Some ppo_val -> ppo_val
-        | None -> (
-            match (ctx, p) with
-            | Some ctx_val, Some p_val -> Forwardingcontext.ppo ctx_val p_val
-            | _ -> failwith "ctx and p must be provided when ppo is not given"
-          )
-      in
-      let inversed = Uset.inverse_relation ppo_result in
-      let tree = build_tree inversed in
-        Lwt.return (fun e -> Hashtbl.find tree e)
-    in
-
     (* Initialize justifications for writes *)
     let init_justs =
       Uset.map
@@ -188,7 +173,6 @@ let calculate_dependencies ast structure events ~exhaustive
         rmw;
         fj;
         val_fn;
-        pred;
         build_tree;
         conflicting_branch;
       }

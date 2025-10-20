@@ -133,8 +133,6 @@ let create_mock_context () =
     | None -> None
   in
 
-  let pred _con _exprs ?ppo:_ () = Lwt.return (fun _e -> Uset.create ()) in
-
   let build_tree edges =
     let tree = Hashtbl.create 10 in
       Uset.iter
@@ -164,7 +162,6 @@ let create_mock_context () =
     rmw;
     fj;
     val_fn;
-    pred;
     build_tree;
     conflicting_branch;
   }

@@ -2,18 +2,19 @@
  (name smrd_lib)
  (wrapped false)
  (modules
-  types
-  uset
+  elaborations
+  events
+  executions
   expr
+  forwardingcontext
+  interpret
+  justifications
+  parse
   rewrite
   solver
   symmrd
-  interpret
-  parse
-  forwardingcontext
-  justifications
-  executions
-  elaborations)
+  types
+  uset)
  (flags
   (:standard -w -26-27))
  (libraries lwt lwt.unix z3 zarith landmarks)
