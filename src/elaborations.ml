@@ -34,6 +34,74 @@ let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
   let tree = elab_ctx.build_tree inversed in
     Lwt.return (fun e -> Hashtbl.find tree e)
 
+(** Lifted cache for relations with forwarding context *)
+type lifted_cache = {
+  mutable t : (justification * justification) Uset.t;
+  mutable to_ : ((justification * justification) * justification list) Uset.t;
+}
+
+(** Create a new lifted cache *)
+let create_lifted_cache () = { t = Uset.create (); to_ = Uset.create () }
+
+(** Compare two events for equality *)
+let event_equal e1 e2 = e1.label = e2.label && e1.van = e2.van
+
+(** Check if pair is in cache and return justifications *)
+let lifted_has cache (a, b) =
+  (* Filter to find matching elements *)
+  let vals =
+    Uset.filter
+      (fun ((_a, _b), _) ->
+        (* Compare write events *)
+        event_equal _a.w a.w
+        && event_equal _b.w b.w
+        (* Compare predicates as sets *)
+        && Uset.equal (Uset.of_list _a.p) (Uset.of_list a.p)
+        && Uset.equal (Uset.of_list _b.p) (Uset.of_list b.p)
+        (* Compare forwarding and write-elision sets *)
+        && Uset.equal _a.fwd a.fwd
+        && Uset.equal _a.we a.we
+      )
+      cache.to_
+  in
+
+  if Uset.size vals > 0 then
+    (* Return mapped justifications *)
+    let results =
+      Uset.map
+        (fun ((_, _), justifs) ->
+          List.map
+            (fun x ->
+              {
+                p = x.p;
+                d = x.d;
+                fwd = a.fwd;
+                we = a.we;
+                w = x.w;
+                op = ("lifted", Some a, None);
+              }
+            )
+            justifs
+        )
+        vals
+      |> Uset.values
+      |> List.flatten
+    in
+      Some results
+  else if Uset.mem cache.t (a, b) then Some []
+  else None
+
+(** Add pair to cache *)
+let lifted_add cache (a, b) = Uset.add cache.t (a, b) |> ignore
+
+(** Add mapping to results cache *)
+let lifted_to cache x r = Uset.add cache.to_ (x, r) |> ignore
+
+(** Clear cache *)
+let lifted_clear cache =
+  Uset.clear cache.t |> ignore;
+  Uset.clear cache.to_ |> ignore
+
 let filter elab_ctx (justs : justification list) =
   let landmark = Landmark.register "dp.filter" in
     Landmark.enter landmark;
