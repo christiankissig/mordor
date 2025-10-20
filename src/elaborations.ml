@@ -598,15 +598,468 @@ let conflict (elab_ctx : context) events =
   (* Union all results *)
   Uset.fold (fun acc s -> Uset.union acc s) branch_results (Uset.create ())
 
+(** Helper: Get write value from event *)
+let val_of_event e = e.wval
+
+(** Helper: Get location from event *)
+let loc e = e.id
+
+(** Helper: Parse dependency symbol to get origin event label *)
+let origin s =
+  (* Dependency symbols are typically formatted as "symbol@label" *)
+  try
+    let parts = String.split_on_char '@' s in
+      match parts with
+      | [ _; label ] -> int_of_string label
+      | _ -> failwith ("Invalid dependency symbol: " ^ s)
+  with _ -> failwith ("Failed to parse origin: " ^ s)
+
+(** Helper: Check if justification is independent *)
+let independent just =
+  Uset.size just.fwd = 0 && Uset.size just.we = 0 && Uset.size just.d = 0
+
+(** Helper: Apply relabeling substitutions *)
+let relabel expr pairs =
+  Uset.fold
+    (fun acc (f, t) -> Expr.subst acc (VSymbol f) (VSymbol t))
+    pairs expr
+
+(** Helper: Apply inverse relabeling substitutions *)
+let unlabel expr pairs =
+  Uset.fold
+    (fun acc (f, t) -> Expr.subst acc (VSymbol t) (VSymbol f))
+    pairs expr
+
+(** Check if two expressions are equivalent under predicates using Z3 *)
+let relabel_equivalent_expressions elab_ctx con statex p_1 p_2 relabelPairs e_1
+    e_2 =
+  (* Remap and relabel e_1 *)
+  let e_1_remapped = Forwardingcontext.remap_expr con e_1 in
+  let e_1_relabeled =
+    match e_1_remapped with
+    | VExpression expr -> VExpression (relabel expr relabelPairs)
+    | v -> v
+  in
+
+  (* Remap e_2 *)
+  let e_2_remapped = Forwardingcontext.remap_expr con e_2 in
+
+  (* Quick check: if they're the same, return true *)
+  if Value.equal e_1_relabeled e_2_remapped then Lwt.return_true
+  else
+    (* Check if e_1 = e_2 clashes with static constraints *)
+    let e1_eq_e2 = EBinOp (e_1_relabeled, "=", e_2_remapped) in
+    let stat_clash = Solver.create (statex @ [ e1_eq_e2 ]) in
+      let* clash_result = Solver.check stat_clash in
+        match clash_result with
+        | Some false ->
+            Lwt.return_false (* UNSAT: expressions cannot be equal *)
+        | _ -> (
+            (* Use Z3 exists quantification *)
+            (* Formula: ∃v. (p_1 => e_1 = v) ∧ (p_2 => e_2 = v) *)
+            let context = Solver.create_context () in
+            let v_name = "0v0" in
+            let v_sort = Z3.Arithmetic.Integer.mk_sort context.ctx in
+            let v_symbol = Z3.Symbol.mk_string context.ctx v_name in
+            let v_var = Z3.Expr.mk_const context.ctx v_symbol v_sort in
+
+            (* Convert predicates to Z3 *)
+            let p_1_z3 =
+              match p_1 with
+              | [] -> Z3.Boolean.mk_true context.ctx
+              | _ ->
+                  let exprs = List.map (Solver.expr_to_z3 context) p_1 in
+                    Z3.Boolean.mk_and context.ctx exprs
+            in
+            let p_2_z3 =
+              match p_2 with
+              | [] -> Z3.Boolean.mk_true context.ctx
+              | _ ->
+                  let exprs = List.map (Solver.expr_to_z3 context) p_2 in
+                    Z3.Boolean.mk_and context.ctx exprs
+            in
+
+            (* e_1 = v *)
+            let e_1_z3 = Solver.value_to_z3 context e_1_relabeled in
+            let e1_eq_v = Z3.Boolean.mk_eq context.ctx e_1_z3 v_var in
+
+            (* e_2 = v *)
+            let e_2_z3 = Solver.value_to_z3 context e_2_remapped in
+            let e2_eq_v = Z3.Boolean.mk_eq context.ctx e_2_z3 v_var in
+
+            (* (p_1 => e_1 = v) ∧ (p_2 => e_2 = v) *)
+            let imply1 = Z3.Boolean.mk_implies context.ctx p_1_z3 e1_eq_v in
+            let imply2 = Z3.Boolean.mk_implies context.ctx p_2_z3 e2_eq_v in
+            let body = Z3.Boolean.mk_and context.ctx [ imply1; imply2 ] in
+
+            (* Add static constraints *)
+            let statex_z3 = List.map (Solver.expr_to_z3 context) statex in
+            let full_formula =
+              Z3.Boolean.mk_and context.ctx (statex_z3 @ [ body ])
+            in
+
+            (* ∃v. formula *)
+            let exists =
+              Z3.Quantifier.mk_exists context.ctx [ v_sort ] [ v_symbol ]
+                full_formula None [] [] None None
+            in
+            let exists_expr = Z3.Quantifier.expr_of_quantifier exists in
+
+            (* Check satisfiability *)
+            Z3.Solver.add context.solver [ exists_expr ];
+            let result = Z3.Solver.check context.solver [] in
+
+            match result with
+            | Z3.Solver.SATISFIABLE -> Lwt.return_true
+            | _ -> Lwt.return_false
+          )
+
+(** Recursively check if two events are equivalent *)
+let rec relabel_equivalent elab_ctx con statex p_1 p_2 relabelPairs _pred
+    label_1 label_2 =
+  (* Get events from labels *)
+  let e_1 =
+    try Hashtbl.find elab_ctx.events label_1
+    with Not_found -> failwith ("Event not found: " ^ string_of_int label_1)
+  in
+  let e_2 =
+    try Hashtbl.find elab_ctx.events label_2
+    with Not_found -> failwith ("Event not found: " ^ string_of_int label_2)
+  in
+
+  if e_1.label = e_2.label then Lwt.return_true
+  else
+    (* Get predecessors *)
+    let pred_1 = _pred e_1.label in
+    let pred_2 = _pred e_2.label in
+
+    let ps1 = Uset.size pred_1 = 0 in
+    let ps2 = Uset.size pred_2 = 0 in
+
+    if ps1 <> ps2 then Lwt.return_false
+    else if e_1.typ <> e_2.typ then Lwt.return_false
+    else
+      match e_1.typ with
+      | Fence -> Lwt.return_true
+      | Read | Write | Malloc -> (
+          let* loc_eq =
+            match (loc e_1, loc e_2) with
+            | Some l1, Some l2 ->
+                relabel_equivalent_expressions elab_ctx con statex p_1 p_2
+                  relabelPairs l1 l2
+            | None, None -> Lwt.return_true
+            | _ -> Lwt.return_false
+          in
+            if not loc_eq then Lwt.return_false
+            else
+              let* val_eq =
+                match (val_of_event e_1, val_of_event e_2) with
+                | Some v1, Some v2 ->
+                    relabel_equivalent_expressions elab_ctx con statex p_1 p_2
+                      relabelPairs v1 v2
+                | None, None -> Lwt.return_true
+                | _ -> Lwt.return_false
+              in
+                if not val_eq then Lwt.return_false
+                else if ps1 then Lwt.return_true
+                else
+                  (* Recurse on predecessors *)
+                  let pred_1_vals = Uset.values pred_1 in
+                  let pred_2_vals = Uset.values pred_2 in
+                    match (pred_1_vals, pred_2_vals) with
+                    | [ p1 ], [ p2 ] ->
+                        relabel_equivalent elab_ctx con statex p_1 p_2
+                          relabelPairs _pred p1 p2
+                    | _ -> Lwt.return_false
+        )
+      | Free -> (
+          let* loc_eq =
+            match (loc e_1, loc e_2) with
+            | Some l1, Some l2 ->
+                relabel_equivalent_expressions elab_ctx con statex p_1 p_2
+                  relabelPairs l1 l2
+            | None, None -> Lwt.return_true
+            | _ -> Lwt.return_false
+          in
+            if not loc_eq then Lwt.return_false
+            else if ps1 then Lwt.return_true
+            else
+              let pred_1_vals = Uset.values pred_1 in
+              let pred_2_vals = Uset.values pred_2 in
+                match (pred_1_vals, pred_2_vals) with
+                | [ p1 ], [ p2 ] ->
+                    relabel_equivalent elab_ctx con statex p_1 p_2 relabelPairs
+                      _pred p1 p2
+                | _ -> Lwt.return_false
+        )
+      | _ -> Lwt.return_true
+
 let lift elab_ctx justs =
   let landmark = Landmark.register "dp.lift" in
     Landmark.enter landmark;
 
-    let ctx = Forwardingcontext.create () in
+    (* Static constraints from structure *)
+    let statex = elab_ctx.structure.constraint_ in
 
-    (* Simplified lifting *)
-    Landmark.exit landmark;
-    Lwt.return justs
+    (* Create justification map: event label -> set of justifications *)
+    let justmap = Hashtbl.create 16 in
+      Uset.iter
+        (fun just ->
+          let label = just.w.label in
+          let existing =
+            match Hashtbl.find_opt justmap label with
+            | Some s -> s
+            | None -> Uset.create ()
+          in
+            Hashtbl.replace justmap label (Uset.add existing just)
+        )
+        justs;
+
+      (* Compute liftpairs: conflicting write pairs *)
+      let w_cross_w = Uset.cross elab_ctx.write_events elab_ctx.write_events in
+      let conflict_set = conflict elab_ctx elab_ctx.e_set in
+      let liftpairs = Uset.intersection w_cross_w conflict_set in
+
+      (* Create pairs of justifications from liftpairs *)
+      let pairs =
+        Uset.fold
+          (fun acc (a, b) ->
+            let justs_a =
+              match Hashtbl.find_opt justmap a with
+              | Some s -> s
+              | None -> Uset.create ()
+            in
+            let justs_b =
+              match Hashtbl.find_opt justmap b with
+              | Some s -> s
+              | None -> Uset.create ()
+            in
+              Uset.union acc (Uset.cross justs_a justs_b)
+          )
+          liftpairs (Uset.create ())
+      in
+
+      (* Create lifted cache *)
+      let lifted = create_lifted_cache () in
+
+      (* If no pairs to lift, return input unchanged *)
+      if Uset.size pairs = 0 then (
+        Landmark.exit landmark;
+        Lwt.return justs
+      )
+      else
+        (* Process each pair of justifications *)
+        let* out =
+          Lwt_list.map_p
+            (fun (just_1, just_2) ->
+              let ojust_1 = just_1 in
+              let ojust_2 = just_2 in
+
+              (* Check if contexts match and not both independent *)
+              if
+                (not (Uset.equal just_1.fwd just_2.fwd))
+                || (not (Uset.equal just_1.we just_2.we))
+                || (independent just_1 && independent just_2)
+              then Lwt.return []
+              else
+                (* Check lifted cache *)
+                match lifted_has lifted (just_1, just_2) with
+                | Some cached -> Lwt.return cached
+                | None ->
+                    (* Add to cache to prevent recomputation *)
+                    lifted_add lifted (just_1, just_2);
+                    lifted_add lifted (just_2, just_1);
+
+                    (* Create forwarding context *)
+                    let con =
+                      Forwardingcontext.create ~fwd:just_1.fwd ~we:just_1.we ()
+                    in
+
+                    (* Compute ppo for both justifications *)
+                    let* ppo_1 = Forwardingcontext.ppo con just_1.p in
+                      let* ppo_2 = Forwardingcontext.ppo con just_2.p in
+                      let ppo = Uset.union ppo_1 ppo_2 in
+
+                      (* Get pred function *)
+                      let* _pred =
+                        pred elab_ctx None None ~ppo:(Lwt.return ppo) ()
+                      in
+
+                      (* Clone and unify values if needed *)
+                      let just_1, just_2 =
+                        match
+                          (val_of_event just_1.w, val_of_event just_2.w)
+                        with
+                        | Some (VNumber n1), Some v2 when not (is_number v2) ->
+                            (* just_1 has number, just_2 has symbol - unify *)
+                            let eq_pred = EBinOp (v2, "=", VNumber n1) in
+                            let new_w2 =
+                              { just_2.w with wval = Some (VNumber n1) }
+                            in
+                              ( just_1,
+                                {
+                                  just_2 with
+                                  p = just_2.p @ [ eq_pred ];
+                                  w = new_w2;
+                                  d = Uset.create ();
+                                }
+                              )
+                        | Some v1, Some (VNumber n2) when not (is_number v1) ->
+                            (* just_2 has number, just_1 has symbol - unify *)
+                            let eq_pred = EBinOp (v1, "=", VNumber n2) in
+                            let new_w1 =
+                              { just_1.w with wval = Some (VNumber n2) }
+                            in
+                              ( {
+                                  just_1 with
+                                  p = just_1.p @ [ eq_pred ];
+                                  w = new_w1;
+                                  d = Uset.create ();
+                                },
+                                just_2
+                              )
+                        | _ -> (just_1, just_2)
+                      in
+
+                      (* Strengthen the pair *)
+                      let* str = strengthen elab_ctx just_1 just_2 ppo con in
+
+                      (* Process each strengthening result *)
+                      let* results =
+                        Lwt_list.map_p
+                          (fun (str_1, str_2, relabelPairs) ->
+                            (* Update predicates *)
+                            let just_1 = { just_1 with p = str_1 } in
+                            let just_2 = { just_2 with p = str_2 } in
+
+                            (* Check uniqueness of relabel pairs *)
+                            let from_syms =
+                              Uset.map (fun (f, _) -> f) relabelPairs
+                            in
+                            let to_syms =
+                              Uset.map (fun (_, t) -> t) relabelPairs
+                            in
+                              if
+                                Uset.size from_syms <> Uset.size relabelPairs
+                                || Uset.size to_syms <> Uset.size relabelPairs
+                              then Lwt.return []
+                              else
+                                (* Apply relabeling to predicates *)
+                                let p_1 =
+                                  List.map
+                                    (fun x ->
+                                      let remapped =
+                                        Forwardingcontext.remap_expr con x
+                                      in
+                                        relabel remapped relabelPairs
+                                    )
+                                    just_1.p
+                                in
+                                let p_2 =
+                                  List.map
+                                    (fun x -> Forwardingcontext.remap_expr con x)
+                                    just_2.p
+                                in
+
+                                (* Check if writes are equivalent *)
+                                let* writes_eq =
+                                  relabel_equivalent elab_ctx con statex p_1 p_2
+                                    relabelPairs _pred just_1.w.label
+                                    just_2.w.label
+                                in
+                                  if not writes_eq then Lwt.return []
+                                  else
+                                    (* Check if all dependencies have equivalent origins *)
+                                    let* deps_eq =
+                                      Uset.async_for_all
+                                        (fun s_1 ->
+                                          Uset.async_exists
+                                            (fun s_2 ->
+                                              relabel_equivalent elab_ctx con
+                                                statex p_1 p_2 relabelPairs
+                                                _pred (origin s_1) (origin s_2)
+                                            )
+                                            just_2.d
+                                        )
+                                        just_1.d
+                                    in
+                                      if not deps_eq then Lwt.return []
+                                      else
+                                        (* Compute P_prime: simplify (p_1 OR p_2) *)
+                                        let p_1_relabeled =
+                                          List.map
+                                            (fun x -> relabel x relabelPairs)
+                                            p_1
+                                        in
+                                        let disjunction =
+                                          [ p_1_relabeled; p_2 ]
+                                          (* CNF: list of clauses *)
+                                        in
+                                          let* simplified =
+                                            Solver.simplify_disjunction
+                                              disjunction
+                                          in
+                                            match simplified with
+                                            | None -> Lwt.return []
+                                            | Some clauses ->
+                                                (* Create output justifications for each clause *)
+                                                let outputs =
+                                                  List.map
+                                                    (fun clause ->
+                                                      [
+                                                        {
+                                                          p =
+                                                            List.map
+                                                              (fun x ->
+                                                                unlabel x
+                                                                  relabelPairs
+                                                              )
+                                                              clause;
+                                                          fwd = just_1.fwd;
+                                                          we = just_1.we;
+                                                          d = just_1.d;
+                                                          w = just_1.w;
+                                                          op =
+                                                            ( "lift",
+                                                              Some just_1,
+                                                              Some
+                                                                (EVar "just_2")
+                                                            );
+                                                        };
+                                                        {
+                                                          p = clause;
+                                                          fwd = just_1.fwd;
+                                                          we = just_1.we;
+                                                          d = just_2.d;
+                                                          w = just_2.w;
+                                                          op =
+                                                            ( "lift",
+                                                              Some just_2,
+                                                              Some
+                                                                (EVar "just_1")
+                                                            );
+                                                        };
+                                                      ]
+                                                    )
+                                                    clauses
+                                                  |> List.concat
+                                                in
+                                                  Lwt.return outputs
+                          )
+                          str
+                      in
+
+                      let out = List.concat results in
+                        (* Store in cache *)
+                        lifted_to lifted (ojust_1, ojust_2) out;
+                        Lwt.return out
+            )
+            (Uset.values pairs)
+        in
+
+        let result = List.concat out |> Uset.of_list in
+          Landmark.exit landmark;
+          Lwt.return result
 
 let weaken elab_ctx justs =
   let landmark = Landmark.register "dp.weaken" in
