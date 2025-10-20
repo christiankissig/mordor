@@ -11,6 +11,7 @@
 *.obj
 *.lib
 *.dll
+*.opam
 
 # Native code compilation
 *.opt
