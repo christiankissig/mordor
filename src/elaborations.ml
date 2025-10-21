@@ -1,7 +1,8 @@
-open Expr
-open Types
-open Justifications
 open Lwt.Syntax
+open Expr
+open Justifications
+open Trees
+open Types
 
 type context = {
   structure : symbolic_event_structure;
@@ -15,7 +16,6 @@ type context = {
   rmw : (int * int) Uset.t;
   fj : (int * int) Uset.t;
   val_fn : int -> value_type option;
-  build_tree : (int * int) Uset.t -> (int, int Uset.t) Hashtbl.t;
   conflicting_branch : int -> int -> int;
 }
 
@@ -31,7 +31,7 @@ let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
       )
   in
   let inversed = Uset.inverse_relation ppo_result in
-  let tree = elab_ctx.build_tree inversed in
+  let tree = build_tree elab_ctx.e_set inversed in
     Lwt.return (fun e -> Hashtbl.find tree e)
 
 (** Lifted cache for relations with forwarding context *)
@@ -46,7 +46,6 @@ let create_lifted_cache () = { t = Uset.create (); to_ = Uset.create () }
 (** Compare two events for equality *)
 let event_equal e1 e2 = e1.label = e2.label && e1.van = e2.van
 
-(** Check if pair is in cache and return justifications *)
 let lifted_has cache (a, b) =
   (* Filter to find matching elements *)
   let vals =
@@ -69,9 +68,11 @@ let lifted_has cache (a, b) =
     (* Return mapped justifications *)
     let results =
       Uset.map
-        (fun ((_, _), justifs) ->
+        (fun ((_, _), (justifs : justification list)) ->
+          (* Add type annotation here *)
           List.map
-            (fun x ->
+            (fun (x : justification) ->
+              (* Add type annotation here *)
               {
                 p = x.p;
                 d = x.d;
@@ -539,7 +540,7 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
 
 let conflict (elab_ctx : context) events =
   (* Build po tree *)
-  let po_tree = elab_ctx.build_tree elab_ctx.po in
+  let po_tree = build_tree elab_ctx.e_set elab_ctx.po in
 
   (* Semicolon composition *)
   let semicolon r1 r2 =

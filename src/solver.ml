@@ -1,4 +1,4 @@
-(** Constraint solver using Z3 *)
+(** solver.ml - Constraint solver using Z3 *)
 
 open Types
 open Expr
@@ -67,6 +67,7 @@ and expr_to_z3 context = function
       let r = value_to_z3 context rhs in
         (* Bitwise not - simplified to arithmetic negation *)
         Z3.Arithmetic.mk_unary_minus context.ctx r
+  | EUnOp (op, _) -> failwith ("Unsupported unary operator: " ^ op)
   | EOr clauses ->
       let clause_exprs =
         List.map
@@ -77,41 +78,70 @@ and expr_to_z3 context = function
           clauses
       in
         Z3.Boolean.mk_or context.ctx clause_exprs
-  | _ -> failwith "Unsupported expression type"
 
-(** Constraint type *)
-type constraint_t = { op : string; value : Z.t option }
+(** Constraint type for range-based solving *)
+type range = Z.t * Z.t (* (min, max) inclusive *)
 
 (** Solver type *)
-type solver = {
-  context : context;
-  constraints : (string, constraint_t Uset.t) Hashtbl.t;
-  expressions : expr list;
-}
+type solver = { context : context; expressions : expr list }
 
 (** Create solver *)
 let create exprs =
   let context = create_context () in
-  let constraints = Hashtbl.create 32 in
-    { context; constraints; expressions = exprs }
+    { context; expressions = exprs }
+
+(** Evaluate constant expression if possible *)
+let try_eval_constant = function
+  | EBinOp (VNumber a, "=", VNumber b) -> Some (Z.equal a b)
+  | EBinOp (VNumber a, "!=", VNumber b) -> Some (not (Z.equal a b))
+  | EBinOp (VNumber a, "<", VNumber b) -> Some (Z.lt a b)
+  | EBinOp (VNumber a, ">", VNumber b) -> Some (Z.gt a b)
+  | EBinOp (VNumber a, "<=", VNumber b) -> Some (Z.leq a b)
+  | EBinOp (VNumber a, ">=", VNumber b) -> Some (Z.geq a b)
+  | _ -> None
 
 (** Check satisfiability *)
 let check solver =
   let* _ = Lwt.return_unit in
 
-  (* Convert expressions to Z3 *)
-  let z3_exprs = List.map (expr_to_z3 solver.context) solver.expressions in
+  (* Quick checks for contradictions and tautologies *)
+  let has_contradiction =
+    List.exists Expr.is_contradiction solver.expressions
+  in
+    if has_contradiction then Lwt.return_some false
+    else if List.length solver.expressions = 0 then Lwt.return_some true
+    else if List.for_all Expr.is_tautology solver.expressions then
+      Lwt.return_some true
+    else
+      (* Quick constant check *)
+      let all_constant_true =
+        List.for_all
+          (fun expr ->
+            match try_eval_constant expr with
+            | Some true -> true
+            | Some false -> false
+            | None -> true
+          )
+          solver.expressions
+      in
 
-  (* Add to solver - Z3.Solver.add takes solver and list of exprs *)
-  Z3.Solver.add solver.context.solver z3_exprs;
+      if not all_constant_true then Lwt.return_some false
+      else
+        (* Convert expressions to Z3 *)
+        let z3_exprs =
+          List.map (expr_to_z3 solver.context) solver.expressions
+        in
 
-  (* Check *)
-  let result = Z3.Solver.check solver.context.solver [] in
+        (* Add to solver *)
+        Z3.Solver.add solver.context.solver z3_exprs;
 
-  match result with
-  | Z3.Solver.SATISFIABLE -> Lwt.return_some true
-  | Z3.Solver.UNSATISFIABLE -> Lwt.return_some false
-  | Z3.Solver.UNKNOWN -> Lwt.return_none
+        (* Check *)
+        let result = Z3.Solver.check solver.context.solver [] in
+
+        match result with
+        | Z3.Solver.SATISFIABLE -> Lwt.return_some true
+        | Z3.Solver.UNSATISFIABLE -> Lwt.return_some false
+        | Z3.Solver.UNKNOWN -> Lwt.return_none
 
 (** Solve and get model *)
 let solve solver =
@@ -145,17 +175,289 @@ let solve solver =
 let concrete_value bindings var =
   try Some (Hashtbl.find bindings var) with Not_found -> None
 
-(** Simplify disjunction *)
+(** Simplify disjunction using basic heuristics *)
 let simplify_disjunction clauses =
   let* _ = Lwt.return_unit in
-  (* Simplified version - just remove tautologies and contradictions *)
-  let clauses' =
+
+  (* Remove clauses containing contradictions *)
+  let filtered_clauses =
     List.filter
-      (fun clause ->
-        (not (List.exists Expr.is_contradiction clause))
-        && not (List.for_all Expr.is_tautology clause)
-      )
+      (fun clause -> not (List.exists Expr.is_contradiction clause))
       clauses
   in
 
-  if List.length clauses' = 0 then Lwt.return_none else Lwt.return_some clauses'
+  (* Remove tautological literals from each clause *)
+  let filtered_clauses2 =
+    List.map
+      (fun clause -> List.filter (fun e -> not (Expr.is_tautology e)) clause)
+      filtered_clauses
+  in
+
+  (* Remove empty clauses (all literals were tautologies) unless it means the whole thing is a tautology *)
+  let has_empty_clause =
+    List.exists (fun c -> List.length c = 0) filtered_clauses2
+  in
+
+  if has_empty_clause then
+    (* Empty clause means that clause is a tautology, so entire disjunction is tautology *)
+    Lwt.return_some [ [] ]
+  else
+    let non_empty =
+      List.filter (fun c -> List.length c > 0) filtered_clauses2
+    in
+
+    (* Check if result is empty (unsatisfiable) *)
+    if List.length non_empty = 0 then Lwt.return_none
+    else Lwt.return_some non_empty
+
+(** Get all symbols from a list of expressions *)
+let get_all_symbols exprs =
+  let symbols = List.flatten (List.map Expr.get_symbols exprs) in
+  let uset = Uset.of_list symbols in
+    Uset.values uset
+
+(** Solve with Z3 and return ranges or concrete values *)
+let solve_with_ranges solver =
+  let* result = solve solver in
+    match result with
+    | None -> Lwt.return_none
+    | Some bindings ->
+        (* Convert bindings to range format *)
+        let ranges = Hashtbl.create 16 in
+
+        (* Get all symbols that appear in expressions *)
+        let all_symbols = get_all_symbols solver.expressions in
+
+        (* For each symbol, determine its range *)
+        List.iter
+          (fun symbol ->
+            match concrete_value bindings symbol with
+            | Some (VNumber n) ->
+                (* Try to determine if this is the only possible value *)
+                (* by checking if symbol != n is unsatisfiable *)
+                let test_expr = Expr.binop (VVar symbol) "!=" (VNumber n) in
+                let test_solver = create (test_expr :: solver.expressions) in
+                  (* For now, just return the single value as range *)
+                  Hashtbl.add ranges symbol [ (n, n) ]
+            | _ ->
+                (* Unknown range - use unbounded *)
+                let min_val = Z.of_int min_int in
+                let max_val = Z.of_int max_int in
+                  Hashtbl.add ranges symbol [ (min_val, max_val) ]
+          )
+          all_symbols;
+
+        Lwt.return_some ranges
+
+(** Check if all expressions are flat (for optimization) *)
+let all_flat exprs = List.for_all Expr.is_flat exprs
+
+(** Advanced solve that checks multiple strategies *)
+let solve_advanced solver =
+  (* First try: quick constant evaluation *)
+  let has_contradiction =
+    List.exists Expr.is_contradiction solver.expressions
+  in
+    if has_contradiction then Lwt.return_some false
+    else
+      (* Second try: all tautologies *)
+      let all_taut = List.for_all Expr.is_tautology solver.expressions in
+        if all_taut then Lwt.return_some true
+        else
+          (* Use Z3 for complex cases *)
+          check solver
+
+(** Create a solver and check satisfiability in one go *)
+let quick_check exprs =
+  let solver = create exprs in
+    check solver
+
+(** Create a solver and get a model in one go *)
+let quick_solve exprs =
+  let solver = create exprs in
+    solve solver
+
+(** Check if a set of constraints implies another expression *)
+let implies constraints conclusion =
+  let negated = Expr.inverse conclusion in
+  let solver = create (constraints @ [ negated ]) in
+    let* result = check solver in
+      match result with
+      | Some false ->
+          Lwt.return_true (* Negation is unsat, so implication holds *)
+      | _ -> Lwt.return_false
+
+(** Reset solver (create fresh context) *)
+let reset solver = { solver with context = create_context () }
+
+(** Push solver state (for backtracking) *)
+let push solver =
+  Z3.Solver.push solver.context.solver;
+  solver
+
+(** Pop solver state (for backtracking) *)
+let pop solver =
+  Z3.Solver.pop solver.context.solver 1;
+  solver
+
+(** Add assertions to existing solver *)
+let add_assertions solver exprs =
+  let z3_exprs = List.map (expr_to_z3 solver.context) exprs in
+    Z3.Solver.add solver.context.solver z3_exprs;
+    solver
+
+(** Get statistics from solver *)
+let get_statistics solver =
+  Z3.Statistics.to_string (Z3.Solver.get_statistics solver.context.solver)
+
+(** Convert Z3 model to readable string *)
+let model_to_string bindings =
+  let items =
+    Hashtbl.fold
+      (fun name value acc -> (name, Value.to_string value) :: acc)
+      bindings []
+  in
+  let sorted = List.sort (fun (a, _) (b, _) -> String.compare a b) items in
+    String.concat ", "
+      (List.map
+         (fun (name, value) -> Printf.sprintf "%s = %s" name value)
+         sorted
+      )
+
+(** Check if expression list is satisfiable (simplified API) *)
+let is_sat exprs =
+  let* result = quick_check exprs in
+    match result with
+    | Some true -> Lwt.return_true
+    | _ -> Lwt.return_false
+
+(** Check if expression list is unsatisfiable (simplified API) *)
+let is_unsat exprs =
+  let* result = quick_check exprs in
+    match result with
+    | Some false -> Lwt.return_true
+    | _ -> Lwt.return_false
+
+(** Solve and extract concrete values for specific variables *)
+let solve_for_vars solver var_names =
+  let* model_opt = solve solver in
+    match model_opt with
+    | None -> Lwt.return_none
+    | Some bindings ->
+        let results = Hashtbl.create (List.length var_names) in
+          List.iter
+            (fun var_name ->
+              match concrete_value bindings var_name with
+              | Some value -> Hashtbl.add results var_name value
+              | None -> ()
+            )
+            var_names;
+          Lwt.return_some results
+
+(** Semantic equality checking *)
+
+(** Check if two expressions are semantically equal (always equal under all
+    interpretations) *)
+let exeq ?(state = []) a b =
+  if Expr.equal a b then Lwt.return_true
+  else
+    (* Check if a != b is unsatisfiable, meaning a = b is always true *)
+    let neq_expr = Expr.binop (VExpression a) "!=" (VExpression b) in
+    let solver = create (neq_expr :: state) in
+      let* result = check solver in
+        match result with
+        | Some false ->
+            Lwt.return_true (* a != b is unsat, so a = b always holds *)
+        | _ -> Lwt.return_false
+
+(** Check if two expressions are potentially equal (equality is satisfiable) *)
+let expoteq ?(state = []) a b =
+  if Expr.equal a b then Lwt.return_true
+  else
+    (* Check if a = b is satisfiable *)
+    let eq_expr = Expr.binop (VExpression a) "=" (VExpression b) in
+    let solver = create (eq_expr :: state) in
+      let* result = check solver in
+        match result with
+        | Some true ->
+            Lwt.return_true (* a = b is sat, so they could be equal *)
+        | _ -> Lwt.return_false
+
+(** Semantic equality module with state management *)
+module Semeq = struct
+  (** Mutable state for semantic equality checking *)
+  type state = { mutable context : expr list }
+
+  (** Create new state *)
+  let create_state () = { context = [] }
+
+  (** Set global state *)
+  let set_state state context = state.context <- context
+
+  (** Check semantic equality with current state *)
+  let exeq state a b = exeq ~state:state.context a b
+
+  (** Check potential equality with current state *)
+  let expoteq state a b = expoteq ~state:state.context a b
+
+  (** Check equality of values *)
+  let exeq_value state v1 v2 =
+    match (v1, v2) with
+    | VExpression e1, VExpression e2 -> exeq state e1 e2
+    | _ -> Lwt.return (Value.equal v1 v2)
+
+  (** Check potential equality of values *)
+  let expoteq_value state v1 v2 =
+    if Value.equal v1 v2 then Lwt.return true
+    else
+      match (v1, v2) with
+      | VExpression e1, VExpression e2 -> expoteq state e1 e2
+      | _ -> (
+          (* For any two values, check if they could be equal by solving v1 = v2 *)
+          let eq_expr = Expr.binop v1 "=" v2 in
+          let solver = create (eq_expr :: state.context) in
+            let* result = check solver in
+              match result with
+              | Some true -> Lwt.return true
+              | _ -> Lwt.return false
+        )
+end
+
+(** Cache for semantic equality results *)
+module SemeqCache = struct
+  type cache = {
+    eq_cache : (string, bool) Hashtbl.t;
+    poteq_cache : (string, bool) Hashtbl.t;
+  }
+
+  let create () =
+    { eq_cache = Hashtbl.create 256; poteq_cache = Hashtbl.create 256 }
+
+  let key_of_exprs a b =
+    Printf.sprintf "%s|%s" (Expr.to_string a) (Expr.to_string b)
+
+  (** Cached semantic equality check *)
+  let exeq_cached cache ?(state = []) a b =
+    let key = key_of_exprs a b in
+      match Hashtbl.find_opt cache.eq_cache key with
+      | Some result -> Lwt.return result
+      | None ->
+          let* result = exeq ~state a b in
+            Hashtbl.add cache.eq_cache key result;
+            Lwt.return result
+
+  (** Cached potential equality check *)
+  let expoteq_cached cache ?(state = []) a b =
+    let key = key_of_exprs a b in
+      match Hashtbl.find_opt cache.poteq_cache key with
+      | Some result -> Lwt.return result
+      | None ->
+          let* result = expoteq ~state a b in
+            Hashtbl.add cache.poteq_cache key result;
+            Lwt.return result
+
+  (** Clear cache *)
+  let clear cache =
+    Hashtbl.clear cache.eq_cache;
+    Hashtbl.clear cache.poteq_cache
+end

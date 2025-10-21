@@ -13,6 +13,7 @@
   rewrite
   solver
   symmrd
+  trees
   types
   uset)
  (flags

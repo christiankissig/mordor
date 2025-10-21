@@ -3,6 +3,8 @@
 
 open Parse (* must come before open Types *)
 open Types
+open Expr
+open Trees
 open Justifications
 open Executions
 open Lwt.Syntax
@@ -29,6 +31,246 @@ let val_ events e =
       | Some v -> Some v
       | None -> event.rval
   with Not_found -> None
+
+(** Helper functions for execution generation *)
+
+(** Project first elements from relation *)
+let pi_1 rel = Uset.map (fun (x, _) -> x) rel
+
+(** Project second elements from relation *)
+let pi_2 rel = Uset.map (fun (_, y) -> y) rel
+
+(** Get value from event e, or create symbolic value based on x's location *)
+let vale events e x =
+  match Hashtbl.find_opt events e with
+  | Some event when event.label >= 0 -> (
+      match val_ events e with
+      | Some v -> v
+      | None ->
+          let loc_x =
+            match loc events x with
+            | Some l -> Value.to_string l
+            | None -> string_of_int x
+          in
+            VVar (Printf.sprintf "v(%s)" loc_x)
+    )
+  | _ ->
+      let loc_x =
+        match loc events x with
+        | Some l -> Value.to_string l
+        | None -> string_of_int x
+      in
+        VVar (Printf.sprintf "v(%s)" loc_x)
+
+(** Get location from event e, or create symbolic location based on x's location
+*)
+let loce events e x =
+  match Hashtbl.find_opt events e with
+  | Some event when event.label >= 0 -> (
+      match loc events e with
+      | Some l -> l
+      | None ->
+          let loc_x =
+            match loc events x with
+            | Some l -> Value.to_string l
+            | None -> string_of_int x
+          in
+            VVar (Printf.sprintf "l(%s)" loc_x)
+    )
+  | _ ->
+      let loc_x =
+        match loc events x with
+        | Some l -> Value.to_string l
+        | None -> string_of_int x
+      in
+        VVar (Printf.sprintf "l(%s)" loc_x)
+
+(** Find origin event of a symbol *)
+let origin events read_events malloc_events s =
+  (* Try to find in reads *)
+  let in_reads =
+    Uset.filter
+      (fun x ->
+        match val_ events x with
+        | Some (VSymbol sym) -> sym = s
+        | _ -> false
+      )
+      read_events
+  in
+  let in_reads_vals = Uset.values in_reads in
+    match in_reads_vals with
+    | e :: _ -> Some e
+    | [] -> (
+        (* Try to find in mallocs by symbol *)
+        let in_mallocs =
+          Uset.filter
+            (fun x ->
+              try
+                let event = Hashtbl.find events x in
+                  match event.id with
+                  | Some (VSymbol sym) -> sym = s
+                  | _ -> false
+              with Not_found -> false
+            )
+            malloc_events
+        in
+        let in_mallocs_vals = Uset.values in_mallocs in
+          match in_mallocs_vals with
+          | e :: _ -> Some e
+          | [] -> None
+      )
+
+(** Create disjoint predicate for two (location, value) pairs *)
+let disjoint (loc1, val1) (loc2, val2) =
+  (* Two memory accesses are disjoint if their locations differ *)
+  EBinOp (loc1, "!=", loc2)
+
+(** Path type *)
+type path_info = {
+  path : int list;
+  p : expr list list; (* List of predicate lists *)
+}
+
+(** Generate all paths through the control flow structure *)
+let gen_paths events structure restrict =
+  let po_tree = build_tree structure.e structure.po in
+
+  let rec gen_paths_rec e =
+    let next_uset =
+      try Hashtbl.find po_tree e with Not_found -> Uset.create ()
+    in
+    let next = Uset.values next_uset in
+
+    if List.length next = 0 then [ { path = [ e ]; p = [] } ]
+    else
+      (* Check if event is a branch *)
+      let event = Hashtbl.find events e in
+        if event.typ = Branch then (
+          (* Branch event - create two paths *)
+          if List.length next <> 2 then
+            failwith "Branch event must have exactly 2 successors";
+
+          let next0 = List.nth next 0 in
+          let next1 = List.nth next 1 in
+
+          let restrict_e = try Hashtbl.find restrict e with Not_found -> [] in
+
+          let cond =
+            match event.cond with
+            | Some (VExpression c) -> c
+            | Some c -> EVar (Value.to_string c)
+            | None -> failwith "Branch missing condition"
+          in
+
+          (* Left branch paths *)
+          let n0_paths =
+            if Uset.mem structure.e next0 then
+              let restrict_next0 =
+                try Hashtbl.find restrict next0 with Not_found -> []
+              in
+                List.map
+                  (fun p ->
+                    { path = p.path @ [ e ]; p = p.p @ [ restrict_next0 ] }
+                  )
+                  (gen_paths_rec next0)
+            else [ { path = [ e ]; p = [ restrict_e @ [ cond ] ] } ]
+          in
+
+          (* Right branch paths *)
+          let n1_paths =
+            if Uset.mem structure.e next1 then
+              let restrict_next1 =
+                try Hashtbl.find restrict next1 with Not_found -> []
+              in
+                List.map
+                  (fun p ->
+                    { path = p.path @ [ e ]; p = p.p @ [ restrict_next1 ] }
+                  )
+                  (gen_paths_rec next1)
+            else
+              [ { path = [ e ]; p = [ restrict_e @ [ Expr.inverse cond ] ] } ]
+          in
+
+          n0_paths @ n1_paths
+        )
+        else
+          (* Non-branch event - combine paths from successors *)
+          let successor_paths = List.map gen_paths_rec next in
+
+          (* Cartesian product and concatenation *)
+          let rec combine_paths paths =
+            match paths with
+            | [] -> [ { path = []; p = [] } ]
+            | p :: rest ->
+                let rest_combined = combine_paths rest in
+                  List.concat_map
+                    (fun path1 ->
+                      List.map
+                        (fun path2 ->
+                          {
+                            path =
+                              List.filter (( <> ) e) path1.path @ path2.path;
+                            p = path1.p @ path2.p;
+                          }
+                        )
+                        rest_combined
+                    )
+                    p
+          in
+
+          let combined = combine_paths successor_paths in
+            List.map (fun p -> { path = p.path @ [ e ]; p = p.p }) combined
+  in
+    gen_paths_rec 0
+
+(** Choose compatible justifications for a path *)
+let choose justmap path_events =
+  let path_list = Uset.values path_events in
+
+  let rec choose_rec list i items fwdwe =
+    if i = 0 then [ items ]
+    else
+      let i = i - 1 in
+
+      (* Skip if already covered by fwdwe *)
+      if List.length items > 0 && Uset.mem (pi_2 fwdwe) list.(i) then
+        choose_rec list i items fwdwe
+      else
+        (* Get justifications for this event *)
+        let justs_for_event =
+          try Hashtbl.find justmap list.(i) with Not_found -> []
+        in
+
+        (* Filter compatible justifications *)
+        let compatible =
+          List.filter
+            (fun just ->
+              let x = Uset.union just.fwd just.we in
+              (* Check no conflicts with existing fwdwe *)
+              let pi1_x = pi_1 x in
+              let pi2_x = pi_2 x in
+              let pi1_fwdwe = pi_1 fwdwe in
+              let pi2_fwdwe = pi_2 fwdwe in
+
+              Uset.size (Uset.intersection pi1_x pi2_fwdwe) = 0
+              && Uset.size (Uset.intersection pi2_x pi1_fwdwe) = 0
+            )
+            justs_for_event
+        in
+
+        (* Recursively choose for each compatible justification *)
+        List.concat_map
+          (fun just ->
+            let new_fwdwe = Uset.union fwdwe (Uset.union just.fwd just.we) in
+              choose_rec list i (items @ [ just ]) new_fwdwe
+          )
+          compatible
+  in
+
+  choose_rec (Array.of_list path_list) (List.length path_list) []
+    (Uset.create ())
+
+(** Calculate dependencies and justifications *)
 
 let calculate_dependencies ast structure events ~exhaustive
     ~include_dependencies ~just_structure ~restrictions =
@@ -64,20 +306,7 @@ let calculate_dependencies ast structure events ~exhaustive
     let malloc_events = filter_events Malloc in
     let free_events = filter_events Free in
 
-    (* Build tree for program order *)
-    let build_tree rel =
-      let tree = Hashtbl.create 256 in
-        Uset.iter (fun e -> Hashtbl.add tree e (Uset.create ())) e_set;
-        Uset.iter
-          (fun (from, to_) ->
-            let set = Hashtbl.find tree from in
-              Uset.add set to_ |> ignore
-          )
-          rel;
-        tree
-    in
-
-    let po_tree = build_tree po in
+    let po_tree = build_tree e_set po in
 
     (* Build ebranch mapping *)
     let ebranch =
@@ -173,7 +402,6 @@ let calculate_dependencies ast structure events ~exhaustive
         rmw;
         fj;
         val_fn;
-        build_tree;
         conflicting_branch;
       }
     in

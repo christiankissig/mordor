@@ -1,9 +1,10 @@
+open Lwt.Syntax
 open Alcotest
 open Elaborations
-open Types
-open Justifications
 open Expr
-open Lwt.Syntax
+open Justifications
+open Trees
+open Types
 
 (* Helper to run Lwt tests *)
 let lwt_test fn () = Lwt_main.run (fn ())
@@ -133,21 +134,6 @@ let create_mock_context () =
     | None -> None
   in
 
-  let build_tree edges =
-    let tree = Hashtbl.create 10 in
-      Uset.iter
-        (fun (from, to_) ->
-          let children =
-            match Hashtbl.find_opt tree from with
-            | Some c -> Uset.add c to_
-            | None -> Uset.singleton to_
-          in
-            Hashtbl.replace tree from children
-        )
-        edges;
-      tree
-  in
-
   let conflicting_branch _e1 _e2 = 0 in
 
   {
@@ -162,7 +148,6 @@ let create_mock_context () =
     rmw;
     fj;
     val_fn;
-    build_tree;
     conflicting_branch;
   }
 
@@ -669,17 +654,66 @@ let test_conflict_with_branches () =
       quot = None;
     }
   in
-    Hashtbl.add ctx.events 10 branch_event;
+  (* Add successor events *)
+  let event_11 =
+    {
+      label = 11;
+      id = Some (VNumber (Z.of_int 11));
+      typ = Write;
+      wval = None;
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 11;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+  let event_12 =
+    {
+      label = 12;
+      id = Some (VNumber (Z.of_int 12));
+      typ = Write;
+      wval = None;
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 12;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
 
-    let branch_events = Uset.singleton 10 in
-    let po = Uset.add ctx.po (10, 11) in
-    let po = Uset.add po (10, 12) in
-    let ctx = { ctx with branch_events; po } in
+  Hashtbl.add ctx.events 10 branch_event;
+  Hashtbl.add ctx.events 11 event_11;
+  Hashtbl.add ctx.events 12 event_12;
 
-    let events = Uset.of_list [ 10; 11; 12 ] in
-    let result = conflict ctx events in
-      check bool "conflict with branches" true (Uset.size result >= 0);
-      ()
+  let branch_events = Uset.singleton 10 in
+  let e_set = Uset.add ctx.e_set 10 in
+  let e_set = Uset.add e_set 11 in
+  let e_set = Uset.add e_set 12 in
+  let po = Uset.add ctx.po (10, 11) in
+  let po = Uset.add po (10, 12) in
+  let ctx = { ctx with branch_events; po; e_set } in
+
+  let events = Uset.of_list [ 10; 11; 12 ] in
+  let result = conflict ctx events in
+    check bool "conflict with branches" true (Uset.size result >= 0);
+    ()
 
 (* Tests for lift function *)
 let test_lift_identity () =
