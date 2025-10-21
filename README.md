@@ -184,17 +184,13 @@ This translation is a **faithful port** but **simplified** in some areas:
 1. **Parser**: Not fully implemented (would need ocamllex/menhir)
 2. **MSet**: BitSet optimization not implemented
 3. **RFSet**: Enumeration strategy simplified
-4. **Coherence**: Basic implementation
-5. **Stats**: Simplified performance tracking
 
 ## Missing Components
 
 To complete the translation, you would need:
 
 1. **Parser** (`parse.ml`): Use ocamllex/menhir for litmus test syntax
-2. **Coherence** (`coherence.ml`): Full IMM/RC11 coherence checking
 3. **Assertion** (`assertion.ml`): Assertion checking logic
-4. **ForwardingContext** (`forwarding.ml`): Full forwarding context
 5. **Utilities**: Helper functions, pretty printing
 
 ## Testing
@@ -224,7 +220,6 @@ let () =
 ## Future Work
 
 1. Complete parser implementation
-2. Full coherence model support
 3. Performance optimizations (MSet bitset)
 4. Comprehensive test suite
 5. Interactive mode
@@ -236,11 +231,3 @@ let () =
 - "Promising Semantics" paper
 - IMM and RC11 memory models
 - Z3 SMT solver documentation
-
-## License
-
-Same as original JavaScript implementation.
-
-## Authors
-
-Translated from JavaScript to OCaml (2024)
