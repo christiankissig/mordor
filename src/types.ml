@@ -8,6 +8,7 @@ type options = {
   forcerc11 : bool;
   forceimm : bool;
   forcenocoh : bool;
+  coherent : string;
 }
 
 let default_options =
@@ -18,6 +19,7 @@ let default_options =
     forcerc11 = false;
     forceimm = false;
     forcenocoh = false;
+    coherent = "rc11";
   }
 
 (** Event types *)

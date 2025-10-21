@@ -7,6 +7,7 @@ open Expr
 open Trees
 open Justifications
 open Executions
+open Coherence
 open Lwt.Syntax
 
 type result = {
@@ -554,8 +555,8 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
 
 (** Create a freeze function that validates RF sets for a justification
     combination *)
-and create_freeze events structure path j_list write_events read_events init_ppo
-    statex =
+and create_freeze events (structure : symbolic_event_structure) path j_list
+    write_events read_events init_ppo statex =
   let* _ = Lwt.return_unit in
 
   let e = Uset.of_list path.path in
@@ -674,9 +675,10 @@ and create_freeze events structure path j_list write_events read_events init_ppo
 
             (* Return the freeze validation function *)
             let freeze_fn rf =
-              validate_rf events structure e elided elided_rf ppo_loc
-                ppo_loc_tree dp dp_ppo j_list pp p_combined rf write_events
-                read_events structure.po
+              validate_rf events
+                (structure : symbolic_event_structure)
+                e elided elided_rf ppo_loc ppo_loc_tree dp dp_ppo j_list pp
+                p_combined rf write_events read_events structure.po
             in
 
             Lwt.return_some freeze_fn
@@ -748,7 +750,7 @@ and build_justcombos events structure paths write_events read_events init_ppo
 
 (** Main execution generation - replaces the stub in calculate_dependencies *)
 let generate_executions events structure final_justs statex e_set po rmw
-    write_events read_events init_ppo ~include_dependencies =
+    write_events read_events init_ppo ~include_dependencies ~restrictions =
   let* _ = Lwt.return_unit in
 
   (* Build program order tree *)
@@ -953,13 +955,16 @@ let generate_executions events structure final_justs statex e_set po rmw
         flat_execs
     in
 
-    (* TODO: Filter through coherence checking *)
-    (* let* coherent_execs =
-    Lwt_list.filter_p
-      (fun exec -> check_for_coherence structure events exec restrictions include_dependencies)
-      final_executions
-  in *)
-    Lwt.return final_executions
+    (* Filter through coherence checking *)
+    let* coherent_execs =
+      Lwt_list.filter_p
+        (fun exec ->
+          check_for_coherence structure events exec restrictions
+            include_dependencies
+        )
+        final_executions
+    in
+      Lwt.return coherent_execs
 
 (** Calculate dependencies and justifications *)
 
@@ -1141,6 +1146,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
         (* Use the full execution generation *)
         generate_executions events structure final_justs structure.constraint_
           e_set po rmw write_events read_events init_ppo ~include_dependencies
+          ~restrictions
     in
 
     Landmark.exit landmark;
@@ -1178,7 +1184,7 @@ let parse_program program =
       ([], [])
 
 (** Main entry point *)
-let create_symbolic_event_structure program options =
+let create_symbolic_event_structure program (opts : options) =
   let* _ = Lwt.return_unit in
 
   (* Parse program - get both constraints and program statements *)
@@ -1189,13 +1195,23 @@ let create_symbolic_event_structure program options =
     Interpret.interpret program_stmts [] (Hashtbl.create 16) []
   in
 
+  (* Create restrictions for coherence checking *)
+  let coherence_restrictions =
+    {
+      Coherence.coherent =
+        ( try opts.coherent with _ -> "imm"
+        )
+        (* default to IMM if not specified *);
+    }
+  in
+
   (* Calculate dependencies *)
   let* structure', justs, executions =
     calculate_dependencies ast structure events
-      ~exhaustive:(options.exhaustive || false)
-      ~include_dependencies:(options.dependencies || true)
-      ~just_structure:(options.just_structure || false)
-      ~restrictions:options
+      ~exhaustive:(opts.exhaustive || false)
+      ~include_dependencies:(opts.dependencies || true)
+      ~just_structure:(opts.just_structure || false)
+      ~restrictions:coherence_restrictions
   in
 
   (* Check assertion if present *)

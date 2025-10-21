@@ -10,6 +10,7 @@ type options = {
   forcerc11 : bool;
   forceimm : bool;
   forcenocoh : bool;
+  coherent : string;
 }
 
 (** Default option values *)
