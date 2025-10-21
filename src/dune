@@ -2,6 +2,7 @@
  (name smrd_lib)
  (wrapped false)
  (modules
+  coherence
   elaborations
   events
   executions
