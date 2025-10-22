@@ -95,7 +95,7 @@ let test_origin_from_reads () =
 
 let test_origin_from_mallocs () =
   let events = create_test_events () in
-  let malloc_event = create_test_event 5 Malloc ~id_val:(VSymbol "s2") () in
+  let malloc_event = create_test_event 5 Malloc ~rval:(VSymbol "s2") () in
     Hashtbl.add events 5 malloc_event;
 
     let read_events = Uset.create () in

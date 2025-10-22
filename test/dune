@@ -1,5 +1,5 @@
 (test
  (name test_smrd)
  (flags
-  (:standard -w -33))
+  (:standard -w -33-26))
  (libraries smrd_lib str alcotest))

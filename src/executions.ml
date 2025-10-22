@@ -13,8 +13,7 @@ let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
   EBinOp (loc1, "!=", loc2)
 
-(** Find origin event of a symbol *)
-let origin events read_events malloc_events s =
+let origin events read_events malloc_events (s : string) =
   (* Try to find in reads *)
   let in_reads =
     Uset.filter
@@ -35,7 +34,8 @@ let origin events read_events malloc_events s =
             (fun x ->
               try
                 let event = Hashtbl.find events x in
-                  match event.id with
+                  match event.rval with
+                  (* Changed from event.id *)
                   | Some (VSymbol sym) -> sym = s
                   | _ -> false
               with Not_found -> false

@@ -58,16 +58,80 @@ let run_example name program =
     print_results result;
     Lwt.return_unit
 
-(** Main *)
-let main () =
+(** Read all .lit files from a directory *)
+let read_litmus_files dir =
+  try
+    let files = Sys.readdir dir in
+    let lit_files =
+      Array.to_list files
+      |> List.filter (fun f -> Filename.check_suffix f ".lit")
+      |> List.map (fun f -> Filename.concat dir f)
+    in
+      List.map
+        (fun path ->
+          let name = Filename.basename path in
+          let ic = open_in path in
+          let content = really_input_string ic (in_channel_length ic) in
+            close_in ic;
+            (name, content)
+        )
+        lit_files
+  with Sys_error msg ->
+    Printf.eprintf "Error reading directory: %s\n" msg;
+    []
+
+(** Run tests from a list of (name, program) pairs *)
+let run_tests tests =
   Printf.printf "MoRDor - Symbolic Modular Relaxed Dependencies\n";
   flush stdout;
 
-  let* () =
-    Lwt_list.iter_s (fun (name, prog) -> run_example name prog) example_programs
-  in
+  let* () = Lwt_list.iter_s (fun (name, prog) -> run_example name prog) tests in
     flush stdout;
     Lwt.return_unit
+
+(** Command line options *)
+type run_mode = Samples | AllLitmusTests
+
+let run_mode = ref Samples
+let litmus_dir = ref "litmus_tests"
+let usage_msg = "Usage: main [--samples | --all-litmus-tests [dir]]"
+
+let specs =
+  [
+    ( "--samples",
+      Arg.Unit (fun () -> run_mode := Samples),
+      " Run built-in sample programs (default)"
+    );
+    ( "--all-litmus-tests",
+      Arg.String
+        (fun dir ->
+          run_mode := AllLitmusTests;
+          litmus_dir := dir
+        ),
+      " Process all .lit files in the specified directory (default: \
+       litmus_tests)"
+    );
+  ]
+
+(** Main entry point *)
+let main () =
+  (* Parse command line arguments *)
+  Arg.parse specs (fun _ -> ()) usage_msg;
+
+  (* Determine which tests to run *)
+  let tests =
+    match !run_mode with
+    | Samples -> example_programs
+    | AllLitmusTests ->
+        let litmus_tests = read_litmus_files !litmus_dir in
+          if List.length litmus_tests = 0 then (
+            Printf.eprintf "Warning: No .lit files found in %s\n" !litmus_dir;
+            []
+          )
+          else litmus_tests
+  in
+
+  run_tests tests
 
 let () =
   (* Enable profiling if requested *)

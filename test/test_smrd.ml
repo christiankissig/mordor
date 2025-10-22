@@ -13,4 +13,7 @@ let () =
       Test_parse.suite;
       Test_solver.suite;
       Test_types.suite;
+      Test_symbolic_mrd.suite;
+      Test_advanced_mrd.suite;
+      Test_properties_mrd.suite;
     ]

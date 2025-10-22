@@ -60,7 +60,7 @@ let clone s =
 (** Union *)
 let union s1 s2 =
   let result = clone s1 in
-    Hashtbl.iter (fun k v -> Hashtbl.add result k v) s2;
+    Hashtbl.iter (fun k v -> Hashtbl.replace result k v) s2;
     result
 
 (** In-place union *)
@@ -207,22 +207,23 @@ let inverse_relation s = map (fun (a, b) -> (b, a)) s
 (** Transitive closure (for relations) *)
 let transitive_closure s =
   let result = clone s in
-  let vals = values result in
   let changed = ref true in
     while !changed do
       changed := false;
-      List.iter
-        (fun (a, b) ->
-          List.iter
-            (fun (c, d) ->
-              if b = c && not (mem result (a, d)) then (
-                add result (a, d) |> ignore;
-                changed := true
+      let vals = values result in
+        (* Move this inside the loop *)
+        List.iter
+          (fun (a, b) ->
+            List.iter
+              (fun (c, d) ->
+                if b = c && not (mem result (a, d)) then (
+                  add result (a, d) |> ignore;
+                  changed := true
+                )
               )
-            )
-            vals
-        )
-        vals
+              vals
+          )
+          vals
     done;
     result
 
@@ -231,35 +232,8 @@ let reflexive_closure domain s = union (identity_relation domain) s
 
 (** Check if acyclic *)
 let acyclic s =
-  let vals = values s in
-  let left_keys = Hashtbl.create 16 in
-  let right_map = Hashtbl.create 16 in
-
-  (* Build maps *)
-  List.iter
-    (fun (a, b) ->
-      Hashtbl.replace left_keys a true;
-      let rights = try Hashtbl.find right_map b with Not_found -> [] in
-        Hashtbl.replace right_map b (a :: rights)
-    )
-    vals;
-
-  (* Remove nodes with no incoming edges *)
-  let changed = ref true in
-    while !changed do
-      changed := false;
-      let keys = Hashtbl.fold (fun k _ acc -> k :: acc) left_keys [] in
-        List.iter
-          (fun key ->
-            if not (Hashtbl.mem right_map key) then (
-              Hashtbl.remove left_keys key;
-              changed := true
-            )
-          )
-          keys
-    done;
-
-    Hashtbl.length left_keys = 0
+  let s_tc = transitive_closure s in
+    Hashtbl.to_seq s_tc |> Seq.for_all (fun ((a, b), _) -> a <> b)
 
 (** Check if irreflexive *)
 let is_irreflexive s = for_all (fun (a, b) -> a <> b) s
