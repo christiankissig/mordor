@@ -40,23 +40,22 @@ module TestUtil = struct
 
   (** Create test E set *)
   let make_e_set () =
-    let e = Hashtbl.create 16 in
-      List.iter (fun i -> Hashtbl.add e i i) [ 0; 1; 2; 3; 4 ];
-      e
+    let e_set = Uset.create () in
+      List.iter (fun i -> ignore (Uset.add e_set i)) [ 0; 1; 2; 3; 4 ];
+      e_set
 
   (** Create test program order *)
   let make_po () =
-    let po = Hashtbl.create 16 in
+    let po = Uset.create () in
       List.iter
-        (fun (f, t) -> Hashtbl.add po (f, t) (f, t))
+        (fun (f, t) -> ignore (Uset.add po (f, t)))
         [ (0, 1); (1, 2); (2, 3); (3, 4) ];
       po
 
   (** Create test RMW *)
   let make_rmw () =
-    let rmw = Hashtbl.create 16 in
-      Hashtbl.add rmw (1, 2) (1, 2);
-      rmw
+    let rmw = Uset.create () in
+      Uset.add rmw (1, 2)
 
   (** Value function for tests *)
   let test_val_fn e = Some (VSymbol (Printf.sprintf "v%d" e))
@@ -112,9 +111,9 @@ let test_init_clears_state () =
   Lwt_main.run
     (let* () =
        (* Add something to goodcon/badcon *)
-       let fwd = Hashtbl.create 1 in
-       let we = Hashtbl.create 1 in
-         Hashtbl.add fwd (1, 2) (1, 2);
+       let fwd = Uset.create () in
+       let we = Uset.create () in
+         ignore (Uset.add fwd (1, 2));
          ignore (Uset.add goodcon (fwd, we));
 
          (* Initialize - should clear *)
@@ -136,15 +135,15 @@ let test_create_empty_context () =
     Alcotest.(check int) "Empty psi" 0 (List.length ctx.psi)
 
 let test_create_with_fwd () =
-  let fwd = Hashtbl.create 2 in
-    Hashtbl.add fwd (1, 2) (1, 2);
+  let fwd = Uset.create () in
+    ignore (Uset.add fwd (1, 2));
     let ctx = create ~fwd () in
       Alcotest.(check int) "Fwd size" 1 (Uset.size ctx.fwd);
       Alcotest.(check int) "Empty we" 0 (Uset.size ctx.we)
 
 let test_create_with_we () =
-  let we = Hashtbl.create 2 in
-    Hashtbl.add we (2, 3) (2, 3);
+  let we = Uset.create () in
+    ignore (Uset.add we (2, 3));
     let ctx = create ~we () in
       Alcotest.(check int) "Empty fwd" 0 (Uset.size ctx.fwd);
       Alcotest.(check int) "WE size" 1 (Uset.size ctx.we)
@@ -153,8 +152,8 @@ let test_create_generates_psi () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let fwd = Hashtbl.create 2 in
-         Hashtbl.add fwd (1, 2) (1, 2);
+       let fwd = Uset.create () in
+         ignore (Uset.add fwd (1, 2));
          let ctx = create ~fwd () in
            (* Should have predicates for value equality *)
            Alcotest.(check bool)
@@ -177,8 +176,8 @@ let test_remap_with_forwarding () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let fwd = Hashtbl.create 2 in
-         Hashtbl.add fwd (1, 2) (1, 2);
+       let fwd = Uset.create () in
+         ignore (Uset.add fwd (1, 2));
          let ctx = create ~fwd () in
            (* Event 2 should remap to 1 *)
            Alcotest.(check int) "Remapped event" 1 (remap ctx 2);
@@ -189,9 +188,9 @@ let test_remap_transitive () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let fwd = Hashtbl.create 3 in
-         Hashtbl.add fwd (1, 2) (1, 2);
-         Hashtbl.add fwd (2, 3) (2, 3);
+       let fwd = Uset.create () in
+         ignore (Uset.add fwd (1, 2));
+         ignore (Uset.add fwd (2, 3));
          let ctx = create ~fwd () in
            (* Event 3 should remap transitively to 1 *)
            Alcotest.(check int) "Transitive remap" 1 (remap ctx 3);
@@ -202,12 +201,12 @@ let test_remap_rel () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let fwd = Hashtbl.create 2 in
-         Hashtbl.add fwd (1, 2) (1, 2);
+       let fwd = Uset.create () in
+         ignore (Uset.add fwd (1, 2));
          let ctx = create ~fwd () in
 
-         let rel = Hashtbl.create 2 in
-           Hashtbl.add rel (2, 3) (2, 3);
+         let rel = Uset.create () in
+           ignore (Uset.add rel (2, 3));
 
            let remapped = remap_rel ctx rel in
              (* (2,3) should become (1,3) *)
@@ -221,12 +220,12 @@ let test_remap_rel_filters_reflexive () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let fwd = Hashtbl.create 2 in
-         Hashtbl.add fwd (1, 2) (1, 2);
+       let fwd = Uset.create () in
+         ignore (Uset.add fwd (1, 2));
          let ctx = create ~fwd () in
 
-         let rel = Hashtbl.create 2 in
-           Hashtbl.add rel (2, 1) (2, 1);
+         let rel = Uset.create () in
+           ignore (Uset.add rel (2, 1));
 
            (* Will remap to (1,1) *)
            let remapped = remap_rel ctx rel in
@@ -244,8 +243,8 @@ let test_cache_initially_empty () =
 
 let test_cache_set_and_get () =
   let ctx = create () in
-  let test_set = Hashtbl.create 2 in
-    Hashtbl.add test_set (1, 2) (1, 2);
+  let test_set = Uset.create () in
+    ignore (Uset.add test_set (1, 2));
 
     let _ = cache_set ctx "ppo" [] test_set in
     let cached = cache_get ctx [] in
@@ -256,10 +255,10 @@ let test_cache_set_and_get () =
 
 let test_cache_different_predicates () =
   let ctx = create () in
-  let set1 = Hashtbl.create 2 in
-    Hashtbl.add set1 (1, 2) (1, 2);
-    let set2 = Hashtbl.create 2 in
-      Hashtbl.add set2 (2, 3) (2, 3);
+  let set1 = Uset.create () in
+    ignore (Uset.add set1 (1, 2));
+    let set2 = Uset.create () in
+      ignore (Uset.add set2 (2, 3));
 
       let pred1 = [ ENum Z.one ] in
       let pred2 = [ ENum Z.zero ] in
@@ -279,13 +278,13 @@ let test_cache_different_predicates () =
 
 (** Test good/bad context tracking *)
 let test_is_good_initially_false () =
-  let fwd = Hashtbl.create 1 in
-  let we = Hashtbl.create 1 in
+  let fwd = Uset.create () in
+  let we = Uset.create () in
     Alcotest.(check bool) "Not initially good" false (is_good fwd we)
 
 let test_is_bad_initially_false () =
-  let fwd = Hashtbl.create 1 in
-  let we = Hashtbl.create 1 in
+  let fwd = Uset.create () in
+  let we = Uset.create () in
     Alcotest.(check bool) "Not initially bad" false (is_bad fwd we)
 
 (** Test context checking *)
@@ -359,7 +358,7 @@ let test_ppo_returns_remapped () =
        let ctx = create () in
          let* ppo = ppo ctx [] in
            (* Should return some relation *)
-           Alcotest.(check bool) "PPO is a uset" true (Hashtbl.length ppo >= 0);
+           Alcotest.(check bool) "PPO is a uset" true (Uset.size ppo >= 0);
            Lwt.return_unit
     )
 
@@ -388,7 +387,7 @@ let test_ppo_loc_returns_remapped () =
            (* Should return some relation *)
            Alcotest.(check bool)
              "PPO_loc is a uset" true
-             (Hashtbl.length ppo_loc >= 0);
+             (Uset.size ppo_loc >= 0);
            Lwt.return_unit
     )
 
@@ -401,7 +400,7 @@ let test_ppo_sync_returns_remapped () =
          (* Should return some relation *)
          Alcotest.(check bool)
            "PPO_sync is a uset" true
-           (Hashtbl.length ppo_sync >= 0);
+           (Uset.size ppo_sync >= 0);
          Lwt.return_unit
     )
 
@@ -414,8 +413,8 @@ let test_to_string_empty () =
       (String.length s > 0)
 
 let test_to_string_with_edges () =
-  let fwd = Hashtbl.create 2 in
-    Hashtbl.add fwd (1, 2) (1, 2);
+  let fwd = Uset.create () in
+    ignore (Uset.add fwd (1, 2));
     let ctx = create ~fwd () in
     let s = to_string ctx in
       Alcotest.(check bool) "String not empty" true (String.length s > 0)
@@ -428,13 +427,13 @@ let test_update_po_clears_cache () =
 
        (* Create a context and cache something *)
        let ctx = create () in
-       let test_set = Hashtbl.create 2 in
-         Hashtbl.add test_set (1, 2) (1, 2);
+       let test_set = Uset.create () in
+         ignore (Uset.add test_set (1, 2));
          let _ = cache_set ctx "ppo" [] test_set in
 
          (* Update PO - should clear cache *)
-         let new_po = Hashtbl.create 2 in
-           Hashtbl.add new_po (0, 1) (0, 1);
+         let new_po = Uset.create () in
+           ignore (Uset.add new_po (0, 1));
            update_po new_po;
 
            (* Cache size should be 0 after clear *)

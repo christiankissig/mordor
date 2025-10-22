@@ -12,6 +12,7 @@
  (description "OCaml implementation of sMRD memory model verifier")
  (depends
   (ocaml (>= 4.14))
+  core
   (dune (>= 3.7))
   (lwt (>= 5.6.0))
   (lwt_ppx (>= 2.0.0))

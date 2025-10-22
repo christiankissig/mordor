@@ -1,169 +1,134 @@
-(** Unordered Set with structural equality *)
+(** Unordered Set using Core's Hash_set.Poly *)
 
+open Core
 open Lwt.Syntax
+
+(** Generic set type using Core's polymorphic Hash_set *)
+type 'a t = 'a Hash_set.Poly.t
 
 (** Equality function for values *)
 let value_equality a b =
   match (a, b) with
-  | x, y when x == y -> true
-  | x, y when Stdlib.(x = y) -> true
+  | x, y when phys_equal x y -> true
+  | x, y when Poly.(x = y) -> true
   | _ -> false
 
-(** Generic set type using hash table *)
-type 'a t = ('a, 'a) Hashtbl.t
-
 (** Create empty set *)
-let create () : 'a t = Hashtbl.create 16
+let create () : 'a t = Hash_set.Poly.create ()
 
 (** Create singleton set *)
 let singleton x =
-  let s = create () in
-    Hashtbl.add s x x;
+  let s = Hash_set.Poly.create () in
+    Hash_set.add s x;
     s
 
 (** Create from list *)
-let of_list lst =
-  let s = create () in
-    List.iter (fun x -> Hashtbl.add s x x) lst;
-    s
+let of_list lst = Hash_set.Poly.of_list lst
 
 (** Check membership *)
-let mem s x = Hashtbl.mem s x
+let mem s x = Hash_set.mem s x
 
-(** Add element *)
+(** Add element (mutates and returns set for chaining) *)
 let add s x =
-  Hashtbl.replace s x x;
+  Hash_set.add s x;
   s
 
-(** Remove element *)
+(** Remove element (mutates and returns set for chaining) *)
 let remove s x =
-  Hashtbl.remove s x;
+  Hash_set.remove s x;
   s
 
 (** Get all values *)
-let values s = Hashtbl.fold (fun _ v acc -> v :: acc) s []
+let values s = Hash_set.to_list s
 
 (** Size *)
-let size s = Hashtbl.length s
+let size s = Hash_set.length s
 
-(** Clear set *)
+(** Clear set (mutates and returns set for chaining) *)
 let clear s =
-  Hashtbl.clear s;
+  Hash_set.clear s;
   s
 
 (** Clone set *)
-let clone s =
-  let ns = create () in
-    Hashtbl.iter (fun k v -> Hashtbl.add ns k v) s;
-    ns
+let clone s = Hash_set.copy s
 
-(** Union *)
-let union s1 s2 =
-  let result = clone s1 in
-    Hashtbl.iter (fun k v -> Hashtbl.replace result k v) s2;
-    result
+(** Union - creates new set *)
+let union s1 s2 = Hash_set.union s1 s2
 
-(** In-place union *)
+(** In-place union (mutates s1 and returns it) *)
 let inplace_union s1 s2 =
-  Hashtbl.iter (fun k v -> Hashtbl.add s1 k v) s2;
+  Hash_set.iter s2 ~f:(fun x -> Hash_set.add s1 x);
   s1
 
-(** Intersection *)
-let intersection s1 s2 =
-  let result = create () in
-    Hashtbl.iter (fun k v -> if Hashtbl.mem s2 k then Hashtbl.add result k v) s1;
-    result
+(** Intersection - creates new set *)
+let intersection s1 s2 = Hash_set.inter s1 s2
 
-(** Set minus *)
-let set_minus s1 s2 =
-  let result = clone s1 in
-    Hashtbl.iter (fun k _ -> Hashtbl.remove result k) s2;
-    result
+(** Set minus - creates new set *)
+let set_minus s1 s2 = Hash_set.diff s1 s2
 
-(** In-place set minus *)
+(** In-place set minus (mutates s1 and returns it) *)
 let inplace_set_minus s1 s2 =
-  Hashtbl.iter (fun k _ -> Hashtbl.remove s1 k) s2;
+  Hash_set.iter s2 ~f:(fun x -> Hash_set.remove s1 x);
   s1
 
-(** Difference (symmetric difference) *)
+(** Difference (symmetric difference) - creates new set *)
 let difference s1 s2 =
-  let a = clone s1 in
-  let b = clone s2 in
-  let _ = inplace_set_minus b s1 in
-  let _ = inplace_set_minus a s2 in
-    inplace_union a b
+  let a = Hash_set.copy s1 in
+  let b = Hash_set.copy s2 in
+    Hash_set.iter s1 ~f:(fun x -> Hash_set.remove b x);
+    Hash_set.iter s2 ~f:(fun x -> Hash_set.remove a x);
+    Hash_set.iter b ~f:(fun x -> Hash_set.add a x);
+    a
 
-(** Map *)
+(** Map - creates new set with mapped values *)
 let map f s =
-  let result = create () in
-    Hashtbl.iter
-      (fun _ v ->
-        let nv = f v in
-          Hashtbl.add result nv nv
-      )
-      s;
+  let result = Hash_set.Poly.create () in
+    Hash_set.iter s ~f:(fun v -> Hash_set.add result (f v));
     result
 
-(** In-place map *)
+(** In-place map (mutates s and returns it) *)
 let imap f s =
-  let pairs = values s in
-    clear s |> ignore;
-    List.iter
-      (fun v ->
-        let nv = f v in
-          Hashtbl.add s nv nv
-      )
-      pairs;
+  let pairs = Hash_set.to_list s in
+    Hash_set.clear s;
+    List.iter pairs ~f:(fun v -> Hash_set.add s (f v));
     s
 
-(** Filter *)
-let filter f s =
-  let result = create () in
-    Hashtbl.iter (fun _ v -> if f v then Hashtbl.add result v v) s;
-    result
+(** Filter - creates new set with filtered values *)
+let filter f s = Hash_set.filter s ~f
 
-(** In-place filter *)
+(** In-place filter (mutates s and returns it) *)
 let ifilter f s =
-  let to_remove = ref [] in
-    Hashtbl.iter (fun k v -> if not (f v) then to_remove := k :: !to_remove) s;
-    List.iter (Hashtbl.remove s) !to_remove;
-    s
+  Hash_set.filter_inplace s ~f;
+  s
 
 (** Async map *)
 let async_map f s =
-  let+ results = Lwt_list.map_p f (values s) in
-    of_list results
+  let+ results = Lwt_list.map_p f (Hash_set.to_list s) in
+    Hash_set.Poly.of_list results
 
 (** Async filter *)
 let async_filter f s =
-  let* vals = Lwt_list.filter_p f (values s) in
-    Lwt.return (of_list vals)
+  let* vals = Lwt_list.filter_p f (Hash_set.to_list s) in
+    Lwt.return (Hash_set.Poly.of_list vals)
 
 (** Iter *)
-let iter f s = Hashtbl.iter (fun _ v -> f v) s
+let iter f s = Hash_set.iter s ~f
 
 (** Fold *)
-let fold f s init = Hashtbl.fold (fun _ v acc -> f acc v) s init
+let fold f s init = Hash_set.fold s ~init ~f:(fun acc v -> f acc v)
 
 (** For all *)
-let for_all f s = Hashtbl.fold (fun _ v acc -> acc && f v) s true
+let for_all f s = Hash_set.for_all s ~f
 
 (** Exists *)
-let exists f s = Hashtbl.fold (fun _ v acc -> acc || f v) s false
+let exists f s = Hash_set.exists s ~f
 
-(** Find *)
-let find f s =
-  Hashtbl.fold
-    (fun _ v acc ->
-      match acc with
-      | Some _ -> acc
-      | None -> if f v then Some v else None
-    )
-    s None
+(** Find - returns first element satisfying predicate *)
+let find f s = Hash_set.find s ~f
 
 (** Async for all *)
 let async_for_all f s =
-  let vals = values s in
+  let vals = Hash_set.to_list s in
   let rec check = function
     | [] -> Lwt.return_true
     | v :: rest ->
@@ -174,7 +139,7 @@ let async_for_all f s =
 
 (** Async exists *)
 let async_exists f s =
-  let vals = values s in
+  let vals = Hash_set.to_list s in
   let rec check = function
     | [] -> Lwt.return_false
     | v :: rest ->
@@ -185,17 +150,10 @@ let async_exists f s =
 
 (** Cartesian product *)
 let cross s1 s2 =
-  let result = create () in
-    Hashtbl.iter
-      (fun _ v1 ->
-        Hashtbl.iter
-          (fun _ v2 ->
-            let pair = (v1, v2) in
-              Hashtbl.add result pair pair
-          )
-          s2
-      )
-      s1;
+  let result = Hash_set.Poly.create () in
+    Hash_set.iter s1 ~f:(fun v1 ->
+        Hash_set.iter s2 ~f:(fun v2 -> Hash_set.add result (v1, v2))
+    );
     result
 
 (** Identity relation *)
@@ -206,24 +164,19 @@ let inverse_relation s = map (fun (a, b) -> (b, a)) s
 
 (** Transitive closure (for relations) *)
 let transitive_closure s =
-  let result = clone s in
+  let result = Hash_set.copy s in
   let changed = ref true in
     while !changed do
       changed := false;
-      let vals = values result in
-        (* Move this inside the loop *)
-        List.iter
-          (fun (a, b) ->
-            List.iter
-              (fun (c, d) ->
-                if b = c && not (mem result (a, d)) then (
-                  add result (a, d) |> ignore;
+      let vals = Hash_set.to_list result in
+        List.iter vals ~f:(fun (a, b) ->
+            List.iter vals ~f:(fun (c, d) ->
+                if Poly.(b = c) && not (Hash_set.mem result (a, d)) then (
+                  Hash_set.add result (a, d);
                   changed := true
                 )
-              )
-              vals
-          )
-          vals
+            )
+        )
     done;
     result
 
@@ -233,21 +186,19 @@ let reflexive_closure domain s = union (identity_relation domain) s
 (** Check if acyclic *)
 let acyclic s =
   let s_tc = transitive_closure s in
-    Hashtbl.to_seq s_tc |> Seq.for_all (fun ((a, b), _) -> a <> b)
+    Hash_set.for_all s_tc ~f:(fun (a, b) -> not Poly.(a = b))
 
 (** Check if irreflexive *)
-let is_irreflexive s = for_all (fun (a, b) -> a <> b) s
+let is_irreflexive s = for_all (fun (a, b) -> not Poly.(a = b)) s
 
 (** Equality *)
-let equal s1 s2 = size s1 = size s2 && for_all (fun v -> mem s2 v) s1
+let equal s1 s2 = Hash_set.equal s1 s2
 
 (** Subset *)
-let subset s1 s2 = for_all (fun v -> mem s2 v) s1
+let subset s1 s2 = Hash_set.for_all s1 ~f:(fun v -> Hash_set.mem s2 v)
 
-(** To string *)
-let to_string s =
-  let vals =
-    values s |> List.map (fun v -> Printf.sprintf "%d" (Obj.magic v))
-  in
-    if List.length vals = 0 then "∅"
-    else Printf.sprintf "{%s}" (String.concat "," vals)
+(** To string - requires a string conversion function *)
+let to_string string_of_val s =
+  let vals = Hash_set.to_list s |> List.map ~f:string_of_val in
+    if List.is_empty vals then "∅"
+    else Printf.sprintf "{%s}" (String.concat ~sep:"," vals)

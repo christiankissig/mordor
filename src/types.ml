@@ -95,7 +95,7 @@ let greek_alpha = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖ�
 (** Chinese numerals for allocation symbols *)
 let zh_alpha = "一二三四五六七八九十"
 
-type 'a uset = ('a, 'a) Hashtbl.t
+type 'a uset = 'a Uset.t
 
 (** Value representation *)
 type value_type =

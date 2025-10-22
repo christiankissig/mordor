@@ -20,7 +20,7 @@
   utils)
  (flags
   (:standard -w -26-27))
- (libraries lwt lwt.unix z3 zarith landmarks)
+ (libraries core lwt lwt.unix z3 zarith landmarks)
  (preprocess
   (pps lwt_ppx landmarks-ppx))
  (public_name smrd))

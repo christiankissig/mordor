@@ -438,41 +438,40 @@ let suite =
     @ PropertySemanticEquality.suite
     @ [
         test_case
-          "PropertyJustificationMonotonicity.test_initial_justifications_are_strongest "
+          "PropertyJustificationMonotonicity.test_initial_justifications_are_strongest"
           `Quick
           PropertyJustificationMonotonicity
           .test_initial_justifications_are_strongest;
         test_case
-          "PropertyJustificationMonotonicity.test_elaboration_weakens_or_maintains "
+          "PropertyJustificationMonotonicity.test_elaboration_weakens_or_maintains"
           `Quick
           PropertyJustificationMonotonicity
           .test_elaboration_weakens_or_maintains;
         test_case
-          "PropertyJustificationMonotonicity.test_final_set_includes_initial "
+          "PropertyJustificationMonotonicity.test_final_set_includes_initial"
           `Quick
           PropertyJustificationMonotonicity.test_final_set_includes_initial;
         test_case
-          "PropertyAllocationDisjointness.test_fresh_allocations_are_disjoint "
+          "PropertyAllocationDisjointness.test_fresh_allocations_are_disjoint"
           `Quick
           PropertyAllocationDisjointness.test_fresh_allocations_are_disjoint;
         test_case
-          "PropertyAllocationDisjointness.test_allocation_disjoint_from_globals "
+          "PropertyAllocationDisjointness.test_allocation_disjoint_from_globals"
           `Quick
           PropertyAllocationDisjointness.test_allocation_disjoint_from_globals;
-        test_case "PropertyAllocationDisjointness.test_free_enables_reuse "
+        test_case "PropertyAllocationDisjointness.test_free_enables_reuse"
           `Quick PropertyAllocationDisjointness.test_free_enables_reuse;
         test_case
-          "PropertyExecutionCompleteness.test_all_maximal_sets_considered "
+          "PropertyExecutionCompleteness.test_all_maximal_sets_considered"
           `Quick PropertyExecutionCompleteness.test_all_maximal_sets_considered;
         test_case
-          "PropertyExecutionCompleteness.test_all_rf_relations_enumerated "
+          "PropertyExecutionCompleteness.test_all_rf_relations_enumerated"
           `Quick PropertyExecutionCompleteness.test_all_rf_relations_enumerated;
-        test_case
-          "PropertyExecutionCompleteness.test_coherence_filters_invalid " `Quick
-          PropertyExecutionCompleteness.test_coherence_filters_invalid;
-        test_case "PropertyDecidability.test_finite_elaboration " `Quick
+        test_case "PropertyExecutionCompleteness.test_coherence_filters_invalid"
+          `Quick PropertyExecutionCompleteness.test_coherence_filters_invalid;
+        test_case "PropertyDecidability.test_finite_elaboration" `Quick
           PropertyDecidability.test_finite_elaboration;
-        test_case "PropertyDecidability.test_finite_executions " `Quick
+        test_case "PropertyDecidability.test_finite_executions" `Quick
           PropertyDecidability.test_finite_executions;
       ]
   )

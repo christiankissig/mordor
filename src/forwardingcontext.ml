@@ -5,23 +5,23 @@ open Lwt.Syntax
 
 (** Global state - mutable references *)
 module State = struct
-  let e : int uset ref = ref (Hashtbl.create 0)
+  let e : int uset ref = ref (Uset.create ())
   let events : (int, event) Hashtbl.t ref = ref (Hashtbl.create 0)
   let val_fn : (int -> value_type option) ref = ref (fun _ -> None)
-  let ppo_loc_base : (int * int) uset ref = ref (Hashtbl.create 0)
-  let ppo_base : (int * int) uset ref = ref (Hashtbl.create 0)
-  let ppo_sync : (int * int) uset ref = ref (Hashtbl.create 0)
-  let ppo_loc_baseA : (int * int) uset ref = ref (Hashtbl.create 0)
-  let ppo_loc_eqA : (int * int) uset ref = ref (Hashtbl.create 0)
-  let ppo_syncA : (int * int) uset ref = ref (Hashtbl.create 0)
-  let ppo_volA : (int * int) uset ref = ref (Hashtbl.create 0)
-  let ppo_rmwA : (int * int) uset ref = ref (Hashtbl.create 0)
+  let ppo_loc_base : (int * int) uset ref = ref (Uset.create ())
+  let ppo_base : (int * int) uset ref = ref (Uset.create ())
+  let ppo_sync : (int * int) uset ref = ref (Uset.create ())
+  let ppo_loc_baseA : (int * int) uset ref = ref (Uset.create ())
+  let ppo_loc_eqA : (int * int) uset ref = ref (Uset.create ())
+  let ppo_syncA : (int * int) uset ref = ref (Uset.create ())
+  let ppo_volA : (int * int) uset ref = ref (Uset.create ())
+  let ppo_rmwA : (int * int) uset ref = ref (Uset.create ())
 end
 
 (** Good and bad contexts tracking *)
-let goodcon : ((int * int) uset * (int * int) uset) uset = Hashtbl.create 16
+let goodcon : ((int * int) uset * (int * int) uset) uset = Uset.create () (*16*)
 
-let badcon : ((int * int) uset * (int * int) uset) uset = Hashtbl.create 16
+let badcon : ((int * int) uset * (int * int) uset) uset = Uset.create () (*16*)
 
 (** Cache key type *)
 type cache_key = {
@@ -225,7 +225,10 @@ let init params =
     (* Synchronization ppo *)
     let e_squared = Uset.cross !State.e !State.e in
     let semicolon r1 r2 =
-      let result = Hashtbl.create 16 in
+      let result =
+        Uset.create ()
+        (*16*)
+      in
         Uset.iter
           (fun (a, b) ->
             Uset.iter
@@ -311,7 +314,7 @@ type t = {
 }
 
 (** Create forwarding context *)
-let create ?(fwd = Hashtbl.create 0) ?(we = Hashtbl.create 0) () =
+let create ?(fwd = Uset.create ()) ?(we = Uset.create ()) () =
   let fwdwe = Uset.union fwd we in
 
   (* valmap is filtered by non-None values *)
@@ -446,4 +449,6 @@ let check ctx =
 
 (** Convert to string *)
 let to_string ctx =
-  Printf.sprintf "(%s, %s)" (Uset.to_string ctx.fwd) (Uset.to_string ctx.we)
+  Printf.sprintf "(%s, %s)"
+    (Uset.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ctx.fwd)
+    (Uset.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ctx.we)

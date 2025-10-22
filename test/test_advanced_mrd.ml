@@ -23,9 +23,6 @@ module TestExample9_1 = struct
       to z uses value 0 (from UB assumption). *)
 
   let test_inconsistent_register_values () =
-    Printf.printf
-      "\n=== Testing Example 9.1: Inconsistent Register Values ===\n";
-
     (* This is a surprising but allowed behavior *)
     (* Read x=1, but write z=0 based on UB analysis *)
 
@@ -113,8 +110,7 @@ module TestExample9_1 = struct
     check bool "initial_z_depends_on_r1" true (mem e3_initial.d "r1");
     check int "optimized_y_no_deps" 0 (size e2_optimized.d);
     check int "optimized_z_no_deps" 0 (size e3_optimized.d);
-
-    Printf.printf "PASS: Inconsistent register values are allowed\n"
+    ()
 end
 
 (** Test Module 2: Example 10.1 - JCTC12 (Pointer Aliasing) *)
@@ -125,8 +121,6 @@ module TestExample10_1 = struct
       Whether *(rp+r1) and *rp alias depends on r1. *)
 
   let test_pointer_aliasing_initial () =
-    Printf.printf "\n=== Testing Example 10.1: Pointer Aliasing ===\n";
-
     (* When aliasing is possible, there's a ≤ edge *)
     let e5_write =
       {
@@ -164,7 +158,7 @@ module TestExample10_1 = struct
 
     (* Without strengthening: must assume possible aliasing *)
     check bool "pointer_write_depends_on_r1" true (mem e5_write.d "r1");
-    Printf.printf "PASS: Pointer aliasing creates dependencies\n"
+    ()
 
   let test_pointer_aliasing_strengthened () =
     (* With strengthening r1 ≠ 0, we know no aliasing *)
@@ -190,7 +184,7 @@ module TestExample10_1 = struct
     (* Instead there's a dp edge from the read of x to the write *)
     check bool "strengthened_has_predicate" true
       (List.length e7_write_strengthened.p > 0);
-    Printf.printf "PASS: Strengthening removes aliasing, adds dependency\n"
+    ()
 end
 
 (** Test Module 3: Example 12.1 - Load Forwarding in Conditional *)
@@ -199,8 +193,6 @@ module TestExample12_1 = struct
       if (r1 == 1) y = r2; else y = 1; *)
 
   let test_load_forwarding_conditional () =
-    Printf.printf "\n=== Testing Example 12.1: Load Forwarding ===\n";
-
     (* After forwarding r1 -> r2, this becomes Example 5.1 *)
     let e4_initial =
       {
@@ -242,7 +234,7 @@ module TestExample12_1 = struct
     check bool "initial_no_forwarding" false (mem e4_initial.fwd (1, 2));
     check bool "forwarded_depends_r1" true (mem e4_forwarded.d "r1");
     check bool "forwarded_has_edge" true (mem e4_forwarded.fwd (1, 2));
-    Printf.printf "PASS: Load forwarding in conditional\n"
+    ()
 end
 
 (** Test Module 4: Example 13.1 - Lifting with Multiple Reads *)
@@ -321,7 +313,7 @@ module TestExample13_1 = struct
     check bool "true_branch_has_pred" true (List.length e4_true.p > 0);
     check bool "false_branch_has_pred" true (List.length e7_false.p > 0);
     check int "lifted_no_pred" 0 (List.length e4_lifted.p);
-    Printf.printf "PASS: Lifting removes control dependencies\n"
+    ()
 end
 
 (** Test Module 5: Store-Store Forwarding (Appendix A) *)
@@ -340,8 +332,6 @@ module TestStoreStoreForwarding = struct
   *)
 
   let test_store_store_forwarding () =
-    Printf.printf "\n=== Testing Store-Store Forwarding ===\n";
-
     (* Duplicate stores to z on lines 2 and 4 *)
     (* After store-store forwarding, line 4's store is elided *)
     let e6_initial_true =
@@ -390,7 +380,7 @@ module TestStoreStoreForwarding = struct
 
     check int "no_initial_elision" 0 (size e6_initial_true.we);
     check bool "forwarded_has_elision" true (mem e6_forwarded.we (4, 2));
-    Printf.printf "PASS: Store-store forwarding creates write elision\n"
+    ()
 end
 
 (** Test Module 6: Complex Elaboration Sequences *)

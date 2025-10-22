@@ -5,7 +5,7 @@ val value_equality : 'a -> 'a -> bool
 
 (** The type of sets containing elements of type ['a]. Implemented as a hash
     table mapping elements to themselves. *)
-type 'a t = ('a, 'a) Hashtbl.t
+type 'a t
 
 (** {1 Creation} *)
 
@@ -139,5 +139,6 @@ val subset : 'a t -> 'a t -> bool
 
 (** {1 Conversion} *)
 
-(** [to_string s] returns a string representation of [s] *)
-val to_string : 'a t -> string
+(** [to_string string_of_val s] returns a string representation of [s] using
+    [string_of_val] to convert each element to a string *)
+val to_string : ('a -> string) -> 'a t -> string

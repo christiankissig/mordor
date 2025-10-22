@@ -9,6 +9,7 @@ homepage: "https://github.com/username/smrd"
 bug-reports: "https://github.com/username/smrd/issues"
 depends: [
   "ocaml" {>= "4.14"}
+  "core"
   "dune" {>= "3.7" & >= "3.7"}
   "lwt" {>= "5.6.0"}
   "lwt_ppx" {>= "2.0.0"}

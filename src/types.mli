@@ -82,7 +82,7 @@ val zh_alpha : string
 (** {1 Utility Types} *)
 
 (** Unordered set implemented as a hashtable *)
-type 'a uset = ('a, 'a) Hashtbl.t
+type 'a uset = 'a Uset.t
 
 (** {1 Values and Expressions} *)
 
