@@ -1,6 +1,5 @@
 open Lwt.Syntax
 open Expr
-open Justifications
 open Trees
 open Types
 

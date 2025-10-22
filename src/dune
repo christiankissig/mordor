@@ -16,7 +16,8 @@
   symmrd
   trees
   types
-  uset)
+  uset
+  utils)
  (flags
   (:standard -w -26-27))
  (libraries lwt lwt.unix z3 zarith landmarks)

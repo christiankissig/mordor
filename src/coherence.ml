@@ -1,6 +1,5 @@
 (** Coherence checking for memory models *)
 
-open Executions
 open Types
 
 (** Cache types *)

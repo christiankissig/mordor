@@ -2,7 +2,6 @@ open Lwt.Syntax
 open Alcotest
 open Elaborations
 open Expr
-open Justifications
 open Trees
 open Types
 

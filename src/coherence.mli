@@ -1,7 +1,6 @@
 (** Coherence checking for memory models *)
 
 open Types
-open Executions
 
 (** Cache type for IMM coherence checking *)
 type imm_cache = {

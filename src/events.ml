@@ -1,6 +1,7 @@
 (** Event operations and utilities for sMRD *)
 
 open Types
+open Expr
 
 (** Mode utility functions *)
 module ModeOps = struct
@@ -424,3 +425,62 @@ module EventsContainer = struct
     Hashtbl.replace t.events label new_event;
     t
 end
+
+let loc events e =
+  try
+    let event = Hashtbl.find events e in
+      event.id
+  with Not_found -> None
+
+let val_ events e =
+  try
+    let event = Hashtbl.find events e in
+      match event.wval with
+      | Some v -> Some v
+      | None -> event.rval
+  with Not_found -> None
+
+(** Get value from event e, or create symbolic value based on x's location *)
+let vale events e x =
+  match Hashtbl.find_opt events e with
+  | Some event when event.label >= 0 -> (
+      match val_ events e with
+      | Some v -> v
+      | None ->
+          let loc_x =
+            match loc events x with
+            | Some l -> Value.to_string l
+            | None -> string_of_int x
+          in
+            VVar (Printf.sprintf "v(%s)" loc_x)
+    )
+  | _ ->
+      let loc_x =
+        match loc events x with
+        | Some l -> Value.to_string l
+        | None -> string_of_int x
+      in
+        VVar (Printf.sprintf "v(%s)" loc_x)
+
+(** Get location from event e, or create symbolic location based on x's location
+*)
+let loce events e x =
+  match Hashtbl.find_opt events e with
+  | Some event when event.label >= 0 -> (
+      match loc events e with
+      | Some l -> l
+      | None ->
+          let loc_x =
+            match loc events x with
+            | Some l -> Value.to_string l
+            | None -> string_of_int x
+          in
+            VVar (Printf.sprintf "l(%s)" loc_x)
+    )
+  | _ ->
+      let loc_x =
+        match loc events x with
+        | Some l -> Value.to_string l
+        | None -> string_of_int x
+      in
+        VVar (Printf.sprintf "l(%s)" loc_x)

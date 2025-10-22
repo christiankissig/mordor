@@ -1,7 +1,6 @@
 (** Forwarding Context for symbolic execution *)
 
 open Types
-open Justifications
 open Lwt.Syntax
 
 (** Global state - mutable references *)
