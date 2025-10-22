@@ -136,93 +136,122 @@ type path_info = {
 let gen_paths events structure restrict =
   let po_tree = build_tree structure.e structure.po in
 
-  let rec gen_paths_rec e =
-    let next_uset =
-      try Hashtbl.find po_tree e with Not_found -> Uset.create ()
-    in
-    let next = Uset.values next_uset in
-
-    if List.length next = 0 then [ { path = [ e ]; p = [] } ]
-    else
-      (* Check if event is a branch *)
-      let event = Hashtbl.find events e in
-        if event.typ = Branch then (
-          (* Branch event - create two paths *)
-          if List.length next <> 2 then
-            failwith "Branch event must have exactly 2 successors";
-
-          let next0 = List.nth next 0 in
-          let next1 = List.nth next 1 in
-
-          let restrict_e = try Hashtbl.find restrict e with Not_found -> [] in
-
-          let cond =
-            match event.cond with
-            | Some (VExpression c) -> c
-            | Some c -> EVar (Value.to_string c)
-            | None -> failwith "Branch missing condition"
-          in
-
-          (* Left branch paths *)
-          let n0_paths =
-            if Uset.mem structure.e next0 then
-              let restrict_next0 =
-                try Hashtbl.find restrict next0 with Not_found -> []
-              in
-                List.map
-                  (fun p ->
-                    { path = p.path @ [ e ]; p = p.p @ [ restrict_next0 ] }
-                  )
-                  (gen_paths_rec next0)
-            else [ { path = [ e ]; p = [ restrict_e @ [ cond ] ] } ]
-          in
-
-          (* Right branch paths *)
-          let n1_paths =
-            if Uset.mem structure.e next1 then
-              let restrict_next1 =
-                try Hashtbl.find restrict next1 with Not_found -> []
-              in
-                List.map
-                  (fun p ->
-                    { path = p.path @ [ e ]; p = p.p @ [ restrict_next1 ] }
-                  )
-                  (gen_paths_rec next1)
-            else
-              [ { path = [ e ]; p = [ restrict_e @ [ Expr.inverse cond ] ] } ]
-          in
-
-          n0_paths @ n1_paths
+  (* Find root events (events with no predecessors in po) *)
+  let find_roots () =
+    let all_events = structure.e in
+    let has_predecessor = pi_2 structure.po in
+    let roots = Uset.set_minus all_events has_predecessor in
+    let root_list = Uset.values roots in
+      match root_list with
+      | [] -> (
+          if
+            (* If no roots found, try to find event 0 or use first event *)
+            Hashtbl.mem events 0
+          then [ 0 ]
+          else
+            let first_events = Uset.values structure.e in
+              match first_events with
+              | [] -> failwith "No events in structure"
+              | hd :: _ -> [ hd ]
         )
-        else
-          (* Non-branch event - combine paths from successors *)
-          let successor_paths = List.map gen_paths_rec next in
-
-          (* Cartesian product and concatenation *)
-          let rec combine_paths paths =
-            match paths with
-            | [] -> [ { path = []; p = [] } ]
-            | p :: rest ->
-                let rest_combined = combine_paths rest in
-                  List.concat_map
-                    (fun path1 ->
-                      List.map
-                        (fun path2 ->
-                          {
-                            path =
-                              List.filter (( <> ) e) path1.path @ path2.path;
-                            p = path1.p @ path2.p;
-                          }
-                        )
-                        rest_combined
-                    )
-                    p
-          in
-
-          let combined = combine_paths successor_paths in
-            List.map (fun p -> { path = p.path @ [ e ]; p = p.p }) combined
+      | roots -> roots
   in
-    gen_paths_rec 0
+
+  let rec gen_paths_rec e =
+    (* Check if event exists before accessing *)
+    if not (Hashtbl.mem events e) then [ { path = []; p = [] } ]
+    else
+      let next_uset =
+        try Hashtbl.find po_tree e with Not_found -> Uset.create ()
+      in
+      let next = Uset.values next_uset in
+
+      if List.length next = 0 then [ { path = [ e ]; p = [] } ]
+      else
+        (* Check if event is a branch *)
+        let event = Hashtbl.find events e in
+          if event.typ = Branch then (
+            (* Branch event - create two paths *)
+            if List.length next <> 2 then
+              failwith "Branch event must have exactly 2 successors";
+
+            let next0 = List.nth next 0 in
+            let next1 = List.nth next 1 in
+
+            let restrict_e =
+              try Hashtbl.find restrict e with Not_found -> []
+            in
+
+            let cond =
+              match event.cond with
+              | Some (VExpression c) -> c
+              | Some c -> EVar (Value.to_string c)
+              | None -> failwith "Branch missing condition"
+            in
+
+            (* Left branch paths *)
+            let n0_paths =
+              if Uset.mem structure.e next0 then
+                let restrict_next0 =
+                  try Hashtbl.find restrict next0 with Not_found -> []
+                in
+                  List.map
+                    (fun p ->
+                      { path = p.path @ [ e ]; p = p.p @ [ restrict_next0 ] }
+                    )
+                    (gen_paths_rec next0)
+              else [ { path = [ e ]; p = [ restrict_e @ [ cond ] ] } ]
+            in
+
+            (* Right branch paths *)
+            let n1_paths =
+              if Uset.mem structure.e next1 then
+                let restrict_next1 =
+                  try Hashtbl.find restrict next1 with Not_found -> []
+                in
+                  List.map
+                    (fun p ->
+                      { path = p.path @ [ e ]; p = p.p @ [ restrict_next1 ] }
+                    )
+                    (gen_paths_rec next1)
+              else
+                [ { path = [ e ]; p = [ restrict_e @ [ Expr.inverse cond ] ] } ]
+            in
+
+            n0_paths @ n1_paths
+          )
+          else
+            (* Non-branch event - combine paths from successors *)
+            let successor_paths = List.map gen_paths_rec next in
+
+            (* Cartesian product and concatenation *)
+            let rec combine_paths paths =
+              match paths with
+              | [] -> [ { path = []; p = [] } ]
+              | p :: rest ->
+                  let rest_combined = combine_paths rest in
+                    List.concat_map
+                      (fun path1 ->
+                        List.map
+                          (fun path2 ->
+                            {
+                              path =
+                                List.filter (( <> ) e) path1.path @ path2.path;
+                              p = path1.p @ path2.p;
+                            }
+                          )
+                          rest_combined
+                      )
+                      p
+            in
+
+            let combined = combine_paths successor_paths in
+              List.map (fun p -> { path = p.path @ [ e ]; p = p.p }) combined
+  in
+
+  (* Generate paths from each root and combine *)
+  let roots = find_roots () in
+    List.concat_map gen_paths_rec roots
 
 (** Choose compatible justifications for a path *)
 let choose justmap path_events =
@@ -288,6 +317,11 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
     elided_rf ppo_loc ppo_loc_tree dp dp_ppo j_list pp p_combined rf
     write_events read_events po =
   let* _ = Lwt.return_unit in
+
+  (* Filter po to only include events in e *)
+  let po_filtered =
+    Uset.filter (fun (f, t) -> Uset.mem e f && Uset.mem e t) po
+  in
 
   (* Remove elided RF edges *)
   let rf_m = Uset.set_minus rf elided_rf in
@@ -479,8 +513,14 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                   | None -> Lwt.return_none
                   | Some bigger_p ->
                       (* Check dslwb (downward-closed same-location write before) *)
+                      (* Filter po to only include events in e *)
+                      let po_filtered =
+                        Uset.filter
+                          (fun (f, t) -> Uset.mem e f && Uset.mem e t)
+                          po
+                      in
                       let inv_po_tree =
-                        build_tree e (Uset.inverse_relation po)
+                        build_tree e (Uset.inverse_relation po_filtered)
                       in
 
                       let check_dslwb w _r =
@@ -529,7 +569,9 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                                   in
                                     Uset.async_for_all f preds
                         in
-                          let* in_po = Lwt.return (Uset.mem po (w, _r)) in
+                          let* in_po =
+                            Lwt.return (Uset.mem po_filtered (w, _r))
+                          in
                             if not in_po then Lwt.return_false else f _r
                       in
 
