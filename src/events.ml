@@ -484,3 +484,14 @@ let loce events e x =
         | None -> string_of_int x
       in
         VVar (Printf.sprintf "l(%s)" loc_x)
+
+(* Event type filters *)
+let filter_events events e_set typ =
+  Uset.filter
+    (fun e ->
+      try
+        let event = Hashtbl.find events e in
+          event.typ = typ
+      with Not_found -> false
+    )
+    e_set

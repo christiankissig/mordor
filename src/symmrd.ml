@@ -4,6 +4,7 @@
 open Lwt.Syntax
 open Parse (* must come before open Types *)
 open Executions
+open Events
 open Types
 
 type result = {
@@ -32,24 +33,12 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
       Uset.filter (fun id -> Hashtbl.mem events id) structure.e
     in
 
-    (* Event type filters *)
-    let filter_events typ =
-      Uset.filter
-        (fun e ->
-          try
-            let event = Hashtbl.find events e in
-              event.typ = typ
-          with Not_found -> false
-        )
-        e_set
-    in
-
-    let branch_events = filter_events Branch in
-    let read_events = filter_events Read in
-    let write_events = filter_events Write in
-    let fence_events = filter_events Fence in
-    let malloc_events = filter_events Malloc in
-    let free_events = filter_events Free in
+    let branch_events = filter_events events e_set_filtered Branch in
+    let read_events = filter_events events e_set_filtered Read in
+    let write_events = filter_events events e_set_filtered Write in
+    let fence_events = filter_events events e_set_filtered Fence in
+    let malloc_events = filter_events events e_set_filtered Malloc in
+    let free_events = filter_events events e_set_filtered Free in
 
     (* Build tree for program order *)
     let build_tree rel =
