@@ -6,6 +6,7 @@ let () =
       Test_coherence.suite;
       Test_elaborations.suite;
       Test_events.suite;
+      Test_executions.suite;
       Test_expr.suite;
       Test_forwardingcontext.suite;
       Test_interpret.suite;
