@@ -500,7 +500,7 @@ let rec permutations = function
 let check_for_coherence (structure : symbolic_event_structure)
     (events : (int, event) Hashtbl.t) (execution : symbolic_execution)
     (restrictions : restrictions) (include_dependencies : bool) : bool Lwt.t =
-  if execution.ex_e = Uset.create () then Lwt.return false
+  if Uset.size execution.ex_e = 0 then Lwt.return false
   else
     let ({ po; restrict; _ } : symbolic_event_structure) = structure in
     let writes =

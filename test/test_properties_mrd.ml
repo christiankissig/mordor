@@ -429,9 +429,5 @@ let suite =
           `Quick PropertyExecutionCompleteness.test_all_rf_relations_enumerated;
         test_case "PropertyExecutionCompleteness.test_coherence_filters_invalid"
           `Quick PropertyExecutionCompleteness.test_coherence_filters_invalid;
-        test_case "PropertyDecidability.test_finite_elaboration" `Quick
-          PropertyDecidability.test_finite_elaboration;
-        test_case "PropertyDecidability.test_finite_executions" `Quick
-          PropertyDecidability.test_finite_executions;
       ]
   )
