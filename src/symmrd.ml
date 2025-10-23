@@ -194,13 +194,41 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
 let rec convert_stmt = function
   | Parse.SThread { lhs; rhs } ->
       `Thread (List.map convert_stmt lhs, List.map convert_stmt rhs)
-  | Parse.SGlobalLoad { register; global; assign } ->
-      `GlobalLoad (register, global, assign.mode, assign.volatile)
+  | Parse.SDerefStore { pointer; expr; assign } ->
+      `DerefStore (pointer, expr, assign.mode, assign.volatile)
   | Parse.SGlobalStore { global; expr; assign } ->
       `GlobalStore (global, assign.mode, expr, assign.volatile)
+  | Parse.SGlobalLoad { register; global; assign } ->
+      `GlobalLoad (register, global, assign.mode, assign.volatile)
+  | Parse.SDeref { register; pointer; assign } ->
+      `Deref (register, pointer, assign.mode, assign.volatile)
+  | Parse.SCas { register; params; modes; assign } ->
+      `Cas (register, params, modes, assign.volatile)
+  | Parse.SFAdd { register; params; modes; assign } ->
+      `Fadd (register, params, modes, assign.volatile)
+  | Parse.SRegisterStore { register; expr } -> `RegisterStore (register, expr)
+  | Parse.SIf { condition; body; else_body } ->
+      `If
+        ( condition,
+          List.map convert_stmt body,
+          match else_body with
+          | Some l -> List.map convert_stmt l
+          | None -> []
+        )
+  | Parse.SWhile { condition; body } ->
+      `While (condition, List.map convert_stmt body)
+  | Parse.SQWhile { condition; body } ->
+      `QWhile (condition, List.map convert_stmt body)
+  | Parse.SDo { body; condition } -> `Do (List.map convert_stmt body, condition)
+  | Parse.SQDo { body; condition } ->
+      `QDo (List.map convert_stmt body, condition)
   | Parse.SFence { mode } -> `Fence mode
-  (* Add other statement conversions as needed *)
-  | _ -> failwith "Statement conversion not implemented"
+  | Parse.SLock { global } -> `Lock global
+  | Parse.SUnlock { global } -> `Unlock global
+  | Parse.SFree { register } -> `Free register
+  | Parse.SMalloc { register; size; pc; label } ->
+      `Malloc (register, size, pc, label)
+  | Parse.SLabeled { label; stmt } -> `Labeled (label, convert_stmt stmt)
 
 (** Parse program *)
 let parse_program program =
