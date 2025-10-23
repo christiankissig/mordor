@@ -391,6 +391,15 @@ let next_token t =
         | Some '~' ->
             advance t;
             make_token t TILDE
+        (* Unicode operators: ∈ (U+2208) and ∉ (U+2209) *)
+        | Some '\xE2' when starts_with t "\xE2\x88\x88" ->
+            (* ∈ (element of) - UTF-8: E2 88 88 *)
+            t.index <- t.index + 3;
+            make_token t IN
+        | Some '\xE2' when starts_with t "\xE2\x88\x89" ->
+            (* ∉ (not element of) - UTF-8: E2 88 89 *)
+            t.index <- t.index + 3;
+            make_token t NOTIN
         | Some c ->
             failwith
               (Printf.sprintf
@@ -536,7 +545,7 @@ let infix_prec = function
   | "^" | "|" | "&" -> (28, 29)
   | "*" | "/" -> (26, 27)
   | "+" | "-" -> (24, 25)
-  | "=" | "!=" | "<" | ">" | "<=" | ">=" -> (22, 23)
+  | "=" | "!=" | "<" | ">" | "<=" | ">=" | "∈" | "∉" -> (22, 23)
   | "=>" -> (20, 21)
   | "&&" | "||" -> (18, 19)
   | _ -> (-1, -1)
@@ -562,6 +571,8 @@ let token_to_binop = function
   | PIPE -> Some "|"
   | CARET -> Some "^"
   | ARROW -> Some "=>"
+  | IN -> Some "∈"
+  | NOTIN -> Some "∉"
   | _ -> None
 
 let token_to_unop = function

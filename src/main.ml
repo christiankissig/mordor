@@ -85,7 +85,15 @@ let run_tests tests =
   Printf.printf "MoRDor - Symbolic Modular Relaxed Dependencies\n";
   flush stdout;
 
-  let* () = Lwt_list.iter_s (fun (name, prog) -> run_example name prog) tests in
+  let* () =
+    Lwt_list.iter_s
+      (fun (name, prog) ->
+        Printf.printf "Running program %s.\n" name;
+        Printf.printf "===================\n";
+        run_example name prog
+      )
+      tests
+  in
     flush stdout;
     Lwt.return_unit
 
