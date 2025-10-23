@@ -391,7 +391,7 @@ module TestElaborationSequences = struct
     (* Initial: y = 1/!α with dependency on α *)
     (* Step 1: Strengthen with !α ≠ 0 *)
     let after_str =
-      [ EBinOp (VExpression (EUnOp ("!", VSymbol "α")), "≠", VNumber Z.zero) ]
+      [ EUnOp ("!", VExpression (EBinOp (VSymbol "α", "!=", VNumber Z.zero))) ]
     in
 
     (* Step 2: Value assign α=0 from predicate *)
@@ -400,7 +400,7 @@ module TestElaborationSequences = struct
     (* Step 3: Weaken using Ω ⟹ !α ≠ 0 *)
     (* Result: no dependencies *)
     let constraints_after_str =
-      [ EBinOp (VExpression (EUnOp ("!", VSymbol "α")), "≠", VNumber Z.zero) ]
+      [ EUnOp ("!", VExpression (EBinOp (VSymbol "α", "!=", VNumber Z.zero))) ]
     in
 
     Solver.is_sat constraints_after_str >>= fun sat_result ->

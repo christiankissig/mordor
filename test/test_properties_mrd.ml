@@ -150,8 +150,8 @@ module PropertyElaborationSoundness = struct
   let test_weakening_soundness () =
     let open Lwt.Infix in
     (* Weakening: if Ω ⟹ P, then removing P is sound *)
-    let omega = [ EBinOp (VSymbol "x", "≥", VNumber Z.zero) ] in
-    let p = [ EBinOp (VSymbol "x", "≥", VNumber Z.zero) ] in
+    let omega = [ EBinOp (VSymbol "x", ">=", VNumber Z.zero) ] in
+    let p = [ EBinOp (VSymbol "x", ">=", VNumber Z.zero) ] in
 
     (* Ω should imply P *)
     let implication =
@@ -169,7 +169,7 @@ module PropertyElaborationSoundness = struct
     (* Lifting: if two writes are equivalent under complementary predicates,
        they can be merged *)
     let p1 = [ EBinOp (VSymbol "c", "=", VNumber Z.one) ] in
-    let p2 = [ EBinOp (VSymbol "c", "≠", VNumber Z.one) ] in
+    let p2 = [ EBinOp (VSymbol "c", "!=", VNumber Z.one) ] in
 
     (* P1 ∨ P2 should be ⊤ *)
     let disjunction = EOr [ p1; p2 ] in
