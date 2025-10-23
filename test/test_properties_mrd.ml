@@ -10,8 +10,6 @@ module PropertyThinAirFreedom = struct
   (** The model forbids thin-air values by requiring acyclic(dp ∪ ≤ ∪ rf) *)
 
   let test_acyclicity_prevents_thin_air () =
-    Printf.printf "\n=== Property: Thin-Air Freedom ===\n";
-
     (* Classic thin-air example:
        Thread 1:         Thread 2:
        int r1 = x;       int r2 = y;
@@ -28,8 +26,7 @@ module PropertyThinAirFreedom = struct
       let dp = of_list [ (1, 2); (3, 4) ] in
       let dp_rf = union dp rf_cycle in
         check bool "dp_rf_cycle_not_acyclic" false (acyclic dp_rf);
-
-        Printf.printf "PASS: Acyclicity requirement prevents thin-air\n"
+        ()
 
   let test_dependencies_break_cycles () =
     (* With proper dependencies, the cycle is detected *)
@@ -43,9 +40,8 @@ module PropertyThinAirFreedom = struct
       (* But with independent writes, there's no cycle *)
       let dp_empty = create () in
       let combined2 = union (union po rf) dp_empty in
-      (* This might still have a cycle from po ∪ rf, depending on the program *)
-
-      Printf.printf "PASS: Dependencies correctly detect cycles\n"
+        (* This might still have a cycle from po ∪ rf, depending on the program *)
+        ()
 end
 
 (** Property 2: DRF-SC (Data-Race-Free implies Sequential Consistency) *)
@@ -53,8 +49,6 @@ module PropertyDRFSC = struct
   (** Theorem 5 from the paper: (J𝑃K_SC ∩ DR = ∅) ⟹ (J𝑃K_SC = J𝑃K_n ⊤) *)
 
   let test_drf_sc_property () =
-    Printf.printf "\n=== Property: DRF-SC ===\n";
-
     (* If a program has no data races under SC, then it only exhibits
        SC behaviors under sMRD *)
 
@@ -66,11 +60,13 @@ module PropertyDRFSC = struct
 
     (* No races: all conflicting accesses ordered by happens-before *)
     (* The program should only show r1=1 *)
-    Printf.printf "PASS: DRF-SC property holds (see paper Theorem 5)\n"
+    (* TODO Printf.printf "PASS: DRF-SC property holds (see paper Theorem 5)\n"*)
+    ()
 
   let test_racy_program_allows_more () =
     (* With races, sMRD may allow more behaviors than SC *)
-    Printf.printf "PASS: Racy programs allow non-SC behaviors\n"
+    (* TODO Printf.printf "PASS: Racy programs allow non-SC behaviors\n"*)
+    ()
 end
 
 (** Property 3: Compilation Correctness (Lemma 5.1) *)
@@ -78,8 +74,6 @@ module PropertyCompilationCorrectness = struct
   (** Lemma 5.1: J𝑃K_n ⊤ ⊇ J𝑃K_RC11 ⊇ Jcomp(𝑃)K_IMM *)
 
   let test_smrd_includes_rc11 () =
-    Printf.printf "\n=== Property: Compilation Correctness ===\n";
-
     (* sMRD is a relaxation of RC11 *)
     (* Every RC11 execution has a corresponding sMRD execution *)
     (* Because: (dp ∪ ≤) ⊆ ⊑, so acyclic(⊑ ∪ rf) ⟹ acyclic(dp ∪ ≤ ∪ rf) *)
@@ -90,12 +84,12 @@ module PropertyCompilationCorrectness = struct
 
     (* If po ∪ rf is acyclic, then so is dp ∪ ppo ∪ rf when dp ∪ ppo ⊆ po *)
     check bool "po_includes_deps" true (subset dp po);
-
-    Printf.printf "PASS: sMRD soundly extends RC11\n"
+    ()
 
   let test_standard_compilation_mappings () =
     (* Standard compilation to ARM/Power/x86 remains sound *)
-    Printf.printf "PASS: Standard compilation mappings work\n"
+    (*TODO Printf.printf "PASS: Standard compilation mappings work\n"*)
+    ()
 end
 
 (** Property 4: Elaboration Soundness *)
@@ -103,8 +97,6 @@ module PropertyElaborationSoundness = struct
   (** Each elaboration preserves or extends the set of valid behaviors *)
 
   let test_value_assignment_soundness () =
-    Printf.printf "\n=== Property: Elaboration Soundness ===\n";
-
     (* Value assignment: if P ⟹ (α = v), substituting v for α is sound *)
     let open Lwt.Infix in
     let premises = [ EBinOp (VSymbol "α", "=", VNumber Z.one) ] in
@@ -118,7 +110,6 @@ module PropertyElaborationSoundness = struct
 
     Solver.implies premises conclusion >>= fun result ->
     check bool "va_soundness" true result;
-    Printf.printf "PASS: Value assignment is sound\n";
     Lwt.return_unit
 
   let test_strengthening_soundness () =
@@ -144,7 +135,6 @@ module PropertyElaborationSoundness = struct
 
     Solver.is_sat stronger_implies_weaker >>= fun result ->
     check bool "str_soundness" true result;
-    Printf.printf "PASS: Strengthening is sound\n";
     Lwt.return_unit
 
   let test_weakening_soundness () =
@@ -161,7 +151,6 @@ module PropertyElaborationSoundness = struct
 
     Solver.is_sat implication >>= fun result ->
     check bool "weak_soundness" true result;
-    Printf.printf "PASS: Weakening is sound\n";
     Lwt.return_unit
 
   let test_lifting_soundness () =
@@ -176,7 +165,6 @@ module PropertyElaborationSoundness = struct
 
     Solver.is_sat [ disjunction ] >>= fun result ->
     check bool "lift_soundness" true result;
-    Printf.printf "PASS: Lifting is sound\n";
     Lwt.return_unit
 
   let suite =
@@ -199,8 +187,6 @@ end
 (** Property 5: Forwarding Correctness *)
 module PropertyForwardingCorrectness = struct
   let test_load_forwarding_preserves_semantics () =
-    Printf.printf "\n=== Property: Forwarding Correctness ===\n";
-
     (* Load forwarding: if two loads read the same location and
        the first is not overtaken, forwarding is correct *)
     let fwd_ctx = of_list [ (1, 2) ] in
@@ -209,27 +195,25 @@ module PropertyForwardingCorrectness = struct
        - Event 2 is elided
        - Symbols from event 2 are replaced by symbols from event 1 *)
     check bool "fwd_recorded" true (mem fwd_ctx (1, 2));
-    Printf.printf "PASS: Load forwarding is correct\n"
+    ()
 
   let test_store_forwarding_preserves_semantics () =
-    (* Store forwarding: if a write is immediately followed by a read,
+    (* TODO Store forwarding: if a write is immediately followed by a read,
        the value can be forwarded *)
-    Printf.printf "PASS: Store forwarding is correct\n"
+    ()
 
   let test_write_elision_preserves_semantics () =
     (* Write elision: if a write is immediately followed by another
        write to the same location, the first can be elided *)
     let we_ctx = of_list [ (1, 2) ] in
       check bool "we_recorded" true (mem we_ctx (1, 2));
-      Printf.printf "PASS: Write elision is correct\n"
+      ()
 end
 
 (** Property 6: Semantic Equality *)
 module PropertySemanticEquality = struct
   let test_semantic_equality_is_reflexive () =
     let open Lwt.Infix in
-    Printf.printf "\n=== Property: Semantic Equality ===\n";
-
     let expr = EBinOp (VSymbol "x", "+", VNumber Z.one) in
       Solver.exeq expr expr >>= fun result ->
       check bool "exeq_reflexive" true result;
@@ -275,8 +259,6 @@ end
 (** Property 7: Justification Monotonicity *)
 module PropertyJustificationMonotonicity = struct
   let test_initial_justifications_are_strongest () =
-    Printf.printf "\n=== Property: Justification Monotonicity ===\n";
-
     (* J₀ ⊆ J₁ ⊆ J₂ ⊆ ... ⊆ J *)
     (* Initial justifications capture all syntactic dependencies *)
     let e = { (make_event Write 1) with wval = Some (VSymbol "α") } in
@@ -294,7 +276,7 @@ module PropertyJustificationMonotonicity = struct
 
     (* Initial justification has all syntactic dependencies *)
     check bool "j0_has_deps" true (size j0.d > 0);
-    Printf.printf "PASS: Initial justifications are strongest\n"
+    ()
 
   let test_elaboration_weakens_or_maintains () =
     (* Each elaboration either:
@@ -326,80 +308,58 @@ module PropertyJustificationMonotonicity = struct
 
     check bool "elaboration_weakens" true
       (List.length j_after_weak.p <= List.length j_before.p);
-    Printf.printf "PASS: Elaboration weakens or maintains dependencies\n"
+    ()
 
   let test_final_set_includes_initial () =
     (* J₀ ⊆ J *)
-    (* The final set always includes the initial justifications *)
-    Printf.printf "PASS: Final justification set includes initial\n"
+    (* TODO The final set always includes the initial justifications *)
+    ()
 end
 
 (** Property 8: Disjointness from Allocation *)
 module PropertyAllocationDisjointness = struct
   let test_fresh_allocations_are_disjoint () =
-    Printf.printf "\n=== Property: Allocation Disjointness ===\n";
-
     (* Different allocation events introduce disjoint regions *)
     let alloc1 = VSymbol "π1" in
     let alloc2 = VSymbol "π2" in
 
     (* π1 ⊗ π2 should hold (they're disjoint) *)
-    (* This is enforced in the freeze function *)
-    Printf.printf "PASS: Fresh allocations are disjoint\n"
+    (* TODO This is enforced in the freeze function *)
+    ()
 
   let test_allocation_disjoint_from_globals () =
     (* Allocated regions are disjoint from global variables *)
     let alloc = VSymbol "π" in
     let global = VVar "x" in
 
-    (* π ⊗ x should hold *)
-    Printf.printf "PASS: Allocations disjoint from globals\n"
+    (* TODO π ⊗ x should hold *)
+    ()
 
   let test_free_enables_reuse () =
     (* After free, the region can potentially be reused *)
-    (* But only if ordered by happens-before *)
-    Printf.printf "PASS: Free enables region reuse\n"
+    (* TODO But only if ordered by happens-before *)
+    ()
 end
 
 (** Property 9: Execution Completeness *)
 module PropertyExecutionCompleteness = struct
   let test_all_maximal_sets_considered () =
-    Printf.printf "\n=== Property: Execution Completeness ===\n";
-
     (* Every maximal conflict-free set of events is considered *)
     let e_all = of_list [ 1; 2; 3; 4 ] in
     let conflict = of_list [ (2, 3) ] in
     (* Events 2 and 3 conflict *)
 
     (* Maximal sets: {1,2,4}, {1,3,4} *)
-    (* Both should generate candidate executions *)
-    Printf.printf "PASS: All maximal conflict-free sets considered\n"
+    (* TODO Both should generate candidate executions *)
+    ()
 
   let test_all_rf_relations_enumerated () =
-    (* For each maximal set, all valid RF relations are tried *)
-    Printf.printf "PASS: All RF relations enumerated\n"
+    (* TODO For each maximal set, all valid RF relations are tried *)
+    ()
 
   let test_coherence_filters_invalid () =
-    (* Only coherent executions are included in the final result *)
-    Printf.printf "PASS: Coherence filtering works correctly\n"
-end
-
-(** Property 10: Decidability (Appendix F) *)
-module PropertyDecidability = struct
-  let test_finite_elaboration () =
-    Printf.printf "\n=== Property: Decidability ===\n";
-
-    (* With finite value sets, elaboration terminates *)
-    (* |J| ≤ |E × (R ∪ A) × E² × E × E| *)
-    (* This is finite, so elaboration is decidable *)
-    Printf.printf "PASS: Elaboration is decidable\n"
-
-  let test_finite_executions () =
-    (* Number of candidate executions is finite *)
-    (* - Finite maximal conflict-free sets *)
-    (* - Finite RF relations per set *)
-    (* - Finite justification combinations *)
-    Printf.printf "PASS: Execution generation is decidable\n"
+    (* TODO Only coherent executions are included in the final result *)
+    ()
 end
 
 let suite =
