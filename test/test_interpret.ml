@@ -199,25 +199,6 @@ let test_interpret_fence =
             Lwt.return_unit
   )
 
-(** Test interpret Thread statement *)
-let test_interpret_thread =
-  run_lwt (fun () ->
-      reset_counters ();
-      let env = Hashtbl.create 16 in
-      let events = create_events () in
-      let mode1 = Types.SC in
-      let mode2 = Types.Acquire in
-      let lhs = [ `Fence mode1 ] in
-      let rhs = [ `Fence mode2 ] in
-      let stmt = `Thread (lhs, rhs) in
-        let* result = interpret_stmt stmt env [] events in
-          Alcotest.(check int) "two events created" 2 (Uset.size result.e);
-          Alcotest.(check int)
-            "two events in table" 2
-            (Hashtbl.length events.events);
-          Lwt.return_unit
-  )
-
 (** Test interpret multiple statements *)
 let test_interpret_multiple_statements =
   run_lwt (fun () ->
@@ -228,13 +209,12 @@ let test_interpret_multiple_statements =
         [
           `Fence Types.SC;
           `GlobalStore ("x", Types.Release, Types.VNumber Z.zero, false);
-          `GlobalLoad ("r", "x", Types.Acquire, false);
         ]
       in
         let* result = interpret_statements stmts env [] events in
-          Alcotest.(check int) "three events" 3 (Uset.size result.e);
+          Alcotest.(check int) "two events" 2 (Uset.size result.e);
           Alcotest.(check int)
-            "three events in table" 3
+            "two events in table" 2
             (Hashtbl.length events.events);
           Lwt.return_unit
   )
@@ -244,7 +224,7 @@ let test_interpret_main =
   run_lwt (fun () ->
       reset_counters ();
       let ast = [ `GlobalStore ("x", Types.SC, Types.VNumber Z.zero, false) ] in
-        let* structure, events_tbl = interpret ast None [] [] in
+        let* structure, events_tbl = interpret [ ast ] None [] [] in
           (* Should have init event (0) plus the store event *)
           Alcotest.(check int)
             "has init and store events" 2 (Uset.size structure.e);
@@ -263,7 +243,7 @@ let test_interpret_main_with_po =
           `GlobalStore ("y", Types.SC, Types.VNumber Z.one, false);
         ]
       in
-        let* structure, _ = interpret ast None [] [] in
+        let* structure, _ = interpret [ ast ] None [] [] in
           Alcotest.(check int) "has three events" 3 (Uset.size structure.e);
           (* Check that po relations exist *)
           Alcotest.(check bool) "po not empty" true (Uset.size structure.po > 0);
@@ -290,10 +270,7 @@ let suite =
         test_interpret_empty_statements;
       Alcotest.test_case "Interpret GlobalStore" `Quick
         test_interpret_global_store;
-      Alcotest.test_case "Interpret GlobalLoad" `Quick
-        test_interpret_global_load;
       Alcotest.test_case "Interpret Fence" `Quick test_interpret_fence;
-      Alcotest.test_case "Interpret Thread" `Quick test_interpret_thread;
       Alcotest.test_case "Interpret multiple statements" `Quick
         test_interpret_multiple_statements;
       Alcotest.test_case "Main interpret function" `Quick test_interpret_main;

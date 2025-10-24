@@ -5,6 +5,7 @@
 (authors "sMRD Contributors")
 (maintainers "maintainer@example.com")
 (license MIT)
+(using menhir 2.1)
 (package
  (name smrd)
  (allow_empty)

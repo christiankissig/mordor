@@ -2,7 +2,6 @@
     algorithm *)
 
 open Lwt.Syntax
-open Parse (* must come before open Types *)
 open Executions
 open Events
 open Types
@@ -192,43 +191,51 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
 
 (** Convert parsed AST to interpreter format *)
 let rec convert_stmt = function
-  | Parse.SThread { lhs; rhs } ->
-      `Thread (List.map convert_stmt lhs, List.map convert_stmt rhs)
-  | Parse.SDerefStore { pointer; expr; assign } ->
-      `DerefStore (pointer, expr, assign.mode, assign.volatile)
-  | Parse.SGlobalStore { global; expr; assign } ->
+  (* Direct mappings - same structure in new parser *)
+  | Ast.SRegisterStore { register; expr } -> `RegisterStore (register, expr)
+  | Ast.SGlobalStore { global; expr; assign } ->
       `GlobalStore (global, assign.mode, expr, assign.volatile)
-  | Parse.SGlobalLoad { register; global; assign } ->
-      `GlobalLoad (register, global, assign.mode, assign.volatile)
-  | Parse.SDeref { register; pointer; assign } ->
-      `Deref (register, pointer, assign.mode, assign.volatile)
-  | Parse.SCas { register; params; modes; assign } ->
-      `Cas (register, params, modes, assign.volatile)
-  | Parse.SFAdd { register; params; modes; assign } ->
-      `Fadd (register, params, modes, assign.volatile)
-  | Parse.SRegisterStore { register; expr } -> `RegisterStore (register, expr)
-  | Parse.SIf { condition; body; else_body } ->
+  | Ast.SStore { address; expr; assign } ->
+      (* Was SDerefStore in old parser *)
+      `DerefStore (address, expr, assign.mode, assign.volatile)
+  | Ast.SIf { condition; then_body; else_body } ->
       `If
         ( condition,
-          List.map convert_stmt body,
+          List.map convert_stmt then_body,
           match else_body with
           | Some l -> List.map convert_stmt l
           | None -> []
         )
-  | Parse.SWhile { condition; body } ->
+  | Ast.SWhile { condition; body } ->
       `While (condition, List.map convert_stmt body)
-  | Parse.SQWhile { condition; body } ->
-      `QWhile (condition, List.map convert_stmt body)
-  | Parse.SDo { body; condition } -> `Do (List.map convert_stmt body, condition)
-  | Parse.SQDo { body; condition } ->
-      `QDo (List.map convert_stmt body, condition)
-  | Parse.SFence { mode } -> `Fence mode
-  | Parse.SLock { global } -> `Lock global
-  | Parse.SUnlock { global } -> `Unlock global
-  | Parse.SFree { register } -> `Free register
-  | Parse.SMalloc { register; size; pc; label } ->
+  | Ast.SDo { body; condition } -> `Do (List.map convert_stmt body, condition)
+  | Ast.SQDo { body; condition } -> `QDo (List.map convert_stmt body, condition)
+  | Ast.SFence { mode } -> `Fence mode
+  | Ast.SLock { global } -> `Lock global
+  | Ast.SUnlock { global } -> `Unlock global
+  | Ast.SFree { register } -> `Free register
+  | Ast.SMalloc { register; size; pc; label } ->
       `Malloc (register, size, pc, label)
-  | Parse.SLabeled { label; stmt } -> `Labeled (label, convert_stmt stmt)
+  | Ast.SLabeled { label; stmt } -> `Labeled (label, convert_stmt stmt)
+  | Ast.SSkip ->
+      (* New in new parser - treat as no-op *)
+      `Skip
+  (* CAS and FADD - structure changed in new parser *)
+  | Ast.SCAS { register; address; expected; desired; mode } ->
+      (* Old parser: params list and modes list
+         New parser: explicit address, expected, desired fields *)
+      `Cas (register, [ address; expected; desired ], [ mode ], false)
+  | Ast.SFADD { register; address; operand; mode } ->
+      (* Old parser: params list and modes list
+         New parser: explicit address and operand fields *)
+      `Fadd (register, [ address; operand ], [ mode ], false)
+
+(* Note: The following old parser constructs no longer exist:
+   - SThread: Thread composition now handled at parse time with ||| operator
+   - SGlobalLoad: Should be converted to SRegisterStore with appropriate expr
+   - SDeref: Should be converted to SRegisterStore with load expr
+   - SQWhile: Use QDo with negated condition or handle separately
+*)
 
 (** Parse program *)
 let parse_program program =
@@ -237,9 +244,13 @@ let parse_program program =
   try
     let litmus = Parse.parse program in
     let constraints =
-      List.map Parse.ast_expr_to_expr litmus.config.constraint_
+      List.map Parse.ast_expr_to_expr
+        ( match litmus.config with
+        | Some c -> c.constraint_
+        | None -> []
+        )
     in
-    let program_stmts = List.map convert_stmt litmus.program in
+    let program_stmts = List.map (List.map convert_stmt) litmus.program in
       (constraints, program_stmts)
   with
   | Failure msg ->

@@ -1,7 +1,14 @@
+(ocamllex lexer)
+
+(menhir
+ (modules parser)
+ (flags --explain))
+
 (library
  (name smrd_lib)
  (wrapped false)
  (modules
+  ast
   coherence
   elaborations
   events
@@ -10,7 +17,9 @@
   forwardingcontext
   interpret
   justifications
+  lexer
   parse
+  parser
   rewrite
   solver
   symmrd

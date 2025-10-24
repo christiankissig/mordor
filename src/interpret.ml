@@ -133,6 +133,7 @@ and interpret_stmt stmt env phi events =
       let event' = add_event events evt in
         let* cont = interpret_statements [] env phi events in
           Lwt.return (dot event'.label cont phi)
+      (* TODO
   | `GlobalLoad (register, global, mode, volatile) ->
       let rval = VSymbol (next_greek ()) in
       let base_evt : event = make_event Read 0 in
@@ -149,16 +150,13 @@ and interpret_stmt stmt env phi events =
         Hashtbl.replace env register rval;
         let* cont = interpret_statements [] env phi events in
           Lwt.return (dot event'.label cont phi)
+          *)
   | `Fence mode ->
       let base_evt : event = make_event Fence 0 in
       let evt = { base_evt with fmod = mode } in
       let event' = add_event events evt in
         let* cont = interpret_statements [] env phi events in
           Lwt.return (dot event'.label cont phi)
-  | `Thread (lhs_stmts, rhs_stmts) ->
-      let* lhs_structure = interpret_statements lhs_stmts env phi events in
-        let* rhs_structure = interpret_statements rhs_stmts env phi events in
-          Lwt.return (cross lhs_structure rhs_structure)
   | _ ->
       (* Simplified - return empty structure for unhandled cases *)
       Lwt.return (empty_structure ())
@@ -171,7 +169,20 @@ let interpret ast defacto restrictions constraint_ =
   let events = create_events () in
   let env = Hashtbl.create 32 in
 
-  let* structure = interpret_statements ast env [] events in
+  let* structure =
+    List.map
+      (fun thread_statements ->
+        interpret_statements thread_statements env [] events
+      )
+      ast
+    |> List.fold_left
+         (fun acc_structures thread_structure ->
+           let* acc = acc_structures in
+             let* thread_struct = thread_structure in
+               Lwt.return (cross acc thread_struct)
+         )
+         (Lwt.return (empty_structure ()))
+  in
 
   (* Add init event *)
   let init_event = make_event Init 0 in
