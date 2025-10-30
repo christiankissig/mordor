@@ -220,6 +220,7 @@ end = struct
     | e -> [ e ]
 
   let rec is_tautology = function
+    | EBoolean b -> b
     | EBinOp (lhs, op, rhs) when op = "&&" ->
         is_tautology lhs && is_tautology rhs
     | EBinOp (lhs, op, rhs) when op = "||" ->

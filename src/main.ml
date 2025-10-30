@@ -2,6 +2,19 @@
 open Lwt.Syntax
 open Types
 open Symmrd
+open Eventstructureviz
+
+(* Command line options *)
+type run_mode = Samples | AllLitmusTests | Single
+type output_mode = Json | Html | Dot
+type command = Run | Parse | Interpret | VisualEs | Dependencies | Futures
+
+let command = ref None
+let output_mode = ref None
+let run_mode = ref Samples
+let litmus_dir = ref "litmus_tests"
+let single_file = ref None
+let output_file = ref None
 
 (* Run verification *)
 let verify_program program options =
@@ -47,15 +60,6 @@ name = LB
     );
   ]
 
-(* Run example *)
-let run_example name program =
-  Printf.printf "\n=== Running: %s ===\n" name;
-  Printf.printf "Program:\n%s\n\n" program;
-  flush stdout;
-  let* result = verify_program program default_options in
-    print_results result;
-    Lwt.return_unit
-
 (* Read all .lit files from a directory *)
 let read_litmus_files dir =
   try
@@ -78,31 +82,68 @@ let read_litmus_files dir =
     Printf.eprintf "Error reading directory: %s\n" msg;
     []
 
-(* Run tests from a list of (name, program) pairs *)
-let run_tests tests =
-  Printf.printf "MoRDor - Symbolic Modular Relaxed Dependencies\n";
+let run_single name program =
+  Printf.printf "Running program %s.\n" name;
+  Printf.printf "===================\n";
+  Printf.printf "\n=== Running: %s ===\n" name;
+  Printf.printf "Program:\n%s\n\n" program;
   flush stdout;
+  let* result = verify_program program default_options in
+    print_results result;
+    Lwt.return_unit
+
+let run_tests tests =
+  Printf.printf "Running %d tests.\n" (List.length tests);
+  let* () = Lwt_list.iter_s (fun (name, prog) -> run_single name prog) tests in
+    flush stdout;
+    Lwt.return_unit
+
+let parse_single name program =
+  Printf.printf "Parsing program %s.\n" name;
+  flush stdout;
+  let _ast, _program_stmts = Symmrd.parse_program program in
+    Printf.printf "Parsed program %s successfully.\n" name;
+    flush stdout;
+    Lwt.return_unit
+
+let parse_tests tests =
   let* () =
-    Lwt_list.iter_s
-      (fun (name, prog) ->
-        Printf.printf "Running program %s.\n" name;
-        Printf.printf "===================\n";
-        run_example name prog
-      )
-      tests
+    Lwt_list.iter_s (fun (name, prog) -> parse_single name prog) tests
   in
     flush stdout;
     Lwt.return_unit
 
-(* Command line options *)
-type run_mode = Samples | AllLitmusTests
-type output_mode = Json | Html | Dot
-type command = Parse | Interpret | VisualEs | Futures
-
-let command = ref None
-let output_mode = ref None
-let run_mode = ref Samples
-let litmus_dir = ref "litmus_tests"
+let visualize_event_structure (mode : output_mode) output_file (name, program) =
+  Printf.printf "Visualizing event structure for program %s.\n" name;
+  let* result = create_symbolic_event_structure program default_options in
+    match mode with
+    | Json ->
+        let json =
+          EventStructureViz.visualize EventStructureViz.JSON result.structure
+            result.events
+        in
+          ( if output_file = "stdout" then Printf.printf "%s\n" json
+            else
+              let oc = open_out output_file in
+                output_string oc json;
+                close_out oc
+          );
+          Lwt.return_unit
+    | Dot ->
+        let dot =
+          EventStructureViz.visualize EventStructureViz.DOT result.structure
+            result.events
+        in
+          ( if output_file = "stdout" then Printf.printf "%s\n" dot
+            else
+              let oc = open_out output_file in
+                output_string oc dot;
+                close_out oc
+          );
+          Lwt.return_unit
+    | Html ->
+        Printf.eprintf "HTML output not implemented yet.\n";
+        Lwt.return_unit
 
 let usage_msg =
   "Usage: main COMMAND [OPTIONS]\n\n\
@@ -129,6 +170,10 @@ let specs =
       Arg.String (fun s -> output_mode := Some (parse_output_mode s)),
       " Output mode for visual-es command: json, html, or dot"
     );
+    ( "--output-file",
+      Arg.String (fun s -> output_file := Some s),
+      " Output file for visual-es command (default: stdout)"
+    );
     ( "--samples",
       Arg.Unit (fun () -> run_mode := Samples),
       " Run built-in sample programs (default)"
@@ -142,16 +187,26 @@ let specs =
       " Process all .lit files in the specified directory (default: \
        litmus_tests)"
     );
+    ( "--single",
+      Arg.String
+        (fun filename ->
+          run_mode := Single;
+          single_file := Some filename
+        ),
+      " Process a single .lit file specified by filename"
+    );
   ]
 
 let anon_fun arg =
   match !command with
   | None -> (
       match String.lowercase_ascii arg with
+      | "run" -> command := Some Run
       | "parse" -> command := Some Parse
       | "interpret" -> command := Some Interpret
       | "visual-es" -> command := Some VisualEs
       | "futures" -> command := Some Futures
+      | "dependencies" -> command := Some Dependencies
       | _ ->
           Printf.eprintf "Error: Unknown command '%s'\n" arg;
           Printf.eprintf
@@ -164,6 +219,9 @@ let anon_fun arg =
 
 (* Main entry point *)
 let main () =
+  Printf.printf "MoRDor - Symbolic Modular Relaxed Dependencies\n";
+  flush stdout;
+
   (* Parse command line arguments *)
   Arg.parse specs anon_fun usage_msg;
 
@@ -177,44 +235,57 @@ let main () =
     | Some c -> c
   in
 
+  let tests =
+    match !run_mode with
+    | Samples -> example_programs
+    | AllLitmusTests ->
+        let litmus_tests = read_litmus_files !litmus_dir in
+          if List.length litmus_tests = 0 then (
+            Printf.eprintf "Warning: No .lit files found in %s\n" !litmus_dir;
+            []
+          )
+          else litmus_tests
+    | Single -> (
+        match !single_file with
+        | None ->
+            Printf.eprintf "Error: --single option requires a filename\n";
+            exit 1
+        | Some filename ->
+            let ic = open_in filename in
+            let content = really_input_string ic (in_channel_length ic) in
+              close_in ic;
+              [ (Filename.basename filename, content) ]
+      )
+  in
+
   (* Handle the command *)
   match cmd with
-  | Parse ->
-      Printf.printf "TODO: Implement parse command\n";
-      Lwt.return_unit
-  | Interpret ->
-      (* Determine which tests to run *)
-      let tests =
-        match !run_mode with
-        | Samples -> example_programs
-        | AllLitmusTests ->
-            let litmus_tests = read_litmus_files !litmus_dir in
-              if List.length litmus_tests = 0 then (
-                Printf.eprintf "Warning: No .lit files found in %s\n"
-                  !litmus_dir;
-                []
-              )
-              else litmus_tests
-      in
-        run_tests tests
+  | Run -> run_tests tests
+  | Parse -> parse_tests tests
   | VisualEs ->
-      let mode =
-        match !output_mode with
-        | None ->
-            Printf.eprintf
-              "Error: --output-mode is required for visual-es command\n";
-            Printf.eprintf "Valid modes: json, html, dot\n";
-            exit 1
-        | Some m -> m
+      if List.length tests <> 1 then (
+        Printf.eprintf
+          "Error: visual-es command requires exactly one input program\n";
+        exit 1
+      );
+      let output_file =
+        match !output_file with
+        | None -> "stdout"
+        | Some f -> f
       in
-        ( match mode with
-        | Json -> Printf.printf "TODO: Implement visual-es with JSON output\n"
-        | Html -> Printf.printf "TODO: Implement visual-es with HTML output\n"
-        | Dot -> Printf.printf "TODO: Implement visual-es with DOT output\n"
-        );
-        Lwt.return_unit
-  | Futures ->
-      Printf.printf "TODO: Implement futures command\n";
+        Printf.printf "Generating visualization to %s\n" output_file;
+        let mode =
+          match !output_mode with
+          | None ->
+              Printf.eprintf
+                "Error: --output-mode is required for visual-es command\n";
+              Printf.eprintf "Valid modes: json, html, dot\n";
+              exit 1
+          | Some m -> m
+        in
+          visualize_event_structure mode output_file (List.hd tests)
+  | _ ->
+      Printf.printf "TODO: not implemented yet\n";
       Lwt.return_unit
 
 let () = Lwt_main.run (main ())

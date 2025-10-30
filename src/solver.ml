@@ -111,14 +111,6 @@ let check solver =
   (* force into monadic context *)
   let* _ = Lwt.return_unit in
 
-  Printf.printf "Checking satisfiability of %d expressions...\n"
-    (List.length solver.expressions);
-  Printf.printf "Expressions:\n";
-  List.iter
-    (fun expr -> Printf.printf "  %s\n" (Expr.to_string expr))
-    solver.expressions;
-  flush stdout;
-
   (* Quick checks for contradictions and tautologies *)
   let has_contradiction =
     List.exists Expr.is_contradiction solver.expressions
@@ -139,9 +131,6 @@ let check solver =
           )
           solver.expressions
       in
-
-      Printf.printf "All constant expressions evaluate to true: %b\n"
-        all_constant_true;
 
       if not all_constant_true then Lwt.return_some false
       else
