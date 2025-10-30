@@ -150,32 +150,27 @@ let test_expr_is_flat () =
     Alcotest.(check bool) "non-flat expression" false (Expr.is_flat no_flat)
 
 let test_expr_inverse () =
-  let eq = e_binop (e_var "x") "=" (e_num 5) in
-  let neq = Expr.inverse eq in
-    Alcotest.(check bool)
-      "inverse of =" true
-      ( match neq with
-      | EBinOp (_, "!=", _) -> true
-      | _ -> false
-      );
-
-    let lt = e_binop (e_var "x") "<" (e_num 5) in
-    let gte = Expr.inverse lt in
-      Alcotest.(check bool)
-        "inverse of <" true
-        ( match gte with
-        | EBinOp (_, ">=", _) -> true
-        | _ -> false
-        );
-
-      let gt = e_binop (e_var "x") ">" (e_num 5) in
-      let lte = Expr.inverse gt in
-        Alcotest.(check bool)
-          "inverse of >" true
-          ( match lte with
-          | EBinOp (_, "<=", _) -> true
-          | _ -> false
-          )
+  let cases =
+    [
+      ("inverse of =", "!=", e_binop (e_var "x") "=" (e_num 5));
+      ("inverse of !=", "=", e_binop (e_var "x") "!=" (e_num 5));
+      ("inverse of <", ">=", e_binop (e_var "x") "<" (e_num 5));
+      ("inverse of >=", "<", e_binop (e_var "x") ">=" (e_num 5));
+      ("inverse of >", "<=", e_binop (e_var "x") ">" (e_num 5));
+      ("inverse of <=", ">", e_binop (e_var "x") "<=" (e_num 5));
+    ]
+  in
+    List.iter
+      (fun (name, expected_op, expr) ->
+        let inv = Expr.inverse expr in
+          Alcotest.(check bool)
+            name true
+            ( match inv with
+            | EBinOp (_, op, _) when op = expected_op -> true
+            | _ -> false
+            )
+      )
+      cases
 
 let test_expr_flipped () =
   let e1 = e_binop (e_num 1) "<" (e_num 2) in
@@ -279,6 +274,317 @@ let test_is_number () =
     Alcotest.(check bool) "number is_number" true (Expr.is_number n);
     Alcotest.(check bool) "symbol not is_number" false (Expr.is_number s)
 
+(* Evaluate function tests *)
+
+let test_evaluate_literals () =
+  let cases = [ ENum (Z.of_int 42); EBoolean true; ESymbol "α" ] in
+  let empty_env _ = None in
+    List.iter
+      (fun expr ->
+        Expr.evaluate expr empty_env
+        |> Expr.equal expr
+        |> Alcotest.(check bool) "literal evaluates to itself" true
+      )
+      cases
+
+let test_evaluate_var_lookup () =
+  (* Variable with value in environment *)
+  let env_with_x v = if v = "x" then Some (e_num 10) else None in
+  let x = e_var "x" in
+  let result = Expr.evaluate x env_with_x in
+    Alcotest.(check bool)
+      "variable looks up value" true
+      (Expr.equal result (e_num 10));
+
+    (* Variable without value in environment *)
+    let empty_env _ = None in
+    let y = e_var "y" in
+    let result_y = Expr.evaluate y empty_env in
+      Alcotest.(check bool)
+        "undefined variable returns itself" true (Expr.equal result_y y)
+
+let test_evaluate_arithmetic () =
+  let cases =
+    [
+      ("addition", e_binop (e_num 5) "+" (e_num 3), e_num 8);
+      ("subtraction", e_binop (e_num 10) "-" (e_num 4), e_num 6);
+      ("multiplication", e_binop (e_num 6) "*" (e_num 7), e_num 42);
+      ("division", e_binop (e_num 20) "/" (e_num 4), e_num 5);
+    ]
+  in
+  let empty_env _ = None in
+    List.iter
+      (fun (name, expr, expected) ->
+        let result = Expr.evaluate expr empty_env in
+          Alcotest.(check bool)
+            (name ^ " evaluates correctly")
+            true
+            (Expr.equal result expected)
+      )
+      cases
+
+let test_evaluate_division_by_zero () =
+  let empty_env _ = None in
+  let div_zero = e_binop (e_num 10) "/" (e_num 0) in
+    Alcotest.check_raises "division by zero raises exception"
+      (Failure "Division by zero") (fun () ->
+        ignore (Expr.evaluate div_zero empty_env)
+    )
+
+let test_evaluate_comparisons () =
+  let cases =
+    [
+      ("equality", e_binop (e_num 5) "=" (e_num 5), EBoolean true);
+      ("inequality", e_binop (e_num 5) "!=" (e_num 3), EBoolean true);
+      ("less than", e_binop (e_num 3) "<" (e_num 5), EBoolean true);
+      ("greater than", e_binop (e_num 5) ">" (e_num 3), EBoolean true);
+      ("less than or equal", e_binop (e_num 3) "<=" (e_num 5), EBoolean true);
+      ("greater than or equal", e_binop (e_num 5) ">=" (e_num 3), EBoolean true);
+    ]
+  in
+  let empty_env _ = None in
+    List.iter
+      (fun (name, expr, expected) ->
+        let result = Expr.evaluate expr empty_env in
+          Alcotest.(check bool)
+            (name ^ " comparison evaluates correctly")
+            true
+            (Expr.equal result expected)
+      )
+      cases
+
+let test_evaluate_boolean_ops () =
+  let empty_env _ = None in
+  let cases =
+    [
+      (* Logical AND cases *)
+      ("and_true", e_binop (EBoolean true) "&&" (EBoolean true), EBoolean true);
+      ( "and_false",
+        e_binop (EBoolean true) "&&" (EBoolean false),
+        EBoolean false
+      );
+      (* Logical OR cases *)
+      ("or_true", e_binop (EBoolean true) "||" (EBoolean false), EBoolean true);
+      ( "or_false",
+        e_binop (EBoolean false) "||" (EBoolean false),
+        EBoolean false
+      );
+      (* Boolean equality case *)
+      ("bool_eq", e_binop (EBoolean true) "=" (EBoolean true), EBoolean true);
+      (* Boolean inequality case *)
+      ("bool_neq", e_binop (EBoolean true) "!=" (EBoolean false), EBoolean true);
+    ]
+  in
+    List.iter
+      (fun (name, expr, expected) ->
+        let result = Expr.evaluate expr empty_env in
+          Alcotest.(check bool)
+            (name ^ " boolean operation evaluates correctly")
+            true
+            (Expr.equal result expected)
+      )
+      cases
+
+let test_evaluate_reflexive_var () =
+  let empty_env _ = None in
+  let cases =
+    [
+      ("equality", e_binop (e_var "x") "=" (e_var "x"), EBoolean true);
+      ("inequality", e_binop (e_var "x") "!=" (e_var "x"), EBoolean false);
+      ("less than", e_binop (e_var "x") "<" (e_var "x"), EBoolean false);
+      ("greater than", e_binop (e_var "x") ">" (e_var "x"), EBoolean false);
+      ("less than or equal", e_binop (e_var "x") "<=" (e_var "x"), EBoolean true);
+      ( "greater than or equal",
+        e_binop (e_var "x") ">=" (e_var "x"),
+        EBoolean true
+      );
+    ]
+  in
+    List.iter
+      (fun (name, expr, expected) ->
+        let result = Expr.evaluate expr empty_env in
+          Alcotest.(check bool)
+            (name ^ " with variable evaluates correctly")
+            true
+            (Expr.equal result expected)
+      )
+      cases
+
+let test_evaluate_reflexive_symbol () =
+  let empty_env _ = None in
+  let cases =
+    [
+      ("equality", e_binop (e_sym "α") "=" (e_sym "α"), EBoolean true);
+      ("inequality", e_binop (e_sym "α") "!=" (e_sym "α"), EBoolean false);
+      ("less than", e_binop (e_sym "α") "<" (e_sym "α"), EBoolean false);
+      ("greater than", e_binop (e_sym "α") ">" (e_sym "α"), EBoolean false);
+      ("less than or equal", e_binop (e_sym "α") "<=" (e_sym "α"), EBoolean true);
+      ( "greater than or equal",
+        e_binop (e_sym "α") ">=" (e_sym "α"),
+        EBoolean true
+      );
+    ]
+  in
+    List.iter
+      (fun (name, expr, expected) ->
+        let result = Expr.evaluate expr empty_env in
+          Alcotest.(check bool)
+            (name ^ " with symbol evaluates correctly")
+            true
+            (Expr.equal result expected)
+      )
+      cases
+
+let test_evaluate_with_variables () =
+  let env v =
+    match v with
+    | "x" -> Some (e_num 5)
+    | "y" -> Some (e_num 3)
+    | _ -> None
+  in
+  let cases =
+    [
+      ("x + y", e_binop (e_var "x") "+" (e_var "y"), e_num 8);
+      ("x - y", e_binop (e_var "x") "-" (e_var "y"), e_num 2);
+      ("x * y", e_binop (e_var "x") "*" (e_var "y"), e_num 15);
+      ("x / y", e_binop (e_var "x") "/" (e_var "y"), e_num 1);
+      ("x > y", e_binop (e_var "x") ">" (e_var "y"), EBoolean true);
+      ("x < y", e_binop (e_var "x") "<" (e_var "y"), EBoolean false);
+    ]
+  in
+    List.iter
+      (fun (name, expr, expected) ->
+        let result = Expr.evaluate expr env in
+          Alcotest.(check bool)
+            (name ^ " with variables evaluates correctly")
+            true
+            (Expr.equal result expected)
+      )
+      cases
+
+let test_evaluate_nested_expressions () =
+  let empty_env _ = None in
+  let cases =
+    [
+      ( "(2 + 3) * 4 = 20",
+        e_binop (e_binop (e_num 2) "+" (e_num 3)) "*" (e_num 4),
+        e_num 20
+      );
+      ( "(10 - 2) / 2 = 4",
+        e_binop (e_binop (e_num 10) "-" (e_num 2)) "/" (e_num 2),
+        e_num 4
+      );
+    ]
+  in
+    List.iter
+      (fun (name, expr, expected) ->
+        let result = Expr.evaluate expr empty_env in
+          Alcotest.(check bool)
+            (name ^ " nested expression evaluates correctly")
+            true
+            (Expr.equal result expected)
+      )
+      cases
+
+let test_evaluate_unop () =
+  let empty_env _ = None in
+  (* UnOp with number *)
+  let unop_num = Expr.unop "-" (e_num 5) in
+  let result_unop = Expr.evaluate unop_num empty_env in
+    (* UnOp doesn't actually evaluate the operation, just evaluates the operand *)
+    Alcotest.(check bool)
+      "unop evaluates operand" true
+      ( match result_unop with
+      | EUnOp ("-", ENum n) -> Z.equal n (Z.of_int 5)
+      | _ -> false
+      );
+
+    (* UnOp with variable *)
+    let env_x v = if v = "x" then Some (e_num 10) else None in
+    let unop_var = Expr.unop "!" (e_var "x") in
+    let result_var = Expr.evaluate unop_var env_x in
+      Alcotest.(check bool)
+        "unop with var substitution" true
+        ( match result_var with
+        | EUnOp ("!", ENum n) -> Z.equal n (Z.of_int 10)
+        | _ -> false
+        )
+
+let test_evaluate_eor_clauses () =
+  let env v = if v = "x" then Some (e_num 5) else None in
+  (* EOr with simple clauses *)
+  let clause1 = [ e_var "x"; e_num 1 ] in
+  let clause2 = [ e_num 2; e_num 3 ] in
+  let eor = EOr [ clause1; clause2 ] in
+  let result = Expr.evaluate eor env in
+    (* Variables should be substituted *)
+    Alcotest.(check bool)
+      "EOr evaluates clauses" true
+      ( match result with
+      | EOr [ [ ENum n1; ENum n2 ]; [ ENum n3; ENum n4 ] ] ->
+          Z.equal n1 (Z.of_int 5)
+          && Z.equal n2 (Z.of_int 1)
+          && Z.equal n3 (Z.of_int 2)
+          && Z.equal n4 (Z.of_int 3)
+      | _ -> false
+      )
+
+let test_evaluate_partial () =
+  let empty_env _ = None in
+  (* When operands can't be fully evaluated, return binop with evaluated operands *)
+  let expr = e_binop (e_var "x") "+" (e_num 5) in
+  let result = Expr.evaluate expr empty_env in
+    Alcotest.(check bool)
+      "partial evaluation keeps structure" true
+      ( match result with
+      | EBinOp (EVar "x", "+", ENum n) -> Z.equal n (Z.of_int 5)
+      | _ -> false
+      );
+
+    (* Unsupported operation on booleans *)
+    let unsupported = e_binop (EBoolean true) "+" (EBoolean false) in
+    let result_unsup = Expr.evaluate unsupported empty_env in
+      Alcotest.(check bool)
+        "unsupported op returns binop" true
+        ( match result_unsup with
+        | EBinOp (EBoolean true, "+", EBoolean false) -> true
+        | _ -> false
+        )
+
+let test_evaluate_complex_with_env () =
+  let env v =
+    match v with
+    | "a" -> Some (e_num 10)
+    | "b" -> Some (e_num 20)
+    | "c" -> Some (EBoolean true)
+    | "d" -> Some (EBoolean false)
+    | _ -> None
+  in
+  (* (a + b) * 2 = 60 *)
+  let arith_expr =
+    e_binop (e_binop (e_var "a") "+" (e_var "b")) "*" (e_num 2)
+  in
+  let result_arith = Expr.evaluate arith_expr env in
+    Alcotest.(check bool)
+      "(a + b) * 2 = 60 when a=10, b=20" true
+      (Expr.equal result_arith (e_num 60));
+
+    (* c && d = false *)
+    let bool_expr = e_binop (e_var "c") "&&" (e_var "d") in
+    let result_bool = Expr.evaluate bool_expr env in
+      Alcotest.(check bool)
+        "c && d = false when c=true, d=false" true
+        (Expr.equal result_bool (EBoolean false));
+
+      (* (a > 5) && c = true *)
+      let mixed_expr =
+        e_binop (e_binop (e_var "a") ">" (e_num 5)) "&&" (e_var "c")
+      in
+      let result_mixed = Expr.evaluate mixed_expr env in
+        Alcotest.(check bool)
+          "(a > 5) && c = true when a=10, c=true" true
+          (Expr.equal result_mixed (EBoolean true))
+
 (* Test suite *)
 let suite =
   ( "Expressions",
@@ -304,5 +610,29 @@ let suite =
         test_expr_is_contradiction;
       (* Helper function tests *)
       Alcotest.test_case "is_number helper" `Quick test_is_number;
+      (* Evaluate function tests *)
+      Alcotest.test_case "Evaluate literals" `Quick test_evaluate_literals;
+      Alcotest.test_case "Evaluate variable lookup" `Quick
+        test_evaluate_var_lookup;
+      Alcotest.test_case "Evaluate arithmetic" `Quick test_evaluate_arithmetic;
+      Alcotest.test_case "Evaluate division by zero" `Quick
+        test_evaluate_division_by_zero;
+      Alcotest.test_case "Evaluate comparisons" `Quick test_evaluate_comparisons;
+      Alcotest.test_case "Evaluate boolean operations" `Quick
+        test_evaluate_boolean_ops;
+      Alcotest.test_case "Evaluate reflexive variable" `Quick
+        test_evaluate_reflexive_var;
+      Alcotest.test_case "Evaluate reflexive symbol" `Quick
+        test_evaluate_reflexive_symbol;
+      Alcotest.test_case "Evaluate with variables" `Quick
+        test_evaluate_with_variables;
+      Alcotest.test_case "Evaluate nested expressions" `Quick
+        test_evaluate_nested_expressions;
+      Alcotest.test_case "Evaluate unary operations" `Quick test_evaluate_unop;
+      Alcotest.test_case "Evaluate EOr clauses" `Quick test_evaluate_eor_clauses;
+      Alcotest.test_case "Evaluate partial evaluation" `Quick
+        test_evaluate_partial;
+      Alcotest.test_case "Evaluate complex with environment" `Quick
+        test_evaluate_complex_with_env;
     ]
   )

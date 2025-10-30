@@ -109,6 +109,7 @@ end = struct
 
   let rec equal e1 e2 =
     match (e1, e2) with
+    | EBoolean b1, EBoolean b2 -> b1 = b2
     | ENum n1, ENum n2 -> Z.equal n1 n2
     | EVar v1, EVar v2 -> String.equal v1 v2
     | ESymbol s1, ESymbol s2 -> String.equal s1 s2
@@ -267,6 +268,7 @@ end = struct
     | ENum _ -> true
     | _ -> false
 
+  (** Evaluate expression with environment for variables *)
   let rec evaluate expr env =
     match expr with
     | ENum _ -> expr
@@ -280,10 +282,48 @@ end = struct
     | EUnOp (op, rhs) ->
         let r_val = evaluate rhs env in
           EUnOp (op, r_val)
-    | EBinOp (lhs, op, rhs) ->
+    | EBinOp (lhs, op, rhs) -> (
         let l_val = evaluate lhs env in
         let r_val = evaluate rhs env in
-          EBinOp (l_val, op, r_val)
+          match (l_val, r_val) with
+          | ENum n1, ENum n2 -> (
+              match op with
+              | "+" -> ENum (Z.add n1 n2)
+              | "-" -> ENum (Z.sub n1 n2)
+              | "*" -> ENum (Z.mul n1 n2)
+              | "/" ->
+                  if Z.equal n2 Z.zero then failwith "Division by zero"
+                  else ENum (Z.div n1 n2)
+              | "=" -> EBoolean (Z.equal n1 n2)
+              | "!=" -> EBoolean (not (Z.equal n1 n2))
+              | "<" -> EBoolean (Z.lt n1 n2)
+              | ">" -> EBoolean (Z.gt n1 n2)
+              | "<=" -> EBoolean (Z.leq n1 n2)
+              | ">=" -> EBoolean (Z.geq n1 n2)
+              | _ -> EBinOp (l_val, op, r_val)
+            )
+          | EBoolean b1, EBoolean b2 -> (
+              match op with
+              | "&&" -> EBoolean (b1 && b2)
+              | "||" -> EBoolean (b1 || b2)
+              | "=" -> EBoolean (b1 = b2)
+              | "!=" -> EBoolean (b1 <> b2)
+              | _ -> EBinOp (l_val, op, r_val)
+            )
+          | EVar v1, EVar v2
+            when List.mem op [ "="; "<="; ">=" ] && String.equal v1 v2 ->
+              EBoolean true
+          | ESymbol v1, ESymbol v2
+            when List.mem op [ "="; "<="; ">=" ] && String.equal v1 v2 ->
+              EBoolean true
+          | EVar v1, EVar v2
+            when List.mem op [ "!="; "<"; ">" ] && String.equal v1 v2 ->
+              EBoolean false
+          | ESymbol v1, ESymbol v2
+            when List.mem op [ "!="; "<"; ">" ] && String.equal v1 v2 ->
+              EBoolean false
+          | _ -> EBinOp (l_val, op, r_val)
+      )
     | EOr clauses ->
         let eval_clause clause = List.map (fun e -> evaluate e env) clause in
           EOr (List.map eval_clause clauses)
