@@ -7,7 +7,7 @@ open Lwt.Syntax
 module State = struct
   let e : int uset ref = ref (Uset.create ())
   let events : (int, event) Hashtbl.t ref = ref (Hashtbl.create 0)
-  let val_fn : (int -> value_type option) ref = ref (fun _ -> None)
+  let val_fn : (int -> expr option) ref = ref (fun _ -> None)
   let ppo_loc_base : (int * int) uset ref = ref (Uset.create ())
   let ppo_base : (int * int) uset ref = ref (Uset.create ())
   let ppo_sync : (int * int) uset ref = ref (Uset.create ())
@@ -121,7 +121,7 @@ type init_params = {
   init_e : int uset;
   init_po : (int * int) uset;
   init_events : (int, event) Hashtbl.t;
-  init_val : int -> value_type option;
+  init_val : int -> expr option;
   init_rmw : (int * int) uset;
 }
 
@@ -307,7 +307,7 @@ let update_po po =
 type t = {
   fwd : (int * int) uset;
   we : (int * int) uset;
-  valmap : (value_type * value_type) list;
+  valmap : (expr * expr) list;
   psi : expr list;
   fwdwe : (int * int) uset;
   remap_map : (int, int) Hashtbl.t;
@@ -328,7 +328,7 @@ let create ?(fwd = Uset.create ()) ?(we = Uset.create ()) () =
   in
 
   let psi =
-    List.filter_map (fun (v1, v2) -> Some (EBinOp (v1, "=", v2))) valmap
+    List.filter_map (fun (e1, e2) -> Some (EBinOp (e1, "=", e2))) valmap
   in
 
   (* Build remap map *)

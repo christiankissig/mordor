@@ -18,8 +18,8 @@ let origin events read_events malloc_events (s : string) =
   let in_reads =
     Uset.filter
       (fun x ->
-        match val_ events x with
-        | Some (VSymbol sym) -> sym = s
+        match get_val events x with
+        | Some (ESymbol sym) -> sym = s
         | _ -> false
       )
       read_events
@@ -108,8 +108,7 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
 
             let cond =
               match event.cond with
-              | Some (VExpression c) -> c
-              | Some c -> EVar (Value.to_string c)
+              | Some c -> c
               | None -> failwith "Branch missing condition"
             in
 
@@ -294,11 +293,11 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                  | None -> vale events w r
                in
                let r_val =
-                 match val_ events r with
+                 match get_val events r with
                  | Some v -> v
-                 | None -> VVar "?"
+                 | None -> EVar "?"
                in
-                 EBinOp (w_val, "=", r_val)
+                 Expr.binop w_val "=" r_val
            )
       in
 
@@ -312,11 +311,11 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                  | None -> loce events w r
                in
                let r_loc =
-                 match loc events r with
+                 match get_loc events r with
                  | Some l -> l
-                 | None -> VVar "?"
+                 | None -> EVar "?"
                in
-                 EBinOp (w_loc, "=", r_loc)
+                 Expr.binop w_loc "=" r_loc
            )
       in
 
@@ -374,29 +373,17 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                                 else
                                   (* Check if loc(e_1) = loc(ep) under env_rf using semeq *)
                                   let loc_e1 =
-                                    match loc events e_1 with
+                                    match get_loc events e_1 with
                                     | Some l -> l
-                                    | None -> VVar "?"
+                                    | None -> EVar "?"
                                   in
                                   let loc_ep =
-                                    match loc events ep with
+                                    match get_loc events ep with
                                     | Some l -> l
-                                    | None -> VVar "?"
+                                    | None -> EVar "?"
                                   in
 
-                                  (* Convert to expressions for semeq *)
-                                  let expr_e1 =
-                                    match loc_e1 with
-                                    | VExpression e -> e
-                                    | v -> EVar (Value.to_string v)
-                                  in
-                                  let expr_ep =
-                                    match loc_ep with
-                                    | VExpression e -> e
-                                    | v -> EVar (Value.to_string v)
-                                  in
-
-                                  Solver.exeq ~state:env_rf expr_e1 expr_ep
+                                  Solver.exeq ~state:env_rf loc_e1 loc_ep
                               )
                               e
                           in
@@ -410,24 +397,24 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                     Uset.values af
                     |> List.map (fun (a, b) ->
                            let loc_a =
-                             match loc events a with
+                             match get_loc events a with
                              | Some l -> l
-                             | None -> VVar "?"
+                             | None -> EVar "?"
                            in
                            let val_a =
-                             match val_ events a with
+                             match get_val events a with
                              | Some v -> v
-                             | None -> VVar "?"
+                             | None -> EVar "?"
                            in
                            let loc_b =
-                             match loc events b with
+                             match get_loc events b with
                              | Some l -> l
-                             | None -> VVar "?"
+                             | None -> EVar "?"
                            in
                            let val_b =
-                             match val_ events b with
+                             match get_val events b with
                              | Some v -> v
-                             | None -> VVar "?"
+                             | None -> EVar "?"
                            in
                              disjoint (loc_a, val_a) (loc_b, val_b)
                        )
@@ -460,23 +447,15 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                               match event_r with
                               | Some ev when ev.typ = Write ->
                                   let loc_r =
-                                    match loc events r with
+                                    match get_loc events r with
                                     | Some l -> l
-                                    | None -> VVar "?"
+                                    | None -> EVar "?"
                                   in
                                   let loc__r = loce events _r _r in
 
                                   (* Convert to expressions for exeq *)
-                                  let expr_r =
-                                    match loc_r with
-                                    | VExpression e -> e
-                                    | v -> EVar (Value.to_string v)
-                                  in
-                                  let expr__r =
-                                    match loc__r with
-                                    | VExpression e -> e
-                                    | v -> EVar (Value.to_string v)
-                                  in
+                                  let expr_r = loc_r in
+                                  let expr__r = loc__r in
 
                                   let* same_loc =
                                     Solver.exeq ~state:bigger_p expr_r expr__r
@@ -741,13 +720,13 @@ let generate_executions events structure final_justs statex e_set po rmw
           match event_r with
           | Some ev when ev.typ = Write -> (
               let loc_r =
-                match loc events r with
+                match get_loc events r with
                 | Some l -> l
-                | None -> VVar "?"
+                | None -> EVar "?"
               in
               let loc__r = loce events _r _r in
                 (* Simple string comparison - in full version would use expoteq *)
-                Value.to_string loc_r = Value.to_string loc__r
+                Expr.to_string loc_r = Expr.to_string loc__r
                 ||
                 try
                   let preds = Hashtbl.find inv_po_tree r in
@@ -778,17 +757,17 @@ let generate_executions events structure final_justs statex e_set po rmw
         else
           (* Check location equality *)
           let loc_w =
-            match loc events w with
+            match get_loc events w with
             | Some l -> l
-            | None -> VVar "?"
+            | None -> EVar "?"
           in
           let loc_r =
-            match loc events r with
+            match get_loc events r with
             | Some l -> l
-            | None -> VVar "?"
+            | None -> EVar "?"
           in
             (* Simple comparison - full version would use expoteq *)
-            Lwt.return (Value.to_string loc_w = Value.to_string loc_r)
+            Lwt.return (Expr.to_string loc_w = Expr.to_string loc_r)
       )
       w_cross_r_minus_inv_po
   in
@@ -866,13 +845,13 @@ let generate_executions events structure final_justs statex e_set po rmw
                 | None -> vale events w r
               in
               let r_val =
-                match val_ events r with
+                match get_val events r with
                 | Some v -> v
-                | None -> VVar "?"
+                | None -> EVar "?"
               in
 
               (* Store mapping *)
-              Hashtbl.replace fix_rf_map (Value.to_string r_val) w_val
+              Hashtbl.replace fix_rf_map (Expr.to_string r_val) w_val
             )
             freeze_res.rf;
 
@@ -886,7 +865,7 @@ let generate_executions events structure final_justs statex e_set po rmw
                 (* Evaluate value with current map *)
                 let new_value =
                   match value with
-                  | VVar v -> (
+                  | EVar v -> (
                       try
                         let replacement = Hashtbl.find map v in
                           changed := true;

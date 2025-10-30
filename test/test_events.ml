@@ -1,6 +1,7 @@
 (** Unit tests for Events module *)
 
 open Alcotest
+open Expr
 open Types
 
 (** Helper to create test events *)
@@ -10,6 +11,7 @@ let make_read label id rval rmod =
   {
     (Types.make_event Read label) with
     id = Some (VSymbol id);
+    loc = Some (ESymbol id);
     rval = Some (VSymbol rval);
     rmod;
   }
@@ -18,7 +20,8 @@ let make_write label id wval wmod =
   {
     (Types.make_event Write label) with
     id = Some (VSymbol id);
-    wval = Some (VSymbol wval);
+    loc = Some (ESymbol id);
+    wval = Some (ESymbol wval);
     wmod;
   }
 
@@ -28,8 +31,9 @@ let make_rmw label id rval wval rmod wmod =
   {
     (Types.make_event RMW label) with
     id = Some (VSymbol id);
+    loc = Some (ESymbol id);
     rval = Some (VSymbol rval);
-    wval = Some (VSymbol wval);
+    wval = Some (ESymbol wval);
     rmod;
     wmod;
   }
@@ -152,7 +156,7 @@ let test_get_fields () =
     );
   check bool "get_wval write" true
     ( match Events.get_wval write_ev with
-    | VSymbol "v2" -> true
+    | ESymbol "v2" -> true
     | _ -> false
     );
 
@@ -195,7 +199,7 @@ let test_malloc_creation () =
   let rval = VSymbol "α" in
   let e =
     Events.make_event_with Malloc 1 ~id:None ~rval:(Some rval)
-      ~wval:(Some (VNumber Z.one)) ~rmod:None ~wmod:None ~fmod:None ~cond:None
+      ~wval:(Some (ENum Z.one)) ~rmod:None ~wmod:None ~fmod:None ~cond:None
       ~volatile:false ~strong:None ~lhs:None ~rhs:None ~pc:None
   in
     check bool "malloc id set to rval" true
@@ -206,9 +210,14 @@ let test_malloc_creation () =
 
 let test_clone_event () =
   let e1 = make_read 1 "x" "v" Acquire in
-  let e2 = Events.clone_event e1 in
-    check bool "cloned event equals original" true (Events.event_equal e1 e2);
-    check bool "cloned event same label" true (e1.label = e2.label)
+    Printf.printf "Original event: %s\n" (Events.event_to_string e1);
+    let e2 = Events.clone_event e1 in
+      Printf.printf "Cloned event: %s\n" (Events.event_to_string e2);
+      let result = Events.event_equal e1 e2 in
+        Printf.printf "Events equal: %b\n" result;
+        flush stdout;
+        check bool "cloned event equals original" true (Events.event_equal e1 e2);
+        check bool "cloned event same label" true (e1.label = e2.label)
 
 (** Test event to string *)
 let test_event_to_string () =
@@ -242,11 +251,11 @@ let test_value_equality () =
   let v5 = VSymbol "α" in
   let v6 = VSymbol "β" in
 
-  check bool "equal numbers" true (Events.value_type_equal v1 v2);
-  check bool "unequal numbers" false (Events.value_type_equal v1 v3);
-  check bool "equal symbols" true (Events.value_type_equal v4 v5);
-  check bool "unequal symbols" false (Events.value_type_equal v4 v6);
-  check bool "number not equal symbol" false (Events.value_type_equal v1 v4)
+  check bool "equal numbers" true (Value.equal v1 v2);
+  check bool "unequal numbers" false (Value.equal v1 v3);
+  check bool "equal symbols" true (Value.equal v4 v5);
+  check bool "unequal symbols" false (Value.equal v4 v6);
+  check bool "number not equal symbol" false (Value.equal v1 v4)
 
 let test_event_equality () =
   let e1 = make_read 1 "x" "v" Relaxed in

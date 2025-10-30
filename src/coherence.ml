@@ -1,5 +1,6 @@
 (** Coherence checking for memory models *)
 
+open Expr
 open Types
 
 (** Cache types *)
@@ -444,7 +445,7 @@ let imm_deps (execution : symbolic_execution) (events : (int, event) Hashtbl.t)
               match (from_ev.rval, to_ev.wval) with
               | Some rv, Some wv ->
                   (* Simple structural equality or symbol dependency check *)
-                  Uset.value_equality rv wv
+                  Uset.value_equality (Expr.of_value rv) wv
               | _ -> false
           with Not_found -> false
         )
@@ -526,12 +527,12 @@ let check_for_coherence (structure : symbolic_event_structure)
                 try
                   let ev_a = Hashtbl.find events a in
                   let ev_b = Hashtbl.find events b in
-                    match (ev_a.id, ev_b.id) with
-                    | Some id_a, Some id_b ->
+                    match (ev_a.loc, ev_b.loc) with
+                    | Some loc_a, Some loc_b ->
                         (* Use solver to check semantic equality *)
-                        Solver.Semeq.exeq_value
+                        Solver.Semeq.exeq
                           (Solver.Semeq.create_state ())
-                          id_a id_b
+                          loc_a loc_b
                     | _ -> Lwt.return false
                 with Not_found -> Lwt.return false
             )

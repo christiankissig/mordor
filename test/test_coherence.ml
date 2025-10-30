@@ -1,10 +1,11 @@
 (** Unit tests for coherence checking *)
 
 open Alcotest
-open Lwt.Syntax
 open Coherence
-open Types
 open Executions
+open Expr
+open Lwt.Syntax
+open Types
 
 (* Helper to run Lwt tests *)
 let lwt_test fn () = Lwt_main.run (fn ())
@@ -13,6 +14,7 @@ let lwt_test fn () = Lwt_main.run (fn ())
 let make_event _ typ rmod wmod fmod strong rval wval id_opt =
   {
     id = id_opt;
+    loc = Option.map Expr.of_value id_opt;
     typ;
     rmod =
       ( match rmod with
@@ -183,7 +185,7 @@ let test_imm_deps_data () =
         );
         ( 2,
           make_event 2 Write None (Some Relaxed) None None None
-            (Some (VNumber (Z.of_int 42)))
+            (Some (ENum (Z.of_int 42)))
             None
         );
       ]

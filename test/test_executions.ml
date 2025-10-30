@@ -14,6 +14,7 @@ let create_test_event id typ ?id_val ?cond ?rval ?wval () =
     van = id;
     typ;
     id = id_val;
+    loc = Option.map Expr.of_value id_val;
     rval;
     wval;
     rmod = Normal;
@@ -59,10 +60,10 @@ let create_test_structure () =
 (** Test Utils Functions *)
 
 let test_disjoint_same_location () =
-  let loc1 = VVar "x" in
-  let val1 = VNumber (Z.of_int 1) in
-  let loc2 = VVar "x" in
-  let val2 = VNumber (Z.of_int 2) in
+  let loc1 = EVar "x" in
+  let val1 = ENum (Z.of_int 1) in
+  let loc2 = EVar "x" in
+  let val2 = ENum (Z.of_int 2) in
   let result = disjoint (loc1, val1) (loc2, val2) in
     match result with
     | EBinOp (l1, "!=", l2) ->
@@ -70,10 +71,10 @@ let test_disjoint_same_location () =
     | _ -> fail "Expected binary operation with !="
 
 let test_disjoint_different_locations () =
-  let loc1 = VVar "x" in
-  let val1 = VNumber (Z.of_int 1) in
-  let loc2 = VVar "y" in
-  let val2 = VNumber (Z.of_int 2) in
+  let loc1 = EVar "x" in
+  let val1 = ENum (Z.of_int 1) in
+  let loc2 = EVar "y" in
+  let val2 = ENum (Z.of_int 2) in
   let result = disjoint (loc1, val1) (loc2, val2) in
     match result with
     | EBinOp (l1, "!=", l2) ->
@@ -136,9 +137,7 @@ let test_gen_paths_with_branch () =
 
   (* Add branch event *)
   let branch_event =
-    create_test_event 5 Branch
-      ~cond:(VExpression (EBinOp (VVar "x", "==", VNumber Z.one)))
-      ()
+    create_test_event 5 Branch ~cond:(EBinOp (EVar "x", "==", ENum Z.one)) ()
   in
     Hashtbl.add events 5 branch_event;
 
@@ -368,10 +367,10 @@ let test_gen_paths_with_missing_event () =
       check bool "should handle missing events" true true
 
 let test_disjoint_with_complex_expressions () =
-  let loc1 = VExpression (EBinOp (VVar "base", "+", VNumber (Z.of_int 4))) in
-  let val1 = VNumber (Z.of_int 1) in
-  let loc2 = VExpression (EBinOp (VVar "base", "+", VNumber (Z.of_int 8))) in
-  let val2 = VNumber (Z.of_int 2) in
+  let loc1 = EBinOp (EVar "base", "+", ENum (Z.of_int 4)) in
+  let val1 = ENum (Z.of_int 1) in
+  let loc2 = EBinOp (EVar "base", "+", ENum (Z.of_int 8)) in
+  let val2 = ENum (Z.of_int 2) in
 
   let result = disjoint (loc1, val1) (loc2, val2) in
     match result with

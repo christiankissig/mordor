@@ -1,8 +1,9 @@
 (** Unit tests for ForwardingContext *)
 
-open Types
+open Expr
 open Forwardingcontext
 open Lwt.Syntax
+open Types
 
 (** Test utilities *)
 module TestUtil = struct
@@ -13,8 +14,9 @@ module TestUtil = struct
       van = label;
       typ;
       id = Some (VNumber (Z.of_int label));
+      loc = Some (ENum (Z.of_int label));
       rval = Some (VSymbol (Printf.sprintf "r%d" label));
-      wval = Some (VSymbol (Printf.sprintf "w%d" label));
+      wval = Some (ESymbol (Printf.sprintf "w%d" label));
       rmod = Relaxed;
       wmod = Relaxed;
       fmod = Relaxed;
@@ -58,7 +60,7 @@ module TestUtil = struct
       Uset.add rmw (1, 2)
 
   (** Value function for tests *)
-  let test_val_fn e = Some (VSymbol (Printf.sprintf "v%d" e))
+  let test_val_fn e = Some (ESymbol (Printf.sprintf "v%d" e))
 
   (** Create init params *)
   let make_init_params () =
@@ -294,10 +296,7 @@ let test_check_tautology () =
        let* () = init params in
        (* Context with tautological predicates *)
        let ctx =
-         {
-           (create ()) with
-           psi = [ EBinOp (VNumber Z.one, "=", VNumber Z.one) ];
-         }
+         { (create ()) with psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] }
        in
          let* result = check ctx in
            Alcotest.(check bool) "Tautology is satisfiable" true result;
@@ -310,10 +309,7 @@ let test_check_contradiction () =
        let* () = init params in
        (* Context with contradictory predicates *)
        let ctx =
-         {
-           (create ()) with
-           psi = [ EBinOp (VNumber Z.one, "=", VNumber Z.zero) ];
-         }
+         { (create ()) with psi = [ EBinOp (ENum Z.one, "=", ENum Z.zero) ] }
        in
          let* result = check ctx in
            Alcotest.(check bool) "Contradiction is unsatisfiable" false result;
@@ -325,10 +321,7 @@ let test_check_marks_good () =
     (let params = TestUtil.make_init_params () in
        let* () = init params in
        let ctx =
-         {
-           (create ()) with
-           psi = [ EBinOp (VNumber Z.one, "=", VNumber Z.one) ];
-         }
+         { (create ()) with psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] }
        in
          let* _result = check ctx in
            Alcotest.(check bool) "Marked as good" true (is_good ctx.fwd ctx.we);
@@ -340,10 +333,7 @@ let test_check_marks_bad () =
     (let params = TestUtil.make_init_params () in
        let* () = init params in
        let ctx =
-         {
-           (create ()) with
-           psi = [ EBinOp (VNumber Z.one, "=", VNumber Z.zero) ];
-         }
+         { (create ()) with psi = [ EBinOp (ENum Z.one, "=", ENum Z.zero) ] }
        in
          let* _result = check ctx in
            Alcotest.(check bool) "Marked as bad" true (is_bad ctx.fwd ctx.we);

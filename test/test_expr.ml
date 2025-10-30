@@ -6,9 +6,9 @@ let v_num n = Value.number (Z.of_int n)
 let v_sym s = Value.symbol s
 let v_var v = Value.var v
 let v_bool b = Value.boolean b
-let v_expr e = Value.expression e
 let e_num n = Expr.num (Z.of_int n)
 let e_var v = Expr.var v
+let e_sym s = ESymbol s
 let e_binop l op r = Expr.binop l op r
 
 (* Value module tests *)
@@ -89,8 +89,8 @@ let test_value_subst () =
 let test_expr_constructors () =
   let num_expr = e_num 42 in
   let var_expr = e_var "x" in
-  let binop_expr = e_binop (v_num 1) "+" (v_num 2) in
-  let unop_expr = Expr.unop "-" (v_num 5) in
+  let binop_expr = e_binop (e_num 1) "+" (e_num 2) in
+  let unop_expr = Expr.unop "-" (e_num 5) in
     Alcotest.(check bool)
       "num expr created" true
       ( match num_expr with
@@ -117,17 +117,17 @@ let test_expr_constructors () =
       )
 
 let test_expr_equality () =
-  let e1 = e_binop (v_num 1) "+" (v_num 2) in
-  let e2 = e_binop (v_num 1) "+" (v_num 2) in
-  let e3 = e_binop (v_num 1) "*" (v_num 2) in
-  let e4 = e_binop (v_num 2) "+" (v_num 1) in
+  let e1 = e_binop (e_num 1) "+" (e_num 2) in
+  let e2 = e_binop (e_num 1) "+" (e_num 2) in
+  let e3 = e_binop (e_num 1) "*" (e_num 2) in
+  let e4 = e_binop (e_num 2) "+" (e_num 1) in
     Alcotest.(check bool) "equal expressions" true (Expr.equal e1 e2);
     Alcotest.(check bool) "different operators" false (Expr.equal e1 e3);
     Alcotest.(check bool) "different operands" false (Expr.equal e1 e4)
 
 let test_expr_to_string () =
-  let e1 = e_binop (v_num 1) "+" (v_num 2) in
-  let e2 = Expr.unop "-" (v_num 5) in
+  let e1 = e_binop (e_num 1) "+" (e_num 2) in
+  let e2 = Expr.unop "-" (e_num 5) in
   let s1 = Expr.to_string e1 in
   let s2 = Expr.to_string e2 in
     Alcotest.(check bool)
@@ -136,22 +136,21 @@ let test_expr_to_string () =
       "unop string contains operator" true (String.contains s2 '-')
 
 let test_expr_get_symbols () =
-  let e = e_binop (v_sym "α") "+" (v_sym "β") in
+  let e = e_binop (e_sym "α") "+" (e_sym "β") in
   let symbols = Expr.get_symbols e in
     Alcotest.(check bool) "extracts first symbol" true (List.mem "α" symbols);
     Alcotest.(check bool) "extracts second symbol" true (List.mem "β" symbols)
 
 let test_expr_is_flat () =
-  let flat1 = e_binop (v_num 1) "=" (v_num 2) in
-  let flat2 = e_binop (v_var "x") "<" (v_num 10) in
-  let not_flat = e_binop (v_expr (e_num 1)) "=" (v_num 2) in
+  let flat1 = e_binop (e_num 1) "=" (e_num 2) in
+  let flat2 = e_binop (e_var "x") "<" (e_num 10) in
+  let no_flat = e_binop (e_binop (e_num 1) "+" (e_num 2)) "=" (e_num 3) in
     Alcotest.(check bool) "flat comparison" true (Expr.is_flat flat1);
     Alcotest.(check bool) "flat with var" true (Expr.is_flat flat2);
-    Alcotest.(check bool)
-      "not flat with nested expr" false (Expr.is_flat not_flat)
+    Alcotest.(check bool) "non-flat expression" false (Expr.is_flat no_flat)
 
 let test_expr_inverse () =
-  let eq = e_binop (v_var "x") "=" (v_num 5) in
+  let eq = e_binop (e_var "x") "=" (e_num 5) in
   let neq = Expr.inverse eq in
     Alcotest.(check bool)
       "inverse of =" true
@@ -160,7 +159,7 @@ let test_expr_inverse () =
       | _ -> false
       );
 
-    let lt = e_binop (v_var "x") "<" (v_num 5) in
+    let lt = e_binop (e_var "x") "<" (e_num 5) in
     let gte = Expr.inverse lt in
       Alcotest.(check bool)
         "inverse of <" true
@@ -169,7 +168,7 @@ let test_expr_inverse () =
         | _ -> false
         );
 
-      let gt = e_binop (v_var "x") ">" (v_num 5) in
+      let gt = e_binop (e_var "x") ">" (e_num 5) in
       let lte = Expr.inverse gt in
         Alcotest.(check bool)
           "inverse of >" true
@@ -179,46 +178,46 @@ let test_expr_inverse () =
           )
 
 let test_expr_flipped () =
-  let e1 = e_binop (v_num 1) "<" (v_num 2) in
+  let e1 = e_binop (e_num 1) "<" (e_num 2) in
   let flipped = Expr.flipped e1 in
     Alcotest.(check bool)
       "< flips to >" true
       ( match flipped with
-      | EBinOp (VNumber n, ">", VNumber m) ->
+      | EBinOp (ENum n, ">", ENum m) ->
           Z.equal n (Z.of_int 2) && Z.equal m (Z.of_int 1)
       | _ -> false
       );
 
-    let e2 = e_binop (v_num 1) "+" (v_num 2) in
+    let e2 = e_binop (e_num 1) "+" (e_num 2) in
     let flipped2 = Expr.flipped e2 in
       Alcotest.(check bool)
         "+ is commutative" true
         ( match flipped2 with
-        | EBinOp (VNumber n, "+", VNumber m) ->
+        | EBinOp (ENum n, "+", ENum m) ->
             Z.equal n (Z.of_int 2) && Z.equal m (Z.of_int 1)
         | _ -> false
         );
 
       (* Non-commutative operations should not flip *)
-      let e3 = e_binop (v_num 1) "-" (v_num 2) in
+      let e3 = e_binop (e_num 1) "-" (e_num 2) in
       let flipped3 = Expr.flipped e3 in
         Alcotest.(check bool)
           "- doesn't flip" true
           ( match flipped3 with
-          | EBinOp (VNumber n, "-", VNumber m) ->
+          | EBinOp (ENum n, "-", ENum m) ->
               Z.equal n (Z.of_int 1) && Z.equal m (Z.of_int 2)
           | _ -> false
           )
 
 let test_expr_subst () =
-  let x = v_var "x" in
-  let five = v_num 5 in
-  let e = e_binop x "+" (v_num 2) in
-  let result = Expr.subst e x five in
+  let x = e_var "x" in
+  let five = e_num 5 in
+  let e = e_binop x "+" (e_num 2) in
+  let result = Expr.subst e "x" five in
     Alcotest.(check bool)
       "substitution applied" true
       ( match result with
-      | EBinOp (VNumber n, "+", VNumber m) ->
+      | EBinOp (ENum n, "+", ENum m) ->
           Z.equal n (Z.of_int 5) && Z.equal m (Z.of_int 2)
       | _ -> false
       )
@@ -227,13 +226,13 @@ let test_expr_flatten () =
   let e1 = e_num 1 in
   let e2 = e_num 2 in
   let e3 = e_num 3 in
-  let and_expr = e_binop (v_expr e1) "&&" (v_expr e2) in
-  let nested = e_binop (v_expr and_expr) "&&" (v_expr e3) in
+  let and_expr = e_binop e1 "&&" e2 in
+  let nested = e_binop and_expr "&&" e3 in
   let flat = Expr.flatten nested in
     Alcotest.(check bool) "flattens && operations" true (List.length flat > 1)
 
 let test_expr_is_tautology () =
-  let x = v_var "x" in
+  let x = e_var "x" in
   let taut1 = e_binop x "=" x in
   let taut2 = e_binop x "<=" x in
   let taut3 = e_binop x ">=" x in
@@ -246,7 +245,7 @@ let test_expr_is_tautology () =
       (Expr.is_tautology not_taut)
 
 let test_expr_is_contradiction () =
-  let x = v_var "x" in
+  let x = e_var "x" in
   let contr1 = e_binop x "<" x in
   let contr2 = e_binop x ">" x in
   let contr3 = e_binop x "!=" x in
@@ -265,8 +264,8 @@ let test_expr_is_contradiction () =
       (Expr.is_contradiction not_contr);
 
     (* Test with concrete numbers *)
-    let false_eq = e_binop (v_num 1) "=" (v_num 2) in
-    let true_eq = e_binop (v_num 1) "=" (v_num 1) in
+    let false_eq = e_binop (e_num 1) "=" (e_num 2) in
+    let true_eq = e_binop (e_num 1) "=" (e_num 1) in
       Alcotest.(check bool)
         "1 = 2 is contradiction" true
         (Expr.is_contradiction false_eq);
@@ -275,18 +274,12 @@ let test_expr_is_contradiction () =
         (Expr.is_contradiction true_eq)
 
 let test_is_number () =
-  let n = v_num 42 in
-  let s = v_sym "α" in
-    Alcotest.(check bool) "number is_number" true (is_number n);
-    Alcotest.(check bool) "symbol not is_number" false (is_number s)
-
-let test_is_symbol () =
-  Alcotest.(check bool) "Greek letter is symbol" true (is_symbol "α");
-  Alcotest.(check bool) "Empty string not symbol" false (is_symbol "");
-  Alcotest.(check bool) "ASCII not symbol" false (is_symbol "x")
+  let n = e_num 42 in
+  let s = e_sym "α" in
+    Alcotest.(check bool) "number is_number" true (Expr.is_number n);
+    Alcotest.(check bool) "symbol not is_number" false (Expr.is_number s)
 
 (* Test suite *)
-
 let suite =
   ( "Expressions",
     [
@@ -311,6 +304,5 @@ let suite =
         test_expr_is_contradiction;
       (* Helper function tests *)
       Alcotest.test_case "is_number helper" `Quick test_is_number;
-      Alcotest.test_case "is_symbol helper" `Quick test_is_symbol;
     ]
   )

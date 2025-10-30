@@ -136,9 +136,6 @@ module Semeq : sig
   (** Check potential equality with current state *)
   val expoteq : state -> expr -> expr -> bool Lwt.t
 
-  (** Check equality of values *)
-  val exeq_value : state -> value_type -> value_type -> bool Lwt.t
-
   (** Check potential equality of values *)
   val expoteq_value : state -> value_type -> value_type -> bool Lwt.t
 end

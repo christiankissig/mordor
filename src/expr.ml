@@ -7,57 +7,33 @@ let is_symbol s =
   String.length s > 0
   && (String.contains greek_alpha s.[0] || String.contains zh_alpha s.[0])
 
-(** Check if value is a number *)
-let is_number = function
-  | VNumber _ -> true
-  | _ -> false
-
 (** Mutual recursion for Value and Expr *)
 module rec Value : sig
   val number : Z.t -> value_type
   val symbol : string -> value_type
   val var : string -> value_type
-  val expression : expr -> value_type
   val boolean : bool -> value_type
-  val of_value : value_type -> value_type
-  val make : value_type -> value_type
   val equal : value_type -> value_type -> bool
   val get_symbols : value_type -> string list
   val to_string : value_type -> string
   val subst : value_type -> value_type -> value_type -> value_type
+  val is_number : value_type -> bool
 end = struct
   let number n = VNumber n
   let symbol s = VSymbol s
   let var s = VVar s
-  let expression e = VExpression e
   let boolean b = VBoolean b
 
-  let of_value = function
-    | VNumber n -> VNumber n
-    | VSymbol s -> VSymbol s
-    | VVar v -> VVar v
-    | VExpression e -> VExpression e
-    | VBoolean b -> VBoolean b
-
-  let make = function
-    | VNumber _ as n -> n
-    | VSymbol _ as s -> s
-    | VVar _ as v -> v
-    | VExpression _ as e -> e
-    | VBoolean _ as b -> b
-
-  let equal v1 v2 =
+  let equal (v1 : value_type) (v2 : value_type) =
     match (v1, v2) with
     | VNumber n1, VNumber n2 -> Z.equal n1 n2
     | VSymbol s1, VSymbol s2 -> String.equal s1 s2
-    | VVar v1, VVar v2 -> String.equal v1 v2
+    | VVar s1, VVar s2 -> String.equal s1 s2
     | VBoolean b1, VBoolean b2 -> b1 = b2
-    | VExpression e1, VExpression e2 -> Expr.equal e1 e2
     | _ -> false
 
   let get_symbols = function
     | VSymbol s when is_symbol s -> [ s ]
-    | VExpression e -> Expr.get_symbols e
     | _ -> []
 
   let to_string = function
@@ -65,20 +41,22 @@ end = struct
     | VSymbol s -> s
     | VVar v -> v
     | VBoolean b -> string_of_bool b
-    | VExpression e -> Expr.to_string e
 
   let subst v a b =
     match v with
     | VSymbol _ when equal v a -> b
-    | VExpression e -> VExpression (Expr.subst e a b)
     | _ -> v
+
+  let is_number = function
+    | VNumber _ -> true
+    | _ -> false
 end
 
 and Expr : sig
   type t = expr
 
-  val binop : value_type -> string -> value_type -> t
-  val unop : string -> value_type -> t
+  val binop : t -> string -> t -> t
+  val unop : string -> t -> t
   val or_ : t list list -> t
   val var : string -> t
   val num : Z.t -> t
@@ -87,11 +65,17 @@ and Expr : sig
   val is_flat : t -> bool
   val inverse : t -> t
   val flipped : t -> t
-  val subst : t -> value_type -> value_type -> t
+  val subst : t -> string -> t -> t
   val to_string : t -> string
   val flatten : t -> t list
   val is_tautology : t -> bool
   val is_contradiction : t -> bool
+  val is_value : t -> bool
+  val is_expression : t -> bool
+  val is_number : t -> bool
+  val evaluate : t -> (string -> t option) -> t
+  val to_value : t -> value_type option
+  val of_value : value_type -> t
 end = struct
   type t = expr
 
@@ -101,13 +85,36 @@ end = struct
   let var v = EVar v
   let num n = ENum n
 
+  let of_value = function
+    | VNumber n -> ENum n
+    | VSymbol s -> ESymbol s
+    | VVar v -> EVar v
+    | VBoolean b -> EBoolean b
+
+  let is_value = function
+    | ENum _ -> true
+    | EVar _ -> true
+    | ESymbol _ -> true
+    | EBoolean _ -> true
+    | _ -> false
+
+  let to_value = function
+    | ENum n -> Some (VNumber n)
+    | EVar v -> Some (VVar v)
+    | ESymbol s -> Some (VSymbol s)
+    | EBoolean b -> Some (VBoolean b)
+    | _ -> None
+
+  let is_expression e = not (is_value e)
+
   let rec equal e1 e2 =
     match (e1, e2) with
     | ENum n1, ENum n2 -> Z.equal n1 n2
     | EVar v1, EVar v2 -> String.equal v1 v2
+    | ESymbol s1, ESymbol s2 -> String.equal s1 s2
     | EBinOp (l1, op1, r1), EBinOp (l2, op2, r2) ->
-        op1 = op2 && Value.equal l1 l2 && Value.equal r1 r2
-    | EUnOp (op1, r1), EUnOp (op2, r2) -> op1 = op2 && Value.equal r1 r2
+        op1 = op2 && equal l1 l2 && equal r1 r2
+    | EUnOp (op1, r1), EUnOp (op2, r2) -> op1 = op2 && equal r1 r2
     | EOr c1, EOr c2 ->
         List.length c1 = List.length c2
         && List.for_all2
@@ -119,8 +126,9 @@ end = struct
 
   let rec get_symbols = function
     | EVar v when is_symbol v -> [ v ]
-    | EBinOp (lhs, _, rhs) -> Value.get_symbols lhs @ Value.get_symbols rhs
-    | EUnOp (_, rhs) -> Value.get_symbols rhs
+    | ESymbol s when is_symbol s -> [ s ]
+    | EBinOp (lhs, _, rhs) -> get_symbols lhs @ get_symbols rhs
+    | EUnOp (_, rhs) -> get_symbols rhs
     | EOr clauses ->
         List.flatten
           (List.map (fun c -> List.flatten (List.map get_symbols c)) clauses)
@@ -129,18 +137,7 @@ end = struct
   let is_flat = function
     | EBinOp (lhs, op, rhs) ->
         let comp_ops = [ "="; "!="; "<"; ">"; "<="; ">=" ] in
-          List.mem op comp_ops
-          && (not
-                ( match lhs with
-                | VExpression _ -> true
-                | _ -> false
-                )
-             )
-          && not
-               ( match rhs with
-               | VExpression _ -> true
-               | _ -> false
-               )
+          List.mem op comp_ops && is_value lhs && is_value rhs
     | _ -> false
 
   let inverse = function
@@ -176,43 +173,38 @@ end = struct
           else EBinOp (rhs, flip_op, lhs)
     | e -> e
 
-  let rec subst e a b =
+  let rec subst (e : expr) (a : string) (b : expr) =
     let eq x y = Value.equal x y in
       match e with
       | EBinOp (lhs, op, rhs) ->
           let new_lhs =
-            if eq lhs a then b
-            else
-              match lhs with
-              | VExpression e -> VExpression (subst e a b)
-              | _ -> lhs
+            match lhs with
+            | EVar v -> if v = a then b else lhs
+            | _ -> subst lhs a b
           in
           let new_rhs =
-            if eq rhs a then b
-            else
-              match rhs with
-              | VExpression e -> VExpression (subst e a b)
-              | _ -> rhs
+            match rhs with
+            | EVar v -> if v = a then b else rhs
+            | _ -> subst rhs a b
           in
             EBinOp (new_lhs, op, new_rhs)
       | EUnOp (op, rhs) ->
           let new_rhs =
-            if eq rhs a then b
-            else
-              match rhs with
-              | VExpression e -> VExpression (subst e a b)
-              | _ -> rhs
+            match rhs with
+            | EVar v -> if v = a then b else rhs
+            | _ -> subst rhs a b
           in
             EUnOp (op, new_rhs)
       | e -> e
 
   let rec to_string = function
     | ENum n -> Z.to_string n
+    | EBoolean b -> string_of_bool b
+    | ESymbol s -> s
     | EVar v -> v
     | EBinOp (lhs, op, rhs) ->
-        Printf.sprintf "(%s %s %s)" (Value.to_string lhs) op
-          (Value.to_string rhs)
-    | EUnOp (op, rhs) -> Printf.sprintf "%s(%s)" op (Value.to_string rhs)
+        Printf.sprintf "(%s %s %s)" (to_string lhs) op (to_string rhs)
+    | EUnOp (op, rhs) -> Printf.sprintf "%s(%s)" op (to_string rhs)
     | EOr clauses ->
         let clause_str =
           List.map (fun c -> String.concat " ∧ " (List.map to_string c)) clauses
@@ -221,38 +213,78 @@ end = struct
 
   let rec flatten = function
     | EBinOp (lhs, "&&", rhs) ->
-        let l_flat =
-          match lhs with
-          | VExpression e -> flatten e
-          | _ -> [ EVar "?" ]
-        in
-        let r_flat =
-          match rhs with
-          | VExpression e -> flatten e
-          | _ -> [ EVar "?" ]
-        in
+        let l_flat = flatten lhs in
+        let r_flat = flatten rhs in
           l_flat @ r_flat
     | e -> [ e ]
 
-  let is_tautology = function
-    | EBinOp (lhs, op, rhs) when Value.equal lhs rhs ->
-        List.mem op [ "="; "<="; ">=" ]
+  let rec is_tautology = function
+    | EBinOp (lhs, op, rhs) when op = "&&" ->
+        is_tautology lhs && is_tautology rhs
+    | EBinOp (lhs, op, rhs) when op = "||" ->
+        is_tautology lhs || is_tautology rhs
+    | EBinOp (lhs, op, rhs) when op = "!=" -> (
+        match (to_value lhs, to_value rhs) with
+        | Some lv, Some rv -> not (Value.equal lv rv)
+        | _ -> false
+      )
+    | EBinOp (lhs, op, rhs) when List.mem op [ "="; "<="; ">=" ] -> (
+        match (to_value lhs, to_value rhs) with
+        | Some lv, Some rv -> Value.equal lv rv
+        | _ -> false
+      )
+    (* TODO more cases *)
     | _ -> false
 
   let is_contradiction = function
-    | EBinOp (VNumber l, op, VNumber r) ->
-        let b =
-          match op with
-          | "=" -> Z.equal l r
-          | "!=" -> not (Z.equal l r)
-          | "<" -> Z.lt l r
-          | ">" -> Z.gt l r
-          | "<=" -> Z.leq l r
-          | ">=" -> Z.geq l r
-          | _ -> true
-        in
-          not b
-    | EBinOp (lhs, op, rhs) when Value.equal lhs rhs ->
-        List.mem op [ "<"; ">"; "!=" ]
+    | EBinOp (lhs, op, rhs) -> (
+        match (to_value lhs, to_value rhs) with
+        | Some (VNumber lv), Some (VNumber rv) -> (
+            match op with
+            | "=" -> not (Z.equal lv rv)
+            | "!=" -> Z.equal lv rv
+            | "<" -> Z.geq lv rv
+            | ">" -> Z.leq lv rv
+            | "<=" -> Z.gt lv rv
+            | ">=" -> Z.lt lv rv
+            | _ -> false
+          )
+        | Some (VVar ln), Some (VVar rn) when ln = rn ->
+            List.mem op [ "<"; ">"; "!=" ]
+        | Some (VSymbol ln), Some (VSymbol rn) when ln = rn ->
+            List.mem op [ "<"; ">"; "!=" ]
+        | Some lv, Some rv -> (
+            match op with
+            | "!=" -> Value.equal lv rv
+            | _ -> false
+          )
+        | _ -> false
+      )
+    (* TODO more cases *)
     | _ -> false
+
+  let is_number = function
+    | ENum _ -> true
+    | _ -> false
+
+  let rec evaluate expr env =
+    match expr with
+    | ENum _ -> expr
+    | EBoolean _ -> expr
+    | ESymbol _ -> expr
+    | EVar v -> (
+        match env v with
+        | Some v_expr -> v_expr
+        | None -> expr
+      )
+    | EUnOp (op, rhs) ->
+        let r_val = evaluate rhs env in
+          EUnOp (op, r_val)
+    | EBinOp (lhs, op, rhs) ->
+        let l_val = evaluate lhs env in
+        let r_val = evaluate rhs env in
+          EBinOp (l_val, op, r_val)
+    | EOr clauses ->
+        let eval_clause clause = List.map (fun e -> evaluate e env) clause in
+          EOr (List.map eval_clause clauses)
 end

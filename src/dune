@@ -28,16 +28,18 @@
   uset
   utils)
  (flags
-  (:standard -w -26-27))
- (libraries core lwt lwt.unix z3 zarith landmarks)
+  (:standard -g -w -26-27))
+ (libraries core lwt lwt.unix z3 zarith)
+ (public_name smrd)
  (preprocess
-  (pps lwt_ppx landmarks-ppx))
- (public_name smrd))
+  (pps lwt_ppx)))
 
 (executable
  (name main)
  (public_name smrd)
  (modules main)
- (libraries smrd_lib lwt lwt.unix landmarks)
+ (flags
+  (:standard -g))
+ (libraries smrd_lib lwt lwt.unix)
  (preprocess
-  (pps lwt_ppx landmarks-ppx)))
+  (pps lwt_ppx)))

@@ -19,6 +19,7 @@ type ast_expr =
 type ast_stmt =
   | SRegisterStore of { register : string; expr : ast_expr }
   | SGlobalStore of { global : string; expr : ast_expr; assign : assign_info }
+  | SGlobalLoad of { register : string; global : string; load : assign_info }
   | SStore of { address : ast_expr; expr : ast_expr; assign : assign_info }
   | SCAS of {
       register : string;

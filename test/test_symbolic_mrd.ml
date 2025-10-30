@@ -2,6 +2,7 @@
     Undefined Behaviour, and Extrinsic Choice" *)
 
 open Alcotest
+open Expr
 open Types
 open Uset
 open Executions
@@ -16,12 +17,24 @@ module TestUtils = struct
   (** Create a simple read event *)
   let make_read_event label loc symbol mode =
     let ev = make_event Read label in
-      { ev with id = Some loc; rval = Some symbol; rmod = mode }
+      {
+        ev with
+        id = Some loc;
+        loc = Some (Expr.of_value loc);
+        rval = Some symbol;
+        rmod = mode;
+      }
 
   (** Create a simple write event *)
   let make_write_event label loc value mode =
     let ev = make_event Write label in
-      { ev with id = Some loc; wval = Some value; wmod = mode }
+      {
+        ev with
+        id = Some loc;
+        loc = Some (Expr.of_value loc);
+        wval = Some value;
+        wmod = mode;
+      }
 
   (** Create a branch event *)
   let make_branch_event label condition =
@@ -31,12 +44,12 @@ module TestUtils = struct
   (** Create an allocation event *)
   let make_alloc_event label symbol size =
     let ev = make_event Malloc label in
-      { ev with rval = Some symbol; wval = Some size }
+      { ev with rval = Some symbol; wval = Some (Expr.of_value size) }
 
   (** Create a free event *)
   let make_free_event label loc =
     let ev = make_event Free label in
-      { ev with id = Some loc }
+      { ev with loc = Some loc }
 end
 
 open TestUtils
@@ -50,13 +63,18 @@ module TestEvents = struct
       check bool "read_event_mode" true (ev.rmod = Relaxed)
 
   let test_create_write () =
-    let ev = make_write_event 2 (make_var "y") (make_number 1) Release in
+    let ev =
+      make_write_event 2 (make_var "y") (Expr.of_value (make_number 1)) Release
+    in
       check int "write_event_label" 2 ev.label;
       check bool "write_event_type" true (ev.typ = Write);
       check bool "write_event_mode" true (ev.wmod = Release)
 
   let test_create_branch () =
-    let cond = VExpression (EBinOp (make_symbol "α", "=", make_number 1)) in
+    let cond =
+      EBinOp
+        (Expr.of_value (make_symbol "α"), "=", Expr.of_value (make_number 1))
+    in
     let ev = make_branch_event 3 cond in
       check int "branch_event_label" 3 ev.label;
       check bool "branch_event_type" true (ev.typ = Branch)
@@ -174,8 +192,8 @@ module TestExpressions = struct
         )
 
   let test_binary_expressions () =
-    let lhs = VSymbol "α" in
-    let rhs = VNumber (Z.of_int 1) in
+    let lhs = ESymbol "α" in
+    let rhs = ENum (Z.of_int 1) in
     let expr = EBinOp (lhs, "=", rhs) in
       check bool "binop_created" true
         ( match expr with
@@ -184,7 +202,7 @@ module TestExpressions = struct
         )
 
   let test_unary_expressions () =
-    let val_ = VSymbol "α" in
+    let val_ = ESymbol "α" in
     let expr = EUnOp ("!", val_) in
       check bool "unop_created" true
         ( match expr with
@@ -193,8 +211,8 @@ module TestExpressions = struct
         )
 
   let test_disjunction () =
-    let clause1 = [ EBinOp (VSymbol "α", "=", VNumber Z.one) ] in
-    let clause2 = [ EBinOp (VSymbol "α", "=", VNumber Z.zero) ] in
+    let clause1 = [ EBinOp (ESymbol "α", "=", ENum Z.one) ] in
+    let clause2 = [ EBinOp (ESymbol "α", "=", ENum Z.zero) ] in
     let disj = EOr [ clause1; clause2 ] in
       check bool "disjunction_created" true
         ( match disj with
@@ -216,14 +234,14 @@ end
 (** Test Module 4: Solver (async tests) *)
 module TestSolver = struct
   let test_solver_creation () =
-    let constraints = [ EBinOp (VSymbol "x", ">", VNumber Z.zero) ] in
+    let constraints = [ EBinOp (ESymbol "x", ">", ENum Z.zero) ] in
     let solver = Solver.create constraints in
       check bool "solver_created" true (List.length solver.expressions > 0);
       Lwt.return_unit
 
   let test_satisfiable_constraint () =
     let open Lwt.Infix in
-    let constraints = [ EBinOp (VSymbol "x", "=", VNumber (Z.of_int 5)) ] in
+    let constraints = [ EBinOp (ESymbol "x", "=", ENum (Z.of_int 5)) ] in
       Solver.is_sat constraints >>= fun result ->
       check bool "simple_sat_constraint" true result;
       Lwt.return_unit
@@ -232,8 +250,8 @@ module TestSolver = struct
     let open Lwt.Infix in
     let constraints =
       [
-        EBinOp (VSymbol "x", "=", VNumber Z.one);
-        EBinOp (VSymbol "x", "=", VNumber Z.zero);
+        EBinOp (ESymbol "x", "=", ENum Z.one);
+        EBinOp (ESymbol "x", "=", ENum Z.zero);
       ]
     in
       Solver.is_unsat constraints >>= fun result ->
@@ -242,16 +260,16 @@ module TestSolver = struct
 
   let test_implies () =
     let open Lwt.Infix in
-    let premises = [ EBinOp (VSymbol "x", "=", VNumber Z.one) ] in
-    let conclusion = EBinOp (VSymbol "x", ">", VNumber Z.zero) in
+    let premises = [ EBinOp (ESymbol "x", "=", ENum Z.one) ] in
+    let conclusion = EBinOp (ESymbol "x", ">", ENum Z.zero) in
       Solver.implies premises conclusion >>= fun result ->
       check bool "implication_test" true result;
       Lwt.return_unit
 
   let test_semantic_equality () =
     let open Lwt.Infix in
-    let expr1 = EBinOp (VSymbol "x", "+", VNumber Z.one) in
-    let expr2 = EBinOp (VNumber Z.one, "+", VSymbol "x") in
+    let expr1 = EBinOp (ESymbol "x", "+", ENum Z.one) in
+    let expr2 = EBinOp (ENum Z.one, "+", ESymbol "x") in
       Solver.exeq expr1 expr2 >>= fun result ->
       check bool "commutativity" true result;
       Lwt.return_unit
@@ -290,15 +308,17 @@ module TestExample1_1 = struct
     let e1 = make_read_event 1 (make_var "x") (make_symbol "α") Relaxed in
     let e2 =
       make_write_event 2 (make_var "y")
-        (VExpression
-           (EBinOp (VNumber Z.one, "/", VExpression (EUnOp ("!", VSymbol "α"))))
-        )
+        (EBinOp (ENum Z.one, "/", EUnOp ("!", ESymbol "α")))
         Relaxed
     in
 
     (* Thread 2 events *)
     let e3 = make_read_event 3 (make_var "y") (make_symbol "β") Relaxed in
-    let e4 = make_write_event 4 (make_var "x") (make_symbol "β") Relaxed in
+    let e4 =
+      make_write_event 4 (make_var "x")
+        (Expr.of_value (make_symbol "β"))
+        Relaxed
+    in
 
     Hashtbl.add events 1 e1;
     Hashtbl.add events 2 e2;
@@ -328,7 +348,9 @@ module TestExample1_1 = struct
   let test_lb_ub_data_optimized_justification () =
     (* After strengthening with !α ≠ 0, value assignment with α = 0,
        and weakening, we get an independent justification *)
-    let e2_opt = make_write_event 2 (make_var "y") (make_number 1) Relaxed in
+    let e2_opt =
+      make_write_event 2 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
+    in
 
     let just_opt =
       {
@@ -365,16 +387,12 @@ module TestExample3_1 = struct
   let test_alignment_initial () =
     let e1 = make_read_event 1 (make_var "p") (make_symbol "α") Relaxed in
     let cond =
-      VExpression
-        (EBinOp
-           ( VExpression (EBinOp (VSymbol "α", "%", VNumber (Z.of_int 16))),
-             "=",
-             VNumber Z.zero
-           )
-        )
+      EBinOp (EBinOp (ESymbol "α", "%", ENum (Z.of_int 16)), "=", ENum Z.zero)
     in
     let e2 = make_branch_event 2 cond in
-    let e3 = make_write_event 3 (make_var "y") (make_number 1) Relaxed in
+    let e3 =
+      make_write_event 3 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
+    in
 
     (* Initial justification has control dependency *)
     let just =
@@ -382,10 +400,7 @@ module TestExample3_1 = struct
         p =
           [
             EBinOp
-              ( VExpression (EBinOp (VSymbol "α", "%", VNumber (Z.of_int 16))),
-                "=",
-                VNumber Z.zero
-              );
+              (EBinOp (ESymbol "α", "%", ENum (Z.of_int 16)), "=", ENum Z.zero);
           ];
         d = create ();
         fwd = create ();
@@ -401,7 +416,9 @@ module TestExample3_1 = struct
 
   let test_alignment_with_extrinsic_guarantee () =
     (* With extrinsic guarantee Ω => (α % 16 = 0), we can weaken *)
-    let e3 = make_write_event 3 (make_var "y") (make_number 1) Relaxed in
+    let e3 =
+      make_write_event 3 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
+    in
 
     let just_weak =
       {
@@ -441,11 +458,15 @@ module TestExample4_1 = struct
     (* Thread 1 *)
     let e1 = make_alloc_event 1 (make_symbol "π") (make_number 4) in
     let e2 = make_read_event 2 (VSymbol "π") (make_symbol "α") Relaxed in
-    let e3 = make_write_event 3 (make_var "x") (make_number 1) Relaxed in
+    let e3 =
+      make_write_event 3 (make_var "x") (Expr.of_value (make_number 1)) Relaxed
+    in
 
     (* Thread 2 *)
     let e4 = make_read_event 4 (make_var "x") (make_symbol "β") Relaxed in
-    let e5 = make_write_event 5 (VSymbol "π") (make_symbol "β") Relaxed in
+    let e5 =
+      make_write_event 5 (VSymbol "π") (Expr.of_value (make_symbol "β")) Relaxed
+    in
 
     Hashtbl.add events 1 e1;
     Hashtbl.add events 2 e2;
@@ -458,7 +479,9 @@ module TestExample4_1 = struct
 
     (* Create disjoint predicate *)
     let disj_pred =
-      disjoint (VSymbol "π", VNumber (Z.of_int 4)) (make_var "x", VNumber Z.one)
+      disjoint
+        (ESymbol "π", ENum (Z.of_int 4))
+        (Expr.of_value (make_var "x"), ENum Z.one)
     in
 
     check bool "disjointness_predicate_created" true
@@ -484,13 +507,19 @@ module TestExample5_1 = struct
       Both branches write the same value (1), so no real dependency on r1. *)
   let test_lb_false_dep_initial () =
     let e1 = make_read_event 1 (make_var "x") (make_symbol "r1") Relaxed in
-    let cond = VExpression (EBinOp (VSymbol "r1", "=", VNumber Z.one)) in
+    let cond = EBinOp (ESymbol "r1", "=", ENum Z.one) in
     let e2 = make_branch_event 2 cond in
 
     (* Write in true branch *)
-    let e3 = make_write_event 3 (make_var "y") (make_symbol "r1") Relaxed in
+    let e3 =
+      make_write_event 3 (make_var "y")
+        (Expr.of_value (make_symbol "r1"))
+        Relaxed
+    in
     (* Write in false branch *)
-    let e5 = make_write_event 5 (make_var "y") (make_number 1) Relaxed in
+    let e5 =
+      make_write_event 5 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
+    in
 
     (* Initial justifications *)
     let d_set_true = create () in
@@ -498,7 +527,7 @@ module TestExample5_1 = struct
 
     let just_true =
       {
-        p = [ EBinOp (VSymbol "r1", "=", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
         d = d_set_true;
         fwd = create ();
         we = create ();
@@ -509,7 +538,7 @@ module TestExample5_1 = struct
 
     let just_false =
       {
-        p = [ EBinOp (VSymbol "r1", "≠", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "r1", "≠", ENum Z.one) ];
         d = create ();
         fwd = create ();
         we = create ();
@@ -524,11 +553,13 @@ module TestExample5_1 = struct
 
   let test_lb_false_dep_after_va () =
     (* After value assignment: r1 = 1 in predicate => write y = 1 *)
-    let e3_va = make_write_event 3 (make_var "y") (make_number 1) Relaxed in
+    let e3_va =
+      make_write_event 3 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
+    in
 
     let just_va =
       {
-        p = [ EBinOp (VSymbol "r1", "=", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
         d = create ();
         (* no data dependency after VA *)
         fwd = create ();
@@ -543,7 +574,9 @@ module TestExample5_1 = struct
 
   let test_lb_false_dep_after_lift () =
     (* After lifting: both branches write same value under combined predicate *)
-    let e3_lift = make_write_event 3 (make_var "y") (make_number 1) Relaxed in
+    let e3_lift =
+      make_write_event 3 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
+    in
 
     let just_lift =
       {
@@ -579,7 +612,11 @@ module TestExample6_1 = struct
   let test_forwarding_initial () =
     let e1 = make_read_event 1 (make_var "x") (make_symbol "r1") Relaxed in
     let e2 = make_read_event 2 (make_var "x") (make_symbol "r2") Relaxed in
-    let e3 = make_write_event 3 (make_var "y") (make_symbol "r2") Relaxed in
+    let e3 =
+      make_write_event 3 (make_var "y")
+        (Expr.of_value (make_symbol "r2"))
+        Relaxed
+    in
 
     let d_set = create () in
     let d_set = add d_set "r2" in
@@ -599,7 +636,11 @@ module TestExample6_1 = struct
     Printf.printf "PASS: Forwarding initial justification created\n"
 
   let test_forwarding_after_fwd () =
-    let e3 = make_write_event 3 (make_var "y") (make_symbol "r1") Relaxed in
+    let e3 =
+      make_write_event 3 (make_var "y")
+        (Expr.of_value (make_symbol "r1"))
+        Relaxed
+    in
 
     let fwd_edges = create () in
     let fwd_edges = add fwd_edges (1, 2) in
@@ -637,7 +678,9 @@ end
 (** Test Module 10: Justification Structure *)
 module TestJustifications = struct
   let test_independent_write () =
-    let e = make_write_event 1 (make_var "x") (make_number 42) Relaxed in
+    let e =
+      make_write_event 1 (make_var "x") (Expr.of_value (make_number 42)) Relaxed
+    in
     let just =
       {
         p = [];
@@ -656,13 +699,17 @@ module TestJustifications = struct
     Printf.printf "PASS: Independent write justification\n"
 
   let test_dependent_write () =
-    let e = make_write_event 2 (make_var "y") (make_symbol "α") Relaxed in
+    let e =
+      make_write_event 2 (make_var "y")
+        (Expr.of_value (make_symbol "α"))
+        Relaxed
+    in
     let d_set = create () in
     let d_set = add d_set "α" in
 
     let just =
       {
-        p = [ EBinOp (VSymbol "α", ">", VNumber Z.zero) ];
+        p = [ EBinOp (ESymbol "α", ">", ENum Z.zero) ];
         d = d_set;
         fwd = create ();
         we = create ();
@@ -676,7 +723,11 @@ module TestJustifications = struct
     Printf.printf "PASS: Dependent write justification\n"
 
   let test_forwarding_context () =
-    let e = make_write_event 3 (make_var "z") (make_symbol "β") Relaxed in
+    let e =
+      make_write_event 3 (make_var "z")
+        (Expr.of_value (make_symbol "β"))
+        Relaxed
+    in
     let fwd = create () in
     let fwd = add fwd (1, 2) in
     let fwd = add fwd (2, 3) in
@@ -696,7 +747,9 @@ module TestJustifications = struct
     Printf.printf "PASS: Forwarding context in justification\n"
 
   let test_write_elision () =
-    let e = make_write_event 4 (make_var "w") (make_number 7) Relaxed in
+    let e =
+      make_write_event 4 (make_var "w") (Expr.of_value (make_number 7)) Relaxed
+    in
     let we = create () in
     let we = add we (3, 4) in
 
@@ -799,7 +852,7 @@ module TestSymbolicEventStructure = struct
         lo = create ();
         restrict = Hashtbl.create 10;
         cas_groups = Hashtbl.create 10;
-        pwg = [ EBinOp (VSymbol "x", "≤", VNumber (Z.of_int 100)) ];
+        pwg = [ EBinOp (ESymbol "x", "≤", ENum (Z.of_int 100)) ];
         fj = create ();
         p = create ();
         constraint_ = [];
@@ -938,5 +991,4 @@ let suite =
     @ TestSymbolicEventStructure.suite
     @ TestCoherence.suite
     @ TestOrigin.suite
-    @ []
   )

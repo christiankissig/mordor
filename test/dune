@@ -1,5 +1,26 @@
 (test
  (name test_smrd)
+ (modes byte exe)
  (flags
-  (:standard -w -33-26))
- (libraries smrd_lib str alcotest))
+  (:standard -g -w -33-26))
+ (ocamlc_flags
+  (:standard -g))
+ ; Add debugging information
+ (modules
+  test_smrd
+  test_solver
+  test_types
+  test_executions
+  test_interpret
+  test_elaborations
+  test_coherence
+  test_events
+  test_forwardingcontext
+  test_expr
+  test_parse
+  test_symbolic_mrd
+  test_properties_mrd
+  test_advanced_mrd)
+ (libraries smrd_lib lwt lwt.unix z3 zarith core str alcotest)
+ (preprocess
+  (pps lwt_ppx)))

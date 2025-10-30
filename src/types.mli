@@ -91,15 +91,16 @@ type value_type =
   | VNumber of Z.t
   | VSymbol of string
   | VVar of string
-  | VExpression of expr
   | VBoolean of bool
 
 (** Expression representation *)
 and expr =
-  | EBinOp of value_type * string * value_type
-  | EUnOp of string * value_type
+  | EBinOp of expr * string * expr
+  | EUnOp of string * expr
   | EOr of expr list list
   | EVar of string
+  | ESymbol of string
+  | EBoolean of bool
   | ENum of Z.t
 
 (** {1 Events} *)
@@ -110,12 +111,13 @@ type event = {
   van : int;
   typ : event_type;
   id : value_type option;
+  loc : expr option;
   rval : value_type option;
-  wval : value_type option;
+  wval : expr option;
   rmod : mode;
   wmod : mode;
   fmod : mode;
-  cond : value_type option;
+  cond : expr option;
   volatile : bool;
   strong : mode option;
   lhs : int option;
@@ -184,7 +186,7 @@ type symbolic_execution = {
   ex_rmw : (int * int) uset; (* RMW pairs *)
   ex_p : expr list; (* Predicates *)
   conds : expr list; (* Conditions *)
-  fix_rf_map : (string, value_type) Hashtbl.t; (* Fixed RF mappings *)
+  fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
   justs : justification list; (* Justifications *)
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer mappings *)
 }

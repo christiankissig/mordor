@@ -27,7 +27,7 @@ type freeze_result = {
 (** [disjoint (loc1, val1) (loc2, val2)] creates a disjoint predicate for two
     (location, value) pairs. Returns an expression asserting that [loc1 ≠ loc2].
 *)
-val disjoint : value_type * value_type -> value_type * value_type -> expr
+val disjoint : expr * expr -> expr * expr -> expr
 
 (** [origin events read_events malloc_events symbol] finds the origin event of a
     symbol. First searches in read events, then in malloc events.

@@ -46,24 +46,16 @@ let rec ast_expr_to_expr : ast_expr -> Types.expr = function
   | EGlobal g -> Types.EVar g
   | EAtLoc l -> Types.EVar l
   | EASet s -> Types.EVar ("." ^ s)
-  | EMalloc e -> Types.EUnOp ("malloc", Types.VExpression (ast_expr_to_expr e))
+  | EMalloc e -> Types.EUnOp ("malloc", ast_expr_to_expr e)
   | EBinOp (l, op, r) ->
-      Types.EBinOp
-        ( Types.VExpression (ast_expr_to_expr l),
-          op,
-          Types.VExpression (ast_expr_to_expr r)
-        )
-  | EUnOp (op, e) -> Types.EUnOp (op, Types.VExpression (ast_expr_to_expr e))
+      Types.EBinOp (ast_expr_to_expr l, op, ast_expr_to_expr r)
+  | EUnOp (op, e) -> Types.EUnOp (op, ast_expr_to_expr e)
   | ETuple (e1, e2) ->
       (* Represent tuple as a special binop *)
-      Types.EBinOp
-        ( Types.VExpression (ast_expr_to_expr e1),
-          ",",
-          Types.VExpression (ast_expr_to_expr e2)
-        )
+      Types.EBinOp (ast_expr_to_expr e1, ",", ast_expr_to_expr e2)
   | ELoad { address; load } ->
       (* Represent load as a special unary operation *)
-      Types.EUnOp ("load", Types.VExpression (ast_expr_to_expr address))
+      Types.EUnOp ("load", ast_expr_to_expr address)
 
 (** Convert ast_mode to Types.mode *)
 let ast_mode_to_mode : mode -> Types.mode = function

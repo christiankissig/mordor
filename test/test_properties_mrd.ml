@@ -99,13 +99,9 @@ module PropertyElaborationSoundness = struct
   let test_value_assignment_soundness () =
     (* Value assignment: if P ⟹ (α = v), substituting v for α is sound *)
     let open Lwt.Infix in
-    let premises = [ EBinOp (VSymbol "α", "=", VNumber Z.one) ] in
+    let premises = [ EBinOp (ESymbol "α", "=", ENum Z.one) ] in
     let conclusion =
-      EBinOp
-        ( VExpression (EBinOp (VSymbol "α", "+", VNumber Z.one)),
-          "=",
-          VNumber (Z.of_int 2)
-        )
+      EBinOp (EBinOp (ESymbol "α", "+", ENum Z.one), "=", ENum (Z.of_int 2))
     in
 
     Solver.implies premises conclusion >>= fun result ->
@@ -116,11 +112,11 @@ module PropertyElaborationSoundness = struct
     let open Lwt.Infix in
     (* Strengthening: adding constraints to P is always sound *)
     (* If a write occurs under P, it also occurs under P ∧ P' *)
-    let p_original = [ EBinOp (VSymbol "x", ">", VNumber Z.zero) ] in
+    let p_original = [ EBinOp (ESymbol "x", ">", ENum Z.zero) ] in
     let p_strengthened =
       [
-        EBinOp (VSymbol "x", ">", VNumber Z.zero);
-        EBinOp (VSymbol "x", "<", VNumber (Z.of_int 100));
+        EBinOp (ESymbol "x", ">", ENum Z.zero);
+        EBinOp (ESymbol "x", "<", ENum (Z.of_int 100));
       ]
     in
 
@@ -140,8 +136,8 @@ module PropertyElaborationSoundness = struct
   let test_weakening_soundness () =
     let open Lwt.Infix in
     (* Weakening: if Ω ⟹ P, then removing P is sound *)
-    let omega = [ EBinOp (VSymbol "x", ">=", VNumber Z.zero) ] in
-    let p = [ EBinOp (VSymbol "x", ">=", VNumber Z.zero) ] in
+    let omega = [ EBinOp (ESymbol "x", ">=", ENum Z.zero) ] in
+    let p = [ EBinOp (ESymbol "x", ">=", ENum Z.zero) ] in
 
     (* Ω should imply P *)
     let implication =
@@ -157,8 +153,8 @@ module PropertyElaborationSoundness = struct
     let open Lwt.Infix in
     (* Lifting: if two writes are equivalent under complementary predicates,
        they can be merged *)
-    let p1 = [ EBinOp (VSymbol "c", "=", VNumber Z.one) ] in
-    let p2 = [ EBinOp (VSymbol "c", "!=", VNumber Z.one) ] in
+    let p1 = [ EBinOp (ESymbol "c", "=", ENum Z.one) ] in
+    let p2 = [ EBinOp (ESymbol "c", "!=", ENum Z.one) ] in
 
     (* P1 ∨ P2 should be ⊤ *)
     let disjunction = EOr [ p1; p2 ] in
@@ -214,15 +210,15 @@ end
 module PropertySemanticEquality = struct
   let test_semantic_equality_is_reflexive () =
     let open Lwt.Infix in
-    let expr = EBinOp (VSymbol "x", "+", VNumber Z.one) in
+    let expr = EBinOp (ESymbol "x", "+", ENum Z.one) in
       Solver.exeq expr expr >>= fun result ->
       check bool "exeq_reflexive" true result;
       Lwt.return_unit
 
   let test_semantic_equality_is_symmetric () =
     let open Lwt.Infix in
-    let e1 = EBinOp (VSymbol "x", "+", VNumber Z.one) in
-    let e2 = EBinOp (VNumber Z.one, "+", VSymbol "x") in
+    let e1 = EBinOp (ESymbol "x", "+", ENum Z.one) in
+    let e2 = EBinOp (ENum Z.one, "+", ESymbol "x") in
 
     Solver.exeq e1 e2 >>= fun r1 ->
     Solver.exeq e2 e1 >>= fun r2 ->
@@ -231,9 +227,9 @@ module PropertySemanticEquality = struct
 
   let test_semantic_equality_is_transitive () =
     let open Lwt.Infix in
-    let e1 = EBinOp (VSymbol "x", "+", VNumber Z.zero) in
+    let e1 = EBinOp (ESymbol "x", "+", ENum Z.zero) in
     let e2 = EVar "x" in
-    let e3 = EBinOp (VNumber Z.zero, "+", VSymbol "x") in
+    let e3 = EBinOp (ENum Z.zero, "+", ESymbol "x") in
 
     (* e1 ≡ e2 and e2 ≡ e3 should imply e1 ≡ e3 *)
     Solver.exeq e1 e2 >>= fun r12 ->
@@ -261,7 +257,7 @@ module PropertyJustificationMonotonicity = struct
   let test_initial_justifications_are_strongest () =
     (* J₀ ⊆ J₁ ⊆ J₂ ⊆ ... ⊆ J *)
     (* Initial justifications capture all syntactic dependencies *)
-    let e = { (make_event Write 1) with wval = Some (VSymbol "α") } in
+    let e = { (make_event Write 1) with wval = Some (ESymbol "α") } in
 
     let j0 =
       {
@@ -285,11 +281,11 @@ module PropertyJustificationMonotonicity = struct
        - Records transformations in δ *)
     let j_before =
       {
-        p = [ EBinOp (VSymbol "c", "=", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "c", "=", ENum Z.one) ];
         d = of_list [ "x"; "y" ];
         fwd = create ();
         we = create ();
-        w = { (make_event Write 1) with wval = Some (VNumber Z.zero) };
+        w = { (make_event Write 1) with wval = Some (ENum Z.zero) };
         op = ("before", None, None);
       }
     in
@@ -301,7 +297,7 @@ module PropertyJustificationMonotonicity = struct
         d = of_list [ "x"; "y" ];
         fwd = create ();
         we = create ();
-        w = { (make_event Write 1) with wval = Some (VNumber Z.zero) };
+        w = { (make_event Write 1) with wval = Some (ENum Z.zero) };
         op = ("weakened", None, None);
       }
     in

@@ -197,25 +197,25 @@ let test_expr_types () =
     | _ -> Alcotest.fail "Expected EVar"
 
 let test_expr_binop () =
-  let left = VNumber (Z.of_int 5) in
-  let right = VNumber (Z.of_int 3) in
+  let left = ENum (Z.of_int 5) in
+  let right = ENum (Z.of_int 3) in
   let expr = EBinOp (left, "+", right) in
     match expr with
     | EBinOp (l, op, r) -> (
         Alcotest.(check string) "operator is +" "+" op;
         ( match l with
-        | VNumber z ->
+        | ENum z ->
             Alcotest.(check bool)
               "left operand is 5" true
               (Z.equal z (Z.of_int 5))
-        | _ -> Alcotest.fail "Expected VNumber for left operand"
+        | _ -> Alcotest.fail "Expected ENum for left operand"
         );
         match r with
-        | VNumber z ->
+        | ENum z ->
             Alcotest.(check bool)
               "right operand is 3" true
               (Z.equal z (Z.of_int 3))
-        | _ -> Alcotest.fail "Expected VNumber for right operand"
+        | _ -> Alcotest.fail "Expected ENum for right operand"
       )
     | _ -> Alcotest.fail "Expected EBinOp"
 

@@ -5,6 +5,7 @@ open Types
 open Uset
 open Alcotest
 open Lwt.Syntax
+open Expr
 
 module TestUtils = struct
   let make_symbol name = VSymbol name
@@ -37,16 +38,8 @@ module TestExample9_1 = struct
           {
             (make_event Write 2) with
             id = Some (make_var "y");
-            wval =
-              Some
-                (VExpression
-                   (EBinOp
-                      ( VNumber Z.one,
-                        "/",
-                        VExpression (EUnOp ("!", VSymbol "r1"))
-                      )
-                   )
-                );
+            loc = Some (Expr.of_value (make_var "y"));
+            wval = Some (EBinOp (ENum Z.one, "/", EUnOp ("!", ESymbol "r1")));
             wmod = Relaxed;
           };
         op = ("initial_write_y", None, None);
@@ -63,7 +56,8 @@ module TestExample9_1 = struct
           {
             (make_event Write 3) with
             id = Some (make_var "z");
-            wval = Some (VSymbol "r1");
+            loc = Some (Expr.of_value (make_var "z"));
+            wval = Some (ESymbol "r1");
             wmod = Relaxed;
           };
         op = ("initial_write_z", None, None);
@@ -82,7 +76,8 @@ module TestExample9_1 = struct
           {
             (make_event Write 2) with
             id = Some (make_var "y");
-            wval = Some (VNumber Z.one);
+            loc = Some (Expr.of_value (make_var "y"));
+            wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
         op = ("optimized_write_y", None, None);
@@ -99,7 +94,8 @@ module TestExample9_1 = struct
           {
             (make_event Write 3) with
             id = Some (make_var "z");
-            wval = Some (VNumber Z.zero);
+            loc = Some (Expr.of_value (make_var "z"));
+            wval = Some (ENum Z.zero);
             wmod = Relaxed;
           };
         op = ("optimized_write_z", None, None);
@@ -131,8 +127,8 @@ module TestExample10_1 = struct
         w =
           {
             (make_event Write 5) with
-            id = Some (VExpression (EBinOp (VSymbol "rp", "+", VSymbol "r1")));
-            wval = Some (VNumber Z.zero);
+            loc = Some (EBinOp (ESymbol "rp", "+", ESymbol "r1"));
+            wval = Some (ENum Z.zero);
             wmod = Relaxed;
           };
         op = ("write_via_pointer", None, None);
@@ -149,6 +145,7 @@ module TestExample10_1 = struct
           {
             (make_event Read 6) with
             id = Some (VSymbol "rp");
+            loc = Some (ESymbol "rp");
             rval = Some (VSymbol "r2");
             rmod = Relaxed;
           };
@@ -164,7 +161,7 @@ module TestExample10_1 = struct
     (* With strengthening r1 ≠ 0, we know no aliasing *)
     let e7_write_strengthened =
       {
-        p = [ EBinOp (VSymbol "r1", "≠", VNumber Z.zero) ];
+        p = [ EBinOp (ESymbol "r1", "≠", ENum Z.zero) ];
         d = of_list [ "r1" ];
         (* Still depends on r1 for address *)
         fwd = create ();
@@ -172,8 +169,8 @@ module TestExample10_1 = struct
         w =
           {
             (make_event Write 7) with
-            id = Some (VExpression (EBinOp (VSymbol "rp", "+", VSymbol "r1")));
-            wval = Some (VNumber Z.zero);
+            loc = Some (EBinOp (ESymbol "rp", "+", ESymbol "r1"));
+            wval = Some (ENum Z.zero);
             wmod = Relaxed;
           };
         op = ("write_no_alias", None, None);
@@ -196,7 +193,7 @@ module TestExample12_1 = struct
     (* After forwarding r1 -> r2, this becomes Example 5.1 *)
     let e4_initial =
       {
-        p = [ EBinOp (VSymbol "r1", "=", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
         d = of_list [ "r2" ];
         fwd = create ();
         we = create ();
@@ -204,7 +201,8 @@ module TestExample12_1 = struct
           {
             (make_event Write 4) with
             id = Some (make_var "y");
-            wval = Some (VSymbol "r2");
+            loc = Some (Expr.of_value (make_var "y"));
+            wval = Some (ESymbol "r2");
             wmod = Relaxed;
           };
         op = ("initial_cond_write", None, None);
@@ -213,7 +211,7 @@ module TestExample12_1 = struct
 
     let e4_forwarded =
       {
-        p = [ EBinOp (VSymbol "r1", "=", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
         d = of_list [ "r1" ];
         (* Now depends on r1 *)
         fwd = of_list [ (1, 2) ];
@@ -223,7 +221,8 @@ module TestExample12_1 = struct
           {
             (make_event Write 4) with
             id = Some (make_var "y");
-            wval = Some (VSymbol "r1");
+            loc = Some (Expr.of_value (make_var "y"));
+            wval = Some (ESymbol "r1");
             wmod = Relaxed;
           };
         op = ("forwarded_cond_write", None, None);
@@ -256,7 +255,7 @@ module TestExample13_1 = struct
     (* Both branches read w and write to z *)
     let e4_true =
       {
-        p = [ EBinOp (VSymbol "r1", "=", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
         d = of_list [ "rw1" ];
         (* Read w in true branch *)
         fwd = create ();
@@ -265,7 +264,8 @@ module TestExample13_1 = struct
           {
             (make_event Write 4) with
             id = Some (make_var "z");
-            wval = Some (VSymbol "rw1");
+            loc = Some (Expr.of_value (make_var "z"));
+            wval = Some (ESymbol "rw1");
             wmod = Relaxed;
           };
         op = ("true_branch_write", None, None);
@@ -274,7 +274,7 @@ module TestExample13_1 = struct
 
     let e7_false =
       {
-        p = [ EBinOp (VSymbol "r1", "≠", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "r1", "≠", ENum Z.one) ];
         d = of_list [ "rw2" ];
         (* Read w in false branch *)
         fwd = create ();
@@ -283,7 +283,8 @@ module TestExample13_1 = struct
           {
             (make_event Write 7) with
             id = Some (make_var "z");
-            wval = Some (VSymbol "rw2");
+            loc = Some (Expr.of_value (make_var "z"));
+            wval = Some (ESymbol "rw2");
             wmod = Relaxed;
           };
         op = ("false_branch_write", None, None);
@@ -303,7 +304,8 @@ module TestExample13_1 = struct
           {
             (make_event Write 4) with
             id = Some (make_var "z");
-            wval = Some (VSymbol "rw1");
+            loc = Some (Expr.of_value (make_var "z"));
+            wval = Some (ESymbol "rw1");
             wmod = Relaxed;
           };
         op = ("lifted_write", None, None);
@@ -338,8 +340,8 @@ module TestStoreStoreForwarding = struct
       {
         p =
           [
-            EBinOp (VSymbol "r1", "=", VNumber Z.one);
-            EBinOp (VSymbol "r2", "=", VNumber Z.zero);
+            EBinOp (ESymbol "r1", "=", ENum Z.one);
+            EBinOp (ESymbol "r2", "=", ENum Z.zero);
           ];
         d = create ();
         fwd = create ();
@@ -348,7 +350,8 @@ module TestStoreStoreForwarding = struct
           {
             (make_event Write 6) with
             id = Some (make_var "y");
-            wval = Some (VNumber Z.one);
+            loc = Some (Expr.of_value (make_var "y"));
+            wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
         op = ("true_branch", None, None);
@@ -360,8 +363,8 @@ module TestStoreStoreForwarding = struct
       {
         p =
           [
-            EBinOp (VSymbol "r1", "=", VNumber Z.one);
-            EBinOp (VSymbol "r2", "=", VNumber Z.zero);
+            EBinOp (ESymbol "r1", "=", ENum Z.one);
+            EBinOp (ESymbol "r2", "=", ENum Z.zero);
           ];
         d = create ();
         fwd = create ();
@@ -371,7 +374,8 @@ module TestStoreStoreForwarding = struct
           {
             (make_event Write 6) with
             id = Some (make_var "y");
-            wval = Some (VNumber Z.one);
+            loc = Some (Expr.of_value (make_var "y"));
+            wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
         op = ("store_forwarded", None, None);
@@ -390,9 +394,7 @@ module TestElaborationSequences = struct
     let open Lwt.Infix in
     (* Initial: y = 1/!α with dependency on α *)
     (* Step 1: Strengthen with !α ≠ 0 *)
-    let after_str =
-      [ EUnOp ("!", VExpression (EBinOp (VSymbol "α", "!=", VNumber Z.zero))) ]
-    in
+    let after_str = [ EUnOp ("!", EBinOp (ESymbol "α", "!=", ENum Z.zero)) ] in
 
     (* Step 2: Value assign α=0 from predicate *)
     (* Now: y = 1/!0 = 1/1 = 1 *)
@@ -400,7 +402,7 @@ module TestElaborationSequences = struct
     (* Step 3: Weaken using Ω ⟹ !α ≠ 0 *)
     (* Result: no dependencies *)
     let constraints_after_str =
-      [ EUnOp ("!", VExpression (EBinOp (VSymbol "α", "!=", VNumber Z.zero))) ]
+      [ EUnOp ("!", EBinOp (ESymbol "α", "!=", ENum Z.zero)) ]
     in
 
     Solver.is_sat constraints_after_str >>= fun sat_result ->
@@ -413,7 +415,7 @@ module TestElaborationSequences = struct
 
     let e3_after_fwd =
       {
-        p = [ EBinOp (VSymbol "r1", "=", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
         d = of_list [ "r1" ];
         fwd = fwd_edges;
         we = create ();
@@ -421,7 +423,8 @@ module TestElaborationSequences = struct
           {
             (make_event Write 3) with
             id = Some (make_var "y");
-            wval = Some (VSymbol "r1");
+            loc = Some (Expr.of_value (make_var "y"));
+            wval = Some (ESymbol "r1");
             wmod = Relaxed;
           };
         op = ("after_fwd", None, None);
@@ -430,7 +433,7 @@ module TestElaborationSequences = struct
 
     let e5_after_fwd =
       {
-        p = [ EBinOp (VSymbol "r1", "≠", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "r1", "≠", ENum Z.one) ];
         d = create ();
         fwd = fwd_edges;
         we = create ();
@@ -438,7 +441,8 @@ module TestElaborationSequences = struct
           {
             (make_event Write 5) with
             id = Some (make_var "y");
-            wval = Some (VNumber Z.one);
+            loc = Some (Expr.of_value (make_var "y"));
+            wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
         op = ("after_fwd_else", None, None);
@@ -457,7 +461,8 @@ module TestElaborationSequences = struct
           {
             (make_event Write 3) with
             id = Some (make_var "y");
-            wval = Some (VNumber Z.one);
+            loc = Some (Expr.of_value (make_var "y"));
+            wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
         op = ("after_lift", None, None);
@@ -530,7 +535,7 @@ module TestDependencyCalculation = struct
     let e3 =
       {
         (make_event Write 3) with
-        wval = Some (VExpression (EBinOp (VSymbol "α", "+", VSymbol "β")));
+        wval = Some (EBinOp (ESymbol "α", "+", ESymbol "β"));
       }
     in
 
@@ -558,16 +563,14 @@ module TestDependencyCalculation = struct
     let e2 =
       {
         (make_event Branch 2) with
-        cond = Some (VExpression (EBinOp (VSymbol "α", "=", VNumber Z.one)));
+        cond = Some (EBinOp (ESymbol "α", "=", ENum Z.one));
       }
     in
-    let e3 =
-      { (make_event Write 3) with wval = Some (VNumber (Z.of_int 42)) }
-    in
+    let e3 = { (make_event Write 3) with wval = Some (ENum (Z.of_int 42)) } in
 
     let just =
       {
-        p = [ EBinOp (VSymbol "α", "=", VNumber Z.one) ];
+        p = [ EBinOp (ESymbol "α", "=", ENum Z.one) ];
         d = create ();
         fwd = create ();
         we = create ();

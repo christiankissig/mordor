@@ -1,8 +1,9 @@
 (** solver.ml - Constraint solver using Z3 *)
 
-open Types
 open Expr
 open Lwt.Syntax
+open Printf
+open Types
 
 (** Solver context *)
 type context = {
@@ -31,7 +32,6 @@ let get_var context name =
 let rec value_to_z3 context = function
   | VNumber n -> Z3.Arithmetic.Integer.mk_numeral_s context.ctx (Z.to_string n)
   | VSymbol s | VVar s -> get_var context s
-  | VExpression e -> expr_to_z3 context e
   | VBoolean b ->
       if b then Z3.Boolean.mk_true context.ctx
       else Z3.Boolean.mk_false context.ctx
@@ -40,9 +40,13 @@ let rec value_to_z3 context = function
 and expr_to_z3 context = function
   | ENum n -> Z3.Arithmetic.Integer.mk_numeral_s context.ctx (Z.to_string n)
   | EVar v -> get_var context v
+  | EBoolean b ->
+      if b then Z3.Boolean.mk_true context.ctx
+      else Z3.Boolean.mk_false context.ctx
+  | ESymbol s -> get_var context s (* TODO this should fail *)
   | EBinOp (lhs, op, rhs) -> (
-      let l = value_to_z3 context lhs in
-      let r = value_to_z3 context rhs in
+      let l = expr_to_z3 context lhs in
+      let r = expr_to_z3 context rhs in
         match op with
         | "=" -> Z3.Boolean.mk_eq context.ctx l r
         | "!=" ->
@@ -61,13 +65,12 @@ and expr_to_z3 context = function
         | _ -> failwith ("Unsupported operator: " ^ op)
     )
   | EUnOp ("!", rhs) ->
-      let r = value_to_z3 context rhs in
+      let r = expr_to_z3 context rhs in
         Z3.Boolean.mk_not context.ctx r
   | EUnOp ("~", rhs) ->
-      let r = value_to_z3 context rhs in
-        (* Bitwise not - simplified to arithmetic negation *)
+      let r = expr_to_z3 context rhs in
         Z3.Arithmetic.mk_unary_minus context.ctx r
-  | EUnOp (op, _) -> failwith ("Unsupported unary operator: " ^ op)
+  | EUnOp (op, _) -> failwith (sprintf "Unsupported unary operator %s" op)
   | EOr clauses ->
       let clause_exprs =
         List.map
@@ -90,19 +93,31 @@ let create exprs =
   let context = create_context () in
     { context; expressions = exprs }
 
+(* TODO duplicate with is_tautology *)
+(* TODO recursive evaluation over boolean expressions? *)
+
 (** Evaluate constant expression if possible *)
 let try_eval_constant = function
-  | EBinOp (VNumber a, "=", VNumber b) -> Some (Z.equal a b)
-  | EBinOp (VNumber a, "!=", VNumber b) -> Some (not (Z.equal a b))
-  | EBinOp (VNumber a, "<", VNumber b) -> Some (Z.lt a b)
-  | EBinOp (VNumber a, ">", VNumber b) -> Some (Z.gt a b)
-  | EBinOp (VNumber a, "<=", VNumber b) -> Some (Z.leq a b)
-  | EBinOp (VNumber a, ">=", VNumber b) -> Some (Z.geq a b)
+  | EBinOp (ENum a, "=", ENum b) -> Some (Z.equal a b)
+  | EBinOp (ENum a, "!=", ENum b) -> Some (not (Z.equal a b))
+  | EBinOp (ENum a, "<", ENum b) -> Some (Z.lt a b)
+  | EBinOp (ENum a, ">", ENum b) -> Some (Z.gt a b)
+  | EBinOp (ENum a, "<=", ENum b) -> Some (Z.leq a b)
+  | EBinOp (ENum a, ">=", ENum b) -> Some (Z.geq a b)
   | _ -> None
 
 (** Check satisfiability *)
 let check solver =
+  (* force into monadic context *)
   let* _ = Lwt.return_unit in
+
+  Printf.printf "Checking satisfiability of %d expressions...\n"
+    (List.length solver.expressions);
+  Printf.printf "Expressions:\n";
+  List.iter
+    (fun expr -> Printf.printf "  %s\n" (Expr.to_string expr))
+    solver.expressions;
+  flush stdout;
 
   (* Quick checks for contradictions and tautologies *)
   let has_contradiction =
@@ -124,6 +139,9 @@ let check solver =
           )
           solver.expressions
       in
+
+      Printf.printf "All constant expressions evaluate to true: %b\n"
+        all_constant_true;
 
       if not all_constant_true then Lwt.return_some false
       else
@@ -235,7 +253,7 @@ let solve_with_ranges solver =
             | Some (VNumber n) ->
                 (* Try to determine if this is the only possible value *)
                 (* by checking if symbol != n is unsatisfiable *)
-                let test_expr = Expr.binop (VVar symbol) "!=" (VNumber n) in
+                let test_expr = Expr.binop (EVar symbol) "!=" (ENum n) in
                 let test_solver = create (test_expr :: solver.expressions) in
                   (* For now, just return the single value as range *)
                   Hashtbl.add ranges symbol [ (n, n) ]
@@ -362,7 +380,7 @@ let exeq ?(state = []) a b =
   if Expr.equal a b then Lwt.return_true
   else
     (* Check if a != b is unsatisfiable, meaning a = b is always true *)
-    let neq_expr = Expr.binop (VExpression a) "!=" (VExpression b) in
+    let neq_expr = Expr.binop a "!=" b in
     let solver = create (neq_expr :: state) in
       let* result = check solver in
         match result with
@@ -375,7 +393,7 @@ let expoteq ?(state = []) a b =
   if Expr.equal a b then Lwt.return_true
   else
     (* Check if a = b is satisfiable *)
-    let eq_expr = Expr.binop (VExpression a) "=" (VExpression b) in
+    let eq_expr = Expr.binop a "=" b in
     let solver = create (eq_expr :: state) in
       let* result = check solver in
         match result with
@@ -400,27 +418,17 @@ module Semeq = struct
   (** Check potential equality with current state *)
   let expoteq state a b = expoteq ~state:state.context a b
 
-  (** Check equality of values *)
-  let exeq_value state v1 v2 =
-    match (v1, v2) with
-    | VExpression e1, VExpression e2 -> exeq state e1 e2
-    | _ -> Lwt.return (Value.equal v1 v2)
-
   (** Check potential equality of values *)
-  let expoteq_value state v1 v2 =
+  let expoteq_value state (v1 : value_type) (v2 : value_type) =
     if Value.equal v1 v2 then Lwt.return true
     else
-      match (v1, v2) with
-      | VExpression e1, VExpression e2 -> expoteq state e1 e2
-      | _ -> (
-          (* For any two values, check if they could be equal by solving v1 = v2 *)
-          let eq_expr = Expr.binop v1 "=" v2 in
-          let solver = create (eq_expr :: state.context) in
-            let* result = check solver in
-              match result with
-              | Some true -> Lwt.return true
-              | _ -> Lwt.return false
-        )
+      (* For any two values, check if they could be equal by solving v1 = v2 *)
+      let eq_expr = Expr.binop (Expr.of_value v1) "=" (Expr.of_value v2) in
+      let solver = create (eq_expr :: state.context) in
+        let* result = check solver in
+          match result with
+          | Some true -> Lwt.return true
+          | _ -> Lwt.return false
 end
 
 (** Cache for semantic equality results *)

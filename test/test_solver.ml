@@ -61,7 +61,7 @@ let test_expr_to_z3_var () =
 (** Test expression to Z3 - addition *)
 let test_expr_to_z3_add () =
   let ctx = create_context () in
-  let expr = EBinOp (VNumber (Z.of_int 5), "+", VNumber (Z.of_int 3)) in
+  let expr = EBinOp (ENum (Z.of_int 5), "+", ENum (Z.of_int 3)) in
   let z3_expr = expr_to_z3 ctx expr in
   let str = Z3.Expr.to_string z3_expr in
     Alcotest.(check bool) "addition expr created" true (String.length str > 0)
@@ -69,17 +69,17 @@ let test_expr_to_z3_add () =
 (** Test expression to Z3 - equality *)
 let test_expr_to_z3_eq () =
   let ctx = create_context () in
-  let expr = EBinOp (VVar "x", "=", VNumber (Z.of_int 10)) in
+  let expr = EBinOp (EVar "x", "=", ENum (Z.of_int 10)) in
   let z3_expr = expr_to_z3 ctx expr in
     Alcotest.(check bool) "equality expr created" true (Z3.Boolean.is_eq z3_expr)
 
 (** Test expression to Z3 - comparison operators *)
 let test_expr_to_z3_comparison () =
   let ctx = create_context () in
-  let expr_lt = EBinOp (VVar "x", "<", VNumber (Z.of_int 5)) in
-  let expr_gt = EBinOp (VVar "x", ">", VNumber (Z.of_int 5)) in
-  let expr_le = EBinOp (VVar "x", "<=", VNumber (Z.of_int 5)) in
-  let expr_ge = EBinOp (VVar "x", ">=", VNumber (Z.of_int 5)) in
+  let expr_lt = EBinOp (EVar "x", "<", ENum (Z.of_int 5)) in
+  let expr_gt = EBinOp (EVar "x", ">", ENum (Z.of_int 5)) in
+  let expr_le = EBinOp (EVar "x", "<=", ENum (Z.of_int 5)) in
+  let expr_ge = EBinOp (EVar "x", ">=", ENum (Z.of_int 5)) in
   let _ = expr_to_z3 ctx expr_lt in
   let _ = expr_to_z3 ctx expr_gt in
   let _ = expr_to_z3 ctx expr_le in
@@ -89,9 +89,9 @@ let test_expr_to_z3_comparison () =
 (** Test expression to Z3 - logical operators *)
 let test_expr_to_z3_logical () =
   let ctx = create_context () in
-  let expr_and = EBinOp (VBoolean true, "&&", VBoolean false) in
-  let expr_or = EBinOp (VBoolean true, "||", VBoolean false) in
-  let expr_impl = EBinOp (VBoolean true, "=>", VBoolean false) in
+  let expr_and = EBinOp (EBoolean true, "&&", EBoolean false) in
+  let expr_or = EBinOp (EBoolean true, "||", EBoolean false) in
+  let expr_impl = EBinOp (EBoolean true, "=>", EBoolean false) in
   let _ = expr_to_z3 ctx expr_and in
   let _ = expr_to_z3 ctx expr_or in
   let _ = expr_to_z3 ctx expr_impl in
@@ -100,13 +100,13 @@ let test_expr_to_z3_logical () =
 (** Test expression to Z3 - unary not *)
 let test_expr_to_z3_not () =
   let ctx = create_context () in
-  let expr = EUnOp ("!", VBoolean true) in
+  let expr = EUnOp ("!", EBoolean true) in
   let z3_expr = expr_to_z3 ctx expr in
     Alcotest.(check bool) "not expr created" true (Z3.Boolean.is_not z3_expr)
 
 (** Test solver creation *)
 let test_create_solver () =
-  let expr = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
+  let expr = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
   let solver = create [ expr ] in
     Alcotest.(check int)
       "solver has one expression" 1
@@ -115,8 +115,9 @@ let test_create_solver () =
 (** Test satisfiable constraint *)
 let test_check_satisfiable () =
   run_lwt (fun () ->
-      let expr = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
+      let expr = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
       let solver = create [ expr ] in
+        Printf.printf "Running test_check_satisfiable...\n";
         let* result = check solver in
           match result with
           | Some true ->
@@ -130,8 +131,8 @@ let test_check_satisfiable () =
 (** Test unsatisfiable constraint *)
 let test_check_unsatisfiable () =
   run_lwt (fun () ->
-      let expr1 = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
-      let expr2 = EBinOp (VVar "x", "=", VNumber (Z.of_int 10)) in
+      let expr1 = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
+      let expr2 = EBinOp (EVar "x", "=", ENum (Z.of_int 10)) in
       let solver = create [ expr1; expr2 ] in
         let* result = check solver in
           match result with
@@ -146,7 +147,7 @@ let test_check_unsatisfiable () =
 (** Test solving simple constraint *)
 let test_solve_simple () =
   run_lwt (fun () ->
-      let expr = EBinOp (VVar "x", "=", VNumber (Z.of_int 42)) in
+      let expr = EBinOp (EVar "x", "=", ENum (Z.of_int 42)) in
       let solver = create [ expr ] in
         let* result = solve solver in
           match result with
@@ -166,9 +167,9 @@ let test_solve_simple () =
 (** Test solving with arithmetic *)
 let test_solve_arithmetic () =
   run_lwt (fun () ->
-      let expr1 = EBinOp (VVar "x", "+", VVar "y") in
-      let expr2 = EBinOp (VExpression expr1, "=", VNumber (Z.of_int 10)) in
-      let expr3 = EBinOp (VVar "x", "=", VNumber (Z.of_int 3)) in
+      let expr1 = EBinOp (EVar "x", "+", EVar "y") in
+      let expr2 = EBinOp (expr1, "=", ENum (Z.of_int 10)) in
+      let expr3 = EBinOp (EVar "x", "=", ENum (Z.of_int 3)) in
       let solver = create [ expr2; expr3 ] in
         let* result = solve solver in
           match result with
@@ -191,8 +192,8 @@ let test_solve_arithmetic () =
 (** Test solving inequality *)
 let test_solve_inequality () =
   run_lwt (fun () ->
-      let expr1 = EBinOp (VVar "x", ">", VNumber (Z.of_int 5)) in
-      let expr2 = EBinOp (VVar "x", "<", VNumber (Z.of_int 10)) in
+      let expr1 = EBinOp (EVar "x", ">", ENum (Z.of_int 5)) in
+      let expr2 = EBinOp (EVar "x", "<", ENum (Z.of_int 10)) in
       let solver = create [ expr1; expr2 ] in
         let* result = solve solver in
           match result with
@@ -255,8 +256,8 @@ let test_simplify_disjunction_filter () =
 (** Test exeq - identical expressions *)
 let test_exeq_identical () =
   run_lwt (fun () ->
-      let expr1 = EBinOp (VVar "x", "+", VNumber (Z.of_int 5)) in
-      let expr2 = EBinOp (VVar "x", "+", VNumber (Z.of_int 5)) in
+      let expr1 = EBinOp (EVar "x", "+", ENum (Z.of_int 5)) in
+      let expr2 = EBinOp (EVar "x", "+", ENum (Z.of_int 5)) in
         let* result = exeq expr1 expr2 in
           Lwt.return
             (Alcotest.(check bool) "identical expressions are equal" true result)
@@ -266,8 +267,8 @@ let test_exeq_identical () =
 let test_exeq_semantic () =
   run_lwt (fun () ->
       (* x = 5 and 5 = x should be semantically equal *)
-      let expr1 = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
-      let expr2 = EBinOp (VNumber (Z.of_int 5), "=", VVar "x") in
+      let expr1 = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
+      let expr2 = EBinOp (ENum (Z.of_int 5), "=", EVar "x") in
         let* result = exeq expr1 expr2 in
           Lwt.return
             (Alcotest.(check bool) "x = 5 and 5 = x are equal" true result)
@@ -276,8 +277,8 @@ let test_exeq_semantic () =
 (** Test exeq - not semantically equal *)
 let test_exeq_not_equal () =
   run_lwt (fun () ->
-      let expr1 = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
-      let expr2 = EBinOp (VVar "x", "=", VNumber (Z.of_int 10)) in
+      let expr1 = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
+      let expr2 = EBinOp (EVar "x", "=", ENum (Z.of_int 10)) in
         let* result = exeq expr1 expr2 in
           Lwt.return
             (Alcotest.(check bool) "x = 5 and x = 10 are not equal" false result)
@@ -287,7 +288,7 @@ let test_exeq_not_equal () =
 let test_exeq_with_state () =
   run_lwt (fun () ->
       (* Given x = 5, then x and 5 are semantically equal *)
-      let state = [ EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) ] in
+      let state = [ EBinOp (EVar "x", "=", ENum (Z.of_int 5)) ] in
       let expr1 = EVar "x" in
       let expr2 = ENum (Z.of_int 5) in
         let* result = exeq ~state expr1 expr2 in
@@ -300,8 +301,8 @@ let test_exeq_contradictory_state () =
       (* Given x = 5 and x = 10 (contradiction), any two expressions are "equal" *)
       let state =
         [
-          EBinOp (VVar "x", "=", VNumber (Z.of_int 5));
-          EBinOp (VVar "x", "=", VNumber (Z.of_int 10));
+          EBinOp (EVar "x", "=", ENum (Z.of_int 5));
+          EBinOp (EVar "x", "=", ENum (Z.of_int 10));
         ]
       in
       let expr1 = ENum (Z.of_int 1) in
@@ -317,8 +318,8 @@ let test_exeq_contradictory_state () =
 (** Test expoteq - identical expressions *)
 let test_expoteq_identical () =
   run_lwt (fun () ->
-      let expr1 = EBinOp (VVar "x", "+", VNumber (Z.of_int 5)) in
-      let expr2 = EBinOp (VVar "x", "+", VNumber (Z.of_int 5)) in
+      let expr1 = EBinOp (EVar "x", "+", ENum (Z.of_int 5)) in
+      let expr2 = EBinOp (EVar "x", "+", ENum (Z.of_int 5)) in
         let* result = expoteq expr1 expr2 in
           Lwt.return
             (Alcotest.(check bool)
@@ -351,7 +352,7 @@ let test_expoteq_impossible () =
 let test_expoteq_with_state () =
   run_lwt (fun () ->
       (* Given x > 10, can x = 5? No *)
-      let state = [ EBinOp (VVar "x", ">", VNumber (Z.of_int 10)) ] in
+      let state = [ EBinOp (EVar "x", ">", ENum (Z.of_int 10)) ] in
       let expr1 = EVar "x" in
       let expr2 = ENum (Z.of_int 5) in
         let* result = expoteq ~state expr1 expr2 in
@@ -363,7 +364,7 @@ let test_expoteq_with_state () =
 let test_expoteq_satisfiable_with_state () =
   run_lwt (fun () ->
       (* Given x > 5, can x = 10? Yes *)
-      let state = [ EBinOp (VVar "x", ">", VNumber (Z.of_int 5)) ] in
+      let state = [ EBinOp (EVar "x", ">", ENum (Z.of_int 5)) ] in
       let expr1 = EVar "x" in
       let expr2 = ENum (Z.of_int 10) in
         let* result = expoteq ~state expr1 expr2 in
@@ -379,7 +380,7 @@ let test_semeq_create_state () =
 (** Test Semeq module - set state *)
 let test_semeq_set_state () =
   let state = Semeq.create_state () in
-  let constraints = [ EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) ] in
+  let constraints = [ EBinOp (EVar "x", "=", ENum (Z.of_int 5)) ] in
     Semeq.set_state state constraints;
     Alcotest.(check int) "state has one constraint" 1 (List.length state.context)
 
@@ -387,7 +388,7 @@ let test_semeq_set_state () =
 let test_semeq_exeq () =
   run_lwt (fun () ->
       let state = Semeq.create_state () in
-      let constraints = [ EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) ] in
+      let constraints = [ EBinOp (EVar "x", "=", ENum (Z.of_int 5)) ] in
         Semeq.set_state state constraints;
         let expr1 = EVar "x" in
         let expr2 = ENum (Z.of_int 5) in
@@ -400,7 +401,7 @@ let test_semeq_exeq () =
 let test_semeq_expoteq () =
   run_lwt (fun () ->
       let state = Semeq.create_state () in
-      let constraints = [ EBinOp (VVar "x", ">", VNumber (Z.of_int 5)) ] in
+      let constraints = [ EBinOp (EVar "x", ">", ENum (Z.of_int 5)) ] in
         Semeq.set_state state constraints;
         let expr1 = EVar "x" in
         let expr2 = ENum (Z.of_int 10) in
@@ -413,9 +414,9 @@ let test_semeq_expoteq () =
 let test_semeq_exeq_value_numbers () =
   run_lwt (fun () ->
       let state = Semeq.create_state () in
-      let v1 = VNumber (Z.of_int 5) in
-      let v2 = VNumber (Z.of_int 5) in
-        let* result = Semeq.exeq_value state v1 v2 in
+      let v1 = ENum (Z.of_int 5) in
+      let v2 = ENum (Z.of_int 5) in
+        let* result = Semeq.exeq state v1 v2 in
           Lwt.return (Alcotest.(check bool) "5 equals 5" true result)
   )
 
@@ -423,11 +424,9 @@ let test_semeq_exeq_value_numbers () =
 let test_semeq_exeq_value_expressions () =
   run_lwt (fun () ->
       let state = Semeq.create_state () in
-      let expr1 = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
-      let expr2 = EBinOp (VNumber (Z.of_int 5), "=", VVar "x") in
-      let v1 = VExpression expr1 in
-      let v2 = VExpression expr2 in
-        let* result = Semeq.exeq_value state v1 v2 in
+      let expr1 = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
+      let expr2 = EBinOp (ENum (Z.of_int 5), "=", EVar "x") in
+        let* result = Semeq.exeq state expr1 expr2 in
           Lwt.return
             (Alcotest.(check bool) "expression values equal" true result)
   )
@@ -453,8 +452,8 @@ let test_cache_create () =
 let test_cache_exeq_cached () =
   run_lwt (fun () ->
       let cache = SemeqCache.create () in
-      let expr1 = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
-      let expr2 = EBinOp (VNumber (Z.of_int 5), "=", VVar "x") in
+      let expr1 = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
+      let expr2 = EBinOp (ENum (Z.of_int 5), "=", EVar "x") in
         (* First call should compute *)
         let* result1 = SemeqCache.exeq_cached cache expr1 expr2 in
           Alcotest.(check int)
@@ -513,7 +512,7 @@ let test_cache_clear () =
 let test_cache_with_state () =
   run_lwt (fun () ->
       let cache = SemeqCache.create () in
-      let state = [ EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) ] in
+      let state = [ EBinOp (EVar "x", "=", ENum (Z.of_int 5)) ] in
       let expr1 = EVar "x" in
       let expr2 = ENum (Z.of_int 5) in
         let* result = SemeqCache.exeq_cached cache ~state expr1 expr2 in
@@ -525,8 +524,8 @@ let test_cache_with_state () =
 let test_implies_true () =
   run_lwt (fun () ->
       (* x = 5 implies x = 5 *)
-      let constraints = [ EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) ] in
-      let conclusion = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
+      let constraints = [ EBinOp (EVar "x", "=", ENum (Z.of_int 5)) ] in
+      let conclusion = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
         let* result = implies constraints conclusion in
           Lwt.return (Alcotest.(check bool) "x = 5 implies x = 5" true result)
   )
@@ -535,8 +534,8 @@ let test_implies_true () =
 let test_implies_derivation () =
   run_lwt (fun () ->
       (* x = 5 implies x < 10 *)
-      let constraints = [ EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) ] in
-      let conclusion = EBinOp (VVar "x", "<", VNumber (Z.of_int 10)) in
+      let constraints = [ EBinOp (EVar "x", "=", ENum (Z.of_int 5)) ] in
+      let conclusion = EBinOp (EVar "x", "<", ENum (Z.of_int 10)) in
         let* result = implies constraints conclusion in
           Lwt.return (Alcotest.(check bool) "x = 5 implies x < 10" true result)
   )
@@ -545,8 +544,8 @@ let test_implies_derivation () =
 let test_implies_false () =
   run_lwt (fun () ->
       (* x = 5 does not imply x = 10 *)
-      let constraints = [ EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) ] in
-      let conclusion = EBinOp (VVar "x", "=", VNumber (Z.of_int 10)) in
+      let constraints = [ EBinOp (EVar "x", "=", ENum (Z.of_int 5)) ] in
+      let conclusion = EBinOp (EVar "x", "=", ENum (Z.of_int 10)) in
         let* result = implies constraints conclusion in
           Lwt.return
             (Alcotest.(check bool) "x = 5 does not imply x = 10" false result)
@@ -555,7 +554,7 @@ let test_implies_false () =
 (** Test helper functions - is_sat *)
 let test_is_sat_true () =
   run_lwt (fun () ->
-      let exprs = [ EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) ] in
+      let exprs = [ EBinOp (EVar "x", "=", ENum (Z.of_int 5)) ] in
         let* result = is_sat exprs in
           Lwt.return (Alcotest.(check bool) "x = 5 is satisfiable" true result)
   )
@@ -565,8 +564,8 @@ let test_is_sat_false () =
   run_lwt (fun () ->
       let exprs =
         [
-          EBinOp (VVar "x", "=", VNumber (Z.of_int 5));
-          EBinOp (VVar "x", "=", VNumber (Z.of_int 10));
+          EBinOp (EVar "x", "=", ENum (Z.of_int 5));
+          EBinOp (EVar "x", "=", ENum (Z.of_int 10));
         ]
       in
         let* result = is_sat exprs in
@@ -581,8 +580,8 @@ let test_is_unsat_true () =
   run_lwt (fun () ->
       let exprs =
         [
-          EBinOp (VVar "x", "=", VNumber (Z.of_int 5));
-          EBinOp (VVar "x", "=", VNumber (Z.of_int 10));
+          EBinOp (EVar "x", "=", ENum (Z.of_int 5));
+          EBinOp (EVar "x", "=", ENum (Z.of_int 10));
         ]
       in
         let* result = is_unsat exprs in
@@ -595,7 +594,7 @@ let test_is_unsat_true () =
 (** Test helper functions - is_unsat false *)
 let test_is_unsat_false () =
   run_lwt (fun () ->
-      let exprs = [ EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) ] in
+      let exprs = [ EBinOp (EVar "x", "=", ENum (Z.of_int 5)) ] in
         let* result = is_unsat exprs in
           Lwt.return
             (Alcotest.(check bool) "x = 5 is not unsatisfiable" false result)
@@ -604,8 +603,8 @@ let test_is_unsat_false () =
 (** Test helper functions - solve_for_vars *)
 let test_solve_for_vars () =
   run_lwt (fun () ->
-      let expr1 = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
-      let expr2 = EBinOp (VVar "y", "=", VNumber (Z.of_int 10)) in
+      let expr1 = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
+      let expr2 = EBinOp (EVar "y", "=", ENum (Z.of_int 10)) in
       let solver = create [ expr1; expr2 ] in
         let* result = solve_for_vars solver [ "x"; "y" ] in
           match result with
@@ -638,11 +637,11 @@ let test_model_to_string () =
 (** Test push/pop *)
 let test_push_pop () =
   run_lwt (fun () ->
-      let expr1 = EBinOp (VVar "x", "=", VNumber (Z.of_int 5)) in
+      let expr1 = EBinOp (EVar "x", "=", ENum (Z.of_int 5)) in
       let solver = create [ expr1 ] in
         let* result1 = check solver in
         let _ = push solver in
-        let expr2 = EBinOp (VVar "x", "=", VNumber (Z.of_int 10)) in
+        let expr2 = EBinOp (EVar "x", "=", ENum (Z.of_int 10)) in
         let _ = add_assertions solver [ expr2 ] in
           let* result2 = check solver in
           let _ = pop solver in

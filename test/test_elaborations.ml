@@ -17,11 +17,12 @@ let create_mock_context () =
     {
       label = 0;
       id = Some (VNumber Z.zero);
+      loc = Some (ENum Z.zero);
       typ = Write;
       wval = None;
       wmod = Relaxed;
       volatile = false;
-      cond = Some (VExpression (EBinOp (VNumber Z.one, "=", VNumber Z.one)));
+      cond = Some (EBinOp (ENum Z.one, "=", ENum Z.one));
       van = 0;
       rval = None;
       rmod = Relaxed;
@@ -38,8 +39,9 @@ let create_mock_context () =
     {
       label = 1;
       id = Some (VNumber Z.zero);
+      loc = Some (ENum Z.zero);
       typ = Write;
-      wval = Some (VNumber Z.one);
+      wval = Some (ENum Z.one);
       wmod = Relaxed;
       volatile = false;
       cond = None;
@@ -59,6 +61,7 @@ let create_mock_context () =
     {
       label = 2;
       id = Some (VNumber Z.one);
+      loc = Some (ENum Z.one);
       typ = Read;
       wval = None;
       wmod = Relaxed;
@@ -80,8 +83,9 @@ let create_mock_context () =
     {
       label = 3;
       id = Some (VNumber Z.one);
+      loc = Some (ENum Z.one);
       typ = Write;
-      wval = Some (VNumber (Z.of_int 2));
+      wval = Some (ENum (Z.of_int 2));
       wmod = Relaxed;
       volatile = false;
       cond = None;
@@ -156,8 +160,9 @@ let create_mock_justification label predicates =
     {
       label;
       id = Some (VNumber Z.zero);
+      loc = Some (ENum Z.zero);
       typ = Write;
-      wval = Some (VNumber (Z.of_int 42));
+      wval = Some (ENum (Z.of_int 42));
       wmod = Relaxed;
       volatile = false;
       cond = None;
@@ -191,7 +196,7 @@ let test_lifted_cache_create () =
 
 let test_lifted_cache_add () =
   let cache = create_lifted_cache () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = create_mock_justification 1 [ pred ] in
   let just2 = create_mock_justification 2 [ pred ] in
     lifted_add cache (just1, just2);
@@ -201,7 +206,7 @@ let test_lifted_cache_add () =
 
 let test_lifted_cache_has_not_found () =
   let cache = create_lifted_cache () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = create_mock_justification 1 [ pred ] in
   let just2 = create_mock_justification 2 [ pred ] in
   let result = lifted_has cache (just1, just2) in
@@ -210,7 +215,7 @@ let test_lifted_cache_has_not_found () =
 
 let test_lifted_cache_has_empty_result () =
   let cache = create_lifted_cache () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = create_mock_justification 1 [ pred ] in
   let just2 = create_mock_justification 2 [ pred ] in
     lifted_add cache (just1, just2);
@@ -222,7 +227,7 @@ let test_lifted_cache_has_empty_result () =
 
 let test_lifted_cache_to_and_has () =
   let cache = create_lifted_cache () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
 
   (* Create original justifications *)
   let just1 = create_mock_justification 1 [ pred ] in
@@ -252,8 +257,8 @@ let test_lifted_cache_has_matches_predicates () =
   let cache = create_lifted_cache () in
 
   (* Create justifications with specific predicates *)
-  let pred1 = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
-  let pred2 = EBinOp (VNumber (Z.of_int 2), "=", VNumber (Z.of_int 2)) in
+  let pred1 = EBinOp (ENum Z.one, "=", ENum Z.one) in
+  let pred2 = EBinOp (ENum (Z.of_int 2), "=", ENum (Z.of_int 2)) in
 
   let just1 = create_mock_justification 1 [ pred1 ] in
   let just2 = create_mock_justification 2 [ pred2 ] in
@@ -275,9 +280,9 @@ let test_lifted_cache_has_no_match_different_predicates () =
   let cache = create_lifted_cache () in
 
   (* Create justifications with specific predicates *)
-  let pred1 = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
-  let pred2 = EBinOp (VNumber (Z.of_int 2), "=", VNumber (Z.of_int 2)) in
-  let pred3 = EBinOp (VNumber (Z.of_int 3), "=", VNumber (Z.of_int 3)) in
+  let pred1 = EBinOp (ENum Z.one, "=", ENum Z.one) in
+  let pred2 = EBinOp (ENum (Z.of_int 2), "=", ENum (Z.of_int 2)) in
+  let pred3 = EBinOp (ENum (Z.of_int 3), "=", ENum (Z.of_int 3)) in
 
   let just1 = create_mock_justification 1 [ pred1 ] in
   let just2 = create_mock_justification 2 [ pred2 ] in
@@ -298,7 +303,7 @@ let test_lifted_cache_has_no_match_different_predicates () =
 
 let test_lifted_cache_has_matches_fwd_we () =
   let cache = create_lifted_cache () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
 
   (* Create justifications with specific fwd and we sets *)
   let fwd_set = Uset.of_list [ (1, 2); (2, 3) ] in
@@ -326,7 +331,7 @@ let test_lifted_cache_has_matches_fwd_we () =
 
 let test_lifted_cache_has_returns_modified_justifications () =
   let cache = create_lifted_cache () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
 
   (* Create and store justifications with empty fwd/we *)
   let just1 = create_mock_justification 1 [ pred ] in
@@ -370,7 +375,7 @@ let test_lifted_cache_has_returns_modified_justifications () =
 
 let test_lifted_cache_has_multiple_results () =
   let cache = create_lifted_cache () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
 
   let just1 = create_mock_justification 1 [ pred ] in
   let just2 = create_mock_justification 2 [ pred ] in
@@ -390,7 +395,7 @@ let test_lifted_cache_has_multiple_results () =
 
 let test_lifted_cache_clear () =
   let cache = create_lifted_cache () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = create_mock_justification 1 [ pred ] in
   let just2 = create_mock_justification 2 [ pred ] in
   let result_just = create_mock_justification 3 [ pred ] in
@@ -411,7 +416,7 @@ let test_lifted_cache_clear () =
 
 let test_lifted_cache_has_no_match_different_write_labels () =
   let cache = create_lifted_cache () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
 
   let just1 = create_mock_justification 1 [ pred ] in
   let just2 = create_mock_justification 2 [ pred ] in
@@ -440,7 +445,7 @@ let test_filter_empty () =
 let test_filter_valid () =
   let ctx = create_mock_context () in
   (* Create a valid boolean predicate: 1 = 1 *)
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
     let* result = filter ctx [ just ] in
       check bool "filter keeps valid" true (Uset.size result >= 0);
@@ -448,7 +453,7 @@ let test_filter_valid () =
 
 let test_filter_removes_covered () =
   let ctx = create_mock_context () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = create_mock_justification 1 [ pred; pred ] in
   let just2 = create_mock_justification 1 [ pred ] in
     (* just2 covers just1 as it has fewer predicates *)
@@ -459,7 +464,7 @@ let test_filter_removes_covered () =
 (* Tests for value_assign function *)
 let test_value_assign_no_variables () =
   let ctx = create_mock_context () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
   let justs = [ just ] in
     let* result = value_assign ctx justs in
@@ -472,8 +477,9 @@ let test_value_assign_with_variable () =
     {
       label = 1;
       id = Some (VNumber Z.zero);
+      loc = Some (ENum Z.zero);
       typ = Write;
-      wval = Some (VVar "v1");
+      wval = Some (EVar "v1");
       wmod = Relaxed;
       volatile = false;
       cond = None;
@@ -489,7 +495,7 @@ let test_value_assign_with_variable () =
       quot = None;
     }
   in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just =
     {
       w;
@@ -540,6 +546,7 @@ let test_fwd_filters_volatile () =
     {
       label = 4;
       id = Some (VNumber (Z.of_int 2));
+      loc = Some (ENum (Z.of_int 2));
       typ = Read;
       wval = None;
       wmod = Relaxed;
@@ -602,7 +609,7 @@ let test_forward_empty () =
 
 let test_forward_single_justification () =
   let ctx = create_mock_context () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
   let justs = Uset.singleton just in
     let* result = forward ctx justs in
@@ -611,7 +618,7 @@ let test_forward_single_justification () =
 
 let test_forward_with_pwg () =
   let ctx = create_mock_context () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let structure = { ctx.structure with pwg = [ pred ] } in
   let ctx = { ctx with structure } in
   let just = create_mock_justification 1 [ pred ] in
@@ -631,16 +638,17 @@ let test_conflict_no_branches () =
 let test_conflict_with_branches () =
   let ctx = create_mock_context () in
   (* Add branch event with two successors *)
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let branch_event =
     {
       label = 10;
       id = Some (VNumber (Z.of_int 10));
+      loc = Some (ENum (Z.of_int 10));
       typ = Write;
       wval = None;
       wmod = Relaxed;
       volatile = false;
-      cond = Some (VExpression pred);
+      cond = Some pred;
       van = 10;
       rval = None;
       rmod = Relaxed;
@@ -658,6 +666,7 @@ let test_conflict_with_branches () =
     {
       label = 11;
       id = Some (VNumber (Z.of_int 11));
+      loc = Some (ENum (Z.of_int 11));
       typ = Write;
       wval = None;
       wmod = Relaxed;
@@ -679,6 +688,7 @@ let test_conflict_with_branches () =
     {
       label = 12;
       id = Some (VNumber (Z.of_int 12));
+      loc = Some (ENum (Z.of_int 12));
       typ = Write;
       wval = None;
       wmod = Relaxed;
@@ -717,7 +727,7 @@ let test_conflict_with_branches () =
 (* Tests for lift function *)
 let test_lift_identity () =
   let ctx = create_mock_context () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
   let justs = Uset.singleton just in
     let* result = lift ctx justs in
@@ -728,7 +738,7 @@ let test_lift_identity () =
 (* Tests for weaken function *)
 let test_weaken_no_pwg () =
   let ctx = create_mock_context () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred; pred ] in
   let justs = [ just ] in
     let* result = weaken ctx justs in
@@ -738,7 +748,7 @@ let test_weaken_no_pwg () =
 
 let test_weaken_with_pwg () =
   let ctx = create_mock_context () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let structure = { ctx.structure with pwg = [ pred ] } in
   let ctx = { ctx with structure } in
   let just = create_mock_justification 1 [ pred; pred ] in
@@ -754,11 +764,11 @@ let test_weaken_with_pwg () =
 let test_weaken_preserves_non_implied () =
   let ctx = create_mock_context () in
   (* PWG: x = 1 *)
-  let pwg_pred = EBinOp (VVar "x", "=", VNumber Z.one) in
+  let pwg_pred = EBinOp (EVar "x", "=", ENum Z.one) in
   let structure = { ctx.structure with pwg = [ pwg_pred ] } in
   let ctx = { ctx with structure } in
   (* Create predicate that is NOT implied by PWG: y = 2 (different variable) *)
-  let not_pwg = EBinOp (VVar "y", "=", VNumber (Z.of_int 2)) in
+  let not_pwg = EBinOp (EVar "y", "=", ENum (Z.of_int 2)) in
   let just = create_mock_justification 1 [ not_pwg ] in
   let justs = [ just ] in
     let* result = weaken ctx justs in
@@ -770,7 +780,7 @@ let test_weaken_preserves_non_implied () =
 (* Tests for strengthen function *)
 let test_strengthen_basic () =
   let ctx = create_mock_context () in
-  let pred = EBinOp (VNumber Z.one, "=", VNumber Z.one) in
+  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = create_mock_justification 1 [ pred ] in
   let just2 = create_mock_justification 2 [ pred ] in
   let ppo = Uset.create () in
@@ -781,8 +791,8 @@ let test_strengthen_basic () =
 
 let test_strengthen_disjoint_predicates () =
   let ctx = create_mock_context () in
-  let pred1 = EBinOp (VVar "x", "=", VNumber Z.one) in
-  let pred2 = EBinOp (VVar "y", "=", VNumber (Z.of_int 2)) in
+  let pred1 = EBinOp (EVar "x", "=", ENum Z.one) in
+  let pred2 = EBinOp (EVar "y", "=", ENum (Z.of_int 2)) in
   let just1 = create_mock_justification 1 [ pred1 ] in
   let just2 = create_mock_justification 2 [ pred2 ] in
   let ppo = Uset.create () in

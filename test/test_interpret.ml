@@ -1,5 +1,6 @@
 open Interpret
 open Types
+open Expr
 open Lwt.Syntax
 
 (** Helper to run Lwt tests *)
@@ -160,8 +161,8 @@ let test_interpret_global_store =
       let env = Hashtbl.create 16 in
       let events = create_events () in
       let mode = Types.SC in
-      let expr = Types.VNumber Z.zero in
-      let stmt = `GlobalStore ("x", mode, expr, false) in
+      let expr = Ast.EInt Z.zero in
+      let stmt = `GlobalStore ("x", expr, (mode, false)) in
         let* result = interpret_stmt stmt env [] events in
           Alcotest.(check int) "one event created" 1 (Uset.size result.e);
           Alcotest.(check int)
@@ -177,7 +178,7 @@ let test_interpret_global_load =
       let env = Hashtbl.create 16 in
       let events = create_events () in
       let mode = Types.SC in
-      let stmt = `GlobalLoad ("r", "x", mode, false) in
+      let stmt = `GlobalLoad ("r", "x", (mode, false)) in
         let* result = interpret_stmt stmt env [] events in
           Alcotest.(check int) "one event created" 1 (Uset.size result.e);
           Alcotest.(check bool) "register in env" true (Hashtbl.mem env "r");
@@ -208,7 +209,7 @@ let test_interpret_multiple_statements =
       let stmts =
         [
           `Fence Types.SC;
-          `GlobalStore ("x", Types.Release, Types.VNumber Z.zero, false);
+          `GlobalStore ("x", Ast.EInt Z.zero, (Types.Release, false));
         ]
       in
         let* result = interpret_statements stmts env [] events in
@@ -223,7 +224,7 @@ let test_interpret_multiple_statements =
 let test_interpret_main =
   run_lwt (fun () ->
       reset_counters ();
-      let ast = [ `GlobalStore ("x", Types.SC, Types.VNumber Z.zero, false) ] in
+      let ast = [ `GlobalStore ("x", Ast.EInt Z.zero, (Types.SC, false)) ] in
         let* structure, events_tbl = interpret [ ast ] None [] [] in
           (* Should have init event (0) plus the store event *)
           Alcotest.(check int)
@@ -239,8 +240,8 @@ let test_interpret_main_with_po =
       reset_counters ();
       let ast =
         [
-          `GlobalStore ("x", Types.SC, Types.VNumber Z.zero, false);
-          `GlobalStore ("y", Types.SC, Types.VNumber Z.one, false);
+          `GlobalStore ("x", Ast.EInt Z.zero, (Types.SC, false));
+          `GlobalStore ("y", Ast.EInt Z.one, (Types.SC, false));
         ]
       in
         let* structure, _ = interpret [ ast ] None [] [] in

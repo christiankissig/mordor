@@ -2,6 +2,7 @@
 
 open Types
 open Expr
+open Printf
 
 (** Mode utility functions *)
 module ModeOps = struct
@@ -95,29 +96,29 @@ let get_id e =
   if has_id e then
     match e.id with
     | Some id -> id
-    | None -> failwith (Printf.sprintf "Event %d does not have an id" e.label)
-  else failwith (Printf.sprintf "Event %d type does not support id" e.label)
+    | None -> failwith (sprintf "Event %d does not have an id" e.label)
+  else failwith (sprintf "Event %d type does not support id" e.label)
 
 let get_wval e =
   if has_wval e then
     match e.wval with
     | Some v -> v
-    | None -> failwith (Printf.sprintf "Event %d does not have a wval" e.label)
-  else failwith (Printf.sprintf "Event %d type does not support wval" e.label)
+    | None -> failwith (sprintf "Event %d does not have a wval" e.label)
+  else failwith (sprintf "Event %d type does not support wval" e.label)
 
 let get_rval e =
   if has_rval e then
     match e.rval with
     | Some v -> v
-    | None -> failwith (Printf.sprintf "Event %d does not have an rval" e.label)
-  else failwith (Printf.sprintf "Event %d type does not support rval" e.label)
+    | None -> failwith (sprintf "Event %d does not have an rval" e.label)
+  else failwith (sprintf "Event %d type does not support rval" e.label)
 
 let get_cond e =
   if has_cond e then
     match e.cond with
     | Some c -> c
-    | None -> failwith (Printf.sprintf "Event %d does not have a cond" e.label)
-  else failwith (Printf.sprintf "Event %d type does not support cond" e.label)
+    | None -> failwith (sprintf "Event %d does not have a cond" e.label)
+  else failwith (sprintf "Event %d type does not support cond" e.label)
 
 (** Get event ordering mode *)
 let event_order e =
@@ -203,29 +204,6 @@ let make_event_with typ label ~id ~rval ~wval ~rmod ~wmod ~fmod ~cond ~volatile
 (** Clone an event *)
 let clone_event e = { e with label = e.label }
 
-(** Value to string (you may need to implement this based on your value_type) *)
-let rec value_to_string = function
-  | VNumber z -> Z.to_string z
-  | VSymbol s -> s
-  | VVar v -> v
-  | VExpression expr -> expr_to_string expr
-  | VBoolean b -> string_of_bool b
-
-and expr_to_string = function
-  | EBinOp (v1, op, v2) ->
-      Printf.sprintf "(%s %s %s)" (value_to_string v1) op (value_to_string v2)
-  | EUnOp (op, v) -> Printf.sprintf "(%s %s)" op (value_to_string v)
-  | EOr exprs ->
-      Printf.sprintf "Or(%s)"
-        (String.concat " | "
-           (List.map
-              (fun l -> String.concat " & " (List.map expr_to_string l))
-              exprs
-           )
-        )
-  | EVar v -> v
-  | ENum z -> Z.to_string z
-
 (** Event to string *)
 let event_to_string e =
   if is_init e then ""
@@ -235,82 +213,52 @@ let event_to_string e =
       match e.typ with
       | Init -> ""
       | Read ->
-          Printf.sprintf "R%s %s %s"
+          sprintf "R%s %s %s"
             (ModeOps.to_string_or e.rmod)
-            (Option.fold ~none:"_" ~some:value_to_string e.id)
-            (Option.fold ~none:"_" ~some:value_to_string e.rval)
+            (Option.fold ~none:"_" ~some:Expr.to_string e.loc)
+            (Option.fold ~none:"_" ~some:Value.to_string e.rval)
       | Write ->
-          Printf.sprintf "W%s %s %s"
+          sprintf "W%s %s %s"
             (ModeOps.to_string_or e.wmod)
-            (Option.fold ~none:"_" ~some:value_to_string e.id)
-            (Option.fold ~none:"_" ~some:value_to_string e.wval)
-      | Lock -> Option.fold ~none:"" ~some:value_to_string e.id
-      | Unlock -> Option.fold ~none:"" ~some:value_to_string e.id
-      | Fence -> Printf.sprintf "F%s" (ModeOps.to_string_or e.fmod)
+            (Option.fold ~none:"_" ~some:Expr.to_string e.loc)
+            (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
+      | Lock -> Option.fold ~none:"" ~some:Value.to_string e.id
+      | Unlock -> Option.fold ~none:"" ~some:Value.to_string e.id
+      | Fence -> sprintf "F%s" (ModeOps.to_string_or e.fmod)
       | Branch ->
-          Printf.sprintf "[%s]"
-            (Option.fold ~none:"_" ~some:value_to_string e.cond)
+          sprintf "[%s]" (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
       | Loop ->
-          Printf.sprintf "%s%s%s" Unicode.langle
-            (Option.fold ~none:"_" ~some:value_to_string e.cond)
+          sprintf "%s%s%s" Unicode.langle
+            (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
             Unicode.rangle
       | Malloc ->
-          Printf.sprintf "Alloc %s %s"
-            (Option.fold ~none:"_" ~some:value_to_string e.rval)
-            (Option.fold ~none:"_" ~some:value_to_string e.wval)
+          sprintf "Alloc %s %s"
+            (Option.fold ~none:"_" ~some:Value.to_string e.rval)
+            (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
       | Free ->
-          Printf.sprintf "Free %s"
-            (Option.fold ~none:"_" ~some:value_to_string e.id)
+          sprintf "Free %s" (Option.fold ~none:"_" ~some:Value.to_string e.id)
       | RMW ->
-          Printf.sprintf "%s . R%s %s . W%s %s"
-            (Option.fold ~none:"_" ~some:value_to_string e.id)
+          sprintf "%s . R%s %s . W%s %s"
+            (Option.fold ~none:"_" ~some:Value.to_string e.id)
             (ModeOps.to_string_or e.rmod)
-            (Option.fold ~none:"_" ~some:value_to_string e.rval)
+            (Option.fold ~none:"_" ~some:Value.to_string e.rval)
             (ModeOps.to_string_or e.wmod)
-            (Option.fold ~none:"_" ~some:value_to_string e.wval)
+            (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
       | CRMW ->
           let rmod_extra =
-            if e.rmod <> e.fmod then
-              Printf.sprintf "+%s" (ModeOps.to_string_or e.rmod)
+            if e.rmod <> e.fmod then sprintf "+%s" (ModeOps.to_string_or e.rmod)
             else ""
           in
-            Printf.sprintf "%s . R%s %s . [%s]%s . %s %s"
-              (Option.fold ~none:"_" ~some:value_to_string e.id)
+            sprintf "%s . R%s %s . [%s]%s . %s %s"
+              (Option.fold ~none:"_" ~some:Value.to_string e.id)
               (ModeOps.to_string_or e.fmod)
-              (Option.fold ~none:"_" ~some:value_to_string e.rval)
-              (Option.fold ~none:"_" ~some:value_to_string e.cond)
+              (Option.fold ~none:"_" ~some:Value.to_string e.rval)
+              (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
               rmod_extra
               (ModeOps.to_string_or e.wmod)
-              (Option.fold ~none:"_" ~some:value_to_string e.wval)
+              (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
     in
-      Printf.sprintf "%d: %s%s" e.van volatile_prefix main_str
-
-(** Value type equality *)
-let rec value_type_equal v1 v2 =
-  match (v1, v2) with
-  | VNumber z1, VNumber z2 -> Z.equal z1 z2
-  | VSymbol s1, VSymbol s2 -> s1 = s2
-  | VVar v1, VVar v2 -> v1 = v2
-  | VExpression e1, VExpression e2 -> expr_equal e1 e2
-  | VBoolean b1, VBoolean b2 -> b1 = b2
-  | _ -> false
-
-and expr_equal e1 e2 =
-  match (e1, e2) with
-  | EBinOp (v1, op1, v2), EBinOp (v3, op2, v4) ->
-      op1 = op2 && value_type_equal v1 v3 && value_type_equal v2 v4
-  | EUnOp (op1, v1), EUnOp (op2, v2) -> op1 = op2 && value_type_equal v1 v2
-  | EOr l1, EOr l2 ->
-      List.length l1 = List.length l2
-      && List.for_all2
-           (fun ll1 ll2 ->
-             List.length ll1 = List.length ll2
-             && List.for_all2 expr_equal ll1 ll2
-           )
-           l1 l2
-  | EVar v1, EVar v2 -> v1 = v2
-  | ENum z1, ENum z2 -> Z.equal z1 z2
-  | _ -> false
+      sprintf "%d: %s%s" e.van volatile_prefix main_str
 
 (** Event equality *)
 let event_equal e1 e2 =
@@ -318,18 +266,23 @@ let event_equal e1 e2 =
   && e1.typ = e2.typ
   && ( match (e1.id, e2.id) with
      | None, None -> true
-     | Some v1, Some v2 -> value_type_equal v1 v2
+     | Some v1, Some v2 -> Value.equal v1 v2
+     | _ -> false
+     )
+  && ( match (e1.loc, e2.loc) with
+     | None, None -> true
+     | Some v1, Some v2 -> Expr.equal v1 v2
      | _ -> false
      )
   && ( match (e1.rval, e2.rval) with
      | None, None -> true
-     | Some v1, Some v2 -> value_type_equal v1 v2
+     | Some v1, Some v2 -> Value.equal v1 v2
      | _ -> false
      )
   &&
   match (e1.wval, e2.wval) with
   | None, None -> true
-  | Some v1, Some v2 -> value_type_equal v1 v2
+  | Some v1, Some v2 -> Expr.equal v1 v2
   | _ -> false
 
 (** Events container/manager *)
@@ -373,7 +326,7 @@ module EventsContainer = struct
   let get_exn t label =
     match get t label with
     | Some e -> e
-    | None -> failwith (Printf.sprintf "Event %d not found" label)
+    | None -> failwith (sprintf "Event %d not found" label)
 
   (** Map events matching criteria to a USet of their labels *)
   let map t event_labels ?typ ?mode ?mode_op ?second_mode () =
@@ -394,7 +347,7 @@ module EventsContainer = struct
                 | Some m, None -> event_order e = m
                 | Some m, Some ">" -> ModeOps.mode_le m (event_order e)
                 | Some _, Some op ->
-                    failwith (Printf.sprintf "ModeOp '%s' not supported" op)
+                    failwith (sprintf "ModeOp '%s' not supported" op)
               in
               let second_mode_match =
                 match second_mode with
@@ -426,64 +379,68 @@ module EventsContainer = struct
     t
 end
 
-let loc events e =
+let get_loc events e =
   try
     let event = Hashtbl.find events e in
-      event.id
+      event.loc
   with Not_found -> None
 
-let val_ events e =
+let get_val events e =
   try
     let event = Hashtbl.find events e in
       match event.wval with
       | Some v -> Some v
-      | None -> event.rval
+      | None -> (
+          match event.rval with
+          | Some v -> Some (Expr.of_value v)
+          | None -> None
+        )
   with Not_found -> None
 
 (** Get value from event e, or create symbolic value based on x's location *)
 let vale events e x =
   match Hashtbl.find_opt events e with
   | Some event when event.label >= 0 -> (
-      match val_ events e with
+      match get_val events e with
       | Some v -> v
       | None ->
           let loc_x =
-            match loc events x with
-            | Some l -> Value.to_string l
+            match get_loc events x with
+            | Some l -> Expr.to_string l
             | None -> string_of_int x
           in
-            VVar (Printf.sprintf "v(%s)" loc_x)
+            EVar (sprintf "v(%s)" loc_x)
     )
   | _ ->
       let loc_x =
-        match loc events x with
-        | Some l -> Value.to_string l
+        match get_loc events x with
+        | Some l -> Expr.to_string l
         | None -> string_of_int x
       in
-        VVar (Printf.sprintf "v(%s)" loc_x)
+        EVar (sprintf "v(%s)" loc_x)
 
 (** Get location from event e, or create symbolic location based on x's location
 *)
 let loce events e x =
   match Hashtbl.find_opt events e with
   | Some event when event.label >= 0 -> (
-      match loc events e with
+      match get_loc events e with
       | Some l -> l
       | None ->
           let loc_x =
-            match loc events x with
-            | Some l -> Value.to_string l
+            match get_loc events x with
+            | Some l -> Expr.to_string l
             | None -> string_of_int x
           in
-            VVar (Printf.sprintf "l(%s)" loc_x)
+            EVar (sprintf "l(%s)" loc_x)
     )
   | _ ->
       let loc_x =
-        match loc events x with
-        | Some l -> Value.to_string l
+        match get_loc events x with
+        | Some l -> Expr.to_string l
         | None -> string_of_int x
       in
-        VVar (Printf.sprintf "l(%s)" loc_x)
+        EVar (sprintf "l(%s)" loc_x)
 
 (* Event type filters *)
 let filter_events events e_set typ =
