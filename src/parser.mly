@@ -60,7 +60,7 @@ config:
 
 config_body:
   | name=name_section? values=values_section? defacto=defacto_list
-  constraint_=constraint_list PERCENT PERCENT
+  constraint_=constraint_list
     { {
         name = (match name with Some n -> n | None -> "");
         values = (match values with Some v -> v | None -> []);

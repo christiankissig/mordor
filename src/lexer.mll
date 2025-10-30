@@ -14,7 +14,8 @@ let hex_digit = digit | ['a'-'f' 'A'-'F']
 
 (* Main lexer rule *)
 rule token = parse
-  | whitespace+           { token lexbuf }
+  | [' ' '\t' '\r']+      { token lexbuf }
+  | '\n'                  { Lexing.new_line lexbuf; token lexbuf }
   | "//" [^ '\n']* '\n'   { Lexing.new_line lexbuf; token lexbuf }
   | "//" [^ '\n']* eof    { token lexbuf }
 

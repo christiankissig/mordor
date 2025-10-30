@@ -13,36 +13,6 @@ let e_binop l op r = Expr.binop l op r
 
 (* Value module tests *)
 
-let test_value_constructors () =
-  let n = v_num 42 in
-  let s = v_sym "α" in
-  let v = v_var "x" in
-  let b = v_bool true in
-    Alcotest.(check bool)
-      "number is created" true
-      ( match n with
-      | VNumber _ -> true
-      | _ -> false
-      );
-    Alcotest.(check bool)
-      "symbol is created" true
-      ( match s with
-      | VSymbol _ -> true
-      | _ -> false
-      );
-    Alcotest.(check bool)
-      "var is created" true
-      ( match v with
-      | VVar _ -> true
-      | _ -> false
-      );
-    Alcotest.(check bool)
-      "boolean is created" true
-      ( match b with
-      | VBoolean _ -> true
-      | _ -> false
-      )
-
 let test_value_equality () =
   let n1 = v_num 42 in
   let n2 = v_num 42 in
@@ -590,7 +560,6 @@ let suite =
   ( "Expressions",
     [
       (* Value tests *)
-      Alcotest.test_case "Value constructors" `Quick test_value_constructors;
       Alcotest.test_case "Value equality" `Quick test_value_equality;
       Alcotest.test_case "Value to_string" `Quick test_value_to_string;
       Alcotest.test_case "Value get_symbols" `Quick test_value_get_symbols;

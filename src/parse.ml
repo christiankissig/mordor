@@ -17,12 +17,12 @@ let parse src =
     try Parser.litmus Lexer.token lexbuf with
     | Lexer.Lexer_error msg -> failwith (Printf.sprintf "Lexer error: %s" msg)
     | Parser.Error ->
-        let pos = lexbuf.Lexing.lex_curr_p in
-          failwith
-            (Printf.sprintf "Parse error at line %d, column %d"
-               pos.Lexing.pos_lnum
-               (pos.Lexing.pos_cnum - pos.Lexing.pos_bol)
-            )
+        let pos = lexbuf.lex_curr_p in
+        let msg =
+          Printf.sprintf "Parse error at line %d, column %d" pos.pos_lnum
+            (pos.pos_cnum - pos.pos_bol)
+        in
+          failwith msg
 
 (** Parse an expression from a string *)
 let parse_expr src =

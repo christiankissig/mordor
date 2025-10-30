@@ -238,6 +238,7 @@ end = struct
     | _ -> false
 
   let is_contradiction = function
+    | EBoolean b -> not b
     | EBinOp (lhs, op, rhs) -> (
         match (to_value lhs, to_value rhs) with
         | Some (VNumber lv), Some (VNumber rv) -> (

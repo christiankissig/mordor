@@ -245,6 +245,7 @@ let rec convert_stmt = function
 let parse_program program =
   Printf.printf "[DEBUG] Parsing program...\n";
   flush stdout;
+
   try
     let litmus = Parse.parse program in
     let constraints =
