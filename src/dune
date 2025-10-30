@@ -5,7 +5,7 @@
  (flags --explain))
 
 (library
- (name smrd_lib)
+ (name mordor_lib)
  (wrapped false)
  (modules
   ast
@@ -36,10 +36,10 @@
 
 (executable
  (name main)
- (public_name smrd)
+ (public_name mordor)
  (modules main)
  (flags
   (:standard -g))
- (libraries smrd_lib lwt lwt.unix)
+ (libraries mordor_lib lwt lwt.unix)
  (preprocess
   (pps lwt_ppx)))

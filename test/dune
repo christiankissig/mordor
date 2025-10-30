@@ -1,5 +1,5 @@
 (test
- (name test_smrd)
+ (name test_mordor)
  (modes byte exe)
  (flags
   (:standard -g -w -33-26))
@@ -7,7 +7,7 @@
   (:standard -g))
  ; Add debugging information
  (modules
-  test_smrd
+  test_mordor
   test_solver
   test_types
   test_executions
@@ -21,6 +21,6 @@
   test_symbolic_mrd
   test_properties_mrd
   test_advanced_mrd)
- (libraries smrd_lib lwt lwt.unix z3 zarith core str alcotest)
+ (libraries mordor_lib lwt lwt.unix z3 zarith core str alcotest)
  (preprocess
   (pps lwt_ppx)))
