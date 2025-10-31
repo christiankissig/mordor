@@ -1,4 +1,4 @@
 x := 0
 r1 := x
 y := r1
-%% allow ([2,3] \notin .dp) []
+%% allow ((2,3) ∉ ."dp") []

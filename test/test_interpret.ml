@@ -225,7 +225,7 @@ let test_interpret_main =
   run_lwt (fun () ->
       reset_counters ();
       let ast = [ `GlobalStore ("x", Ast.EInt Z.zero, (Types.SC, false)) ] in
-        let* structure, events_tbl = interpret [ ast ] None [] [] in
+        let* structure, events_tbl = interpret ast None [] [] in
           (* Should have init event (0) plus the store event *)
           Alcotest.(check int)
             "has init and store events" 2 (Uset.size structure.e);
@@ -244,7 +244,7 @@ let test_interpret_main_with_po =
           `GlobalStore ("y", Ast.EInt Z.one, (Types.SC, false));
         ]
       in
-        let* structure, _ = interpret [ ast ] None [] [] in
+        let* structure, _ = interpret ast None [] [] in
           Alcotest.(check int) "has three events" 3 (Uset.size structure.e);
           (* Check that po relations exist *)
           Alcotest.(check bool) "po not empty" true (Uset.size structure.po > 0);

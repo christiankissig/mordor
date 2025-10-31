@@ -8,4 +8,4 @@ rp := malloc(1);
 	*rp := r2;
 }
 %%
-allow ([3,4] ∉ .ppo) []
+allow ((3,4) ∉ ."ppo") []

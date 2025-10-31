@@ -77,7 +77,11 @@ rule token = parse
   | "||"                  { Parser.OR }
   | "&&"                  { Parser.AND }
   | "in"                  { Parser.IN }
+  | "\\in"                  { Parser.IN }
+  | "∈"                   { Parser.IN }
   | "notin"               { Parser.NOTIN }
+  | "\\notin"               { Parser.NOTIN }
+  | "∉"                   { Parser.NOTIN }
   | "forall"              { Parser.FORALL }
 
   (* Single-character operators and delimiters *)

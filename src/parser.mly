@@ -79,12 +79,19 @@ name_part:
   | INT { Z.to_string $1 }
   ;
 
+int_list:
+  | (* empty *) { [] }
+  | n=INT { [n] }
+  | n=INT COMMA rest=int_list { n :: rest }
+  ;
+
 values_section:
-  | VALUES EQ LBRACE values=separated_list(COMMA, INT) RBRACE { values }
+  | VALUES EQ LBRACE values=int_list RBRACE { values }
   ;
 
 defacto_list:
-  | defactos=list(defacto_item) { defactos }
+  | { [] }
+  | defacto=defacto_item rest=defacto_list { defacto :: rest }
   ;
 
 defacto_item:
@@ -92,27 +99,44 @@ defacto_item:
   ;
 
 constraint_list:
-  | constraints=list(constraint_item) { constraints }
+  | { [] }
+  | c=constraint_item rest=constraint_list { c :: rest }
   ;
 
 constraint_item:
   | LDBRACKET e=expr RDBRACKET { e }
   ;
 
-(* Program - parallel composition of threads *)
+(* Program - list of statements and threads *)
 program:
-  | threads=separated_nonempty_list(PARALLEL, thread) { threads }
+  | stmts=statement_list { stmts }
+  ;
+
+threads:
+  | t=thread { [t] }
+  | t=thread PARALLEL rest=threads { t :: rest }
   ;
 
 (* Thread - statements enclosed in braces *)
 thread:
-  | LBRACE stmts=list(statement) RBRACE { stmts }
+  | LBRACE stmts=statement_list RBRACE { stmts }
+  ;
+
+statement_list:
+  | s=statement { [s] }
+  | s=statement rest=statement_list { s :: rest }
   ;
 
 (* Statement with optional labels *)
 statement:
-  | labels=list(label) s=stmt_base { make_labeled labels s }
+  | labels=label_list s=stmt_base { make_labeled labels s }
   | SEMICOLON { SSkip }
+  | threads=threads SEMICOLON? { SThreads { threads } }
+  ;
+
+label_list:
+  | (* empty *) { [] }
+  | l=label rest=label_list { l :: rest }
   ;
 
 label:
@@ -120,6 +144,7 @@ label:
   ;
 
 stmt_base:
+
   (* Volatile pointer load pattern: :v= *reg := expr *)
   | mode=volatile_assign_mode STAR reg=REGISTER ASSIGN e=expr
     { let load, assign = mode in
@@ -201,6 +226,8 @@ stmt_base:
   (* Malloc *)
   | MALLOC LPAREN reg=REGISTER COMMA size=expr RPAREN
     { SMalloc { register = reg; size; pc = 0; label = [] } }
+  | MALLOC reg=REGISTER COMMA size=expr
+    { SMalloc { register = reg; size; pc = 0; label = [] } }
 
   (* Free *)
   | FREE LPAREN reg=REGISTER RPAREN
@@ -216,13 +243,8 @@ stmt_base:
   ;
 
 block_or_stmt:
-  | LBRACE stmts=stmt_sequence RBRACE { stmts }
+  | LBRACE stmts=statement_list RBRACE { stmts }
   | s=stmt_base { [s] }
-  ;
-
-(* Statement sequence - for use inside control flow blocks *)
-stmt_sequence:
-  | stmts=list(statement) { stmts }
   ;
 
 else_clause:
@@ -282,6 +304,7 @@ expr:
   | e1=expr NOTIN e2=expr { EBinOp (e1, "notin", e2) }
   | e1=expr COMMA e2=expr { ETuple (e1, e2) }
   | e1=expr DOT e2=expr { EBinOp (e1, ".", e2) }
+  | LPAREN e1=expr COMMA e2=expr RPAREN { ETuple (e1, e2) }
 
   | BANG e=expr { EUnOp ("!", e) }
   | TILDE e=expr { EUnOp ("~", e) }
@@ -290,6 +313,7 @@ expr:
   | AMPERSAND e=expr %prec BANG { EUnOp ("&", e) }
 
   | MALLOC LPAREN e=expr RPAREN { EMalloc e }
+  | MALLOC e=expr { EMalloc e }
   | LOAD LPAREN mode=memory_order COMMA e=expr RPAREN
     { ELoad { address = e; load = { mode; volatile = false } } }
 

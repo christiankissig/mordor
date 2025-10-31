@@ -230,9 +230,13 @@ let rec convert_stmt = function
       (* Old parser: params list and modes list
          New parser: explicit address and operand fields *)
       `Fadd (register, [ address; operand ], [ mode ], false)
-  | _ ->
+  | s ->
       failwith
-        "Unsupported statement in conversion from AST to interpreter format"
+        (Printf.sprintf
+           "Unsupported statement %s in conversion from AST to interpreter \
+            format"
+           (Ast.to_string s)
+        )
 
 (* Note: The following old parser constructs no longer exist:
    - SThread: Thread composition now handled at parse time with ||| operator
@@ -255,7 +259,7 @@ let parse_program program =
         | None -> []
         )
     in
-    let program_stmts = List.map (List.map convert_stmt) litmus.program in
+    let program_stmts = List.map convert_stmt litmus.program in
       (constraints, program_stmts)
   with
   | Failure msg ->

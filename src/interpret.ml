@@ -279,20 +279,7 @@ let interpret ast defacto restrictions constraint_ =
   let events = create_events () in
   let env = Hashtbl.create 32 in
 
-  let* structure =
-    List.map
-      (fun thread_statements ->
-        interpret_statements thread_statements env [] events
-      )
-      ast
-    |> List.fold_left
-         (fun acc_structures thread_structure ->
-           let* acc = acc_structures in
-             let* thread_struct = thread_structure in
-               Lwt.return (cross acc thread_struct)
-         )
-         (Lwt.return (empty_structure ()))
-  in
+  let* structure = interpret_statements ast env [] events in
 
   (* Add init event *)
   let init_event = make_event Init 0 in

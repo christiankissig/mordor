@@ -17,6 +17,7 @@ type ast_expr =
   | ELoad of { address : ast_expr; load : assign_info }
 
 type ast_stmt =
+  | SThreads of { threads : ast_stmt list list }
   | SRegisterStore of { register : string; expr : ast_expr }
   | SGlobalStore of { global : string; expr : ast_expr; assign : assign_info }
   | SGlobalLoad of { register : string; global : string; load : assign_info }
@@ -75,6 +76,27 @@ type ast_assertion =
 
 and ast_litmus = {
   config : ast_config option;
-  program : ast_thread list; (* List of parallel threads *)
+  program : ast_stmt list; (* List of parallel threads *)
   assertion : ast_assertion option;
 }
+
+let to_string (stmt : ast_stmt) : string =
+  match stmt with
+  | SThreads _ -> "SThreads"
+  | SRegisterStore _ -> "SRegisterStore"
+  | SGlobalStore _ -> "SGlobalStore"
+  | SGlobalLoad _ -> "SGlobalLoad"
+  | SStore _ -> "SStore"
+  | SCAS _ -> "SCAS"
+  | SFADD _ -> "SFADD"
+  | SIf _ -> "SIf"
+  | SWhile _ -> "SWhile"
+  | SDo _ -> "SDo"
+  | SQDo _ -> "SQDo"
+  | SFence _ -> "SFence"
+  | SLock _ -> "SLock"
+  | SUnlock _ -> "SUnlock"
+  | SMalloc _ -> "SMalloc"
+  | SFree _ -> "SFree"
+  | SLabeled _ -> "SLabeled"
+  | SSkip -> "SSkip"

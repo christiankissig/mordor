@@ -249,7 +249,7 @@ let test_parse_register_store () =
   let src = "%% r0 := 42" in
   let ast = parse src in
     match ast.program with
-    | [ [ SRegisterStore { register = "r0"; expr = EInt n } ] ]
+    | [ SRegisterStore { register = "r0"; expr = EInt n } ]
       when Z.equal n (Z.of_int 42) -> ()
     | _ -> Alcotest.fail "Expected r0 := 42"
 
@@ -257,7 +257,7 @@ let test_parse_register_store_expr () =
   let src = "%% r0 := r1 + 1" in
   let ast = parse src in
     match ast.program with
-    | [ [ SRegisterStore { register = "r0"; expr = EBinOp _ } ] ] -> ()
+    | [ SRegisterStore { register = "r0"; expr = EBinOp _ } ] -> ()
     | _ -> Alcotest.fail "Expected r0 := r1 + 1"
 
 let test_parse_global_store_simple () =
@@ -265,14 +265,12 @@ let test_parse_global_store_simple () =
   let ast = parse src in
     match ast.program with
     | [
-     [
-       SGlobalStore
-         {
-           global = "x";
-           expr = EInt n;
-           assign = { mode = Relaxed; volatile = false };
-         };
-     ];
+     SGlobalStore
+       {
+         global = "x";
+         expr = EInt n;
+         assign = { mode = Relaxed; volatile = false };
+       };
     ]
       when Z.equal n Z.one -> ()
     | _ -> Alcotest.fail "Expected x := 1"
@@ -281,45 +279,42 @@ let test_parse_global_store_relaxed () =
   let src = "%% x :rlx= 1" in
   let ast = parse src in
     match ast.program with
-    | [ [ SGlobalStore { global = "x"; assign = { mode = Relaxed; _ }; _ } ] ]
-      -> ()
+    | [ SGlobalStore { global = "x"; assign = { mode = Relaxed; _ }; _ } ] -> ()
     | _ -> Alcotest.fail "Expected x :rlx= 1"
 
 let test_parse_global_store_release () =
   let src = "%% x :rel= 1" in
   let ast = parse src in
     match ast.program with
-    | [ [ SGlobalStore { global = "x"; assign = { mode = Release; _ }; _ } ] ]
-      -> ()
+    | [ SGlobalStore { global = "x"; assign = { mode = Release; _ }; _ } ] -> ()
     | _ -> Alcotest.fail "Expected x :rel= 1"
 
 let test_parse_global_store_acquire () =
   let src = "%% x :acq= 1" in
   let ast = parse src in
     match ast.program with
-    | [ [ SGlobalStore { global = "x"; assign = { mode = Acquire; _ }; _ } ] ]
-      -> ()
+    | [ SGlobalStore { global = "x"; assign = { mode = Acquire; _ }; _ } ] -> ()
     | _ -> Alcotest.fail "Expected x :acq= 1"
 
 let test_parse_global_store_sc () =
   let src = "%% x :sc= 1" in
   let ast = parse src in
     match ast.program with
-    | [ [ SGlobalStore { global = "x"; assign = { mode = SC; _ }; _ } ] ] -> ()
+    | [ SGlobalStore { global = "x"; assign = { mode = SC; _ }; _ } ] -> ()
     | _ -> Alcotest.fail "Expected x :sc= 1"
 
 let test_parse_register_load_global () =
   let src = "%% r0 := x" in
   let ast = parse src in
     match ast.program with
-    | [ [ SRegisterStore { register = "r0"; expr = EGlobal "x" } ] ] -> ()
+    | [ SRegisterStore { register = "r0"; expr = EGlobal "x" } ] -> ()
     | _ -> Alcotest.fail "Expected r0 := x"
 
 let test_parse_deref_store () =
   let src = "%% *r0 := 42" in
   let ast = parse src in
     match ast.program with
-    | [ [ SStore { address = ERegister "r0"; expr = EInt _; _ } ] ] -> ()
+    | [ SStore { address = ERegister "r0"; expr = EInt _; _ } ] -> ()
     | _ -> Alcotest.fail "Expected *r0 := 42"
 
 let test_parse_load_explicit () =
@@ -327,10 +322,8 @@ let test_parse_load_explicit () =
   let ast = parse src in
     match ast.program with
     | [
-     [
-       SRegisterStore
-         { register = "r0"; expr = ELoad { load = { mode = Acquire; _ }; _ } };
-     ];
+     SRegisterStore
+       { register = "r0"; expr = ELoad { load = { mode = Acquire; _ }; _ } };
     ] -> ()
     | _ -> Alcotest.fail "Expected r0 := load(acquire, x)"
 
@@ -338,165 +331,163 @@ let test_parse_store_explicit () =
   let src = "%% store(release, x, 1)" in
   let ast = parse src in
     match ast.program with
-    | [ [ SStore { assign = { mode = Release; _ }; _ } ] ] -> ()
+    | [ SStore { assign = { mode = Release; _ }; _ } ] -> ()
     | _ -> Alcotest.fail "Expected store(release, x, 1)"
 
 let test_parse_if_simple () =
   let src = "%% if (r0 == 1) r1 := 2" in
   let ast = parse src in
     match ast.program with
-    | [ [ SIf { condition = EBinOp _; then_body = _; else_body = None } ] ] ->
-        ()
+    | [ SIf { condition = EBinOp _; then_body = _; else_body = None } ] -> ()
     | _ -> Alcotest.fail "Expected if statement"
 
 let test_parse_if_else () =
   let src = "%% if (r0 == 1) r1 := 2 else r1 := 3" in
   let ast = parse src in
     match ast.program with
-    | [ [ SIf { condition = EBinOp _; then_body = _; else_body = Some _ } ] ] ->
-        ()
+    | [ SIf { condition = EBinOp _; then_body = _; else_body = Some _ } ] -> ()
     | _ -> Alcotest.fail "Expected if-else statement"
 
 let test_parse_if_block () =
   let src = "%% if (r0 == 1) { r1 := 2; r2 := 3 }" in
   let ast = parse src in
     match ast.program with
-    | [ [ SIf { then_body = [ _; _ ]; _ } ] ] -> ()
+    | [ SIf { then_body = [ _; _ ]; _ } ] -> ()
     | _ -> Alcotest.fail "Expected if with block"
 
 let test_parse_while_loop () =
   let src = "%% while (r0 < 10) r0 := r0 + 1" in
   let ast = parse src in
     match ast.program with
-    | [ [ SWhile { condition = EBinOp _; body = _ } ] ] -> ()
+    | [ SWhile { condition = EBinOp _; body = _ } ] -> ()
     | _ -> Alcotest.fail "Expected while loop"
 
 let test_parse_do_while () =
   let src = "%% do r0 := r0 + 1 while (r0 < 10)" in
   let ast = parse src in
     match ast.program with
-    | [ [ SDo { body = _; condition = EBinOp _ } ] ] -> ()
+    | [ SDo { body = _; condition = EBinOp _ } ] -> ()
     | _ -> Alcotest.fail "Expected do-while loop"
 
 let test_parse_qwhile_loop () =
   let src = "%% qdo r0 := r0 + 1 qwhile (r0 < 10)" in
   let ast = parse src in
     match ast.program with
-    | [ [ SQDo { body = _; condition = EBinOp _ } ] ] -> ()
+    | [ SQDo { body = _; condition = EBinOp _ } ] -> ()
     | _ -> Alcotest.fail "Expected qdo-qwhile loop"
 
 let test_parse_fence () =
   let src = "%% fence(sc)" in
   let ast = parse src in
     match ast.program with
-    | [ [ SFence { mode = SC } ] ] -> ()
+    | [ SFence { mode = SC } ] -> ()
     | _ -> Alcotest.fail "Expected fence(sc)"
 
 let test_parse_fence_acquire () =
   let src = "%% fence(acquire)" in
   let ast = parse src in
     match ast.program with
-    | [ [ SFence { mode = Acquire } ] ] -> ()
+    | [ SFence { mode = Acquire } ] -> ()
     | _ -> Alcotest.fail "Expected fence(acquire)"
 
 let test_parse_cas () =
   let src = "%% r0 := cas(sc, x, 0, 1)" in
   let ast = parse src in
     match ast.program with
-    | [ [ SCAS { register = "r0"; mode = SC; _ } ] ] -> ()
+    | [ SCAS { register = "r0"; mode = SC; _ } ] -> ()
     | _ -> Alcotest.fail "Expected CAS operation"
 
 let test_parse_fadd () =
   let src = "%% r0 := fadd(relaxed, x, 1)" in
   let ast = parse src in
     match ast.program with
-    | [ [ SFADD { register = "r0"; mode = Relaxed; _ } ] ] -> ()
+    | [ SFADD { register = "r0"; mode = Relaxed; _ } ] -> ()
     | _ -> Alcotest.fail "Expected FADD operation"
 
 let test_parse_lock () =
   let src = "%% lock" in
   let ast = parse src in
     match ast.program with
-    | [ [ SLock { global = None } ] ] -> ()
+    | [ SLock { global = None } ] -> ()
     | _ -> Alcotest.fail "Expected lock"
 
 let test_parse_lock_with_global () =
   let src = "%% lock mutex" in
   let ast = parse src in
     match ast.program with
-    | [ [ SLock { global = Some "mutex" } ] ] -> ()
+    | [ SLock { global = Some "mutex" } ] -> ()
     | _ -> Alcotest.fail "Expected lock mutex"
 
 let test_parse_unlock () =
   let src = "%% unlock" in
   let ast = parse src in
     match ast.program with
-    | [ [ SUnlock { global = None } ] ] -> ()
+    | [ SUnlock { global = None } ] -> ()
     | _ -> Alcotest.fail "Expected unlock"
 
 let test_parse_unlock_with_global () =
   let src = "%% unlock mutex" in
   let ast = parse src in
     match ast.program with
-    | [ [ SUnlock { global = Some "mutex" } ] ] -> ()
+    | [ SUnlock { global = Some "mutex" } ] -> ()
     | _ -> Alcotest.fail "Expected unlock mutex"
 
 let test_parse_malloc_stmt () =
   let src = "%% malloc(r0, 8)" in
   let ast = parse src in
     match ast.program with
-    | [ [ SMalloc { register = "r0"; size = EInt _; _ } ] ] -> ()
+    | [ SMalloc { register = "r0"; size = EInt _; _ } ] -> ()
     | _ -> Alcotest.fail "Expected malloc(r0, 8)"
 
 let test_parse_free () =
   let src = "%% free(r0)" in
   let ast = parse src in
     match ast.program with
-    | [ [ SFree { register = "r0" } ] ] -> ()
+    | [ SFree { register = "r0" } ] -> ()
     | _ -> Alcotest.fail "Expected free(r0)"
 
 let test_parse_skip () =
   let src = "%% skip" in
   let ast = parse src in
     match ast.program with
-    | [ [ SSkip ] ] -> ()
+    | [ SSkip ] -> ()
     | _ -> Alcotest.fail "Expected skip"
 
 let test_parse_labeled_stmt () =
   let src = "%% `label` x := 1" in
   let ast = parse src in
     match ast.program with
-    | [ [ SLabeled { label = [ "label" ]; stmt = SGlobalStore _ } ] ] -> ()
+    | [ SLabeled { label = [ "label" ]; stmt = SGlobalStore _ } ] -> ()
     | _ -> Alcotest.fail "Expected labeled statement"
 
 let test_parse_multiple_labels () =
   let src = "%% `label1` `label2` x := 1" in
   let ast = parse src in
     match ast.program with
-    | [ [ SLabeled { label = [ "label2"; "label1" ]; stmt = SGlobalStore _ } ] ]
-      -> ()
+    | [ SLabeled { label = [ "label2"; "label1" ]; stmt = SGlobalStore _ } ] ->
+        ()
     | _ -> Alcotest.fail "Expected multiple labels"
 
 let test_parse_multiple_statements () =
   let src = "%% x := 1; y := 2; r0 := x" in
   let ast = parse src in
     match ast.program with
-    | [ [ SGlobalStore _; SGlobalStore _; SRegisterStore _ ] ] -> ()
+    | [ SGlobalStore _; SGlobalStore _; SRegisterStore _ ] -> ()
     | _ -> Alcotest.fail "Expected 3 statements"
 
 let test_parse_thread_parallel () =
   let src = "%% x := 1 ||| y := 2" in
   let ast = parse src in
     match ast.program with
-    | [ [ SGlobalStore { global = "x"; _ }; SGlobalStore { global = "y"; _ } ] ]
-      -> ()
+    | [ SGlobalStore { global = "x"; _ }; SGlobalStore { global = "y"; _ } ] ->
+        ()
     | _ -> Alcotest.fail "Expected parallel threads"
 
 let test_parse_multiple_threads () =
   let src = "%% x := 1 ||| y := 2 ||| r0 := x" in
   let ast = parse src in
     match ast.program with
-    | [ [ SGlobalStore _; SGlobalStore _; SRegisterStore _ ] ] -> ()
+    | [ SGlobalStore _; SGlobalStore _; SRegisterStore _ ] -> ()
     | _ -> Alcotest.fail "Expected 3 threads"
 
 let test_parse_thread_with_blocks () =
