@@ -193,6 +193,8 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
 (** Convert parsed AST to interpreter format *)
 let rec convert_stmt = function
   (* Direct mappings - same structure in new parser *)
+  | Ast.SThreads { threads } ->
+      `Threads (List.map (List.map convert_stmt) threads)
   | Ast.SRegisterStore { register; expr } -> `RegisterStore (register, expr)
   | Ast.SGlobalStore { global; expr; assign } ->
       `GlobalStore (global, expr, (assign.mode, assign.volatile))

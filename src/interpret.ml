@@ -131,6 +131,16 @@ let rec interpret_statements stmts env phi events =
 and interpret_stmt stmt env phi events =
   let* structure =
     match stmt with
+    | `Threads threads ->
+        let rec interpret_threads ts =
+          match ts with
+          | [] -> Lwt.return (empty_structure ())
+          | t :: rest ->
+              let* t_structure = interpret_statements t env phi events in
+                let* rest_structure = interpret_threads rest in
+                  Lwt.return (cross t_structure rest_structure)
+        in
+          interpret_threads threads
     | `RegisterStore (register, e) ->
         let expr = interpret_expr e env in
         let env' = update_env env register expr in

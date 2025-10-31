@@ -113,6 +113,24 @@ let parse_tests tests =
     flush stdout;
     Lwt.return_unit
 
+let interpret_single name program =
+  Printf.printf "Interpreting program %s.\n" name;
+  flush stdout;
+  let _, program_stmts = Symmrd.parse_program program in
+    let* _result =
+      Interpret.interpret program_stmts [] (Hashtbl.create 16) []
+    in
+      Printf.printf "Interpreted program %s successfully.\n" name;
+      flush stdout;
+      Lwt.return_unit
+
+let interpret_tests tests =
+  let* () =
+    Lwt_list.iter_s (fun (name, prog) -> interpret_single name prog) tests
+  in
+    flush stdout;
+    Lwt.return_unit
+
 let visualize_event_structure (mode : output_mode) output_file (name, program) =
   Printf.printf "Visualizing event structure for program %s.\n" name;
   let* result = create_symbolic_event_structure program default_options in
@@ -262,6 +280,7 @@ let main () =
   match cmd with
   | Run -> run_tests tests
   | Parse -> parse_tests tests
+  | Interpret -> interpret_tests tests
   | VisualEs ->
       if List.length tests <> 1 then (
         Printf.eprintf
