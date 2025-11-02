@@ -10,7 +10,6 @@ type ast_expr =
   | EGlobal of string
   | EAtLoc of string
   | EASet of string
-  | EMalloc of ast_expr
   | EBinOp of ast_expr * string * ast_expr
   | EUnOp of string * ast_expr
   | ETuple of ast_expr * ast_expr
@@ -79,6 +78,18 @@ and ast_litmus = {
   program : ast_stmt list; (* List of parallel threads *)
   assertion : ast_assertion option;
 }
+
+let expr_to_string (expr : ast_expr) : string =
+  match expr with
+  | EInt _ -> "EInt"
+  | ERegister _ -> "ERegister"
+  | EGlobal _ -> "EGlobal"
+  | EAtLoc _ -> "EAtLoc"
+  | EASet _ -> "EASet"
+  | EBinOp _ -> "EBinOp"
+  | EUnOp _ -> "EUnOp"
+  | ETuple _ -> "ETuple"
+  | ELoad _ -> "ELoad"
 
 let to_string (stmt : ast_stmt) : string =
   match stmt with

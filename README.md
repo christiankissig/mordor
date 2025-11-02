@@ -181,7 +181,6 @@ Lwt.return_unit
 
 This translation is a **faithful port** but **simplified** in some areas:
 
-1. **Parser**: Not fully implemented (would need ocamllex/menhir)
 2. **MSet**: BitSet optimization not implemented
 3. **RFSet**: Enumeration strategy simplified
 
@@ -189,7 +188,6 @@ This translation is a **faithful port** but **simplified** in some areas:
 
 To complete the translation, you would need:
 
-1. **Parser** (`parse.ml`): Use ocamllex/menhir for litmus test syntax
 3. **Assertion** (`assertion.ml`): Assertion checking logic
 5. **Utilities**: Helper functions, pretty printing
 
@@ -213,7 +211,6 @@ let () =
 ## Performance Considerations
 
 - **Z3 overhead**: SMT solving is expensive
-- **Set operations**: Hash table based, O(1) average
 - **Memory**: OCaml GC handles allocation
 - **Parallelism**: Can use Lwt_preemptive for CPU-bound tasks
 

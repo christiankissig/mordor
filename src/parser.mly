@@ -224,9 +224,9 @@ stmt_base:
     { SUnlock { global } }
 
   (* Malloc *)
-  | MALLOC LPAREN reg=REGISTER COMMA size=expr RPAREN
+  | reg=REGISTER ASSIGN MALLOC LPAREN size=expr RPAREN
     { SMalloc { register = reg; size; pc = 0; label = [] } }
-  | MALLOC reg=REGISTER COMMA size=expr
+  | reg=REGISTER ASSIGN MALLOC size=expr
     { SMalloc { register = reg; size; pc = 0; label = [] } }
 
   (* Free *)
@@ -312,8 +312,6 @@ expr:
   | STAR e=expr %prec BANG { EUnOp ("*", e) }
   | AMPERSAND e=expr %prec BANG { EUnOp ("&", e) }
 
-  | MALLOC LPAREN e=expr RPAREN { EMalloc e }
-  | MALLOC e=expr { EMalloc e }
   | LOAD LPAREN mode=memory_order COMMA e=expr RPAREN
     { ELoad { address = e; load = { mode; volatile = false } } }
 

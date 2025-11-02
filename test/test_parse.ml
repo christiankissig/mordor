@@ -205,12 +205,6 @@ let test_parse_tuple () =
     | ETuple (ERegister "r0", ERegister "r1") -> ()
     | _ -> Alcotest.fail "Expected tuple (r0, r1)"
 
-let test_parse_malloc () =
-  let expr = parse_expr "malloc(8)" in
-    match expr with
-    | EMalloc (EInt n) when Z.equal n (Z.of_int 8) -> ()
-    | _ -> Alcotest.fail "Expected malloc(8)"
-
 let test_parse_load_expr () =
   let expr = parse_expr "load(relaxed, x)" in
     match expr with
@@ -747,7 +741,6 @@ let suite =
         test_parse_precedence_mul_add;
       Alcotest.test_case "Parse parentheses" `Quick test_parse_parentheses;
       Alcotest.test_case "Parse tuple" `Quick test_parse_tuple;
-      Alcotest.test_case "Parse malloc expr" `Quick test_parse_malloc;
       Alcotest.test_case "Parse load expr" `Quick test_parse_load_expr;
       Alcotest.test_case "Parse forall" `Quick test_parse_forall;
       Alcotest.test_case "Parse complex expression" `Quick

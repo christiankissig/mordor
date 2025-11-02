@@ -282,7 +282,11 @@ and interpret_expr (e : Ast.ast_expr) env =
   | Ast.EUnOp (op, expr) ->
       let expr' = interpret_expr expr env in
         Expr.unop op expr'
-  | _ -> failwith "Unhandled expression type in interpret_expr"
+  | _ ->
+      failwith
+        (Printf.sprintf "Unhandled expression type %s in\ninterpret_expr"
+           (Ast.expr_to_string e)
+        )
 
 (** Main interpret function *)
 let interpret ast defacto restrictions constraint_ =

@@ -232,13 +232,9 @@ let rec convert_stmt = function
       (* Old parser: params list and modes list
          New parser: explicit address and operand fields *)
       `Fadd (register, [ address; operand ], [ mode ], false)
-  | s ->
-      failwith
-        (Printf.sprintf
-           "Unsupported statement %s in conversion from AST to interpreter \
-            format"
-           (Ast.to_string s)
-        )
+  | Ast.SMalloc { register; size; pc = _; label = _ } ->
+      (* Old parser had pc and label fields, new parser does not *)
+      `Malloc (register, size)
 
 (* Note: The following old parser constructs no longer exist:
    - SThread: Thread composition now handled at parse time with ||| operator

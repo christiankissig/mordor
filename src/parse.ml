@@ -46,7 +46,6 @@ let rec ast_expr_to_expr : ast_expr -> Types.expr = function
   | EGlobal g -> Types.EVar g
   | EAtLoc l -> Types.EVar l
   | EASet s -> Types.EVar ("." ^ s)
-  | EMalloc e -> Types.EUnOp ("malloc", ast_expr_to_expr e)
   | EBinOp (l, op, r) ->
       Types.EBinOp (ast_expr_to_expr l, op, ast_expr_to_expr r)
   | EUnOp (op, e) -> Types.EUnOp (op, ast_expr_to_expr e)
