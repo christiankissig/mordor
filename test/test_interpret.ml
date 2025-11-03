@@ -166,7 +166,7 @@ let test_interpret_global_store =
       let stmt =
         GlobalStore { global = "x"; expr; assign = { mode; volatile = false } }
       in
-        let* result = interpret_stmt stmt env [] events in
+        let* result = interpret_statements [ stmt ] env [] events in
           Alcotest.(check int) "one event created" 1 (Uset.size result.e);
           Alcotest.(check int)
             "one event in table" 1
@@ -185,7 +185,7 @@ let test_interpret_global_load =
         GlobalLoad
           { register = "r"; global = "x"; load = { mode; volatile = false } }
       in
-        let* result = interpret_stmt stmt env [] events in
+        let* result = interpret_statements [ stmt ] env [] events in
           Alcotest.(check int) "one event created" 1 (Uset.size result.e);
           Alcotest.(check bool) "register in env" true (Hashtbl.mem env "r");
           Lwt.return_unit
@@ -199,7 +199,7 @@ let test_interpret_fence =
       let events = create_events () in
       let mode = Types.SC in
       let stmt = Ir.Fence { mode } in
-        let* result = interpret_stmt stmt env [] events in
+        let* result = interpret_statements [ stmt ] env [] events in
           Alcotest.(check int) "one fence event" 1 (Uset.size result.e);
           let evt = Hashtbl.find events.events 0 in
             Alcotest.(check bool) "is fence" true (evt.typ = Fence);
@@ -246,9 +246,8 @@ let test_interpret_main =
         ]
       in
         let* structure, events_tbl = interpret ast None [] [] in
-          (* TODO Should have init event (0) plus the store event *)
           Alcotest.(check int)
-            "has init and store events" 1 (Uset.size structure.e);
+            "has init and store events" 2 (Uset.size structure.e);
           Alcotest.(check bool)
             "init event present" true (Uset.mem structure.e 0);
           Alcotest.(check int) "events in table" 2 (Hashtbl.length events_tbl);
@@ -275,8 +274,7 @@ let test_interpret_main_with_po =
         ]
       in
         let* structure, _ = interpret ast None [] [] in
-          (* TOOD Should have init event (0) plus two store events *)
-          Alcotest.(check int) "has three events" 2 (Uset.size structure.e);
+          Alcotest.(check int) "has three events" 3 (Uset.size structure.e);
           (* Check that po relations exist *)
           Alcotest.(check bool) "po not empty" true (Uset.size structure.po > 0);
           Lwt.return_unit

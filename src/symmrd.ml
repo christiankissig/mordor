@@ -321,6 +321,8 @@ let create_symbolic_event_structure program (opts : options) =
     Interpret.interpret program_stmts [] (Hashtbl.create 16) []
   in
 
+  assert (Hashtbl.length events = Uset.size structure.e);
+
   Printf.printf "[DEBUG] Program interpreted successfully.\n";
   flush stdout;
 

@@ -43,6 +43,7 @@ let create_events () = { events = Hashtbl.create 256; label = 0; van = 0 }
 
 let add_event (events : events_t) event =
   let lbl = events.label in
+    Printf.printf "Adding event with label %d\n" lbl;
     events.label <- events.label + 1;
     let v = events.van in
       events.van <- events.van + 1;
@@ -51,18 +52,19 @@ let add_event (events : events_t) event =
         event'
 
 (** Symbolic Event Structure builders *)
-let dot a b phi : symbolic_event_structure =
+let dot label structure phi : symbolic_event_structure =
+  Printf.printf "Dotting event %d to structure\n" label;
   {
-    e = Uset.union b.e (Uset.singleton a);
-    po = Uset.union b.po (Uset.map (fun e -> (a, e)) b.e);
-    rmw = b.rmw;
-    lo = b.lo;
-    restrict = b.restrict;
-    cas_groups = b.cas_groups;
-    pwg = b.pwg;
-    fj = b.fj;
-    p = b.p;
-    constraint_ = b.constraint_;
+    e = Uset.union structure.e (Uset.singleton label);
+    po = Uset.union structure.po (Uset.map (fun e -> (label, e)) structure.e);
+    rmw = structure.rmw;
+    lo = structure.lo;
+    restrict = structure.restrict;
+    cas_groups = structure.cas_groups;
+    pwg = structure.pwg;
+    fj = structure.fj;
+    p = structure.p;
+    constraint_ = structure.constraint_;
   }
 
 let plus a b : symbolic_event_structure =
@@ -120,169 +122,167 @@ let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr
 (* TODO check id makes sense here *)
 (* TODO step counter *)
 
-(** Interpret statements *)
-let rec interpret_statements stmts env phi events =
-  match stmts with
-  | [] -> Lwt.return (empty_structure ())
-  | stmt :: rest ->
-      let* structure = interpret_stmt stmt env phi events in
-        let* rest_structure = interpret_statements rest env phi events in
-          Lwt.return (plus structure rest_structure)
+(** Interpret IR - create symbolic event structures *)
 
-and interpret_stmt stmt env phi events =
-  Printf.printf "Interpreting statement:\n";
-  flush stdout;
-  let* structure =
-    match stmt with
-    | Threads { threads } ->
-        let rec interpret_threads ts =
-          match ts with
-          | [] -> Lwt.return (empty_structure ())
-          | t :: rest ->
-              let* t_structure = interpret_statements t env phi events in
-                let* rest_structure = interpret_threads rest in
-                  Lwt.return (cross t_structure rest_structure)
-        in
-          interpret_threads threads
-    | RegisterStore { register; expr } ->
-        let env' = update_env env register expr in
-          let* cont = interpret_statements [] env' phi events in
-            Lwt.return cont
-    | GlobalStore { global; expr; assign } ->
-        let base_evt : event = make_event Write 0 in
-        let evt =
-          {
-            base_evt with
-            id = Some (VVar global);
-            loc = Some (EVar global);
-            wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
-            wmod = assign.mode;
-            volatile = assign.volatile;
-          }
-        in
-        let event' = add_event events evt in
-          let* cont = interpret_statements [] env phi events in
-            Lwt.return (dot event'.label cont phi)
-    | DerefStore { address; expr; assign } ->
-        let base_evt : event = make_event Write 0 in
-        let evt =
-          {
-            base_evt with
-            loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
-            wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
-            wmod = assign.mode;
-            volatile = assign.volatile;
-          }
-        in
-        let event' = add_event events evt in
-          let* cont = interpret_statements [] env phi events in
-            Lwt.return (dot event'.label cont phi)
-    | GlobalLoad { register; global; load } ->
-        let rval = VSymbol (next_greek ()) in
-        let base_evt : event = make_event Read 0 in
-        let evt =
-          {
-            base_evt with
-            id = Some (VVar global);
-            loc = Some (EVar global);
-            rval = Some rval;
-            rmod = load.mode;
-            volatile = load.volatile;
-          }
-        in
-        let event' = add_event events evt in
-        let env' = Hashtbl.copy env in
-          Hashtbl.replace env' register (Expr.of_value rval);
-          let* cont = interpret_statements [] env' phi events in
-            Lwt.return (dot event'.label cont phi)
-    | If { condition; then_body; else_body } -> (
-        let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
-          let* then_structure =
-            interpret_statements then_body env (cond_val :: phi) events
-          in
-            match else_body with
-            | Some eb ->
-                let* else_structure =
-                  interpret_statements eb env
-                    (Expr.unop "~" cond_val :: phi)
-                    events
-                in
-                  Lwt.return (plus then_structure else_structure)
-            | None -> Lwt.return then_structure
-      )
-    (* | `While (condition, body) ->
+let rec interpret_statements (stmts : ir_stmt list) env phi events =
+  match stmts with
+  | [] ->
+      Printf.printf "End of program.\n";
+      Lwt.return (empty_structure ())
+  | stmt :: rest ->
+      Printf.printf "Interpreting statement: %s\n" (Ir.to_string stmt);
+      flush stdout;
+      let* structure =
+        match stmt with
+        | Threads { threads } ->
+            let interpret_threads ts =
+              List.fold_left
+                (fun acc t ->
+                  let* t_structure = interpret_statements t env phi events in
+                    let* acc_structure = acc in
+                      Lwt.return (cross acc_structure t_structure)
+                )
+                (Lwt.return (empty_structure ()))
+                ts
+            in
+              interpret_threads threads
+        | RegisterStore { register; expr } ->
+            let env' = update_env env register expr in
+              let* cont = interpret_statements rest env' phi events in
+                Lwt.return cont
+        | GlobalStore { global; expr; assign } ->
+            let base_evt : event = make_event Write 0 in
+            let evt =
+              {
+                base_evt with
+                id = Some (VVar global);
+                loc = Some (EVar global);
+                wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
+                wmod = assign.mode;
+                volatile = assign.volatile;
+              }
+            in
+            let event' = add_event events evt in
+              let* cont = interpret_statements rest env phi events in
+                Lwt.return (dot event'.label cont phi)
+        | DerefStore { address; expr; assign } ->
+            let base_evt : event = make_event Write 0 in
+            let evt =
+              {
+                base_evt with
+                loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
+                wmod = assign.mode;
+                volatile = assign.volatile;
+              }
+            in
+            let event' = add_event events evt in
+              let* cont = interpret_statements rest env phi events in
+                Lwt.return (dot event'.label cont phi)
+        | GlobalLoad { register; global; load } ->
+            let rval = VSymbol (next_greek ()) in
+            let base_evt : event = make_event Read 0 in
+            let evt =
+              {
+                base_evt with
+                id = Some (VVar global);
+                loc = Some (EVar global);
+                rval = Some rval;
+                rmod = load.mode;
+                volatile = load.volatile;
+              }
+            in
+            let event' = add_event events evt in
+            let env' = Hashtbl.copy env in
+              Hashtbl.replace env' register (Expr.of_value rval);
+              let* cont = interpret_statements rest env' phi events in
+                Lwt.return (dot event'.label cont phi)
+        | If { condition; then_body; else_body } -> (
+            let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
+              let* then_structure =
+                interpret_statements then_body env (cond_val :: phi) events
+              in
+                match else_body with
+                | Some eb ->
+                    let* else_structure =
+                      interpret_statements eb env
+                        (Expr.unop "~" cond_val :: phi)
+                        events
+                    in
+                      Lwt.return (plus then_structure else_structure)
+                | None -> Lwt.return then_structure
+          )
+        (* | `While (condition, body) ->
           (* Simplified - ignore loops for now *)
           Lwt.return (empty_structure ()) *)
-    (* | `Do (body, condition) ->
+        (* | `Do (body, condition) ->
           (* Simplified - ignore loops for now *)
           Lwt.return (empty_structure ()) *)
-    | Fence { mode } ->
-        let base_evt : event = make_event Fence 0 in
-        let evt = { base_evt with fmod = mode } in
-        let event' = add_event events evt in
-          let* cont = interpret_statements [] env phi events in
-            Lwt.return (dot event'.label cont phi)
-    | Lock { global } ->
-        let base_evt : event = make_event Lock 0 in
-        let evt =
-          match global with
-          | Some g -> { base_evt with id = Some (VVar g) }
-          | None -> base_evt
-        in
-        let event' = add_event events evt in
-          let* cont = interpret_statements [] env phi events in
-            Lwt.return (dot event'.label cont phi)
-    | Unlock { global } ->
-        let base_evt : event = make_event Unlock 0 in
-        let evt =
-          match global with
-          | Some g -> { base_evt with id = Some (VVar g) }
-          | None -> base_evt
-        in
-        let event' = add_event events evt in
-          let* cont = interpret_statements [] env phi events in
-            Lwt.return (dot event'.label cont phi)
-        (* TODO | `Malloc (register, size, pc, label) ->
-          let rval = VSymbol (next_zh ()) in
-          let base_evt : event = make_event Malloc 0 in
-          let evt =
-            {
-              base_evt with
-              rval = Some rval;
-              (* msize = Some (Expr.evaluate size (Hashtbl.find_opt env)); *)
-              pc;
-              label;
-            }
-          in
-          let event' = add_event events evt in
-          let env' = Hashtbl.copy env in
-            Hashtbl.replace env' register (Expr.of_value rval);
-            let* cont = interpret_statements [] env' phi events in
-              Lwt.return (dot event'.label cont phi) *)
-        (* TODO Free, Labeled *)
-    | _ ->
-        (* Simplified - return empty structure for unhandled cases *)
-        Lwt.return (empty_structure ())
-  in
-    Lwt.return structure
+        | Fence { mode } ->
+            let base_evt : event = make_event Fence 0 in
+            let evt = { base_evt with fmod = mode } in
+            let event' = add_event events evt in
+              let* cont = interpret_statements rest env phi events in
+                Lwt.return (dot event'.label cont phi)
+        | Lock { global } ->
+            let base_evt : event = make_event Lock 0 in
+            let evt =
+              match global with
+              | Some g -> { base_evt with id = Some (VVar g) }
+              | None -> base_evt
+            in
+            let event' = add_event events evt in
+              let* cont = interpret_statements rest env phi events in
+                Lwt.return (dot event'.label cont phi)
+        | Unlock { global } ->
+            let base_evt : event = make_event Unlock 0 in
+            let evt =
+              match global with
+              | Some g -> { base_evt with id = Some (VVar g) }
+              | None -> base_evt
+            in
+            let event' = add_event events evt in
+              let* cont = interpret_statements rest env phi events in
+                Lwt.return (dot event'.label cont phi)
+        | Malloc { register; size } ->
+            let rval = VSymbol (next_zh ()) in
+            let base_evt : event = make_event Malloc 0 in
+            let evt = { base_evt with rval = Some rval } in
+            let event' = add_event events evt in
+            let env' = Hashtbl.copy env in
+              Hashtbl.replace env' register (Expr.of_value rval);
+              let* cont = interpret_statements rest env' phi events in
+                Lwt.return (dot event'.label cont phi)
+        | Free { register } ->
+            let base_evt : event = make_event Free 0 in
+            let evt = base_evt in
+            let event' = add_event events evt in
+              let* cont = interpret_statements rest env phi events in
+                Lwt.return (dot event'.label cont phi)
+        | Labeled { label; stmt } ->
+            (* TODO *)
+            Printf.printf "[WARN] Labeled event\n";
+            let* structure = interpret_statements [ stmt ] env phi events in
+              Lwt.return structure
+        | _ ->
+            (* Simplified - return empty structure for unhandled cases *)
+            Printf.printf
+              "[ERROR] Statement not handled %s, returning empty structure.\n"
+              (Ir.to_string stmt);
+            flush stdout;
+            Lwt.return (empty_structure ())
+      in
+        Lwt.return structure
 
 (** Main interpret function *)
 let interpret ast defacto restrictions constraint_ =
   let events = create_events () in
   let env = Hashtbl.create 32 in
 
-  let* structure = interpret_statements ast env [] events in
-
-  (* Add init event *)
   let init_event = make_event Init 0 in
-  let init_event' = add_event events { init_event with label = 0 } in
+  let init_event' = add_event events { (make_event Init 4) with label = 0 } in
 
-  let structure' =
-    {
-      structure with
-      e = Uset.add structure.e 0;
-      po = Uset.union structure.po (Uset.map (fun e -> (0, e)) structure.e);
-    }
-  in
+  let* structure = interpret_statements ast env [] events in
+  let structure' = dot init_event'.label structure [] in
 
   Lwt.return (structure', events.events)
