@@ -17,6 +17,7 @@
   eventstructureviz
   forwardingcontext
   interpret
+  ir
   justifications
   lexer
   parse

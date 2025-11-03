@@ -41,16 +41,10 @@ type ast_stmt =
     }
   | SWhile of { condition : ast_expr; body : ast_stmt list }
   | SDo of { body : ast_stmt list; condition : ast_expr }
-  | SQDo of { body : ast_stmt list; condition : ast_expr }
   | SFence of { mode : mode }
   | SLock of { global : string option }
   | SUnlock of { global : string option }
-  | SMalloc of {
-      register : string;
-      size : ast_expr;
-      pc : int;
-      label : string list;
-    }
+  | SMalloc of { register : string; size : ast_expr }
   | SFree of { register : string }
   | SLabeled of { label : string list; stmt : ast_stmt }
 
@@ -158,10 +152,6 @@ let rec to_string (stmt : ast_stmt) : string =
       Printf.sprintf "SDo do %s while %s"
         (String.concat "; " (List.map to_string body))
         (expr_to_string condition)
-  | SQDo { body; condition } ->
-      Printf.sprintf "SQDo do %s qwhile %s"
-        (String.concat "; " (List.map to_string body))
-        (expr_to_string condition)
   | SFence { mode } ->
       Printf.sprintf "SFence with mode %s" (Types.mode_to_string mode)
   | SLock { global } ->
@@ -176,9 +166,8 @@ let rec to_string (stmt : ast_stmt) : string =
         | Some g -> g
         | None -> "none"
         )
-  | SMalloc { register; size; pc; label } ->
-      Printf.sprintf "SMalloc %s := malloc %s with pc %d and label [%s]"
-        register (expr_to_string size) pc (String.concat "; " label)
+  | SMalloc { register; size } ->
+      Printf.sprintf "SMalloc %s := malloc %s" register (expr_to_string size)
   | SFree { register } -> Printf.sprintf "SFree %s" register
   | SLabeled { label; stmt } ->
       Printf.sprintf "SLabeled [%s]: %s" (String.concat "; " label)

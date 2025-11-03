@@ -363,13 +363,6 @@ let test_parse_do_while () =
     | [ SDo { body = _; condition = EBinOp _ } ] -> ()
     | _ -> Alcotest.fail "Expected do-while loop"
 
-let test_parse_qwhile_loop () =
-  let src = "%% qdo r0 := r0 + 1 qwhile (r0 < 10)" in
-  let ast = parse src in
-    match ast.program with
-    | [ SQDo { body = _; condition = EBinOp _ } ] -> ()
-    | _ -> Alcotest.fail "Expected qdo-qwhile loop"
-
 let test_parse_fence () =
   let src = "%% fence(sc)" in
   let ast = parse src in
@@ -763,7 +756,6 @@ let suite =
       Alcotest.test_case "Parse if block" `Quick test_parse_if_block;
       Alcotest.test_case "Parse while loop" `Quick test_parse_while_loop;
       Alcotest.test_case "Parse do-while" `Quick test_parse_do_while;
-      Alcotest.test_case "Parse qwhile loop" `Quick test_parse_qwhile_loop;
       Alcotest.test_case "Parse fence" `Quick test_parse_fence;
       Alcotest.test_case "Parse fence acquire" `Quick test_parse_fence_acquire;
       Alcotest.test_case "Parse CAS" `Quick test_parse_cas;

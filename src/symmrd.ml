@@ -6,6 +6,7 @@ open Executions
 open Events
 open Types
 open Expr
+open Ir
 
 type result = {
   ast : expr list; (* Simplified AST *)
@@ -50,7 +51,13 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
       tree
   in
 
+  Printf.printf "[DEBUG] Building PO tree...\n";
+  flush stdout;
+
   let po_tree = build_tree po in
+
+  Printf.printf "[DEBUG] PO tree built.\n";
+  flush stdout;
 
   (* Build ebranch mapping *)
   let ebranch =
@@ -154,20 +161,33 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
     }
   in
 
+  Printf.printf "[DEBUG] Starting elaborations...\n";
+  flush stdout;
+
   let* final_justs =
     if include_dependencies then
       let rec fixed_point justs =
+        Printf.printf
+          "[DEBUG] Fixed-point calculation Justifications count: %d\n"
+          (List.length justs);
+        flush stdout;
         let* va = Elaborations.value_assign elab_ctx justs in
           let* lift = Elaborations.lift elab_ctx va in
-            let* weak = Elaborations.weaken elab_ctx (Uset.values lift) in
-              let* fwd = Elaborations.forward elab_ctx (Uset.of_list weak) in
+            let* weak = Elaborations.weaken elab_ctx lift in
+              let* fwd = Elaborations.forward elab_ctx weak in
                 let* filtered =
                   Elaborations.filter elab_ctx
                     (Uset.values (Uset.union (Uset.of_list justs) fwd))
                 in
 
-                if Uset.equal filtered (Uset.of_list justs) then
+                if Uset.equal filtered (Uset.of_list justs) then (
+                  Printf.printf
+                    "[DEBUG] Fixed-point reached with %d\n\
+                    \                  justifications.\n"
+                    (Uset.size filtered);
+                  flush stdout;
                   Lwt.return filtered
+                )
                 else fixed_point (Uset.values filtered)
       in
 
@@ -178,67 +198,92 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
     else Lwt.return init_justs
   in
 
+  Printf.printf
+    "[DEBUG] Elaborations complete. Final justifications count: %d\n"
+    (Uset.size final_justs);
+  flush stdout;
+
+  Printf.printf "[DEBUG] Generating executions...\n";
+  flush stdout;
+
   (* Build executions if not just structure *)
   let* executions =
     if just_structure then Lwt.return []
-    else
-      (* Use the full execution generation *)
+    else (* Use the full execution generation *)
       generate_executions events structure final_justs structure.constraint_
         e_set po rmw write_events read_events init_ppo ~include_dependencies
         ~restrictions
   in
 
+  Printf.printf "[DEBUG] Executions generated: %d\n" (List.length executions);
+  flush stdout;
+
   Lwt.return (structure, final_justs, executions)
 
-(** Convert parsed AST to interpreter format *)
-let rec convert_stmt = function
-  (* Direct mappings - same structure in new parser *)
-  | Ast.SThreads { threads } ->
-      `Threads (List.map (List.map convert_stmt) threads)
-  | Ast.SRegisterStore { register; expr } -> `RegisterStore (register, expr)
-  | Ast.SGlobalStore { global; expr; assign } ->
-      `GlobalStore (global, expr, (assign.mode, assign.volatile))
-  | Ast.SGlobalLoad { register; global; load } ->
-      `GlobalLoad (register, global, (load.mode, load.volatile))
-  | Ast.SStore { address; expr; assign } ->
-      (* Was SDerefStore in old parser *)
-      `DerefStore (address, expr, (assign.mode, assign.volatile))
-  | Ast.SIf { condition; then_body; else_body } ->
-      `If
-        ( condition,
-          List.map convert_stmt then_body,
-          Option.map (List.map convert_stmt) else_body
-        )
-  | Ast.SWhile { condition; body } ->
-      `While (condition, List.map convert_stmt body)
-  | Ast.SDo { body; condition } -> `Do (List.map convert_stmt body, condition)
-  | Ast.SQDo { body; condition } -> `QDo (List.map convert_stmt body, condition)
-  | Ast.SFence { mode } -> `Fence mode
-  | Ast.SLock { global } -> `Lock global
-  | Ast.SUnlock { global } -> `Unlock global
-  | Ast.SFree { register } -> `Free register
-  (* TODO  | Ast.SMalloc { register; size; pc; label } ->
-      `Malloc (register, size, pc, label) *)
-  | Ast.SLabeled { label; stmt } -> `Labeled (label, convert_stmt stmt)
-  (* CAS and FADD - structure changed in new parser *)
-  | Ast.SCAS { register; address; expected; desired; mode } ->
-      (* Old parser: params list and modes list
-         New parser: explicit address, expected, desired fields *)
-      `Cas (register, [ address; expected; desired ], [ mode ], false)
-  | Ast.SFADD { register; address; operand; mode } ->
-      (* Old parser: params list and modes list
-         New parser: explicit address and operand fields *)
-      `Fadd (register, [ address; operand ], [ mode ], false)
-  | Ast.SMalloc { register; size; pc = _; label = _ } ->
-      (* Old parser had pc and label fields, new parser does not *)
-      `Malloc (register, size)
+(** Convert parsed AST expressions to IR format *)
+let convert_expr = Parse.ast_expr_to_expr
 
-(* Note: The following old parser constructs no longer exist:
-   - SThread: Thread composition now handled at parse time with ||| operator
-   - SGlobalLoad: Should be converted to SRegisterStore with appropriate expr
-   - SDeref: Should be converted to SRegisterStore with load expr
-   - SQWhile: Use QDo with negated condition or handle separately
-*)
+(** Convert parsed AST statements to IR format *)
+let rec convert_stmt = function
+  | Ast.SThreads { threads } ->
+      let ir_threads = List.map (List.map convert_stmt) threads in
+        Threads { threads = ir_threads }
+  | Ast.SRegisterStore { register; expr } ->
+      let ir_expr = convert_expr expr in
+        RegisterStore { register; expr = ir_expr }
+  | Ast.SGlobalStore { global; expr; assign } ->
+      let ir_expr = convert_expr expr in
+        GlobalStore { global; expr = ir_expr; assign }
+  | Ast.SGlobalLoad { register; global; load } ->
+      GlobalLoad { register; global; load }
+  | Ast.SStore { address; expr; assign } ->
+      let ir_address = convert_expr address in
+      let ir_expr = convert_expr expr in
+        DerefStore { address = ir_address; expr = ir_expr; assign }
+  | Ast.SIf { condition; then_body; else_body } ->
+      let ir_condition = convert_expr condition in
+      let ir_then_body = List.map convert_stmt then_body in
+      let ir_else_body = Option.map (List.map convert_stmt) else_body in
+        If
+          {
+            condition = ir_condition;
+            then_body = ir_then_body;
+            else_body = ir_else_body;
+          }
+  | Ast.SWhile { condition; body } ->
+      let ir_condition = convert_expr condition in
+      let ir_body = List.map convert_stmt body in
+        While { condition = ir_condition; body = ir_body }
+  | Ast.SDo { body; condition } ->
+      let ir_condition = convert_expr condition in
+      let ir_body = List.map convert_stmt body in
+        Do { body = ir_body; condition = ir_condition }
+  | Ast.SFence { mode } -> Fence { mode }
+  | Ast.SLock { global } -> Lock { global }
+  | Ast.SUnlock { global } -> Unlock { global }
+  | Ast.SFree { register } -> Free { register }
+  | Ast.SLabeled { label; stmt } ->
+      let ir_stmt = convert_stmt stmt in
+        Labeled { label; stmt = ir_stmt }
+  | Ast.SCAS { register; address; expected; desired; mode } ->
+      let ir_address = convert_expr address in
+      let ir_expected = convert_expr expected in
+      let ir_desired = convert_expr desired in
+        Cas
+          {
+            register;
+            address = ir_address;
+            expected = ir_expected;
+            desired = ir_desired;
+            mode;
+          }
+  | Ast.SFADD { register; address; operand; mode } ->
+      let ir_address = convert_expr address in
+      let ir_operand = convert_expr operand in
+        Fadd { register; address = ir_address; operand = ir_operand; mode }
+  | Ast.SMalloc { register; size } ->
+      let ir_size = convert_expr size in
+        Malloc { register; size = ir_size }
 
 (** Parse program *)
 let parse_program program =
@@ -276,6 +321,9 @@ let create_symbolic_event_structure program (opts : options) =
     Interpret.interpret program_stmts [] (Hashtbl.create 16) []
   in
 
+  Printf.printf "[DEBUG] Program interpreted successfully.\n";
+  flush stdout;
+
   (* Create restrictions for coherence checking *)
   let coherence_restrictions =
     {
@@ -294,6 +342,9 @@ let create_symbolic_event_structure program (opts : options) =
       ~just_structure:(opts.just_structure || false)
       ~restrictions:coherence_restrictions
   in
+
+  Printf.printf "[DEBUG] Dependencies calculated.\n";
+  flush stdout;
 
   (* Check assertion if present *)
   let result =

@@ -103,6 +103,9 @@ let lifted_clear cache =
   Uset.clear cache.to_ |> ignore
 
 let filter elab_ctx (justs : justification list) =
+  Printf.printf "Filtering %d justifications...\n" (List.length justs);
+  flush stdout;
+
   let* (justs' : justification option list) =
     Lwt_list.map_p
       (fun (just : justification) ->
@@ -135,9 +138,15 @@ let filter elab_ctx (justs : justification list) =
     |> Uset.of_list
   in
 
+  Printf.printf "Filtered down to %d justifications.\n" (Uset.size result);
+  flush stdout;
   Lwt.return result
 
 let value_assign elab_ctx justs =
+  Printf.printf "Performing value assignment on %d justifications...\n"
+    (List.length justs);
+  flush stdout;
+
   let* results =
     Lwt_list.map_p
       (fun (just : justification) ->
@@ -162,6 +171,8 @@ let value_assign elab_ctx justs =
       justs
   in
 
+  Printf.printf "Completed value assignment.\n";
+  flush stdout;
   Lwt.return (Uset.of_list results)
 
 let fprime elab_ctx pred_fn ppo_loc =
@@ -208,6 +219,9 @@ let we elab_ctx pred_fn (ctx : Forwardingcontext.t) ppo_loc =
     |> Uset.map (fun (e1, e2) -> (e2, e1))
 
 let forward elab_ctx justs =
+  Printf.printf "Performing forwarding on %d justifications...\n"
+    (Uset.size justs);
+  flush stdout;
   let* out =
     (* Map over justifications *)
     let* results =
@@ -328,11 +342,15 @@ let forward elab_ctx justs =
       Lwt.return (Uset.of_list flattened)
   in
 
-  (* Simplified forwarding *)
+  Printf.printf "Completed forwarding.\n";
+  flush stdout;
   Lwt.return out
 
 let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
     con =
+  Printf.printf "Strengthening justifications %d and %d...\n" just_1.w.label
+    just_2.w.label;
+  flush stdout;
   let p_1 = Uset.of_list just_1.p in
   let p_2 = Uset.of_list just_2.p in
   let w_1 = just_1.w in
@@ -507,9 +525,13 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
        )
   in
 
+  Printf.printf "Completed strengthening. Found %d results.\n" (List.length out);
   Lwt.return out
 
 let conflict (elab_ctx : context) events =
+  Printf.printf "Computing conflicts among %d events...\n" (Uset.size events);
+  flush stdout;
+
   (* Build po tree *)
   let po_tree = build_tree elab_ctx.e_set elab_ctx.po in
 
@@ -566,6 +588,9 @@ let conflict (elab_ctx : context) events =
       )
       elab_ctx.branch_events
   in
+
+  Printf.printf "Completed conflict computation.\n";
+  flush stdout;
 
   (* Union all results *)
   Uset.fold (fun acc s -> Uset.union acc s) branch_results (Uset.create ())
@@ -753,6 +778,8 @@ let rec relabel_equivalent elab_ctx con statex p_1 p_2 relabelPairs _pred
       | _ -> Lwt.return_true
 
 let lift elab_ctx justs =
+  Printf.printf "Performing lifting on %d justifications...\n" (Uset.size justs);
+  flush stdout;
   (* Static constraints from structure *)
   let statex = elab_ctx.structure.constraint_ in
 
@@ -1006,10 +1033,18 @@ let lift elab_ctx justs =
       in
 
       let result = List.concat out |> Uset.of_list in
+        Printf.printf "Completed lifting.\n";
         Lwt.return result
 
-let weaken elab_ctx justs =
-  if elab_ctx.structure.pwg = [] then Lwt.return justs
+let weaken elab_ctx (justs : justification uset) : justification uset Lwt.t =
+  Printf.printf "Performing weakening on %d justifications...\n"
+    (Uset.size justs);
+  flush stdout;
+  if elab_ctx.structure.pwg = [] then (
+    Printf.printf "No PWG predicates; skipping weakening.\n";
+    flush stdout;
+    Lwt.return justs
+  )
   else
     let* out =
       Lwt_list.map_p
@@ -1049,7 +1084,9 @@ let weaken elab_ctx justs =
           Lwt.return
             { just with p = filtered_p; op = ("weak", Some just, None) }
         )
-        justs
+        (Uset.values justs)
     in
 
-    Lwt.return out
+    Printf.printf "Completed weakening.\n";
+    flush stdout;
+    Lwt.return (Uset.of_list out)

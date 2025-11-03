@@ -740,10 +740,10 @@ let test_weaken_no_pwg () =
   let ctx = create_mock_context () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred; pred ] in
-  let justs = [ just ] in
+  let justs = Uset.singleton just in
     let* result = weaken ctx justs in
       (* With no PWG, should return input unchanged *)
-      check int "weaken no pwg" (List.length justs) (List.length result);
+      check int "weaken no pwg" (Uset.size justs) (Uset.size result);
       Lwt.return_unit
 
 let test_weaken_with_pwg () =
@@ -752,11 +752,11 @@ let test_weaken_with_pwg () =
   let structure = { ctx.structure with pwg = [ pred ] } in
   let ctx = { ctx with structure } in
   let just = create_mock_justification 1 [ pred; pred ] in
-  let justs = [ just ] in
+  let justs = Uset.singleton just in
     let* result = weaken ctx justs in
-      check bool "weaken with pwg" true (List.length result > 0);
+      check bool "weaken with pwg" true (Uset.size result > 0);
       (* Predicates implied by PWG should be removed *)
-      let just' = List.hd result in
+      let just' = List.hd (Uset.values result) in
         check bool "weaken removes implied" true
           (List.length just'.p <= List.length just.p);
         Lwt.return_unit
@@ -770,9 +770,9 @@ let test_weaken_preserves_non_implied () =
   (* Create predicate that is NOT implied by PWG: y = 2 (different variable) *)
   let not_pwg = EBinOp (EVar "y", "=", ENum (Z.of_int 2)) in
   let just = create_mock_justification 1 [ not_pwg ] in
-  let justs = [ just ] in
+  let justs = Uset.singleton just in
     let* result = weaken ctx justs in
-    let just' = List.hd result in
+    let just' = List.hd (Uset.values result) in
       (* Non-implied predicate should be preserved *)
       check bool "weaken preserves non-implied" true (List.length just'.p > 0);
       Lwt.return_unit

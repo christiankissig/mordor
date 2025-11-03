@@ -133,35 +133,37 @@ let interpret_tests tests =
 
 let visualize_event_structure (mode : output_mode) output_file (name, program) =
   Printf.printf "Visualizing event structure for program %s.\n" name;
-  let* result = create_symbolic_event_structure program default_options in
-    match mode with
-    | Json ->
-        let json =
-          EventStructureViz.visualize EventStructureViz.JSON result.structure
-            result.events
-        in
-          ( if output_file = "stdout" then Printf.printf "%s\n" json
-            else
-              let oc = open_out output_file in
-                output_string oc json;
-                close_out oc
-          );
+  flush stdout;
+  let opts = { default_options with just_structure = true } in
+    let* result = create_symbolic_event_structure program opts in
+      match mode with
+      | Json ->
+          let json =
+            EventStructureViz.visualize EventStructureViz.JSON result.structure
+              result.events
+          in
+            ( if output_file = "stdout" then Printf.printf "%s\n" json
+              else
+                let oc = open_out output_file in
+                  output_string oc json;
+                  close_out oc
+            );
+            Lwt.return_unit
+      | Dot ->
+          let dot =
+            EventStructureViz.visualize EventStructureViz.DOT result.structure
+              result.events
+          in
+            ( if output_file = "stdout" then Printf.printf "%s\n" dot
+              else
+                let oc = open_out output_file in
+                  output_string oc dot;
+                  close_out oc
+            );
+            Lwt.return_unit
+      | Html ->
+          Printf.eprintf "HTML output not implemented yet.\n";
           Lwt.return_unit
-    | Dot ->
-        let dot =
-          EventStructureViz.visualize EventStructureViz.DOT result.structure
-            result.events
-        in
-          ( if output_file = "stdout" then Printf.printf "%s\n" dot
-            else
-              let oc = open_out output_file in
-                output_string oc dot;
-                close_out oc
-          );
-          Lwt.return_unit
-    | Html ->
-        Printf.eprintf "HTML output not implemented yet.\n";
-        Lwt.return_unit
 
 let usage_msg =
   "Usage: main COMMAND [OPTIONS]\n\n\

@@ -3,6 +3,7 @@
 open Lwt.Syntax
 open Types
 open Expr
+open Ir
 
 (** Event counter *)
 let event_counter = ref 0
@@ -38,9 +39,9 @@ type events_t = {
   mutable van : int;
 }
 
-let create_events () = { events = Hashtbl.create 256; label = 1; van = 1 }
+let create_events () = { events = Hashtbl.create 256; label = 0; van = 0 }
 
-let add_event events event =
+let add_event (events : events_t) event =
   let lbl = events.label in
     events.label <- events.label + 1;
     let v = events.van in
@@ -129,9 +130,11 @@ let rec interpret_statements stmts env phi events =
           Lwt.return (plus structure rest_structure)
 
 and interpret_stmt stmt env phi events =
+  Printf.printf "Interpreting statement:\n";
+  flush stdout;
   let* structure =
     match stmt with
-    | `Threads threads ->
+    | Threads { threads } ->
         let rec interpret_threads ts =
           match ts with
           | [] -> Lwt.return (empty_structure ())
@@ -141,52 +144,50 @@ and interpret_stmt stmt env phi events =
                   Lwt.return (cross t_structure rest_structure)
         in
           interpret_threads threads
-    | `RegisterStore (register, e) ->
-        let expr = interpret_expr e env in
+    | RegisterStore { register; expr } ->
         let env' = update_env env register expr in
           let* cont = interpret_statements [] env' phi events in
             Lwt.return cont
-    | `GlobalStore (global, e, (mode, volatile)) ->
-        let expr = interpret_expr e env in
+    | GlobalStore { global; expr; assign } ->
         let base_evt : event = make_event Write 0 in
         let evt =
           {
             base_evt with
             id = Some (VVar global);
+            loc = Some (EVar global);
             wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
-            (* Simplified *)
-            wmod = mode;
-            volatile;
+            wmod = assign.mode;
+            volatile = assign.volatile;
           }
         in
         let event' = add_event events evt in
           let* cont = interpret_statements [] env phi events in
             Lwt.return (dot event'.label cont phi)
-    | `SStore (address, e, (mode, volatile)) ->
-        let expr = interpret_expr e env in
+    | DerefStore { address; expr; assign } ->
         let base_evt : event = make_event Write 0 in
         let evt =
           {
             base_evt with
             loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
             wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
-            wmod = mode;
-            volatile;
+            wmod = assign.mode;
+            volatile = assign.volatile;
           }
         in
         let event' = add_event events evt in
           let* cont = interpret_statements [] env phi events in
             Lwt.return (dot event'.label cont phi)
-    | `GlobalLoad (register, global, (mode, volatile)) ->
+    | GlobalLoad { register; global; load } ->
         let rval = VSymbol (next_greek ()) in
         let base_evt : event = make_event Read 0 in
         let evt =
           {
             base_evt with
             id = Some (VVar global);
+            loc = Some (EVar global);
             rval = Some rval;
-            rmod = mode;
-            volatile;
+            rmod = load.mode;
+            volatile = load.volatile;
           }
         in
         let event' = add_event events evt in
@@ -194,16 +195,15 @@ and interpret_stmt stmt env phi events =
           Hashtbl.replace env' register (Expr.of_value rval);
           let* cont = interpret_statements [] env' phi events in
             Lwt.return (dot event'.label cont phi)
-    | `If (cond, then_body, else_body_opt) -> (
-        let condition = interpret_expr cond env in
+    | If { condition; then_body; else_body } -> (
         let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
           let* then_structure =
             interpret_statements then_body env (cond_val :: phi) events
           in
-            match else_body_opt with
-            | Some else_body ->
+            match else_body with
+            | Some eb ->
                 let* else_structure =
-                  interpret_statements else_body env
+                  interpret_statements eb env
                     (Expr.unop "~" cond_val :: phi)
                     events
                 in
@@ -216,16 +216,13 @@ and interpret_stmt stmt env phi events =
     (* | `Do (body, condition) ->
           (* Simplified - ignore loops for now *)
           Lwt.return (empty_structure ()) *)
-    (* | `QDo (body, condition) ->
-          (* Simplified - ignore loops for now *)
-          Lwt.return (empty_structure ()) *)
-    | `Fence mode ->
+    | Fence { mode } ->
         let base_evt : event = make_event Fence 0 in
         let evt = { base_evt with fmod = mode } in
         let event' = add_event events evt in
           let* cont = interpret_statements [] env phi events in
             Lwt.return (dot event'.label cont phi)
-    | `Lock global ->
+    | Lock { global } ->
         let base_evt : event = make_event Lock 0 in
         let evt =
           match global with
@@ -235,7 +232,7 @@ and interpret_stmt stmt env phi events =
         let event' = add_event events evt in
           let* cont = interpret_statements [] env phi events in
             Lwt.return (dot event'.label cont phi)
-    | `Unlock global ->
+    | Unlock { global } ->
         let base_evt : event = make_event Unlock 0 in
         let evt =
           match global with
@@ -268,25 +265,6 @@ and interpret_stmt stmt env phi events =
         Lwt.return (empty_structure ())
   in
     Lwt.return structure
-
-and interpret_expr (e : Ast.ast_expr) env =
-  match e with
-  | Ast.EInt n -> Expr.num n
-  | Ast.ERegister v ->
-      Hashtbl.find_opt env v |> Option.value ~default:(Expr.var v)
-  | Ast.EGlobal v -> Expr.var v
-  | Ast.EBinOp (lhs, op, rhs) ->
-      let lhs' = interpret_expr lhs env in
-      let rhs' = interpret_expr rhs env in
-        Expr.binop lhs' op rhs'
-  | Ast.EUnOp (op, expr) ->
-      let expr' = interpret_expr expr env in
-        Expr.unop op expr'
-  | _ ->
-      failwith
-        (Printf.sprintf "Unhandled expression type %s in\ninterpret_expr"
-           (Ast.expr_to_string e)
-        )
 
 (** Main interpret function *)
 let interpret ast defacto restrictions constraint_ =

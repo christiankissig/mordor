@@ -41,8 +41,6 @@ rule token = parse
   | "while"               { Parser.WHILE }
   | "do"                  { Parser.DO }
   | "skip"                { Parser.SKIP }
-  | "qdo"                 { Parser.QDO }
-  | "qwhile"              { Parser.QWHILE }
   | "fence"               { Parser.FENCE }
   | "malloc"              { Parser.MALLOC }
   | "free"                { Parser.FREE }

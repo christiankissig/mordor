@@ -15,7 +15,7 @@ let make_labeled labels stmt =
 
 (* Token declarations *)
 %token NONATOMIC RELAXED RELEASE ACQUIRE STRONG NORMAL SC
-%token FADD CAS IF ELSE WHILE DO SKIP QDO QWHILE FENCE
+%token FADD CAS IF ELSE WHILE DO SKIP FENCE
 %token MALLOC FREE LOCK UNLOCK LOAD STORE
 %token ALLOW FORBID NAME VALUES
 %token <Z.t> INT
@@ -209,9 +209,6 @@ stmt_base:
   | DO body=block_or_stmt WHILE LPAREN cond=expr RPAREN
     { SDo { body; condition = cond } }
 
-  | QDO body=block_or_stmt QWHILE LPAREN cond=expr RPAREN
-    { SQDo { body; condition = cond } }
-
   (* Fence *)
   | FENCE LPAREN mode=memory_order RPAREN
     { SFence { mode } }
@@ -225,9 +222,9 @@ stmt_base:
 
   (* Malloc *)
   | reg=REGISTER ASSIGN MALLOC LPAREN size=expr RPAREN
-    { SMalloc { register = reg; size; pc = 0; label = [] } }
+    { SMalloc { register = reg; size; } }
   | reg=REGISTER ASSIGN MALLOC size=expr
-    { SMalloc { register = reg; size; pc = 0; label = [] } }
+    { SMalloc { register = reg; size; } }
 
   (* Free *)
   | FREE LPAREN reg=REGISTER RPAREN
