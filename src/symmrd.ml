@@ -1,5 +1,4 @@
-(** sMRD - Symbolic Memory Relaxation Dependencies Main dependency calculation
-    algorithm *)
+(** Mordor - Main dependency calculation algorithm *)
 
 open Lwt.Syntax
 open Executions
@@ -26,10 +25,14 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
   let rmw = structure.rmw in
   let po = structure.po in
 
-  (* Filter to only events that exist in the hashtable *)
+  (* TODO should not be needed!
+     Filter to only events that exist in the hashtable *)
+  (*
   let e_set_filtered =
     Uset.filter (fun id -> Hashtbl.mem events id) structure.e
   in
+  *)
+  let e_set_filtered = e_set in
 
   let branch_events = filter_events events e_set_filtered Branch in
   let read_events = filter_events events e_set_filtered Read in
@@ -51,13 +54,11 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
       tree
   in
 
-  Printf.printf "[DEBUG] Building PO tree...\n";
-  flush stdout;
+  Logs.debug (fun m -> m "Building PO tree...");
 
   let po_tree = build_tree po in
 
-  Printf.printf "[DEBUG] PO tree built.\n";
-  flush stdout;
+  Logs.debug (fun m -> m "PO tree built");
 
   (* Build ebranch mapping *)
   let ebranch =
@@ -131,6 +132,14 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
       write_events
   in
 
+  Logs.debug (fun m ->
+      m "Initial justification for event\n\t%s"
+        (String.concat "\n\t"
+           (List.map Justifications.to_string (Uset.values init_justs))
+        )
+  );
+
+  (* Initialize initial PPO relation *)
   let init_ppo =
     if Hashtbl.mem events 0 then
       Uset.cross (Uset.singleton 0)
@@ -161,16 +170,14 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
     }
   in
 
-  Printf.printf "[DEBUG] Starting elaborations...\n";
-  flush stdout;
+  Logs.debug (fun m -> m "Starting elaborations...");
 
   let* final_justs =
     if include_dependencies then
       let rec fixed_point justs =
-        Printf.printf
-          "[DEBUG] Fixed-point calculation Justifications count: %d\n"
-          (List.length justs);
-        flush stdout;
+        Logs.debug (fun m ->
+            m "Fixed-point iteration with %d justifications" (List.length justs)
+        );
         let* va = Elaborations.value_assign elab_ctx justs in
           let* lift = Elaborations.lift elab_ctx va in
             let* weak = Elaborations.weaken elab_ctx lift in
@@ -181,10 +188,10 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
                 in
 
                 if Uset.equal filtered (Uset.of_list justs) then (
-                  Printf.printf
-                    "[DEBUG] Fixed-point reached with %d\n\
-                    \                  justifications.\n"
-                    (Uset.size filtered);
+                  Logs.debug (fun m ->
+                      m "Fixed-point reached with %d justifications."
+                        (Uset.size filtered)
+                  );
                   flush stdout;
                   Lwt.return filtered
                 )
@@ -198,13 +205,12 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
     else Lwt.return init_justs
   in
 
-  Printf.printf
-    "[DEBUG] Elaborations complete. Final justifications count: %d\n"
-    (Uset.size final_justs);
-  flush stdout;
+  Logs.debug (fun m ->
+      m "Elaborations complete. Final justifications count: %d"
+        (Uset.size final_justs)
+  );
 
-  Printf.printf "[DEBUG] Generating executions...\n";
-  flush stdout;
+  Logs.debug (fun m -> m "Generating executions...");
 
   (* Build executions if not just structure *)
   let* executions =
@@ -215,8 +221,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
         ~restrictions
   in
 
-  Printf.printf "[DEBUG] Executions generated: %d\n" (List.length executions);
-  flush stdout;
+  Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));
 
   Lwt.return (structure, final_justs, executions)
 
@@ -287,8 +292,7 @@ let rec convert_stmt = function
 
 (** Parse program *)
 let parse_program program =
-  Printf.printf "[DEBUG] Parsing program...\n";
-  flush stdout;
+  Logs.debug (fun m -> m "Parsing program...");
 
   try
     let litmus = Parse.parse program in
@@ -303,10 +307,10 @@ let parse_program program =
       (constraints, program_stmts)
   with
   | Failure msg ->
-      Printf.eprintf "Parse error: %s\n" msg;
+      Logs.err (fun m -> m "Parse error: %s" msg);
       ([], [])
   | e ->
-      Printf.eprintf "Unexpected error: %s\n" (Printexc.to_string e);
+      Logs.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
       ([], [])
 
 (** Main entry point *)
@@ -323,8 +327,7 @@ let create_symbolic_event_structure program (opts : options) =
 
   assert (Hashtbl.length events = Uset.size structure.e);
 
-  Printf.printf "[DEBUG] Program interpreted successfully.\n";
-  flush stdout;
+  Logs.debug (fun m -> m "Program interpreted successfully.");
 
   (* Create restrictions for coherence checking *)
   let coherence_restrictions =
@@ -345,8 +348,7 @@ let create_symbolic_event_structure program (opts : options) =
       ~restrictions:coherence_restrictions
   in
 
-  Printf.printf "[DEBUG] Dependencies calculated.\n";
-  flush stdout;
+  Logs.debug (fun m -> m "Dependencies calculated.");
 
   (* Check assertion if present *)
   let result =
@@ -360,7 +362,6 @@ let create_symbolic_event_structure program (opts : options) =
     }
   in
 
-  Printf.printf "[DEBUG] Verification complete.\n";
-  flush stdout;
+  Logs.debug (fun m -> m "Verification complete.");
 
   Lwt.return result

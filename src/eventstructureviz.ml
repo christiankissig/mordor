@@ -16,6 +16,7 @@ module EventStructureViz = struct
     | Fence -> "F"
     | Lock -> "Lock"
     | Unlock -> "Unlock"
+    | Init -> "Init"
     | _ -> "Event"
 
   (** Vertex type with event information *)

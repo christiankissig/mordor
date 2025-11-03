@@ -31,7 +31,7 @@
   utils)
  (flags
   (:standard -g -w -26-27))
- (libraries core ocamlgraph lwt lwt.unix z3 zarith)
+ (libraries core ocamlgraph logs logs.fmt lwt lwt.unix z3 zarith)
  (public_name smrd)
  (preprocess
   (pps lwt_ppx)))

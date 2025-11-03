@@ -43,7 +43,6 @@ let create_events () = { events = Hashtbl.create 256; label = 0; van = 0 }
 
 let add_event (events : events_t) event =
   let lbl = events.label in
-    Printf.printf "Adding event with label %d\n" lbl;
     events.label <- events.label + 1;
     let v = events.van in
       events.van <- events.van + 1;
@@ -53,7 +52,6 @@ let add_event (events : events_t) event =
 
 (** Symbolic Event Structure builders *)
 let dot label structure phi : symbolic_event_structure =
-  Printf.printf "Dotting event %d to structure\n" label;
   {
     e = Uset.union structure.e (Uset.singleton label);
     po = Uset.union structure.po (Uset.map (fun e -> (label, e)) structure.e);
@@ -126,12 +124,9 @@ let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr
 
 let rec interpret_statements (stmts : ir_stmt list) env phi events =
   match stmts with
-  | [] ->
-      Printf.printf "End of program.\n";
-      Lwt.return (empty_structure ())
+  | [] -> Lwt.return (empty_structure ())
   | stmt :: rest ->
-      Printf.printf "Interpreting statement: %s\n" (Ir.to_string stmt);
-      flush stdout;
+      Logs.debug (fun m -> m "Interpreting statement: %s" (Ir.to_string stmt));
       let* structure =
         match stmt with
         | Threads { threads } ->
@@ -261,15 +256,14 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
                 Lwt.return (dot event'.label cont phi)
         | Labeled { label; stmt } ->
             (* TODO *)
-            Printf.printf "[WARN] Labeled event\n";
+            Logs.warn (fun m ->
+                m "Labeled event encountered: %s" (String.concat "; " label)
+            );
             let* structure = interpret_statements [ stmt ] env phi events in
               Lwt.return structure
         | _ ->
             (* Simplified - return empty structure for unhandled cases *)
-            Printf.printf
-              "[ERROR] Statement not handled %s, returning empty structure.\n"
-              (Ir.to_string stmt);
-            flush stdout;
+            Logs.err (fun m -> m "Statement not handled: %s" (Ir.to_string stmt));
             Lwt.return (empty_structure ())
       in
         Lwt.return structure

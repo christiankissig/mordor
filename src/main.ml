@@ -1,4 +1,5 @@
-(* Main entry point for sMRD *)
+(** Mordor - Main Loop *)
+
 open Lwt.Syntax
 open Types
 open Symmrd
@@ -93,17 +94,15 @@ let run_single name program =
     Lwt.return_unit
 
 let run_tests tests =
-  Printf.printf "Running %d tests.\n" (List.length tests);
+  Logs.info (fun m -> m "Running %d tests." (List.length tests));
   let* () = Lwt_list.iter_s (fun (name, prog) -> run_single name prog) tests in
     flush stdout;
     Lwt.return_unit
 
 let parse_single name program =
-  Printf.printf "Parsing program %s.\n" name;
-  flush stdout;
+  Logs.info (fun m -> m "Parsing program %s." name);
   let _ast, _program_stmts = Symmrd.parse_program program in
-    Printf.printf "Parsed program %s successfully.\n" name;
-    flush stdout;
+    Logs.info (fun m -> m "Parsed program %s successfully." name);
     Lwt.return_unit
 
 let parse_tests tests =
@@ -114,8 +113,7 @@ let parse_tests tests =
     Lwt.return_unit
 
 let interpret_single name program =
-  Printf.printf "Interpreting program %s.\n" name;
-  flush stdout;
+  Logs.info (fun m -> m "Interpreting program %s." name);
   let _, program_stmts = Symmrd.parse_program program in
     let* _result =
       Interpret.interpret program_stmts [] (Hashtbl.create 16) []
@@ -309,4 +307,7 @@ let main () =
       Printf.printf "TODO: not implemented yet\n";
       Lwt.return_unit
 
-let () = Lwt_main.run (main ())
+let () =
+  Logs.set_reporter (Logs_fmt.reporter ());
+  Logs.set_level (Some Logs.Debug);
+  Lwt_main.run (main ())
