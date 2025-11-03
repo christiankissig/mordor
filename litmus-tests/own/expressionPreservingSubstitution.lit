@@ -13,4 +13,4 @@ else {
   x := (ra + rc) / rb;
 }
 %%
-forbid (r1 = r2 && (1,7) ∉ ."dp") []
+forbid (r1 = r2 && (1,7) ∉ .dp) []

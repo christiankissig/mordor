@@ -1,4 +1,4 @@
 x :v= 0
 r1 :v= x
 y :v= r1
-%% forbid ((2,3) ∉ ."dp") []
+%% forbid ((2,3) ∉ .dp) []

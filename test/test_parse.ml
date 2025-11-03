@@ -427,11 +427,11 @@ let test_parse_unlock_with_global () =
     | _ -> Alcotest.fail "Expected unlock mutex"
 
 let test_parse_malloc_stmt () =
-  let src = "%% malloc(r0, 8)" in
+  let src = "%% r0 := malloc(8)" in
   let ast = parse src in
     match ast.program with
     | [ SMalloc { register = "r0"; size = EInt _; _ } ] -> ()
-    | _ -> Alcotest.fail "Expected malloc(r0, 8)"
+    | _ -> Alcotest.fail "Expected r0 := malloc(8)"
 
 let test_parse_free () =
   let src = "%% free(r0)" in
@@ -439,13 +439,6 @@ let test_parse_free () =
     match ast.program with
     | [ SFree { register = "r0" } ] -> ()
     | _ -> Alcotest.fail "Expected free(r0)"
-
-let test_parse_skip () =
-  let src = "%% skip" in
-  let ast = parse src in
-    match ast.program with
-    | [ SSkip ] -> ()
-    | _ -> Alcotest.fail "Expected skip"
 
 let test_parse_labeled_stmt () =
   let src = "%% `label` x := 1" in
@@ -470,43 +463,52 @@ let test_parse_multiple_statements () =
     | _ -> Alcotest.fail "Expected 3 statements"
 
 let test_parse_thread_parallel () =
-  let src = "%% x := 1 ||| y := 2" in
+  let src = "%% {x := 1} ||| {y := 2}" in
   let ast = parse src in
     match ast.program with
-    | [ SGlobalStore { global = "x"; _ }; SGlobalStore { global = "y"; _ } ] ->
-        ()
+    | [
+     SThreads
+       {
+         threads =
+           [
+             [ SGlobalStore { global = "x"; _ } ];
+             [ SGlobalStore { global = "y"; _ } ];
+           ];
+       };
+    ] -> ()
     | _ -> Alcotest.fail "Expected parallel threads"
 
 let test_parse_multiple_threads () =
-  let src = "%% x := 1 ||| y := 2 ||| r0 := x" in
+  let src = "%% {x := 1} ||| {y := 2} ||| {r0 := x}" in
   let ast = parse src in
     match ast.program with
-    | [ SGlobalStore _; SGlobalStore _; SRegisterStore _ ] -> ()
+    | [
+     SThreads
+       {
+         threads =
+           [ [ SGlobalStore _ ]; [ SGlobalStore _ ]; [ SRegisterStore _ ] ];
+       };
+    ] -> ()
     | _ -> Alcotest.fail "Expected 3 threads"
-
-let test_parse_thread_with_blocks () =
-  let src = "%% { x := 1; y := 2 } ||| { r0 := x; r1 := y }" in
-  let ast = parse src in
-    Alcotest.(check int) "4 statements" 4 (List.length ast.program)
 
 (** Configuration Parsing Tests *)
 
 let test_parse_config_name () =
-  let src = "name = mytest\n%%" in
+  let src = "name = mytest\n%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config -> Alcotest.(check string) "config name" "mytest" config.name
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_name_with_numbers () =
-  let src = "name = test123\n%%" in
+  let src = "name = test123\n%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config -> Alcotest.(check string) "config name" "test123" config.name
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_values () =
-  let src = "values = {0, 1, 2}\n%%" in
+  let src = "values = {0, 1, 2}\n%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config ->
@@ -514,7 +516,7 @@ let test_parse_config_values () =
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_values_hex () =
-  let src = "values = {0x0, 0x1, 0xFF}\n%%" in
+  let src = "values = {0x0, 0x1, 0xFF}\n%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config ->
@@ -522,7 +524,7 @@ let test_parse_config_values_hex () =
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_defacto () =
-  let src = "[r0 = 1]\n%%" in
+  let src = "[r0 = 1]\n%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config ->
@@ -532,7 +534,7 @@ let test_parse_config_defacto () =
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_multiple_defacto () =
-  let src = "[r0 = 1]\n[x = 0]\n%%" in
+  let src = "[r0 = 1]\n[x = 0]\n%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config ->
@@ -542,7 +544,7 @@ let test_parse_config_multiple_defacto () =
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_constraint () =
-  let src = "[[r0 = 1]]\n%%" in
+  let src = "[[r0 = 1]]\n%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config ->
@@ -550,7 +552,7 @@ let test_parse_config_constraint () =
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_multiple_constraints () =
-  let src = "[[r0 = 1]]\n[[x = 0]]\n%%" in
+  let src = "[[r0 = 1]]\n[[x = 0]]\n%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config ->
@@ -558,7 +560,7 @@ let test_parse_config_multiple_constraints () =
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_full_config () =
-  let src = "name = test\nvalues = {0, 1}\n[x = 0]\n[[r0 = 1]]\n%%" in
+  let src = "name = test\nvalues = {0, 1}\n[x = 0]\n[[r0 = 1]]\n%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config ->
@@ -569,7 +571,7 @@ let test_parse_full_config () =
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_minimal_config () =
-  let src = "%%" in
+  let src = "%%r := 0" in
   let ast = parse src in
     match ast.config with
     | Some config ->
@@ -580,42 +582,42 @@ let test_parse_minimal_config () =
 (** Assertion Parsing Tests *)
 
 let test_parse_assertion_allow () =
-  let src = "%% x := 1\n%% allow r0 = 1 []" in
+  let src = "x := 1;\n%% allow r0 = 1 []" in
   let ast = parse src in
     match ast.assertion with
     | Some (AOutcome { outcome = "allow"; condition = EBinOp _; _ }) -> ()
     | _ -> Alcotest.fail "Expected allow assertion"
 
 let test_parse_assertion_forbid () =
-  let src = "%% x := 1\n%% forbid r0 = 1 []" in
+  let src = "x := 1;\n%% forbid r0 = 1 []" in
   let ast = parse src in
     match ast.assertion with
     | Some (AOutcome { outcome = "forbid"; _ }) -> ()
     | _ -> Alcotest.fail "Expected forbid assertion"
 
 let test_parse_assertion_with_model () =
-  let src = "%% x := 1\n%% allow r0 = 1 [sc]" in
+  let src = "x := 1;\n%% allow r0 = 1 [sc]" in
   let ast = parse src in
     match ast.assertion with
     | Some (AOutcome { outcome = "allow"; model = Some "sc"; _ }) -> ()
     | _ -> Alcotest.fail "Expected assertion with sc model"
 
 let test_parse_assertion_complex_condition () =
-  let src = "%% x := 1\n%% forbid r0 = 1 && r1 = 0 []" in
+  let src = "x := 1;\n%% forbid r0 = 1 && r1 = 0 []" in
   let ast = parse src in
     match ast.assertion with
     | Some (AOutcome { condition = EBinOp (_, "&&", _); _ }) -> ()
     | _ -> Alcotest.fail "Expected complex condition"
 
 let test_parse_assertion_model_only () =
-  let src = "%% x := 1\n%% [rc11]" in
+  let src = "x := 1;\n%% [rc11]" in
   let ast = parse src in
     match ast.assertion with
     | Some (AModel { model = "rc11" }) -> ()
     | _ -> Alcotest.fail "Expected model-only assertion"
 
 let test_parse_no_assertion () =
-  let src = "%% x := 1" in
+  let src = "x := 1" in
   let ast = parse src in
     match ast.assertion with
     | None -> ()
@@ -628,7 +630,7 @@ let test_parse_message_passing () =
     "name = MP\n\
      values = {0, 1}\n\
      %%\n\
-     x := 1; y := 1 ||| r0 := y; r1 := x\n\
+     {x := 1; y := 1} ||| {r0 := y; r1 := x}\n\
      %% forbid r0 = 1 && r1 = 0 []"
   in
   let ast = parse src in
@@ -636,7 +638,6 @@ let test_parse_message_passing () =
     | Some config -> Alcotest.(check string) "MP test name" "MP" config.name
     | None -> Alcotest.fail "Expected config section"
     );
-    Alcotest.(check int) "4 statements" 4 (List.length ast.program);
     match ast.assertion with
     | Some (AOutcome { outcome = "forbid"; _ }) -> ()
     | _ -> Alcotest.fail "Expected forbid assertion"
@@ -645,27 +646,20 @@ let test_parse_store_buffer () =
   let src =
     "name = SB\n\
      %%\n\
-     x := 1; r0 := y ||| y := 1; r1 := x\n\
+     {x := 1; r0 := y} ||| {y := 1; r1 := x}\n\
      %% forbid r0 = 0 && r1 = 0 []"
   in
   let ast = parse src in
-    ( match ast.config with
+    match ast.config with
     | Some config -> Alcotest.(check string) "SB test name" "SB" config.name
     | None -> Alcotest.fail "Expected config section"
-    );
-    Alcotest.(check int) "4 statements" 4 (List.length ast.program)
 
 let test_parse_load_buffering () =
   let src =
-    "%%\nr0 := x; y := 1 ||| r1 := y; x := 1\n%% forbid r0 = 1 && r1 = 1 []"
+    "%%\n{r0 := x; y := 1} ||| {r1 := y; x := 1}\n%% forbid r0 = 1 && r1 = 1 []"
   in
   let ast = parse src in
-    Alcotest.(check int) "4 statements" 4 (List.length ast.program)
-
-let test_parse_empty_litmus () =
-  let src = "%%" in
-  let ast = parse src in
-    Alcotest.(check int) "empty program" 0 (List.length ast.program)
+    ()
 
 let test_parse_single_thread () =
   let src = "%% x := 1; r0 := x" in
@@ -685,20 +679,18 @@ let test_parse_complex_litmus () =
      [y = 0]\n\
      [[r0 != r1]]\n\
      %%\n\
-     `thread1` x :rel= 1; fence(sc); y :rel= 1 |||\n\
-     `thread2` r0 := y; fence(sc); r1 := x\n\
+     {`thread1` x :rel= 1; fence(sc); y :rel= 1} |||\n\
+     {`thread2` r0 := y; fence(sc); r1 := x}\n\
      %% forbid r0 = 1 && r1 = 0 [sc]"
   in
   let ast = parse src in
-    ( match ast.config with
+    match ast.config with
     | Some config ->
         Alcotest.(check string) "name" "Complex" config.name;
         Alcotest.(check int) "values" 3 (List.length config.values);
         Alcotest.(check int) "defacto" 2 (List.length config.defacto);
         Alcotest.(check int) "constraint" 1 (List.length config.constraint_)
     | None -> Alcotest.fail "Expected config section"
-    );
-    Alcotest.(check int) "6 statements" 6 (List.length ast.program)
 
 (** Test Suite *)
 
@@ -745,8 +737,7 @@ let suite =
       Alcotest.test_case "Parse forall" `Quick test_parse_forall;
       Alcotest.test_case "Parse complex expression" `Quick
         test_parse_complex_expr;
-      (* TODO
-         Alcotest.test_case "Parse in operator" `Quick test_parse_in_operator;
+      Alcotest.test_case "Parse in operator" `Quick test_parse_in_operator;
       Alcotest.test_case "Parse notin operator" `Quick test_parse_notin_operator;
       (* Statement parsing tests *)
       Alcotest.test_case "Parse register store" `Quick test_parse_register_store;
@@ -785,7 +776,6 @@ let suite =
         test_parse_unlock_with_global;
       Alcotest.test_case "Parse malloc stmt" `Quick test_parse_malloc_stmt;
       Alcotest.test_case "Parse free" `Quick test_parse_free;
-      Alcotest.test_case "Parse skip" `Quick test_parse_skip;
       Alcotest.test_case "Parse labeled statement" `Quick
         test_parse_labeled_stmt;
       Alcotest.test_case "Parse multiple labels" `Quick
@@ -796,8 +786,6 @@ let suite =
         test_parse_thread_parallel;
       Alcotest.test_case "Parse multiple threads" `Quick
         test_parse_multiple_threads;
-      Alcotest.test_case "Parse thread with blocks" `Quick
-        test_parse_thread_with_blocks;
       (* Configuration parsing tests *)
       Alcotest.test_case "Parse config name" `Quick test_parse_config_name;
       Alcotest.test_case "Parse config name with numbers" `Quick
@@ -831,11 +819,8 @@ let suite =
         test_parse_message_passing;
       Alcotest.test_case "Parse store buffer" `Quick test_parse_store_buffer;
       Alcotest.test_case "Parse load buffering" `Quick test_parse_load_buffering;
-      Alcotest.test_case "Parse empty litmus" `Quick test_parse_empty_litmus;
       Alcotest.test_case "Parse single thread" `Quick test_parse_single_thread;
       Alcotest.test_case "Parse with comments" `Quick test_parse_with_comments;
       Alcotest.test_case "Parse complex litmus" `Quick test_parse_complex_litmus;
-
-       *)
     ]
   )

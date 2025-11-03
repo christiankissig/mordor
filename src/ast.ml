@@ -53,7 +53,6 @@ type ast_stmt =
     }
   | SFree of { register : string }
   | SLabeled of { label : string list; stmt : ast_stmt }
-  | SSkip
 
 type ast_config = {
   name : string;
@@ -79,35 +78,118 @@ and ast_litmus = {
   assertion : ast_assertion option;
 }
 
-let expr_to_string (expr : ast_expr) : string =
+(** String representation functions for AST expressions *)
+let rec expr_to_string (expr : ast_expr) : string =
   match expr with
-  | EInt _ -> "EInt"
-  | ERegister _ -> "ERegister"
-  | EGlobal _ -> "EGlobal"
-  | EAtLoc _ -> "EAtLoc"
-  | EASet _ -> "EASet"
-  | EBinOp _ -> "EBinOp"
-  | EUnOp _ -> "EUnOp"
-  | ETuple _ -> "ETuple"
-  | ELoad _ -> "ELoad"
+  | EInt z -> Printf.sprintf "EInt %s" (Z.to_string z)
+  | ERegister r -> Printf.sprintf "ERegister %s" r
+  | EGlobal g -> Printf.sprintf "EGlobal %s" g
+  | EAtLoc l -> Printf.sprintf "EAtLoc %s" l
+  | EASet s -> Printf.sprintf "EASet %s" s
+  | EBinOp (lhs, op, rhs) ->
+      Printf.sprintf "EBinOp %s %s %s" (expr_to_string lhs) op
+        (expr_to_string rhs)
+  | EUnOp (op, rhs) -> Printf.sprintf "EUnOp %s %s" op (expr_to_string rhs)
+  | ETuple (lhs, rhs) ->
+      Printf.sprintf "ETuple %s , %s" (expr_to_string lhs) (expr_to_string rhs)
+  | ELoad { address; load } -> (
+      match load with
+      | { mode; volatile } ->
+          Printf.sprintf "ELoad %s with mode %s and volatile %b"
+            (expr_to_string address)
+            (Types.mode_to_string mode)
+            volatile
+    )
 
-let to_string (stmt : ast_stmt) : string =
+(** String representation functions for AST statements *)
+let rec to_string (stmt : ast_stmt) : string =
   match stmt with
-  | SThreads _ -> "SThreads"
-  | SRegisterStore _ -> "SRegisterStore"
-  | SGlobalStore _ -> "SGlobalStore"
-  | SGlobalLoad _ -> "SGlobalLoad"
-  | SStore _ -> "SStore"
-  | SCAS _ -> "SCAS"
-  | SFADD _ -> "SFADD"
-  | SIf _ -> "SIf"
-  | SWhile _ -> "SWhile"
-  | SDo _ -> "SDo"
-  | SQDo _ -> "SQDo"
-  | SFence _ -> "SFence"
-  | SLock _ -> "SLock"
-  | SUnlock _ -> "SUnlock"
-  | SMalloc _ -> "SMalloc"
-  | SFree _ -> "SFree"
-  | SLabeled _ -> "SLabeled"
-  | SSkip -> "SSkip"
+  | SThreads { threads } ->
+      Printf.sprintf "SThreads %s"
+        (String.concat " | "
+           (List.map
+              (fun thread ->
+                "[" ^ String.concat ", " (List.map to_string thread) ^ "]"
+              )
+              threads
+           )
+        )
+  | SRegisterStore { register; expr } ->
+      Printf.sprintf "SRegisterStore %s := %s" register (expr_to_string expr)
+  | SGlobalStore { global; expr; assign } ->
+      Printf.sprintf "SGlobalStore %s := %s with mode %s and volatile %b" global
+        (expr_to_string expr)
+        (Types.mode_to_string assign.mode)
+        assign.volatile
+  | SGlobalLoad { register; global; load } ->
+      Printf.sprintf "SGlobalLoad %s := load %s with mode %s and volatile %b"
+        register global
+        (Types.mode_to_string load.mode)
+        load.volatile
+  | SStore { address; expr; assign } ->
+      Printf.sprintf "SStore *%s := %s with mode %s and volatile %b"
+        (expr_to_string address) (expr_to_string expr)
+        (Types.mode_to_string assign.mode)
+        assign.volatile
+  | SCAS { register; address; expected; desired; mode } ->
+      Printf.sprintf "SCAS %s, %s, %s, %s with mode %s" register
+        (expr_to_string address) (expr_to_string expected)
+        (expr_to_string desired)
+        (Types.mode_to_string mode)
+  | SFADD { register; address; operand; mode } ->
+      Printf.sprintf "SFADD %s, %s, %s with mode %s" register
+        (expr_to_string address) (expr_to_string operand)
+        (Types.mode_to_string mode)
+  | SIf { condition; then_body; else_body } -> (
+      "SIf "
+      ^ expr_to_string condition
+      ^ " then: "
+      ^ String.concat ", " (List.map to_string then_body)
+      ^
+      match else_body with
+      | Some else_stmts ->
+          " else: " ^ String.concat ", " (List.map to_string else_stmts)
+      | None -> ""
+    )
+  | SWhile { condition; body } ->
+      Printf.sprintf "SWhile %s do %s" (expr_to_string condition)
+        (String.concat "; " (List.map to_string body))
+  | SDo { body; condition } ->
+      Printf.sprintf "SDo do %s while %s"
+        (String.concat "; " (List.map to_string body))
+        (expr_to_string condition)
+  | SQDo { body; condition } ->
+      Printf.sprintf "SQDo do %s qwhile %s"
+        (String.concat "; " (List.map to_string body))
+        (expr_to_string condition)
+  | SFence { mode } ->
+      Printf.sprintf "SFence with mode %s" (Types.mode_to_string mode)
+  | SLock { global } ->
+      Printf.sprintf "SLock with global %s"
+        ( match global with
+        | Some g -> g
+        | None -> "none"
+        )
+  | SUnlock { global } ->
+      Printf.sprintf "SUnlock with global %s"
+        ( match global with
+        | Some g -> g
+        | None -> "none"
+        )
+  | SMalloc { register; size; pc; label } ->
+      Printf.sprintf "SMalloc %s := malloc %s with pc %d and label [%s]"
+        register (expr_to_string size) pc (String.concat "; " label)
+  | SFree { register } -> Printf.sprintf "SFree %s" register
+  | SLabeled { label; stmt } ->
+      Printf.sprintf "SLabeled [%s]: %s" (String.concat "; " label)
+        (to_string stmt)
+
+(** String representation for entire litmus test *)
+let ast_litmus_to_string (litmus : ast_litmus) : string =
+  let program_str = String.concat "\n" (List.map to_string litmus.program) in
+  let assertion_str =
+    match litmus.assertion with
+    | Some _ -> "With assertion"
+    | None -> "No assertion"
+  in
+    "Program:\n" ^ program_str ^ "\n" ^ assertion_str ^ "\n"

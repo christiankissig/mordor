@@ -220,9 +220,6 @@ let rec convert_stmt = function
   (* TODO  | Ast.SMalloc { register; size; pc; label } ->
       `Malloc (register, size, pc, label) *)
   | Ast.SLabeled { label; stmt } -> `Labeled (label, convert_stmt stmt)
-  | Ast.SSkip ->
-      (* New in new parser - treat as no-op *)
-      `Skip
   (* CAS and FADD - structure changed in new parser *)
   | Ast.SCAS { register; address; expected; desired; mode } ->
       (* Old parser: params list and modes list

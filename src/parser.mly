@@ -124,13 +124,13 @@ thread:
 
 statement_list:
   | s=statement { [s] }
-  | s=statement rest=statement_list { s :: rest }
+  | s=statement SEMICOLON rest=statement_list { s :: rest }
+  | s=statement SEMICOLON { [s] }
   ;
 
 (* Statement with optional labels *)
 statement:
   | labels=label_list s=stmt_base { make_labeled labels s }
-  | SEMICOLON { SSkip }
   | threads=threads SEMICOLON? { SThreads { threads } }
   ;
 
@@ -236,10 +236,6 @@ stmt_base:
   | FREE LPAREN global=GLOBAL RPAREN
     { (* Generate a load from global then free *)
       SFree { register = "tmp_" ^ global } }
-
-  (* Skip *)
-  | SKIP
-    { SSkip }
   ;
 
 block_or_stmt:
@@ -324,6 +320,7 @@ expr:
   | global=GLOBAL { EGlobal global }
   | atloc=ATLOC { EAtLoc atloc }
   | DOT s=STRING { EASet s }
+  | DOT s=GLOBAL { EASet s }
   | QUOTE s=STRING { EASet s }
   ;
 
