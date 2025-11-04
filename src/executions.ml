@@ -30,6 +30,8 @@ let to_string (exec : symbolic_execution) : string =
        )
     )
 
+(* TODO values are not tested *)
+
 (** Create disjoint predicate for two (location, value) pairs *)
 let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)

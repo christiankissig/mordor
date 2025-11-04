@@ -107,23 +107,55 @@ end = struct
 
   let is_expression e = not (is_value e)
 
-  let rec equal e1 e2 =
-    match (e1, e2) with
-    | EBoolean b1, EBoolean b2 -> b1 = b2
-    | ENum n1, ENum n2 -> Z.equal n1 n2
-    | EVar v1, EVar v2 -> String.equal v1 v2
-    | ESymbol s1, ESymbol s2 -> String.equal s1 s2
+  let rec compare expr1 expr2 =
+    match (expr1, expr2) with
+    | ENum n1, ENum n2 -> Z.compare n1 n2
+    | EBoolean b1, EBoolean b2 -> Bool.compare b1 b2
+    | ESymbol s1, ESymbol s2 -> String.compare s1 s2
+    | EVar v1, EVar v2 -> String.compare v1 v2
     | EBinOp (l1, op1, r1), EBinOp (l2, op2, r2) ->
-        op1 = op2 && equal l1 l2 && equal r1 r2
-    | EUnOp (op1, r1), EUnOp (op2, r2) -> op1 = op2 && equal r1 r2
-    | EOr c1, EOr c2 ->
-        List.length c1 = List.length c2
-        && List.for_all2
-             (fun a b ->
-               List.length a = List.length b && List.for_all2 equal a b
-             )
-             c1 c2
-    | _ -> false
+        let c = String.compare op1 op2 in
+          if c <> 0 then c
+          else
+            let c_l = compare l1 l2 in
+              if c_l <> 0 then c_l else compare r1 r2
+    | EUnOp (op1, r1), EUnOp (op2, r2) ->
+        let c = String.compare op1 op2 in
+          if c <> 0 then c else compare r1 r2
+    | EOr clauses_1, EOr clauses_2 ->
+        let rec compare_clauses (clauses_1, clauses_2) =
+          match (clauses_1, clauses_2) with
+          | [], [] -> 0
+          | [], _ -> -1
+          | _, [] -> 1
+          | c1 :: rest1, c2 :: rest2 ->
+              let rec compare_clause c1 c2 =
+                match (c1, c2) with
+                | [], [] -> 0
+                | [], _ -> -1
+                | _, [] -> 1
+                | e1 :: r1, e2 :: r2 ->
+                    let c = compare e1 e2 in
+                      if c <> 0 then c else compare_clause r1 r2
+              in
+              let c = compare_clause c1 c2 in
+                if c <> 0 then c else compare_clauses (rest1, rest2)
+        in
+          compare_clauses (clauses_1, clauses_2)
+    | ENum _, _ -> -1
+    | _, ENum _ -> 1
+    | EBoolean _, _ -> -1
+    | _, EBoolean _ -> 1
+    | ESymbol _, _ -> -1
+    | _, ESymbol _ -> 1
+    | EVar _, _ -> -1
+    | _, EVar _ -> 1
+    | EBinOp _, _ -> -1
+    | _, EBinOp _ -> 1
+    | EUnOp _, _ -> -1
+    | _, EUnOp _ -> 1
+
+  let equal e1 e2 = compare e1 e2 = 0
 
   let rec get_symbols = function
     | EVar v when is_symbol v -> [ v ]
