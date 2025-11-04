@@ -52,6 +52,7 @@ jobs:
           opam depext -y smrd
           opam install . --deps-only --with-test
           opam install ocamlformat
+          opam install logs fmt
 
       - name: Build project
         run: opam exec -- dune build
