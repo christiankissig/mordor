@@ -102,8 +102,8 @@ let lifted_clear cache =
   Uset.clear cache.t |> ignore;
   Uset.clear cache.to_ |> ignore
 
-let filter elab_ctx (justs : justification list) =
-  Logs.debug (fun m -> m "Filtering %d justifications..." (List.length justs));
+let filter elab_ctx (justs : justification uset) =
+  Logs.debug (fun m -> m "Filtering %d justifications..." (Uset.size justs));
 
   let* (justs' : justification option list) =
     Lwt_list.map_p
@@ -113,7 +113,7 @@ let filter elab_ctx (justs : justification list) =
           | Some p -> Lwt.return_some { just with p }
           | None -> Lwt.return_none
       )
-      justs
+      (Uset.values justs)
   in
 
   let (justs'' : justification list) = List.filter_map Fun.id justs' in
@@ -144,7 +144,7 @@ let filter elab_ctx (justs : justification list) =
 
 let value_assign elab_ctx justs =
   Logs.debug (fun m ->
-      m "Performing value assignment on %d justifications..." (List.length justs)
+      m "Performing value assignment on %d justifications..." (Uset.size justs)
   );
 
   let* results =
@@ -168,7 +168,7 @@ let value_assign elab_ctx justs =
                     { just with w = new_w; op = ("va", Some just, None) }
             | None -> Lwt.return just
       )
-      justs
+      (Uset.values justs)
   in
 
   Logs.debug (fun m ->

@@ -379,11 +379,10 @@ module EventsContainer = struct
     t
 end
 
-let get_loc events e =
-  try
-    let event = Hashtbl.find events e in
-      event.loc
-  with Not_found -> None
+let get_loc events event_id =
+  Hashtbl.find_opt events event_id
+  |> Option.map (fun event -> event.loc)
+  |> Option.join
 
 let get_val events e =
   try

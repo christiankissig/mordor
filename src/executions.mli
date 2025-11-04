@@ -196,12 +196,9 @@ val generate_executions :
   symbolic_event_structure ->
   justification uset ->
   expr list ->
-  int uset ->
-  (int * int) uset ->
-  (int * int) uset ->
-  int uset ->
-  int uset ->
   (int * int) uset ->
   include_dependencies:bool ->
   restrictions:Coherence.restrictions ->
   symbolic_execution list Lwt.t
+
+val to_string : symbolic_execution -> string

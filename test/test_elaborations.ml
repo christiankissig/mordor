@@ -437,7 +437,7 @@ let test_lifted_cache_has_no_match_different_write_labels () =
 (* Tests for filter function *)
 let test_filter_empty () =
   let ctx = create_mock_context () in
-  let justs = [] in
+  let justs = Uset.create () in
     let* result = filter ctx justs in
       check int "empty filter" 0 (Uset.size result);
       Lwt.return_unit
@@ -447,7 +447,7 @@ let test_filter_valid () =
   (* Create a valid boolean predicate: 1 = 1 *)
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
-    let* result = filter ctx [ just ] in
+    let* result = filter ctx (Uset.singleton just) in
       check bool "filter keeps valid" true (Uset.size result >= 0);
       Lwt.return_unit
 
@@ -456,8 +456,9 @@ let test_filter_removes_covered () =
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = create_mock_justification 1 [ pred; pred ] in
   let just2 = create_mock_justification 1 [ pred ] in
+  let justs = Uset.of_list [ just1; just2 ] in
     (* just2 covers just1 as it has fewer predicates *)
-    let* result = filter ctx [ just1; just2 ] in
+    let* result = filter ctx justs in
       check bool "filter removes covered" true (Uset.size result <= 2);
       Lwt.return_unit
 
@@ -466,7 +467,7 @@ let test_value_assign_no_variables () =
   let ctx = create_mock_context () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
-  let justs = [ just ] in
+  let justs = Uset.singleton just in
     let* result = value_assign ctx justs in
       check int "value_assign size preserved" 1 (Uset.size result);
       Lwt.return_unit
@@ -506,7 +507,7 @@ let test_value_assign_with_variable () =
       op = ("init", None, None);
     }
   in
-  let justs = [ just ] in
+  let justs = Uset.singleton just in
     let* result = value_assign ctx justs in
       check bool "value_assign processes variables" true (Uset.size result > 0);
       Lwt.return_unit

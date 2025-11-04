@@ -25,21 +25,12 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
   let rmw = structure.rmw in
   let po = structure.po in
 
-  (* TODO should not be needed!
-     Filter to only events that exist in the hashtable *)
-  (*
-  let e_set_filtered =
-    Uset.filter (fun id -> Hashtbl.mem events id) structure.e
-  in
-  *)
-  let e_set_filtered = e_set in
-
-  let branch_events = filter_events events e_set_filtered Branch in
-  let read_events = filter_events events e_set_filtered Read in
-  let write_events = filter_events events e_set_filtered Write in
-  let fence_events = filter_events events e_set_filtered Fence in
-  let malloc_events = filter_events events e_set_filtered Malloc in
-  let free_events = filter_events events e_set_filtered Free in
+  let branch_events = filter_events events e_set Branch in
+  let read_events = filter_events events e_set Read in
+  let write_events = filter_events events e_set Write in
+  let fence_events = filter_events events e_set Fence in
+  let malloc_events = filter_events events e_set Malloc in
+  let free_events = filter_events events e_set Free in
 
   (* Build tree for program order *)
   let build_tree rel =
@@ -105,7 +96,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
   let* () =
     Forwardingcontext.init
       {
-        init_e = e_set_filtered;
+        init_e = e_set;
         init_po = po;
         init_events = events;
         init_val = val_fn;
@@ -174,34 +165,40 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
 
   let* final_justs =
     if include_dependencies then
-      let rec fixed_point justs =
+      let rec fixed_point (justs : justification uset) =
         Logs.debug (fun m ->
-            m "Fixed-point iteration with %d justifications" (List.length justs)
+            m "Fixed-point iteration with %d justifications" (Uset.size justs)
         );
         let* va = Elaborations.value_assign elab_ctx justs in
           let* lift = Elaborations.lift elab_ctx va in
             let* weak = Elaborations.weaken elab_ctx lift in
               let* fwd = Elaborations.forward elab_ctx weak in
                 let* filtered =
-                  Elaborations.filter elab_ctx
-                    (Uset.values (Uset.union (Uset.of_list justs) fwd))
+                  Elaborations.filter elab_ctx (Uset.union justs fwd)
                 in
 
-                if Uset.equal filtered (Uset.of_list justs) then (
-                  Logs.debug (fun m ->
-                      m "Fixed-point reached with %d justifications."
-                        (Uset.size filtered)
-                  );
-                  flush stdout;
-                  Lwt.return filtered
-                )
-                else fixed_point (Uset.values filtered)
+                let justs_str =
+                  String.concat "\n\t"
+                    (Uset.values (Uset.map Justifications.to_string filtered))
+                in
+                  if Uset.equal filtered justs then (
+                    Logs.debug (fun m ->
+                        m "Fixed-point reached with %d justifications:\n\t%s"
+                          (Uset.size filtered) justs_str
+                    );
+                    Lwt.return filtered
+                  )
+                  else (
+                    Logs.debug (fun m ->
+                        m "Continue elaborating with %d justifications:\n\t%s"
+                          (Uset.size filtered) justs_str
+                    );
+                    fixed_point filtered
+                  )
       in
 
-      let* filtered_init =
-        Elaborations.filter elab_ctx (Uset.values init_justs)
-      in
-        fixed_point (Uset.values filtered_init)
+      let* filtered_init = Elaborations.filter elab_ctx init_justs in
+        fixed_point filtered_init
     else Lwt.return init_justs
   in
 
@@ -217,8 +214,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure) events
     if just_structure then Lwt.return []
     else (* Use the full execution generation *)
       generate_executions events structure final_justs structure.constraint_
-        e_set po rmw write_events read_events init_ppo ~include_dependencies
-        ~restrictions
+        init_ppo ~include_dependencies ~restrictions
   in
 
   Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));

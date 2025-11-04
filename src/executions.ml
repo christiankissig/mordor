@@ -8,6 +8,28 @@ open Utils
 
 (** Utils **)
 
+let to_string (exec : symbolic_execution) : string =
+  Printf.sprintf "{\nex_e=%s,\nrf=%s\ndp=%s\nppo=%s\n}"
+    (String.concat ", " (List.map (Printf.sprintf "%d") (Uset.values exec.ex_e)))
+    (String.concat ", "
+       (List.map
+          (fun (e1, e2) -> Printf.sprintf "(%d,%d)" e1 e2)
+          (Uset.values exec.rf)
+       )
+    )
+    (String.concat ", "
+       (List.map
+          (fun (e1, e2) -> Printf.sprintf "(%d,%d)" e1 e2)
+          (Uset.values exec.dp)
+       )
+    )
+    (String.concat ", "
+       (List.map
+          (fun (e1, e2) -> Printf.sprintf "(%d,%d)" e1 e2)
+          (Uset.values exec.ppo)
+       )
+    )
+
 (** Create disjoint predicate for two (location, value) pairs *)
 let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
@@ -698,13 +720,24 @@ and build_justcombos events structure paths write_events read_events init_ppo
 (** Generate executions **)
 
 (** Main execution generation - replaces the stub in calculate_dependencies *)
-let generate_executions events structure final_justs statex e_set po rmw
-    write_events read_events init_ppo ~include_dependencies ~restrictions =
+let generate_executions (events : (int, event) Hashtbl.t)
+    (structure : symbolic_event_structure) (justs : justification uset) statex
+    init_ppo ~include_dependencies ~restrictions =
   let* _ = Lwt.return_unit in
 
-  (* Build program order tree *)
-  let po_tree = build_tree e_set po in
-  let inv_po_tree = build_tree e_set (Uset.inverse_relation po) in
+  Logs.debug (fun m ->
+      m "Generating executions for structure with %d events"
+        (Hashtbl.length events)
+  );
+
+  let e_set = structure.e in
+  let read_events = filter_events events e_set Read in
+  let write_events = filter_events events e_set Write in
+  let po = structure.po in
+
+  (* Build adjacency relations *)
+  let po_tree = build_tree structure.e structure.po in
+  let inv_po_tree = build_tree structure.e (Uset.inverse_relation po) in
 
   (* Generate all paths through the control flow *)
   let paths = gen_paths events structure structure.restrict in
@@ -714,9 +747,7 @@ let generate_executions events structure final_justs statex e_set po rmw
     let rec f r =
       if w = r then false
       else
-        let event_r =
-          try Some (Hashtbl.find events r) with Not_found -> None
-        in
+        let event_r = Hashtbl.find_opt events r in
           match event_r with
           | Some ev when ev.typ = Write -> (
               let loc_r =
@@ -782,7 +813,7 @@ let generate_executions events structure final_justs statex e_set po rmw
         let existing = try Hashtbl.find justmap label with Not_found -> [] in
           Hashtbl.replace justmap label (just :: existing)
       )
-      final_justs;
+      justs;
 
     (* Build justcombos for all paths *)
     let* justcombos =
@@ -903,6 +934,10 @@ let generate_executions events structure final_justs statex e_set po rmw
         )
         flat_execs
     in
+
+    Printf.printf "Generated %d executions before coherence filtering\n\n%s"
+      (List.length final_executions)
+      (String.concat "\n\n" (List.map to_string final_executions));
 
     (* Filter through coherence checking *)
     let* coherent_execs =
