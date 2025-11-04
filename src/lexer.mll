@@ -40,7 +40,6 @@ rule token = parse
   | "else"                { Parser.ELSE }
   | "while"               { Parser.WHILE }
   | "do"                  { Parser.DO }
-  | "skip"                { Parser.SKIP }
   | "fence"               { Parser.FENCE }
   | "malloc"              { Parser.MALLOC }
   | "free"                { Parser.FREE }

@@ -46,6 +46,64 @@ module EventStructureViz = struct
   (** Create the graph type *)
   module G = Imperative.Digraph.ConcreteLabeled (Vertex) (Edge)
 
+  (** Perform transitive reduction on program order edges *)
+  let transitive_reduction_po (po : (int * int) uset) : (int * int) uset =
+    (* Build adjacency map *)
+    let adj = Hashtbl.create 100 in
+      Uset.iter
+        (fun (src, dst) ->
+          let neighbors = try Hashtbl.find adj src with Not_found -> [] in
+            Hashtbl.replace adj src (dst :: neighbors)
+        )
+        po;
+
+      (* Check if there's a path from src to dst of length >= 2 *)
+      let has_indirect_path src dst =
+        (* Start from neighbors of src (excluding direct edge to dst) *)
+        let neighbors = try Hashtbl.find adj src with Not_found -> [] in
+        let intermediate_neighbors =
+          List.filter (fun n -> n <> dst) neighbors
+        in
+
+        (* BFS to check if any intermediate neighbor can reach dst *)
+        let visited = Hashtbl.create 100 in
+        let queue = Queue.create () in
+          List.iter (fun n -> Queue.add n queue) intermediate_neighbors;
+          List.iter (fun n -> Hashtbl.add visited n ()) intermediate_neighbors;
+
+          let rec bfs () =
+            if Queue.is_empty queue then false
+            else
+              let current = Queue.take queue in
+                if current = dst then true
+                else
+                  let next_neighbors =
+                    try Hashtbl.find adj current with Not_found -> []
+                  in
+                    List.iter
+                      (fun n ->
+                        if not (Hashtbl.mem visited n) then (
+                          Hashtbl.add visited n ();
+                          Queue.add n queue
+                        )
+                      )
+                      next_neighbors;
+                    bfs ()
+          in
+            bfs ()
+      in
+
+      (* Keep only non-transitive edges *)
+      let reduced = ref (Uset.create ()) in
+        Uset.iter
+          (fun ((src, dst) as edge) ->
+            if not (has_indirect_path src dst) then
+              reduced := Uset.add !reduced edge
+          )
+          po;
+
+        !reduced
+
   (** Build graph from event structure *)
   let build_graph (ses : symbolic_event_structure)
       (events : (int, event) Hashtbl.t) : G.t =
@@ -74,6 +132,9 @@ module EventStructureViz = struct
         )
         ses.e;
 
+      (* Apply transitive reduction to po *)
+      let po_reduced = transitive_reduction_po ses.po in
+
       (* Add program order edges *)
       Uset.iter
         (fun (src, dst) ->
@@ -81,7 +142,7 @@ module EventStructureViz = struct
           let v_dst = Hashtbl.find vertex_map dst in
             G.add_edge_e g (G.E.create v_src PO v_dst)
         )
-        ses.po;
+        po_reduced;
 
       (* Add RMW edges *)
       Uset.iter

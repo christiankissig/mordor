@@ -20,7 +20,8 @@
   test_parse
   test_symbolic_mrd
   test_properties_mrd
-  test_advanced_mrd)
+  test_advanced_mrd
+  test_histories_futures)
  (libraries mordor_lib lwt lwt.unix z3 zarith core str alcotest)
  (preprocess
   (pps lwt_ppx)))

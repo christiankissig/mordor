@@ -18,8 +18,9 @@ type result = {
 
 (** Calculate dependencies and justifications *)
 
-let calculate_dependencies ast (structure : symbolic_event_structure) events
-    ~exhaustive ~include_dependencies ~just_structure ~restrictions =
+let calculate_dependencies ast (structure : symbolic_event_structure)
+    (events : (int, event) Hashtbl.t) ~exhaustive ~include_dependencies
+    ~just_structure ~restrictions =
   let e_set = structure.e in
   let restrict = structure.restrict in
   let rmw = structure.rmw in

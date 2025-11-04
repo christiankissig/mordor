@@ -190,3 +190,11 @@ type symbolic_execution = {
   justs : justification list; (* Justifications *)
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer mappings *)
 }
+
+(** Future set type *)
+type future = (int * int) uset
+
+(** Future set for a set of symbolic executions *)
+type future_set = (int * int) uset uset
+
+type history = int uset

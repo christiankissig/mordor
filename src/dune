@@ -16,6 +16,7 @@
   expr
   eventstructureviz
   forwardingcontext
+  futures
   interpret
   ir
   justifications

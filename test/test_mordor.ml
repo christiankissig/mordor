@@ -16,4 +16,5 @@ let () =
       Test_symbolic_mrd.suite;
       Test_properties_mrd.suite;
       Test_advanced_mrd.suite;
+      Test_histories_futures.suite;
     ]
