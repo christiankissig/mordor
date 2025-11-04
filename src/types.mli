@@ -1,3 +1,5 @@
+open Uset
+
 (** Core type definitions for sMRD *)
 
 (** {1 Options} *)
@@ -82,7 +84,7 @@ val zh_alpha : string
 (** {1 Utility Types} *)
 
 (** Unordered set implemented as a hashtable *)
-type 'a uset = 'a Uset.t
+type 'a uset = 'a USet.t
 
 (** {1 Values and Expressions} *)
 

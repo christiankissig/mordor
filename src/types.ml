@@ -1,4 +1,6 @@
-(** Core type definitions for sMRD *)
+(** Core type definitions for Mordor *)
+
+open Uset
 
 (** Options *)
 type options = {
@@ -95,7 +97,7 @@ let greek_alpha = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖ�
 (** Chinese numerals for allocation symbols *)
 let zh_alpha = "一二三四五六七八九十"
 
-type 'a uset = 'a Uset.t
+type 'a uset = 'a USet.t
 
 (** Value representation *)
 type value_type =

@@ -2,18 +2,19 @@ open Lwt.Syntax
 open Expr
 open Trees
 open Types
+open Uset
 
 type context = {
   structure : symbolic_event_structure;
   events : (int, event) Hashtbl.t;
-  e_set : int Uset.t;
-  branch_events : int Uset.t;
-  read_events : int Uset.t;
-  write_events : int Uset.t;
-  malloc_events : int Uset.t;
-  po : (int * int) Uset.t;
-  rmw : (int * int) Uset.t;
-  fj : (int * int) Uset.t;
+  e_set : int USet.t;
+  branch_events : int USet.t;
+  read_events : int USet.t;
+  write_events : int USet.t;
+  malloc_events : int USet.t;
+  po : (int * int) USet.t;
+  rmw : (int * int) USet.t;
+  fj : (int * int) USet.t;
   val_fn : int -> expr option;
   conflicting_branch : int -> int -> int;
 }
@@ -29,18 +30,18 @@ let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
         | _ -> failwith "ctx and p must be provided when ppo is not given"
       )
   in
-  let inversed = Uset.inverse_relation ppo_result in
+  let inversed = URelation.inverse_relation ppo_result in
   let tree = build_tree elab_ctx.e_set inversed in
     Lwt.return (fun e -> Hashtbl.find tree e)
 
 (** Lifted cache for relations with forwarding context *)
 type lifted_cache = {
-  mutable t : (justification * justification) Uset.t;
-  mutable to_ : ((justification * justification) * justification list) Uset.t;
+  mutable t : (justification * justification) USet.t;
+  mutable to_ : ((justification * justification) * justification list) USet.t;
 }
 
 (** Create a new lifted cache *)
-let create_lifted_cache () = { t = Uset.create (); to_ = Uset.create () }
+let create_lifted_cache () = { t = USet.create (); to_ = USet.create () }
 
 (** Compare two events for equality *)
 let event_equal e1 e2 = e1.label = e2.label && e1.van = e2.van
@@ -48,25 +49,25 @@ let event_equal e1 e2 = e1.label = e2.label && e1.van = e2.van
 let lifted_has cache (a, b) =
   (* Filter to find matching elements *)
   let vals =
-    Uset.filter
+    USet.filter
       (fun ((_a, _b), _) ->
         (* Compare write events *)
         event_equal _a.w a.w
         && event_equal _b.w b.w
         (* Compare predicates as sets *)
-        && Uset.equal (Uset.of_list _a.p) (Uset.of_list a.p)
-        && Uset.equal (Uset.of_list _b.p) (Uset.of_list b.p)
+        && USet.equal (USet.of_list _a.p) (USet.of_list a.p)
+        && USet.equal (USet.of_list _b.p) (USet.of_list b.p)
         (* Compare forwarding and write-elision sets *)
-        && Uset.equal _a.fwd a.fwd
-        && Uset.equal _a.we a.we
+        && USet.equal _a.fwd a.fwd
+        && USet.equal _a.we a.we
       )
       cache.to_
   in
 
-  if Uset.size vals > 0 then
+  if USet.size vals > 0 then
     (* Return mapped justifications *)
     let results =
-      Uset.map
+      USet.map
         (fun ((_, _), (justifs : justification list)) ->
           (* Add type annotation here *)
           List.map
@@ -84,26 +85,26 @@ let lifted_has cache (a, b) =
             justifs
         )
         vals
-      |> Uset.values
+      |> USet.values
       |> List.flatten
     in
       Some results
-  else if Uset.mem cache.t (a, b) then Some []
+  else if USet.mem cache.t (a, b) then Some []
   else None
 
 (** Add pair to cache *)
-let lifted_add cache (a, b) = Uset.add cache.t (a, b) |> ignore
+let lifted_add cache (a, b) = USet.add cache.t (a, b) |> ignore
 
 (** Add mapping to results cache *)
-let lifted_to cache x r = Uset.add cache.to_ (x, r) |> ignore
+let lifted_to cache x r = USet.add cache.to_ (x, r) |> ignore
 
 (** Clear cache *)
 let lifted_clear cache =
-  Uset.clear cache.t |> ignore;
-  Uset.clear cache.to_ |> ignore
+  USet.clear cache.t |> ignore;
+  USet.clear cache.to_ |> ignore
 
 let filter elab_ctx (justs : justification uset) =
-  Logs.debug (fun m -> m "Filtering %d justifications..." (Uset.size justs));
+  Logs.debug (fun m -> m "Filtering %d justifications..." (USet.size justs));
 
   let* (justs' : justification option list) =
     Lwt_list.map_p
@@ -113,7 +114,7 @@ let filter elab_ctx (justs : justification uset) =
           | Some p -> Lwt.return_some { just with p }
           | None -> Lwt.return_none
       )
-      (Uset.values justs)
+      (USet.values justs)
   in
 
   let (justs'' : justification list) = List.filter_map Fun.id justs' in
@@ -134,17 +135,17 @@ let filter elab_ctx (justs : justification uset) =
              )
        )
     |> List.map snd
-    |> Uset.of_list
+    |> USet.of_list
   in
 
   Logs.debug (fun m ->
-      m "Filtered down to %d justifications." (Uset.size result)
+      m "Filtered down to %d justifications." (USet.size result)
   );
   Lwt.return result
 
 let value_assign elab_ctx justs =
   Logs.debug (fun m ->
-      m "Performing value assignment on %d justifications..." (Uset.size justs)
+      m "Performing value assignment on %d justifications..." (USet.size justs)
   );
 
   let* results =
@@ -168,29 +169,29 @@ let value_assign elab_ctx justs =
                     { just with w = new_w; op = ("va", Some just, None) }
             | None -> Lwt.return just
       )
-      (Uset.values justs)
+      (USet.values justs)
   in
 
   Logs.debug (fun m ->
       m "Completed value assignment on %d justifications." (List.length results)
   );
-  Lwt.return (Uset.of_list results)
+  Lwt.return (USet.of_list results)
 
 let fprime elab_ctx pred_fn ppo_loc =
-  let w_cross_r = Uset.cross elab_ctx.write_events elab_ctx.read_events in
-  let r_cross_r = Uset.cross elab_ctx.read_events elab_ctx.read_events in
-  let w_cross_w = Uset.cross elab_ctx.write_events elab_ctx.write_events in
-  let combined = Uset.union w_cross_r r_cross_r in
-  let combined = Uset.union combined w_cross_w in
-  let in_po = Uset.intersection combined elab_ctx.po in
-    Uset.filter
-      (fun (e1, e2) -> Uset.mem ppo_loc (e1, e2) && Uset.mem (pred_fn e2) e1)
+  let w_cross_r = URelation.cross elab_ctx.write_events elab_ctx.read_events in
+  let r_cross_r = URelation.cross elab_ctx.read_events elab_ctx.read_events in
+  let w_cross_w = URelation.cross elab_ctx.write_events elab_ctx.write_events in
+  let combined = USet.union w_cross_r r_cross_r in
+  let combined = USet.union combined w_cross_w in
+  let in_po = USet.intersection combined elab_ctx.po in
+    USet.filter
+      (fun (e1, e2) -> USet.mem ppo_loc (e1, e2) && USet.mem (pred_fn e2) e1)
       in_po
 
 (* Define fwd function *)
 let fwd elab_ctx pred_fn (ctx : Forwardingcontext.t) ppo_loc =
   let edges = fprime elab_ctx pred_fn ppo_loc in
-    Uset.filter
+    USet.filter
       (fun (e1, e2) ->
         try
           let ev2 = Hashtbl.find elab_ctx.events e2 in
@@ -208,7 +209,7 @@ let fwd elab_ctx pred_fn (ctx : Forwardingcontext.t) ppo_loc =
 (* Define we function *)
 let we elab_ctx pred_fn (ctx : Forwardingcontext.t) ppo_loc =
   let edges = fprime elab_ctx pred_fn ppo_loc in
-    Uset.filter
+    USet.filter
       (fun (e1, e2) ->
         try
           let ev1 = Hashtbl.find elab_ctx.events e1 in
@@ -217,11 +218,11 @@ let we elab_ctx pred_fn (ctx : Forwardingcontext.t) ppo_loc =
         with Not_found -> false
       )
       edges
-    |> Uset.map (fun (e1, e2) -> (e2, e1))
+    |> USet.map (fun (e1, e2) -> (e2, e1))
 
 let forward elab_ctx justs =
   Logs.debug (fun m ->
-      m "Performing forwarding on %d justifications..." (Uset.size justs)
+      m "Performing forwarding on %d justifications..." (USet.size justs)
   );
   let* out =
     (* Map over justifications *)
@@ -249,7 +250,7 @@ let forward elab_ctx justs =
                       in
 
                       (* Subtract fj from ppo_loc *)
-                      let _ppo_loc = Uset.set_minus ppo_loc elab_ctx.fj in
+                      let _ppo_loc = USet.set_minus ppo_loc elab_ctx.fj in
 
                       (* Compute fwd and we edges *)
                       let _fwd = fwd elab_ctx _pred ctx _ppo_loc in
@@ -257,10 +258,10 @@ let forward elab_ctx justs =
 
                       (* Filter edges by label *)
                       let _fwd =
-                        Uset.filter (fun (_, e2) -> e2 <> just.w.label) _fwd
+                        USet.filter (fun (_, e2) -> e2 <> just.w.label) _fwd
                       in
                       let _we =
-                        Uset.filter (fun (_, e2) -> e2 <> just.w.label) _we
+                        USet.filter (fun (_, e2) -> e2 <> just.w.label) _we
                       in
 
                       (* Filter edge function *)
@@ -278,10 +279,10 @@ let forward elab_ctx justs =
 
                       (* Create fwd edges with contexts *)
                       let fwdedges =
-                        Uset.values _fwd
+                        USet.values _fwd
                         |> List.map (fun edge ->
                                ( edge,
-                                 Uset.union just.fwd (Uset.singleton edge),
+                                 USet.union just.fwd (USet.singleton edge),
                                  just.we
                                )
                            )
@@ -289,11 +290,11 @@ let forward elab_ctx justs =
 
                       (* Create we edges with contexts *)
                       let weedges =
-                        Uset.values _we
+                        USet.values _we
                         |> List.map (fun edge ->
                                ( edge,
                                  just.fwd,
-                                 Uset.union just.we (Uset.singleton edge)
+                                 USet.union just.we (USet.singleton edge)
                                )
                            )
                       in
@@ -335,16 +336,16 @@ let forward elab_ctx justs =
           in
             Lwt.return (List.concat path_results)
         )
-        (Uset.values justs)
+        (USet.values justs)
     in
 
     (* Flatten results and convert to USet *)
     let flattened = List.concat results in
-      Lwt.return (Uset.of_list flattened)
+      Lwt.return (USet.of_list flattened)
   in
 
   Logs.debug (fun m ->
-      m "Completed forwarding on justifications. Result size: %d" (Uset.size out)
+      m "Completed forwarding on justifications. Result size: %d" (USet.size out)
   );
   Lwt.return out
 
@@ -354,8 +355,8 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
       m "Strengthening justifications %d and %d..." just_1.w.label
         just_2.w.label
   );
-  let p_1 = Uset.of_list just_1.p in
-  let p_2 = Uset.of_list just_2.p in
+  let p_1 = USet.of_list just_1.p in
+  let p_2 = USet.of_list just_2.p in
   let w_1 = just_1.w in
   let w_2 = just_2.w in
   let e_1 = w_1.label in
@@ -364,21 +365,21 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
   (* Get symbols for an event *)
   let gsyms e =
     let po_neighbors =
-      Uset.filter (fun (f, t) -> f = e || t = e) elab_ctx.po
-      |> Uset.map (fun (f, t) -> [ f; t ])
-      |> fun s -> Uset.fold (fun acc pairs -> pairs @ acc) s [] |> Uset.of_list
+      USet.filter (fun (f, t) -> f = e || t = e) elab_ctx.po
+      |> USet.map (fun (f, t) -> [ f; t ])
+      |> fun s -> USet.fold (fun acc pairs -> pairs @ acc) s [] |> USet.of_list
     in
-    let r_union_a = Uset.union elab_ctx.read_events elab_ctx.malloc_events in
-      Uset.intersection po_neighbors r_union_a
-      |> Uset.filter (fun ep -> not (Uset.mem ppo (e, ep)))
-      |> Uset.map (fun ep ->
+    let r_union_a = USet.union elab_ctx.read_events elab_ctx.malloc_events in
+      USet.intersection po_neighbors r_union_a
+      |> USet.filter (fun ep -> not (USet.mem ppo (e, ep)))
+      |> USet.map (fun ep ->
              let remapped = Forwardingcontext.remap con ep in
                match elab_ctx.val_fn remapped with
                | Some (ESymbol s) when is_symbol s -> Some s
                | _ -> None
          )
-      |> Uset.filter (fun x -> x <> None)
-      |> Uset.map (fun x ->
+      |> USet.filter (fun x -> x <> None)
+      |> USet.map (fun x ->
              match x with
              | Some s -> s
              | None -> ""
@@ -387,14 +388,14 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
 
   let syms_1 = gsyms e_1 in
   let syms_2 = gsyms e_2 in
-  let cs = Uset.intersection syms_1 syms_2 in
-  let syms_1 = Uset.set_minus syms_1 cs in
-  let syms_2 = Uset.set_minus syms_2 cs in
-  let pos_rp = Uset.cross syms_1 syms_2 in
+  let cs = USet.intersection syms_1 syms_2 in
+  let syms_1 = USet.set_minus syms_1 cs in
+  let syms_2 = USet.set_minus syms_2 cs in
+  let pos_rp = URelation.cross syms_1 syms_2 in
 
   (* Get necessary symbols *)
   let get_expr_symbols exprs =
-    List.map Expr.get_symbols exprs |> List.concat |> Uset.of_list
+    List.map Expr.get_symbols exprs |> List.concat |> USet.of_list
   in
 
   let w1_syms =
@@ -410,15 +411,15 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
 
   let ness_1 =
     let p1_syms = get_expr_symbols just_1.p in
-      Uset.union p1_syms (Uset.of_list w1_syms) |> fun s ->
-      Uset.intersection s syms_1
+      USet.union p1_syms (USet.of_list w1_syms) |> fun s ->
+      USet.intersection s syms_1
   in
   let ness_2 =
     let p2_syms = get_expr_symbols just_2.p in
-      Uset.union p2_syms (Uset.of_list w2_syms) |> fun s ->
-      Uset.intersection s syms_2
+      USet.union p2_syms (USet.of_list w2_syms) |> fun s ->
+      USet.intersection s syms_2
   in
-  let ness = Uset.union ness_1 ness_2 in
+  let ness = USet.union ness_1 ness_2 in
 
   (* Get branch predicate *)
   let bp_event =
@@ -432,52 +433,52 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
   let bpi = Expr.inverse bp in
 
   (* Compute uncommon predicates *)
-  let uncommon = Uset.difference p_1 p_2 in
+  let uncommon = USet.difference p_1 p_2 in
   let uncommonstr =
-    Uset.filter (fun x -> not (Uset.mem uncommon (Expr.inverse x))) uncommon
+    USet.filter (fun x -> not (USet.mem uncommon (Expr.inverse x))) uncommon
   in
 
-  let notcommon_1 = Uset.set_minus uncommonstr p_2 in
-  let notcommon_2 = Uset.set_minus uncommonstr p_1 in
+  let notcommon_1 = USet.set_minus uncommonstr p_2 in
+  let notcommon_2 = USet.set_minus uncommonstr p_1 in
 
   (* Iterator function *)
   let it n_1 n_2 =
     let ncs_1 =
-      Uset.values n_1
+      USet.values n_1
       |> List.map Expr.get_symbols
       |> List.concat
-      |> Uset.of_list
-      |> fun s -> Uset.set_minus s cs
+      |> USet.of_list
+      |> fun s -> USet.set_minus s cs
     in
     let ncs_2 =
-      Uset.values n_2
+      USet.values n_2
       |> List.map Expr.get_symbols
       |> List.concat
-      |> Uset.of_list
-      |> fun s -> Uset.set_minus s cs
+      |> USet.of_list
+      |> fun s -> USet.set_minus s cs
     in
-    let rls = ref (Uset.values (Uset.union ncs_1 ncs_2)) in
+    let rls = ref (USet.values (USet.union ncs_1 ncs_2)) in
 
-    let str_1 = ref (Uset.union p_1 n_2) in
-    let str_2 = ref (Uset.union p_2 n_1) in
+    let str_1 = ref (USet.union p_1 n_2) in
+    let str_2 = ref (USet.union p_2 n_1) in
     let i = ref 0 in
 
     let rp =
       let filter1 =
-        Uset.filter
+        USet.filter
           (fun (f, t) ->
-            not (Uset.exists (fun (f2, t2) -> f2 = f && t <> t2) pos_rp)
+            not (USet.exists (fun (f2, t2) -> f2 = f && t <> t2) pos_rp)
           )
           pos_rp
       in
       let filter2 =
-        Uset.filter
+        USet.filter
           (fun (f, t) ->
-            not (Uset.exists (fun (f2, t2) -> t2 = t && f <> f2) pos_rp)
+            not (USet.exists (fun (f2, t2) -> t2 = t && f <> f2) pos_rp)
           )
           pos_rp
       in
-        ref (Uset.union filter1 filter2)
+        ref (USet.union filter1 filter2)
     in
 
     while !rls <> [] && !i < 10 do
@@ -485,30 +486,30 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
       let s = List.hd !rls in
         rls := List.tl !rls;
 
-        let relabels = Uset.filter (fun (a, b) -> a = s || b = s) pos_rp in
-          if Uset.size relabels = 0 then rls := []
-          else if Uset.size relabels <> 1 then
+        let relabels = USet.filter (fun (a, b) -> a = s || b = s) pos_rp in
+          if USet.size relabels = 0 then rls := []
+          else if USet.size relabels <> 1 then
             assert
               (* debugger - assertion failure *)
               false
           else
-            let values = Uset.values relabels in
+            let values = USet.values relabels in
             let f, t = List.hd values in
-              rp := Uset.add !rp (f, t);
+              rp := USet.add !rp (f, t);
 
-              str_1 := Uset.map (fun x -> Expr.subst x t (ESymbol f)) !str_1;
-              str_2 := Uset.map (fun x -> Expr.subst x f (ESymbol t)) !str_2;
+              str_1 := USet.map (fun x -> Expr.subst x t (ESymbol f)) !str_1;
+              str_2 := USet.map (fun x -> Expr.subst x f (ESymbol t)) !str_2;
 
               rls := List.filter (fun x -> x <> f && x <> t) !rls
     done;
 
     if !rls = [] || !i >= 10 then
-      [ (Uset.values !str_1, Uset.values !str_2, !rp) ]
+      [ (USet.values !str_1, USet.values !str_2, !rp) ]
     else []
   in
 
   (* Generate all combinations *)
-  let empty_set = Uset.create () in
+  let empty_set = USet.create () in
   let results =
     [
       it notcommon_1 notcommon_2;
@@ -522,8 +523,8 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
     List.filter (fun x -> x <> []) results
     |> List.concat
     |> List.filter (fun (_, _, r) ->
-           Uset.for_all
-             (fun x -> Uset.exists (fun (y0, y1) -> x = y0 || x = y1) r)
+           USet.for_all
+             (fun x -> USet.exists (fun (y0, y1) -> x = y0 || x = y1) r)
              ness
        )
   in
@@ -535,7 +536,7 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
 
 let conflict (elab_ctx : context) events =
   Logs.debug (fun m ->
-      m "Computing conflicts among %d events..." (Uset.size events)
+      m "Computing conflicts among %d events..." (USet.size events)
   );
 
   (* Build po tree *)
@@ -543,11 +544,11 @@ let conflict (elab_ctx : context) events =
 
   (* Semicolon composition *)
   let semicolon r1 r2 =
-    let result = Uset.create () in
-      Uset.iter
+    let result = USet.create () in
+      USet.iter
         (fun (a, b) ->
-          Uset.iter
-            (fun (c, d) -> if b = c then Uset.add result (a, d) |> ignore)
+          USet.iter
+            (fun (c, d) -> if b = c then USet.add result (a, d) |> ignore)
             r2
         )
         r1;
@@ -556,52 +557,52 @@ let conflict (elab_ctx : context) events =
 
   (* Compute all successors of x in po (including x) *)
   let it x =
-    let singleton = Uset.singleton (x, x) in
+    let singleton = USet.singleton (x, x) in
     let composed = semicolon singleton elab_ctx.po in
-    let successors = Uset.map (fun (_, y) -> y) composed in
-      Uset.add successors x
+    let successors = USet.map (fun (_, y) -> y) composed in
+      USet.add successors x
   in
 
   (* Process each branch event *)
   let branch_results =
-    Uset.map
+    USet.map
       (fun x ->
         let successors =
-          try Hashtbl.find po_tree x with Not_found -> Uset.create ()
+          try Hashtbl.find po_tree x with Not_found -> USet.create ()
         in
-        let values = Uset.values successors in
+        let values = USet.values successors in
           match values with
           | [ a; b ] ->
               let ita = it a in
               let itb = it b in
 
               (* Remove common elements *)
-              let ita_clone = Uset.clone ita in
-                Uset.iter
+              let ita_clone = USet.clone ita in
+                USet.iter
                   (fun e ->
-                    if Uset.mem itb e then (
-                      Uset.remove ita e |> ignore;
-                      Uset.remove itb e |> ignore
+                    if USet.mem itb e then (
+                      USet.remove ita e |> ignore;
+                      USet.remove itb e |> ignore
                     )
                   )
                   ita_clone;
 
                 (* Cross product and inverse *)
-                let cross = Uset.cross ita itb in
-                let inverse = Uset.inverse_relation cross in
-                  Uset.union cross inverse
-          | _ -> Uset.create ()
+                let cross = URelation.cross ita itb in
+                let inverse = URelation.inverse_relation cross in
+                  USet.union cross inverse
+          | _ -> USet.create ()
       )
       elab_ctx.branch_events
   in
 
   Logs.debug (fun m ->
       m "Computed conflicts for %d branch events."
-        (Uset.size elab_ctx.branch_events)
+        (USet.size elab_ctx.branch_events)
   );
 
   (* Union all results *)
-  Uset.fold (fun acc s -> Uset.union acc s) branch_results (Uset.create ())
+  USet.fold (fun acc s -> USet.union acc s) branch_results (USet.create ())
 
 (** Helper: Parse dependency symbol to get origin event label *)
 let origin s =
@@ -615,15 +616,15 @@ let origin s =
 
 (** Helper: Check if justification is independent *)
 let independent just =
-  Uset.size just.fwd = 0 && Uset.size just.we = 0 && Uset.size just.d = 0
+  USet.size just.fwd = 0 && USet.size just.we = 0 && USet.size just.d = 0
 
 (** Helper: Apply relabeling substitutions *)
 let relabel expr pairs =
-  Uset.fold (fun acc (f, t) -> Expr.subst acc f (ESymbol t)) pairs expr
+  USet.fold (fun acc (f, t) -> Expr.subst acc f (ESymbol t)) pairs expr
 
 (** Helper: Apply inverse relabeling substitutions *)
 let unlabel expr pairs =
-  Uset.fold (fun acc (f, t) -> Expr.subst acc t (ESymbol f)) pairs expr
+  USet.fold (fun acc (f, t) -> Expr.subst acc t (ESymbol f)) pairs expr
 
 (** Check if two expressions are equivalent under predicates using Z3 *)
 let relabel_equivalent_expressions elab_ctx con statex p_1 p_2 relabelPairs e_1
@@ -724,8 +725,8 @@ let rec relabel_equivalent elab_ctx con statex p_1 p_2 relabelPairs _pred
     let pred_1 = _pred e_1.label in
     let pred_2 = _pred e_2.label in
 
-    let ps1 = Uset.size pred_1 = 0 in
-    let ps2 = Uset.size pred_2 = 0 in
+    let ps1 = USet.size pred_1 = 0 in
+    let ps2 = USet.size pred_2 = 0 in
 
     if ps1 <> ps2 then Lwt.return_false
     else if e_1.typ <> e_2.typ then Lwt.return_false
@@ -755,8 +756,8 @@ let rec relabel_equivalent elab_ctx con statex p_1 p_2 relabelPairs _pred
                 else if ps1 then Lwt.return_true
                 else
                   (* Recurse on predecessors *)
-                  let pred_1_vals = Uset.values pred_1 in
-                  let pred_2_vals = Uset.values pred_2 in
+                  let pred_1_vals = USet.values pred_1 in
+                  let pred_2_vals = USet.values pred_2 in
                     match (pred_1_vals, pred_2_vals) with
                     | [ p1 ], [ p2 ] ->
                         relabel_equivalent elab_ctx con statex p_1 p_2
@@ -775,8 +776,8 @@ let rec relabel_equivalent elab_ctx con statex p_1 p_2 relabelPairs _pred
             if not loc_eq then Lwt.return_false
             else if ps1 then Lwt.return_true
             else
-              let pred_1_vals = Uset.values pred_1 in
-              let pred_2_vals = Uset.values pred_2 in
+              let pred_1_vals = USet.values pred_1 in
+              let pred_2_vals = USet.values pred_2 in
                 match (pred_1_vals, pred_2_vals) with
                 | [ p1 ], [ p2 ] ->
                     relabel_equivalent elab_ctx con statex p_1 p_2 relabelPairs
@@ -786,53 +787,55 @@ let rec relabel_equivalent elab_ctx con statex p_1 p_2 relabelPairs _pred
       | _ -> Lwt.return_true
 
 let lift elab_ctx justs =
-  Logs.debug (fun m -> m "Lifting %d justifications..." (Uset.size justs));
+  Logs.debug (fun m -> m "Lifting %d justifications..." (USet.size justs));
   (* Static constraints from structure *)
   let statex = elab_ctx.structure.constraint_ in
 
   (* Create justification map: event label -> set of justifications *)
   let justmap = Hashtbl.create 16 in
-    Uset.iter
+    USet.iter
       (fun just ->
         let label = just.w.label in
         let existing =
           match Hashtbl.find_opt justmap label with
           | Some s -> s
-          | None -> Uset.create ()
+          | None -> USet.create ()
         in
-          Hashtbl.replace justmap label (Uset.add existing just)
+          Hashtbl.replace justmap label (USet.add existing just)
       )
       justs;
 
     (* Compute liftpairs: conflicting write pairs *)
-    let w_cross_w = Uset.cross elab_ctx.write_events elab_ctx.write_events in
+    let w_cross_w =
+      URelation.cross elab_ctx.write_events elab_ctx.write_events
+    in
     let conflict_set = conflict elab_ctx elab_ctx.e_set in
-    let liftpairs = Uset.intersection w_cross_w conflict_set in
+    let liftpairs = USet.intersection w_cross_w conflict_set in
 
     (* Create pairs of justifications from liftpairs *)
     let pairs =
-      Uset.fold
+      USet.fold
         (fun acc (a, b) ->
           let justs_a =
             match Hashtbl.find_opt justmap a with
             | Some s -> s
-            | None -> Uset.create ()
+            | None -> USet.create ()
           in
           let justs_b =
             match Hashtbl.find_opt justmap b with
             | Some s -> s
-            | None -> Uset.create ()
+            | None -> USet.create ()
           in
-            Uset.union acc (Uset.cross justs_a justs_b)
+            USet.union acc (URelation.cross justs_a justs_b)
         )
-        liftpairs (Uset.create ())
+        liftpairs (USet.create ())
     in
 
     (* Create lifted cache *)
     let lifted = create_lifted_cache () in
 
     (* If no pairs to lift, return input unchanged *)
-    if Uset.size pairs = 0 then Lwt.return justs
+    if USet.size pairs = 0 then Lwt.return justs
     else
       (* Process each pair of justifications *)
       let* out =
@@ -843,8 +846,8 @@ let lift elab_ctx justs =
 
             (* Check if contexts match and not both independent *)
             if
-              (not (Uset.equal just_1.fwd just_2.fwd))
-              || (not (Uset.equal just_1.we just_2.we))
+              (not (USet.equal just_1.fwd just_2.fwd))
+              || (not (USet.equal just_1.we just_2.we))
               || (independent just_1 && independent just_2)
             then Lwt.return []
             else
@@ -864,7 +867,7 @@ let lift elab_ctx justs =
                   (* Compute ppo for both justifications *)
                   let* ppo_1 = Forwardingcontext.ppo con just_1.p in
                     let* ppo_2 = Forwardingcontext.ppo con just_2.p in
-                    let ppo = Uset.union ppo_1 ppo_2 in
+                    let ppo = USet.union ppo_1 ppo_2 in
 
                     (* Get pred function *)
                     let* _pred =
@@ -885,7 +888,7 @@ let lift elab_ctx justs =
                                 just_2 with
                                 p = just_2.p @ [ eq_pred ];
                                 w = new_w2;
-                                d = Uset.create ();
+                                d = USet.create ();
                               }
                             )
                       | Some v1, Some (ENum n2) when not (Expr.is_number v1) ->
@@ -898,7 +901,7 @@ let lift elab_ctx justs =
                                 just_1 with
                                 p = just_1.p @ [ eq_pred ];
                                 w = new_w1;
-                                d = Uset.create ();
+                                d = USet.create ();
                               },
                               just_2
                             )
@@ -918,14 +921,14 @@ let lift elab_ctx justs =
 
                           (* Check uniqueness of relabel pairs *)
                           let from_syms =
-                            Uset.map (fun (f, _) -> f) relabelPairs
+                            USet.map (fun (f, _) -> f) relabelPairs
                           in
                           let to_syms =
-                            Uset.map (fun (_, t) -> t) relabelPairs
+                            USet.map (fun (_, t) -> t) relabelPairs
                           in
                             if
-                              Uset.size from_syms <> Uset.size relabelPairs
-                              || Uset.size to_syms <> Uset.size relabelPairs
+                              USet.size from_syms <> USet.size relabelPairs
+                              || USet.size to_syms <> USet.size relabelPairs
                             then Lwt.return []
                             else
                               (* Apply relabeling to predicates *)
@@ -955,9 +958,9 @@ let lift elab_ctx justs =
                                 else
                                   (* Check if all dependencies have equivalent origins *)
                                   let* deps_eq =
-                                    Uset.async_for_all
+                                    USet.async_for_all
                                       (fun s_1 ->
-                                        Uset.async_exists
+                                        USet.async_exists
                                           (fun s_2 ->
                                             relabel_equivalent elab_ctx con
                                               statex p_1 p_2 relabelPairs _pred
@@ -1036,12 +1039,12 @@ let lift elab_ctx justs =
                       lifted_to lifted (ojust_1, ojust_2) out;
                       Lwt.return out
           )
-          (Uset.values pairs)
+          (USet.values pairs)
       in
 
-      let result = List.concat out |> Uset.of_list in
+      let result = List.concat out |> USet.of_list in
         Logs.debug (fun m ->
-            m "Completed lifting. Result size: %d" (Uset.size result)
+            m "Completed lifting. Result size: %d" (USet.size result)
         );
         Lwt.return result
 
@@ -1090,9 +1093,9 @@ let weaken elab_ctx (justs : justification uset) : justification uset Lwt.t =
           Lwt.return
             { just with p = filtered_p; op = ("weak", Some just, None) }
         )
-        (Uset.values justs)
+        (USet.values justs)
     in
 
     Logs.debug (fun m -> m "Filtered predicates based on PWG.");
     flush stdout;
-    Lwt.return (Uset.of_list out)
+    Lwt.return (USet.of_list out)

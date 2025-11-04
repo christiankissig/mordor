@@ -1,9 +1,9 @@
 (** Property-Based Tests for Symbolic MRD Testing invariants, theorems, and
     properties from the paper *)
 
+open Alcotest
 open Types
 open Uset
-open Alcotest
 
 (** Property 1: Thin-Air Freedom (Theorem from §1) *)
 module PropertyThinAirFreedom = struct
@@ -19,27 +19,27 @@ module PropertyThinAirFreedom = struct
     *)
 
     (* Without dependencies: cycle in rf *)
-    let rf_cycle = of_list [ (1, 3); (2, 4); (3, 2); (4, 1) ] in
-      check bool "rf_cycle_not_acyclic" false (acyclic rf_cycle);
+    let rf_cycle = USet.of_list [ (1, 3); (2, 4); (3, 2); (4, 1) ] in
+      check bool "rf_cycle_not_acyclic" false (URelation.acyclic rf_cycle);
 
       (* With dependencies: cycle in dp ∪ rf *)
-      let dp = of_list [ (1, 2); (3, 4) ] in
-      let dp_rf = union dp rf_cycle in
-        check bool "dp_rf_cycle_not_acyclic" false (acyclic dp_rf);
+      let dp = USet.of_list [ (1, 2); (3, 4) ] in
+      let dp_rf = USet.union dp rf_cycle in
+        check bool "dp_rf_cycle_not_acyclic" false (URelation.acyclic dp_rf);
         ()
 
   let test_dependencies_break_cycles () =
     (* With proper dependencies, the cycle is detected *)
-    let po = of_list [ (1, 2); (3, 4) ] in
-    let rf = of_list [ (2, 3); (4, 1) ] in
-    let dp = of_list [ (1, 2); (3, 4) ] in
+    let po = USet.of_list [ (1, 2); (3, 4) ] in
+    let rf = USet.of_list [ (2, 3); (4, 1) ] in
+    let dp = USet.of_list [ (1, 2); (3, 4) ] in
 
-    let combined = union (union po rf) dp in
-      check bool "proper_deps_create_cycle" false (acyclic combined);
+    let combined = USet.union (USet.union po rf) dp in
+      check bool "proper_deps_create_cycle" false (URelation.acyclic combined);
 
       (* But with independent writes, there's no cycle *)
-      let dp_empty = create () in
-      let combined2 = union (union po rf) dp_empty in
+      let dp_empty = USet.create () in
+      let combined2 = USet.union (USet.union po rf) dp_empty in
         (* This might still have a cycle from po ∪ rf, depending on the program *)
         ()
 end
@@ -77,13 +77,13 @@ module PropertyCompilationCorrectness = struct
     (* sMRD is a relaxation of RC11 *)
     (* Every RC11 execution has a corresponding sMRD execution *)
     (* Because: (dp ∪ ≤) ⊆ ⊑, so acyclic(⊑ ∪ rf) ⟹ acyclic(dp ∪ ≤ ∪ rf) *)
-    let po = of_list [ (1, 2); (2, 3); (4, 5) ] in
-    let rf = of_list [ (3, 4) ] in
-    let dp = of_list [ (1, 2) ] in
-    let ppo = of_list [ (1, 2) ] in
+    let po = USet.of_list [ (1, 2); (2, 3); (4, 5) ] in
+    let rf = USet.of_list [ (3, 4) ] in
+    let dp = USet.of_list [ (1, 2) ] in
+    let ppo = USet.of_list [ (1, 2) ] in
 
     (* If po ∪ rf is acyclic, then so is dp ∪ ppo ∪ rf when dp ∪ ppo ⊆ po *)
-    check bool "po_includes_deps" true (subset dp po);
+    check bool "po_includes_deps" true (USet.subset dp po);
     ()
 
   let test_standard_compilation_mappings () =
@@ -185,12 +185,12 @@ module PropertyForwardingCorrectness = struct
   let test_load_forwarding_preserves_semantics () =
     (* Load forwarding: if two loads read the same location and
        the first is not overtaken, forwarding is correct *)
-    let fwd_ctx = of_list [ (1, 2) ] in
+    let fwd_ctx = USet.of_list [ (1, 2) ] in
 
     (* The forwarding context records (1,2) means:
        - Event 2 is elided
        - Symbols from event 2 are replaced by symbols from event 1 *)
-    check bool "fwd_recorded" true (mem fwd_ctx (1, 2));
+    check bool "fwd_recorded" true (USet.mem fwd_ctx (1, 2));
     ()
 
   let test_store_forwarding_preserves_semantics () =
@@ -201,8 +201,8 @@ module PropertyForwardingCorrectness = struct
   let test_write_elision_preserves_semantics () =
     (* Write elision: if a write is immediately followed by another
        write to the same location, the first can be elided *)
-    let we_ctx = of_list [ (1, 2) ] in
-      check bool "we_recorded" true (mem we_ctx (1, 2));
+    let we_ctx = USet.of_list [ (1, 2) ] in
+      check bool "we_recorded" true (USet.mem we_ctx (1, 2));
       ()
 end
 
@@ -262,16 +262,16 @@ module PropertyJustificationMonotonicity = struct
     let j0 =
       {
         p = [];
-        d = of_list [ "α" ];
-        fwd = create ();
-        we = create ();
+        d = USet.of_list [ "α" ];
+        fwd = USet.create ();
+        we = USet.create ();
         w = e;
         op = ("initial", None, None);
       }
     in
 
     (* Initial justification has all syntactic dependencies *)
-    check bool "j0_has_deps" true (size j0.d > 0);
+    check bool "j0_has_deps" true (USet.size j0.d > 0);
     ()
 
   let test_elaboration_weakens_or_maintains () =
@@ -282,9 +282,9 @@ module PropertyJustificationMonotonicity = struct
     let j_before =
       {
         p = [ EBinOp (ESymbol "c", "=", ENum Z.one) ];
-        d = of_list [ "x"; "y" ];
-        fwd = create ();
-        we = create ();
+        d = USet.of_list [ "x"; "y" ];
+        fwd = USet.create ();
+        we = USet.create ();
         w = { (make_event Write 1) with wval = Some (ENum Z.zero) };
         op = ("before", None, None);
       }
@@ -294,9 +294,9 @@ module PropertyJustificationMonotonicity = struct
       {
         p = [];
         (* Weakened *)
-        d = of_list [ "x"; "y" ];
-        fwd = create ();
-        we = create ();
+        d = USet.of_list [ "x"; "y" ];
+        fwd = USet.create ();
+        we = USet.create ();
         w = { (make_event Write 1) with wval = Some (ENum Z.zero) };
         op = ("weakened", None, None);
       }
@@ -341,8 +341,8 @@ end
 module PropertyExecutionCompleteness = struct
   let test_all_maximal_sets_considered () =
     (* Every maximal conflict-free set of events is considered *)
-    let e_all = of_list [ 1; 2; 3; 4 ] in
-    let conflict = of_list [ (2, 3) ] in
+    let e_all = USet.of_list [ 1; 2; 3; 4 ] in
+    let conflict = USet.of_list [ (2, 3) ] in
     (* Events 2 and 3 conflict *)
 
     (* Maximal sets: {1,2,4}, {1,3,4} *)

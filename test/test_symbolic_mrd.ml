@@ -2,11 +2,11 @@
     Undefined Behaviour, and Extrinsic Choice" *)
 
 open Alcotest
+open Coherence
+open Executions
 open Expr
 open Types
 open Uset
-open Executions
-open Coherence
 
 (** Test utilities *)
 module TestUtils = struct
@@ -90,82 +90,6 @@ module TestEvents = struct
       test_case "TestEvents.test_create_write" `Quick test_create_write;
       test_case "TestEvents.test_create_branch" `Quick test_create_branch;
       test_case "TestEvents.test_create_alloc" `Quick test_create_alloc;
-    ]
-end
-
-(** Test Module 2: Unordered Sets (uset) *)
-module TestUset = struct
-  let test_create_empty () =
-    let s = Uset.create () in
-      check int "empty_set_size" 0 (Uset.size s)
-
-  let test_singleton () =
-    let s = singleton 42 in
-      check int "singleton_size" 1 (size s);
-      check bool "singleton_membership" true (mem s 42)
-
-  let test_add_remove () =
-    let s = create () in
-    let s = add s 1 in
-    let s = add s 2 in
-    let s = add s 3 in
-      check int "add_size" 3 (size s);
-      let s = remove s 2 in
-        check int "remove_size" 2 (size s);
-        check bool "removed_element" false (mem s 2)
-
-  let test_union () =
-    let s1 = Uset.of_list [ 1; 2; 3 ] in
-    let s2 = Uset.of_list [ 3; 4; 5 ] in
-    let s_union = Uset.union s1 s2 in
-      check int "union_size" 5 (Uset.size s_union)
-
-  let test_intersection () =
-    let s1 = of_list [ 1; 2; 3; 4 ] in
-    let s2 = of_list [ 3; 4; 5; 6 ] in
-    let s_inter = intersection s1 s2 in
-      check int "intersection_size" 2 (size s_inter)
-
-  let test_set_minus () =
-    let s1 = of_list [ 1; 2; 3; 4 ] in
-    let s2 = of_list [ 3; 4; 5 ] in
-    let s_diff = set_minus s1 s2 in
-      check int "set_minus_size" 2 (size s_diff);
-      check bool "set_minus_1" true (mem s_diff 1);
-      check bool "set_minus_2" true (mem s_diff 2)
-
-  let test_cross () =
-    let s1 = of_list [ 1; 2 ] in
-    let s2 = of_list [ 'a'; 'b' ] in
-    let s_cross = cross s1 s2 in
-      check int "cross_product_size" 4 (size s_cross)
-
-  let test_transitive_closure () =
-    let rel = of_list [ (1, 2); (2, 3); (3, 4) ] in
-    let tc = transitive_closure rel in
-      check bool "tc_includes_original" true (mem tc (1, 2));
-      check bool "tc_includes_derived" true (mem tc (1, 3));
-      check bool "tc_includes_long_chain" true (mem tc (1, 4))
-
-  let test_acyclic () =
-    let acyclic_rel = of_list [ (1, 2); (2, 3); (3, 4) ] in
-      check bool "acyclic_relation" true (acyclic acyclic_rel);
-
-      let cyclic_rel = of_list [ (1, 2); (2, 3); (3, 1) ] in
-        check bool "cyclic_relation" false (acyclic cyclic_rel)
-
-  let suite =
-    [
-      test_case "TestUset.test_create_empty" `Quick test_create_empty;
-      test_case "TestUset.test_singleton" `Quick test_singleton;
-      test_case "TestUset.test_add_remove" `Quick test_add_remove;
-      test_case "TestUset.test_union" `Quick test_union;
-      test_case "TestUset.test_intersection" `Quick test_intersection;
-      test_case "TestUset.test_set_minus" `Quick test_set_minus;
-      test_case "TestUset.test_cross" `Quick test_cross;
-      test_case "TestUset.test_transitive_closure" `Quick
-        test_transitive_closure;
-      test_case "TestUset.test_acyclic" `Quick test_acyclic;
     ]
 end
 
@@ -326,8 +250,8 @@ module TestExample1_1 = struct
     Hashtbl.add events 4 e4;
 
     (* Initial justification for write 2 has data dependency on α *)
-    let d_set = create () in
-    let d_set = add d_set "α" in
+    let d_set = USet.create () in
+    let d_set = USet.add d_set "α" in
 
     let just =
       {
@@ -335,15 +259,15 @@ module TestExample1_1 = struct
         (* predicate: ⊤ *)
         d = d_set;
         (* data dependency on α *)
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e2;
         op = ("initial", None, None);
       }
     in
 
-    check int "ub_initial_just_deps" 1 (size just.d);
-    check bool "ub_initial_just_has_alpha" true (mem just.d "α")
+    check int "ub_initial_just_deps" 1 (USet.size just.d);
+    check bool "ub_initial_just_has_alpha" true (USet.mem just.d "α")
 
   let test_lb_ub_data_optimized_justification () =
     (* After strengthening with !α ≠ 0, value assignment with α = 0,
@@ -356,16 +280,16 @@ module TestExample1_1 = struct
       {
         p = [];
         (* predicate: ⊤ after weakening *)
-        d = create ();
+        d = USet.create ();
         (* no dependencies *)
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e2_opt;
         op = ("optimized", None, None);
       }
     in
 
-    check int "ub_optimized_just_deps" 0 (size just_opt.d);
+    check int "ub_optimized_just_deps" 0 (USet.size just_opt.d);
     Printf.printf "PASS: LB+UB+data optimization produces independent write\n"
 
   let suite =
@@ -402,9 +326,9 @@ module TestExample3_1 = struct
             EBinOp
               (EBinOp (ESymbol "α", "%", ENum (Z.of_int 16)), "=", ENum Z.zero);
           ];
-        d = create ();
-        fwd = create ();
-        we = create ();
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e3;
         op = ("initial", None, None);
       }
@@ -424,9 +348,9 @@ module TestExample3_1 = struct
       {
         p = [];
         (* weakened to ⊤ *)
-        d = create ();
-        fwd = create ();
-        we = create ();
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e3;
         op = ("weakened", None, None);
       }
@@ -522,15 +446,15 @@ module TestExample5_1 = struct
     in
 
     (* Initial justifications *)
-    let d_set_true = create () in
-    let d_set_true = add d_set_true "r1" in
+    let d_set_true = USet.create () in
+    let d_set_true = USet.add d_set_true "r1" in
 
     let just_true =
       {
         p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
         d = d_set_true;
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e3;
         op = ("true_branch", None, None);
       }
@@ -539,16 +463,16 @@ module TestExample5_1 = struct
     let just_false =
       {
         p = [ EBinOp (ESymbol "r1", "≠", ENum Z.one) ];
-        d = create ();
-        fwd = create ();
-        we = create ();
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e5;
         op = ("false_branch", None, None);
       }
     in
 
     check bool "true_branch_has_control_dep" true (List.length just_true.p > 0);
-    check bool "true_branch_has_data_dep" true (mem just_true.d "r1");
+    check bool "true_branch_has_data_dep" true (USet.mem just_true.d "r1");
     Printf.printf "PASS: Control dependency initial justifications created\n"
 
   let test_lb_false_dep_after_va () =
@@ -560,16 +484,16 @@ module TestExample5_1 = struct
     let just_va =
       {
         p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
-        d = create ();
+        d = USet.create ();
         (* no data dependency after VA *)
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e3_va;
         op = ("value_assigned", None, None);
       }
     in
 
-    check int "after_va_no_data_deps" 0 (size just_va.d);
+    check int "after_va_no_data_deps" 0 (USet.size just_va.d);
     Printf.printf "PASS: Value assignment removes data dependency\n"
 
   let test_lb_false_dep_after_lift () =
@@ -582,9 +506,9 @@ module TestExample5_1 = struct
       {
         p = [];
         (* ⊤ after lifting *)
-        d = create ();
-        fwd = create ();
-        we = create ();
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e3_lift;
         op = ("lifted", None, None);
       }
@@ -618,21 +542,21 @@ module TestExample6_1 = struct
         Relaxed
     in
 
-    let d_set = create () in
-    let d_set = add d_set "r2" in
+    let d_set = USet.create () in
+    let d_set = USet.add d_set "r2" in
 
     let just =
       {
         p = [];
         d = d_set;
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e3;
         op = ("initial", None, None);
       }
     in
 
-    check bool "forwarding_initial_deps_r2" true (mem just.d "r2");
+    check bool "forwarding_initial_deps_r2" true (USet.mem just.d "r2");
     Printf.printf "PASS: Forwarding initial justification created\n"
 
   let test_forwarding_after_fwd () =
@@ -642,11 +566,11 @@ module TestExample6_1 = struct
         Relaxed
     in
 
-    let fwd_edges = create () in
-    let fwd_edges = add fwd_edges (1, 2) in
+    let fwd_edges = USet.create () in
+    let fwd_edges = USet.add fwd_edges (1, 2) in
 
-    let d_set = create () in
-    let d_set = add d_set "r1" in
+    let d_set = USet.create () in
+    let d_set = USet.add d_set "r1" in
 
     let just_fwd =
       {
@@ -655,15 +579,15 @@ module TestExample6_1 = struct
         (* now depends on r1 instead of r2 *)
         fwd = fwd_edges;
         (* records (1,2) forwarding *)
-        we = create ();
+        we = USet.create ();
         w = e3;
         op = ("forwarded", None, None);
       }
     in
 
-    check bool "forwarding_has_fwd_edge" true (mem just_fwd.fwd (1, 2));
-    check bool "forwarding_deps_r1" true (mem just_fwd.d "r1");
-    check bool "forwarding_not_deps_r2" false (mem just_fwd.d "r2");
+    check bool "forwarding_has_fwd_edge" true (USet.mem just_fwd.fwd (1, 2));
+    check bool "forwarding_deps_r1" true (USet.mem just_fwd.d "r1");
+    check bool "forwarding_not_deps_r2" false (USet.mem just_fwd.d "r2");
     Printf.printf "PASS: Forwarding changes dependencies correctly\n"
 
   let suite =
@@ -685,17 +609,17 @@ module TestJustifications = struct
       {
         p = [];
         (* ⊤ *)
-        d = create ();
+        d = USet.create ();
         (* ∅ *)
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e;
         op = ("independent", None, None);
       }
     in
 
     check int "independent_no_predicates" 0 (List.length just.p);
-    check int "independent_no_deps" 0 (size just.d);
+    check int "independent_no_deps" 0 (USet.size just.d);
     Printf.printf "PASS: Independent write justification\n"
 
   let test_dependent_write () =
@@ -704,22 +628,22 @@ module TestJustifications = struct
         (Expr.of_value (make_symbol "α"))
         Relaxed
     in
-    let d_set = create () in
-    let d_set = add d_set "α" in
+    let d_set = USet.create () in
+    let d_set = USet.add d_set "α" in
 
     let just =
       {
         p = [ EBinOp (ESymbol "α", ">", ENum Z.zero) ];
         d = d_set;
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e;
         op = ("dependent", None, None);
       }
     in
 
     check bool "dependent_has_predicates" true (List.length just.p > 0);
-    check bool "dependent_has_deps" true (size just.d > 0);
+    check bool "dependent_has_deps" true (USet.size just.d > 0);
     Printf.printf "PASS: Dependent write justification\n"
 
   let test_forwarding_context () =
@@ -728,43 +652,43 @@ module TestJustifications = struct
         (Expr.of_value (make_symbol "β"))
         Relaxed
     in
-    let fwd = create () in
-    let fwd = add fwd (1, 2) in
-    let fwd = add fwd (2, 3) in
+    let fwd = USet.create () in
+    let fwd = USet.add fwd (1, 2) in
+    let fwd = USet.add fwd (2, 3) in
 
     let just =
       {
         p = [];
-        d = create ();
+        d = USet.create ();
         fwd;
-        we = create ();
+        we = USet.create ();
         w = e;
         op = ("with_forwarding", None, None);
       }
     in
 
-    check int "forwarding_context_size" 2 (size just.fwd);
+    check int "forwarding_context_size" 2 (USet.size just.fwd);
     Printf.printf "PASS: Forwarding context in justification\n"
 
   let test_write_elision () =
     let e =
       make_write_event 4 (make_var "w") (Expr.of_value (make_number 7)) Relaxed
     in
-    let we = create () in
-    let we = add we (3, 4) in
+    let we = USet.create () in
+    let we = USet.add we (3, 4) in
 
     let just =
       {
         p = [];
-        d = create ();
-        fwd = create ();
+        d = USet.create ();
+        fwd = USet.create ();
         we;
         w = e;
         op = ("with_elision", None, None);
       }
     in
 
-    check int "write_elision_size" 1 (size just.we);
+    check int "write_elision_size" 1 (USet.size just.we);
     Printf.printf "PASS: Write elision context in justification\n"
 
   let suite =
@@ -785,76 +709,76 @@ module TestSymbolicEventStructure = struct
   let test_create_empty_structure () =
     let ses =
       {
-        e = create ();
-        po = create ();
-        rmw = create ();
-        lo = create ();
+        e = USet.create ();
+        po = USet.create ();
+        rmw = USet.create ();
+        lo = USet.create ();
         restrict = Hashtbl.create 10;
         cas_groups = Hashtbl.create 10;
         pwg = [];
-        fj = create ();
-        p = create ();
+        fj = USet.create ();
+        p = USet.create ();
         constraint_ = [];
       }
     in
 
-    check int "empty_structure_events" 0 (size ses.e);
-    check int "empty_structure_po" 0 (size ses.po);
+    check int "empty_structure_events" 0 (USet.size ses.e);
+    check int "empty_structure_po" 0 (USet.size ses.po);
     Printf.printf "PASS: Empty symbolic event structure\n"
 
   let test_add_program_order () =
     let ses =
       {
-        e = of_list [ 1; 2; 3 ];
-        po = of_list [ (1, 2); (2, 3) ];
-        rmw = create ();
-        lo = create ();
+        e = USet.of_list [ 1; 2; 3 ];
+        po = USet.of_list [ (1, 2); (2, 3) ];
+        rmw = USet.create ();
+        lo = USet.create ();
         restrict = Hashtbl.create 10;
         cas_groups = Hashtbl.create 10;
         pwg = [];
-        fj = create ();
-        p = create ();
+        fj = USet.create ();
+        p = USet.create ();
         constraint_ = [];
       }
     in
 
-    check int "structure_po_size" 2 (size ses.po);
-    check bool "structure_po_12" true (mem ses.po (1, 2));
-    check bool "structure_po_23" true (mem ses.po (2, 3));
+    check int "structure_po_size" 2 (USet.size ses.po);
+    check bool "structure_po_12" true (USet.mem ses.po (1, 2));
+    check bool "structure_po_23" true (USet.mem ses.po (2, 3));
     Printf.printf "PASS: Program order in structure\n"
 
   let test_rmw_pairs () =
     let ses =
       {
-        e = of_list [ 1; 2; 3; 4 ];
-        po = create ();
-        rmw = of_list [ (1, 2); (3, 4) ];
+        e = USet.of_list [ 1; 2; 3; 4 ];
+        po = USet.create ();
+        rmw = USet.of_list [ (1, 2); (3, 4) ];
         (* Two RMW operations *)
-        lo = create ();
+        lo = USet.create ();
         restrict = Hashtbl.create 10;
         cas_groups = Hashtbl.create 10;
         pwg = [];
-        fj = create ();
-        p = create ();
+        fj = USet.create ();
+        p = USet.create ();
         constraint_ = [];
       }
     in
 
-    check int "structure_rmw_size" 2 (size ses.rmw);
+    check int "structure_rmw_size" 2 (USet.size ses.rmw);
     Printf.printf "PASS: RMW pairs in structure\n"
 
   let test_program_wide_guarantee () =
     let ses =
       {
-        e = create ();
-        po = create ();
-        rmw = create ();
-        lo = create ();
+        e = USet.create ();
+        po = USet.create ();
+        rmw = USet.create ();
+        lo = USet.create ();
         restrict = Hashtbl.create 10;
         cas_groups = Hashtbl.create 10;
         pwg = [ EBinOp (ESymbol "x", "≤", ENum (Z.of_int 100)) ];
-        fj = create ();
-        p = create ();
+        fj = USet.create ();
+        p = USet.create ();
         constraint_ = [];
       }
     in
@@ -878,12 +802,13 @@ end
 (** Test Module 12: Coherence Relations *)
 module TestCoherence = struct
   let test_semicolon_composition () =
-    let r1 = of_list [ (1, 2); (2, 3) ] in
-    let r2 = of_list [ (3, 4); (4, 5) ] in
+    let r1 = USet.of_list [ (1, 2); (2, 3) ] in
+    let r2 = USet.of_list [ (3, 4); (4, 5) ] in
     let composed = semicolon_rel [ r1; r2 ] in
 
-    check bool "semicolon_doesnt_include_original" false (mem composed (1, 2));
-    check bool "semicolon_includes_derived" true (mem composed (2, 4));
+    check bool "semicolon_doesnt_include_original" false
+      (USet.mem composed (1, 2));
+    check bool "semicolon_includes_derived" true (USet.mem composed (2, 4));
     ()
 
   let test_event_identity () =
@@ -896,13 +821,13 @@ module TestCoherence = struct
     Hashtbl.add events 2 e2;
     Hashtbl.add events 3 e3;
 
-    let e_set = of_list [ 1; 2; 3 ] in
+    let e_set = USet.of_list [ 1; 2; 3 ] in
     let rel = em events e_set Read (Some Acquire) None None in
 
     (* Should include only acquire reads: (1,1) and (3,3) *)
-    check bool "em_includes_acq_read_1" true (mem rel (1, 1));
-    check bool "em_includes_acq_read_3" true (mem rel (3, 3));
-    check bool "em_excludes_rlx_read" false (mem rel (2, 2));
+    check bool "em_includes_acq_read_1" true (USet.mem rel (1, 1));
+    check bool "em_includes_acq_read_3" true (USet.mem rel (3, 3));
+    check bool "em_excludes_rlx_read" false (USet.mem rel (2, 2));
     ()
 
   let suite =
@@ -920,8 +845,8 @@ module TestOrigin = struct
     let e1 = make_read_event 1 (make_var "x") (make_symbol "α") Relaxed in
       Hashtbl.add events 1 e1;
 
-      let read_events = singleton 1 in
-      let malloc_events = create () in
+      let read_events = USet.singleton 1 in
+      let malloc_events = USet.create () in
 
       let orig = origin events read_events malloc_events "α" in
 
@@ -936,8 +861,8 @@ module TestOrigin = struct
     let e1 = make_alloc_event 1 (make_symbol "π") (make_number 16) in
       Hashtbl.add events 1 e1;
 
-      let read_events = create () in
-      let malloc_events = singleton 1 in
+      let read_events = USet.create () in
+      let malloc_events = USet.singleton 1 in
 
       let orig = origin events read_events malloc_events "π" in
 
@@ -949,8 +874,8 @@ module TestOrigin = struct
 
   let test_origin_not_found () =
     let events = Hashtbl.create 10 in
-    let read_events = create () in
-    let malloc_events = create () in
+    let read_events = USet.create () in
+    let malloc_events = USet.create () in
 
     let orig = origin events read_events malloc_events "ξ" in
 
@@ -976,7 +901,6 @@ let suite =
   ( "Test Symbolic MRD",
     (* Run all test modules *)
     TestEvents.suite
-    @ TestUset.suite
     @ TestExpressions.suite
     (* Run async solver tests *)
     @ TestSolver.suite

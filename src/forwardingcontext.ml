@@ -1,27 +1,28 @@
 (** Forwarding Context for symbolic execution *)
 
 open Types
+open Uset
 open Lwt.Syntax
 
 (** Global state - mutable references *)
 module State = struct
-  let e : int uset ref = ref (Uset.create ())
+  let e : int uset ref = ref (USet.create ())
   let events : (int, event) Hashtbl.t ref = ref (Hashtbl.create 0)
   let val_fn : (int -> expr option) ref = ref (fun _ -> None)
-  let ppo_loc_base : (int * int) uset ref = ref (Uset.create ())
-  let ppo_base : (int * int) uset ref = ref (Uset.create ())
-  let ppo_sync : (int * int) uset ref = ref (Uset.create ())
-  let ppo_loc_baseA : (int * int) uset ref = ref (Uset.create ())
-  let ppo_loc_eqA : (int * int) uset ref = ref (Uset.create ())
-  let ppo_syncA : (int * int) uset ref = ref (Uset.create ())
-  let ppo_volA : (int * int) uset ref = ref (Uset.create ())
-  let ppo_rmwA : (int * int) uset ref = ref (Uset.create ())
+  let ppo_loc_base : (int * int) uset ref = ref (USet.create ())
+  let ppo_base : (int * int) uset ref = ref (USet.create ())
+  let ppo_sync : (int * int) uset ref = ref (USet.create ())
+  let ppo_loc_baseA : (int * int) uset ref = ref (USet.create ())
+  let ppo_loc_eqA : (int * int) uset ref = ref (USet.create ())
+  let ppo_syncA : (int * int) uset ref = ref (USet.create ())
+  let ppo_volA : (int * int) uset ref = ref (USet.create ())
+  let ppo_rmwA : (int * int) uset ref = ref (USet.create ())
 end
 
 (** Good and bad contexts tracking *)
-let goodcon : ((int * int) uset * (int * int) uset) uset = Uset.create () (*16*)
+let goodcon : ((int * int) uset * (int * int) uset) uset = USet.create () (*16*)
 
-let badcon : ((int * int) uset * (int * int) uset) uset = Uset.create () (*16*)
+let badcon : ((int * int) uset * (int * int) uset) uset = USet.create () (*16*)
 
 (** Cache key type *)
 type cache_key = {
@@ -57,11 +58,11 @@ module FwdCache = struct
 
   let get_subset con predicates =
     try
-      let pred_set = Uset.of_list predicates in
+      let pred_set = USet.of_list predicates in
       let entries = Hashtbl.find cache_con con in
       let matching =
         List.filter
-          (fun (preds, _) -> Uset.subset (Uset.of_list preds) pred_set)
+          (fun (preds, _) -> USet.subset (USet.of_list preds) pred_set)
           entries
       in
         match matching with
@@ -73,12 +74,12 @@ module FwdCache = struct
                 (fun (_, v1) (_, v2) ->
                   let size1 =
                     match v1.ppo with
-                    | Some s -> Uset.size s
+                    | Some s -> USet.size s
                     | None -> 0
                   in
                   let size2 =
                     match v2.ppo with
-                    | Some s -> Uset.size s
+                    | Some s -> USet.size s
                     | None -> 0
                   in
                     compare size2 size1
@@ -111,10 +112,10 @@ module FwdCache = struct
 end
 
 (** Check if context is good *)
-let is_good fwd we = Uset.mem goodcon (fwd, we)
+let is_good fwd we = USet.mem goodcon (fwd, we)
 
 (** Check if context is bad *)
-let is_bad fwd we = Uset.mem badcon (fwd, we)
+let is_bad fwd we = USet.mem badcon (fwd, we)
 
 (** Initialization parameters type *)
 type init_params = {
@@ -144,14 +145,14 @@ let init params =
     State.events := params.init_events;
     State.val_fn := params.init_val;
 
-    ignore (Uset.clear goodcon);
-    ignore (Uset.clear badcon);
+    ignore (USet.clear goodcon);
+    ignore (USet.clear badcon);
 
     let po = params.init_po in
 
     (* Filter events by mode *)
     let filter_by_mode events mode_fn =
-      Uset.filter
+      USet.filter
         (fun e ->
           try
             let ev = Hashtbl.find !State.events e in
@@ -177,7 +178,7 @@ let init params =
     let b = filter_by_mode !State.e is_branch in
 
     let e_vol =
-      Uset.filter
+      USet.filter
         (fun e ->
           try (Hashtbl.find !State.events e).volatile with Not_found -> false
         )
@@ -185,7 +186,7 @@ let init params =
     in
 
     let po_nf =
-      Uset.filter
+      USet.filter
         (fun (from, to_) ->
           try
             let from_ev = Hashtbl.find !State.events from in
@@ -201,7 +202,7 @@ let init params =
 
     (* Mode filters *)
     let filter_order events mode =
-      Uset.filter
+      USet.filter
         (fun e ->
           let ev = Hashtbl.find !State.events e in
             match ev.typ with
@@ -213,69 +214,69 @@ let init params =
         events
     in
 
-    let w_rel = Uset.union (filter_order w Release) (filter_order w SC) in
-    let r_acq = Uset.union (filter_order r Acquire) (filter_order r SC) in
+    let w_rel = USet.union (filter_order w Release) (filter_order w SC) in
+    let r_acq = USet.union (filter_order r Acquire) (filter_order r SC) in
     let f_rel = filter_order f Release in
     let f_acq = filter_order f Acquire in
     let f_sc = filter_order f SC in
 
     (* Volatile ppo *)
-    State.ppo_volA := Uset.intersection (Uset.cross e_vol e_vol) po_nf;
+    State.ppo_volA := USet.intersection (URelation.cross e_vol e_vol) po_nf;
 
     (* Synchronization ppo *)
-    let e_squared = Uset.cross !State.e !State.e in
+    let e_squared = URelation.cross !State.e !State.e in
     let semicolon r1 r2 =
       let result =
-        Uset.create ()
+        USet.create ()
         (*16*)
       in
-        Uset.iter
+        USet.iter
           (fun (a, b) ->
-            Uset.iter
-              (fun (c, d) -> if b = c then Uset.add result (a, d) |> ignore)
+            USet.iter
+              (fun (c, d) -> if b = c then USet.add result (a, d) |> ignore)
               r2
           )
           r1;
         result
     in
 
-    let w_rel_sq = Uset.cross w_rel w_rel in
-    let r_acq_sq = Uset.cross r_acq r_acq in
-    let f_sc_sq = Uset.cross f_sc f_sc in
-    let f_rel_sq = Uset.cross f_rel f_rel in
-    let f_acq_sq = Uset.cross f_acq f_acq in
-    let e_minus_r = Uset.set_minus !State.e r in
-    let e_minus_w = Uset.set_minus !State.e w in
+    let w_rel_sq = URelation.cross w_rel w_rel in
+    let r_acq_sq = URelation.cross r_acq r_acq in
+    let f_sc_sq = URelation.cross f_sc f_sc in
+    let f_rel_sq = URelation.cross f_rel f_rel in
+    let f_acq_sq = URelation.cross f_acq f_acq in
+    let e_minus_r = USet.set_minus !State.e r in
+    let e_minus_w = USet.set_minus !State.e w in
 
     State.ppo_syncA := semicolon e_squared w_rel_sq;
     State.ppo_syncA :=
-      Uset.inplace_union !State.ppo_syncA (semicolon r_acq_sq e_squared);
+      USet.inplace_union !State.ppo_syncA (semicolon r_acq_sq e_squared);
     State.ppo_syncA :=
-      Uset.inplace_union !State.ppo_syncA
+      USet.inplace_union !State.ppo_syncA
         (semicolon e_squared (semicolon f_sc_sq e_squared));
     State.ppo_syncA :=
-      Uset.inplace_union !State.ppo_syncA
+      USet.inplace_union !State.ppo_syncA
         (semicolon e_squared
-           (semicolon f_rel_sq (Uset.cross e_minus_r e_minus_r))
+           (semicolon f_rel_sq (URelation.cross e_minus_r e_minus_r))
         );
     State.ppo_syncA :=
-      Uset.inplace_union !State.ppo_syncA
+      USet.inplace_union !State.ppo_syncA
         (semicolon
-           (Uset.cross e_minus_w e_minus_w)
+           (URelation.cross e_minus_w e_minus_w)
            (semicolon f_acq_sq e_squared)
         );
-    State.ppo_syncA := Uset.intersection !State.ppo_syncA po_nf;
+    State.ppo_syncA := USet.intersection !State.ppo_syncA po_nf;
 
     (* RMW ppo *)
-    let rmw_inv = Uset.inverse_relation rmw in
+    let rmw_inv = URelation.inverse_relation rmw in
       State.ppo_rmwA :=
-        Uset.union
+        USet.union
           (semicolon !State.ppo_syncA rmw_inv)
           (semicolon rmw_inv !State.ppo_syncA);
 
       (* Location-based ppo *)
       State.ppo_loc_baseA :=
-        Uset.filter
+        USet.filter
           (fun (from, to_) ->
             try
               let from_ev = Hashtbl.find !State.events from in
@@ -287,20 +288,20 @@ let init params =
 
       (* Async filtering with semantic equality - simplified for now *)
       (* In real implementation, would use Solver.semeq *)
-      State.ppo_loc_eqA := Uset.clone !State.ppo_loc_baseA;
+      State.ppo_loc_eqA := USet.clone !State.ppo_loc_baseA;
       State.ppo_loc_baseA :=
-        Uset.set_minus !State.ppo_loc_baseA !State.ppo_loc_eqA;
+        USet.set_minus !State.ppo_loc_baseA !State.ppo_loc_eqA;
 
       Lwt.return_unit
 
 (** Update with new program order *)
 let update_po po =
-  State.ppo_loc_base := Uset.intersection !State.ppo_loc_baseA po;
-  State.ppo_sync := Uset.intersection !State.ppo_syncA po;
-  State.ppo_base := Uset.union !State.ppo_volA !State.ppo_syncA;
-  State.ppo_base := Uset.inplace_union !State.ppo_base !State.ppo_rmwA;
-  State.ppo_base := Uset.inplace_union !State.ppo_base !State.ppo_loc_eqA;
-  State.ppo_base := Uset.intersection !State.ppo_base po;
+  State.ppo_loc_base := USet.intersection !State.ppo_loc_baseA po;
+  State.ppo_sync := USet.intersection !State.ppo_syncA po;
+  State.ppo_base := USet.union !State.ppo_volA !State.ppo_syncA;
+  State.ppo_base := USet.inplace_union !State.ppo_base !State.ppo_rmwA;
+  State.ppo_base := USet.inplace_union !State.ppo_base !State.ppo_loc_eqA;
+  State.ppo_base := USet.intersection !State.ppo_base po;
   FwdCache.clear ()
 
 (** Forwarding context type *)
@@ -314,12 +315,12 @@ type t = {
 }
 
 (** Create forwarding context *)
-let create ?(fwd = Uset.create ()) ?(we = Uset.create ()) () =
-  let fwdwe = Uset.union fwd we in
+let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
+  let fwdwe = USet.union fwd we in
 
   (* valmap is filtered by non-None values *)
   let valmap =
-    Uset.values fwd
+    USet.values fwd
     |> List.filter_map (fun (e1, e2) ->
            match (!State.val_fn e1, !State.val_fn e2) with
            | Some v1, Some v2 -> Some (v1, v2)
@@ -334,11 +335,11 @@ let create ?(fwd = Uset.create ()) ?(we = Uset.create ()) () =
   (* Build remap map *)
   let remap_map = Hashtbl.create 16 in
   let rec find_root e =
-    match Uset.find (fun (e1, e2) -> e2 = e) fwdwe with
+    match USet.find (fun (e1, e2) -> e2 = e) fwdwe with
     | Some (e1, _) -> find_root e1
     | None -> e
   in
-    Uset.iter (fun e -> Hashtbl.add remap_map e (find_root e)) !State.e;
+    USet.iter (fun e -> Hashtbl.add remap_map e (find_root e)) !State.e;
 
     { fwd; we; valmap; psi; fwdwe; remap_map }
 
@@ -347,14 +348,14 @@ let remap ctx e = try Hashtbl.find ctx.remap_map e with Not_found -> e
 
 (** Remap relation *)
 let remap_rel ctx rel =
-  Uset.map
+  USet.map
     (fun (from, to_) ->
       let from' = remap ctx from in
       let to_' = remap ctx to_ in
         (from', to_')
     )
     rel
-  |> Uset.filter (fun (from, to_) -> from <> to_)
+  |> USet.filter (fun (from, to_) -> from <> to_)
 
 (** Remap expression - simplified *)
 let remap_expr ctx expr =
@@ -371,8 +372,8 @@ let remap_just ctx (just : justification) op =
     }
   in
   let p = List.map (remap_expr ctx) just.p in
-  let fwd = Uset.union ctx.fwd just.fwd in
-  let we = Uset.union ctx.we just.we in
+  let fwd = USet.union ctx.fwd just.fwd in
+  let we = USet.union ctx.we just.we in
     {
       just with
       p;
@@ -418,7 +419,7 @@ let ppo ctx predicates =
             (* In full implementation: filter with alias analysis using solver *)
             Lwt.return base
         in
-        let remapped = remap_rel ctx (Uset.union !State.ppo_base result) in
+        let remapped = remap_rel ctx (USet.union !State.ppo_base result) in
           Lwt.return (cache_set ctx "ppo" p remapped)
 
 (** Compute location-based preserved program order *)
@@ -441,14 +442,14 @@ let check ctx =
   let* result = Solver.check (Solver.create ctx.psi) in
     match result with
     | Some true ->
-        Uset.add goodcon (ctx.fwd, ctx.we) |> ignore;
+        USet.add goodcon (ctx.fwd, ctx.we) |> ignore;
         Lwt.return_true
     | _ ->
-        Uset.add badcon (ctx.fwd, ctx.we) |> ignore;
+        USet.add badcon (ctx.fwd, ctx.we) |> ignore;
         Lwt.return_false
 
 (** Convert to string *)
 let to_string ctx =
   Printf.sprintf "(%s, %s)"
-    (Uset.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ctx.fwd)
-    (Uset.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ctx.we)
+    (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ctx.fwd)
+    (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ctx.we)

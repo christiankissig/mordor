@@ -1,3 +1,4 @@
+open Uset
 open Expr
 open Interpret
 open Ir
@@ -82,68 +83,68 @@ let test_add_multiple_events () =
 (** Test empty structure *)
 let test_empty_structure () =
   let s = empty_structure () in
-    Alcotest.(check int) "empty events" 0 (Uset.size s.e);
-    Alcotest.(check int) "empty po" 0 (Uset.size s.po);
-    Alcotest.(check int) "empty rmw" 0 (Uset.size s.rmw);
-    Alcotest.(check int) "empty lo" 0 (Uset.size s.lo);
-    Alcotest.(check int) "empty fj" 0 (Uset.size s.fj);
-    Alcotest.(check int) "empty p" 0 (Uset.size s.p);
+    Alcotest.(check int) "empty events" 0 (USet.size s.e);
+    Alcotest.(check int) "empty po" 0 (USet.size s.po);
+    Alcotest.(check int) "empty rmw" 0 (USet.size s.rmw);
+    Alcotest.(check int) "empty lo" 0 (USet.size s.lo);
+    Alcotest.(check int) "empty fj" 0 (USet.size s.fj);
+    Alcotest.(check int) "empty p" 0 (USet.size s.p);
     Alcotest.(check int) "empty constraints" 0 (List.length s.constraint_);
     Alcotest.(check int) "empty pwg" 0 (List.length s.pwg)
 
 (** Test dot operation *)
 let test_dot () =
   let s = empty_structure () in
-  let s' = { s with e = Uset.of_list [ 2; 3 ] } in
+  let s' = { s with e = USet.of_list [ 2; 3 ] } in
   let result = dot 1 s' [] in
-    Alcotest.(check bool) "event 1 in result" true (Uset.mem result.e 1);
-    Alcotest.(check bool) "event 2 in result" true (Uset.mem result.e 2);
-    Alcotest.(check bool) "event 3 in result" true (Uset.mem result.e 3);
-    Alcotest.(check int) "result has 3 events" 3 (Uset.size result.e);
+    Alcotest.(check bool) "event 1 in result" true (USet.mem result.e 1);
+    Alcotest.(check bool) "event 2 in result" true (USet.mem result.e 2);
+    Alcotest.(check bool) "event 3 in result" true (USet.mem result.e 3);
+    Alcotest.(check int) "result has 3 events" 3 (USet.size result.e);
     (* Check po relations added *)
-    Alcotest.(check bool) "po (1,2) exists" true (Uset.mem result.po (1, 2));
-    Alcotest.(check bool) "po (1,3) exists" true (Uset.mem result.po (1, 3))
+    Alcotest.(check bool) "po (1,2) exists" true (USet.mem result.po (1, 2));
+    Alcotest.(check bool) "po (1,3) exists" true (USet.mem result.po (1, 3))
 
 (** Test plus operation *)
 let test_plus () =
-  let s1 = { (empty_structure ()) with e = Uset.of_list [ 1; 2 ] } in
-  let s2 = { (empty_structure ()) with e = Uset.of_list [ 3; 4 ] } in
+  let s1 = { (empty_structure ()) with e = USet.of_list [ 1; 2 ] } in
+  let s2 = { (empty_structure ()) with e = USet.of_list [ 3; 4 ] } in
   let result = plus s1 s2 in
-    Alcotest.(check int) "merged events" 4 (Uset.size result.e);
-    Alcotest.(check bool) "has event 1" true (Uset.mem result.e 1);
-    Alcotest.(check bool) "has event 2" true (Uset.mem result.e 2);
-    Alcotest.(check bool) "has event 3" true (Uset.mem result.e 3);
-    Alcotest.(check bool) "has event 4" true (Uset.mem result.e 4)
+    Alcotest.(check int) "merged events" 4 (USet.size result.e);
+    Alcotest.(check bool) "has event 1" true (USet.mem result.e 1);
+    Alcotest.(check bool) "has event 2" true (USet.mem result.e 2);
+    Alcotest.(check bool) "has event 3" true (USet.mem result.e 3);
+    Alcotest.(check bool) "has event 4" true (USet.mem result.e 4)
 
 let test_plus_with_relations () =
   let s1 =
     {
       (empty_structure ()) with
-      e = Uset.of_list [ 1 ];
-      po = Uset.of_list [ (1, 2) ];
-      rmw = Uset.of_list [ (1, 3) ];
+      e = USet.of_list [ 1 ];
+      po = USet.of_list [ (1, 2) ];
+      rmw = USet.of_list [ (1, 3) ];
     }
   in
   let s2 =
     {
       (empty_structure ()) with
-      e = Uset.of_list [ 4 ];
-      po = Uset.of_list [ (4, 5) ];
-      rmw = Uset.of_list [ (4, 6) ];
+      e = USet.of_list [ 4 ];
+      po = USet.of_list [ (4, 5) ];
+      rmw = USet.of_list [ (4, 6) ];
     }
   in
   let result = plus s1 s2 in
-    Alcotest.(check int) "merged po relations" 2 (Uset.size result.po);
-    Alcotest.(check int) "merged rmw relations" 2 (Uset.size result.rmw)
+    Alcotest.(check int) "merged po relations" 2 (USet.size result.po);
+    Alcotest.(check int) "merged rmw relations" 2 (USet.size result.rmw)
 
 (** Test cross operation *)
 let test_cross () =
-  let s1 = { (empty_structure ()) with e = Uset.of_list [ 1; 2 ] } in
-  let s2 = { (empty_structure ()) with e = Uset.of_list [ 3; 4 ] } in
+  let s1 = { (empty_structure ()) with e = USet.of_list [ 1; 2 ] } in
+  let s2 = { (empty_structure ()) with e = USet.of_list [ 3; 4 ] } in
   let result = cross s1 s2 in
-    Alcotest.(check int) "crossed events" 4 (Uset.size result.e);
-    Alcotest.(check bool) "has event 1" true (Uset.mem result.e 1);
-    Alcotest.(check bool) "has event 4" true (Uset.mem result.e 4)
+    Alcotest.(check int) "crossed events" 4 (USet.size result.e);
+    Alcotest.(check bool) "has event 1" true (USet.mem result.e 1);
+    Alcotest.(check bool) "has event 4" true (USet.mem result.e 4)
 
 (** Test interpret_statements with empty list *)
 let test_interpret_empty_statements =
@@ -151,7 +152,7 @@ let test_interpret_empty_statements =
       let env = Hashtbl.create 16 in
       let events = create_events () in
         let* result = interpret_statements [] env [] events in
-          Alcotest.(check int) "no events" 0 (Uset.size result.e);
+          Alcotest.(check int) "no events" 0 (USet.size result.e);
           Lwt.return_unit
   )
 
@@ -167,7 +168,7 @@ let test_interpret_global_store =
         GlobalStore { global = "x"; expr; assign = { mode; volatile = false } }
       in
         let* result = interpret_statements [ stmt ] env [] events in
-          Alcotest.(check int) "one event created" 1 (Uset.size result.e);
+          Alcotest.(check int) "one event created" 1 (USet.size result.e);
           Alcotest.(check int)
             "one event in table" 1
             (Hashtbl.length events.events);
@@ -186,7 +187,7 @@ let test_interpret_global_load =
           { register = "r"; global = "x"; load = { mode; volatile = false } }
       in
         let* result = interpret_statements [ stmt ] env [] events in
-          Alcotest.(check int) "one event created" 1 (Uset.size result.e);
+          Alcotest.(check int) "one event created" 1 (USet.size result.e);
           Alcotest.(check bool) "register in env" true (Hashtbl.mem env "r");
           Lwt.return_unit
   )
@@ -200,7 +201,7 @@ let test_interpret_fence =
       let mode = Types.SC in
       let stmt = Ir.Fence { mode } in
         let* result = interpret_statements [ stmt ] env [] events in
-          Alcotest.(check int) "one fence event" 1 (Uset.size result.e);
+          Alcotest.(check int) "one fence event" 1 (USet.size result.e);
           let evt = Hashtbl.find events.events 0 in
             Alcotest.(check bool) "is fence" true (evt.typ = Fence);
             Lwt.return_unit
@@ -224,7 +225,7 @@ let test_interpret_multiple_statements =
         ]
       in
         let* result = interpret_statements stmts env [] events in
-          Alcotest.(check int) "two events" 2 (Uset.size result.e);
+          Alcotest.(check int) "two events" 2 (USet.size result.e);
           Alcotest.(check int)
             "two events in table" 2
             (Hashtbl.length events.events);
@@ -247,9 +248,9 @@ let test_interpret_main =
       in
         let* structure, events_tbl = interpret ast None [] [] in
           Alcotest.(check int)
-            "has init and store events" 2 (Uset.size structure.e);
+            "has init and store events" 2 (USet.size structure.e);
           Alcotest.(check bool)
-            "init event present" true (Uset.mem structure.e 0);
+            "init event present" true (USet.mem structure.e 0);
           Alcotest.(check int) "events in table" 2 (Hashtbl.length events_tbl);
           Lwt.return_unit
   )
@@ -274,9 +275,9 @@ let test_interpret_main_with_po =
         ]
       in
         let* structure, _ = interpret ast None [] [] in
-          Alcotest.(check int) "has three events" 3 (Uset.size structure.e);
+          Alcotest.(check int) "has three events" 3 (USet.size structure.e);
           (* Check that po relations exist *)
-          Alcotest.(check bool) "po not empty" true (Uset.size structure.po > 0);
+          Alcotest.(check bool) "po not empty" true (USet.size structure.po > 0);
           Lwt.return_unit
   )
 

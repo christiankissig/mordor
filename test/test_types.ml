@@ -1,3 +1,4 @@
+open Uset
 open Types
 
 (** Test default options *)

@@ -2,6 +2,7 @@
 
 open Expr
 open Types
+open Uset
 
 (** Cache types *)
 type imm_cache = {
@@ -44,16 +45,16 @@ type restrictions = { coherent : string }
 (** Helper: compose relations using semicolon (;) *)
 let semicolon_rel (rels : (int * int) uset list) : (int * int) uset =
   match rels with
-  | [] -> Uset.create ()
+  | [] -> USet.create ()
   | [ r ] -> r
   | r :: rest ->
       List.fold_left
         (fun acc rel ->
-          let result = Uset.create () in
-            Uset.iter
+          let result = USet.create () in
+            USet.iter
               (fun (a, b) ->
-                Uset.iter
-                  (fun (c, d) -> if b = c then Uset.add result (a, d) |> ignore)
+                USet.iter
+                  (fun (c, d) -> if b = c then USet.add result (a, d) |> ignore)
                   rel
               )
               acc;
@@ -65,8 +66,8 @@ let semicolon_rel (rels : (int * int) uset list) : (int * int) uset =
 let em (events : (int, event) Hashtbl.t) (e : int uset) (typ : event_type)
     (mode_opt : mode option) (op_opt : string option)
     (second_mode_opt : mode option) : (int * int) uset =
-  let result = Uset.create () in
-    Uset.iter
+  let result = USet.create () in
+    USet.iter
       (fun ev_id ->
         try
           let event = Hashtbl.find events ev_id in
@@ -86,7 +87,7 @@ let em (events : (int, event) Hashtbl.t) (e : int uset) (typ : event_type)
               )
           in
             if type_match && mode_match && second_mode_match then
-              Uset.add result (ev_id, ev_id) |> ignore
+              USet.add result (ev_id, ev_id) |> ignore
         with Not_found -> ()
       )
       e;
@@ -100,12 +101,12 @@ let imm_coherent_cache (execution : symbolic_execution)
   let ({ po; restrict; _ } : symbolic_event_structure) = structure in
   let _E = ex_e in
 
-  let rf = Uset.clone rf in
-  let po = Uset.clone po in
-  let rmw = Uset.clone ex_rmw in
+  let rf = USet.clone rf in
+  let po = USet.clone po in
+  let rmw = USet.clone ex_rmw in
 
-  let thread_internal_restriction x = Uset.intersection x po in
-  let thread_external_restriction x = Uset.set_minus x po in
+  let thread_internal_restriction x = USet.intersection x po in
+  let thread_external_restriction x = USet.set_minus x po in
 
   let w = em events _E Write None None None in
 
@@ -113,13 +114,16 @@ let imm_coherent_cache (execution : symbolic_execution)
   let rs =
     let part1 = semicolon_rel [ w; loc_restrict po; w ] in
     let inner =
-      semicolon_rel [ Uset.reflexive_closure _E (loc_restrict po); rf; rmw ]
+      semicolon_rel
+        [ URelation.reflexive_closure _E (loc_restrict po); rf; rmw ]
     in
     let part2 =
       semicolon_rel
-        [ w; Uset.reflexive_closure _E (Uset.transitive_closure inner) ]
+        [
+          w; URelation.reflexive_closure _E (URelation.transitive_closure inner);
+        ]
     in
-      Uset.inplace_union part1 part2
+      USet.inplace_union part1 part2
   in
 
   (* release = ([W_rel] ∪ [F_rel];po);rs *)
@@ -128,7 +132,7 @@ let imm_coherent_cache (execution : symbolic_execution)
     let f_rel_po =
       semicolon_rel [ em events _E Fence (Some Release) (Some ">") None; po ]
     in
-      semicolon_rel [ Uset.inplace_union w_rel f_rel_po; rs ]
+      semicolon_rel [ USet.inplace_union w_rel f_rel_po; rs ]
   in
 
   (* sw = release;(rf ∩ ¬po ∪ [po ∩ loc]?;(rf \ po));([R_acq] ∪ po;[F_acq]) *)
@@ -136,20 +140,20 @@ let imm_coherent_cache (execution : symbolic_execution)
     let rf_internal = thread_internal_restriction rf in
     let rf_external = thread_external_restriction rf in
     let middle =
-      Uset.inplace_union rf_internal
+      USet.inplace_union rf_internal
         (semicolon_rel
-           [ Uset.reflexive_closure _E (loc_restrict po); rf_external ]
+           [ URelation.reflexive_closure _E (loc_restrict po); rf_external ]
         )
     in
     let r_acq = em events _E Read (Some Acquire) None None in
     let po_f_acq =
       semicolon_rel [ po; em events _E Fence (Some Acquire) (Some ">") None ]
     in
-      semicolon_rel [ release; middle; Uset.inplace_union r_acq po_f_acq ]
+      semicolon_rel [ release; middle; USet.inplace_union r_acq po_f_acq ]
   in
 
   (* hb = (sw ∪ po)⁺ *)
-  let hb = Uset.transitive_closure (Uset.inplace_union sw po) in
+  let hb = URelation.transitive_closure (USet.inplace_union sw po) in
 
   (* bob (bounded ordered-before) *)
   let bob =
@@ -167,10 +171,10 @@ let imm_coherent_cache (execution : symbolic_execution)
           em events _E Write None None None;
         ]
     in
-      Uset.union p1 p2
-      |> Uset.inplace_union p3
-      |> Uset.inplace_union p4
-      |> Uset.inplace_union p5
+      USet.union p1 p2
+      |> USet.inplace_union p3
+      |> USet.inplace_union p4
+      |> USet.inplace_union p5
   in
 
   let deps = execution.dp in
@@ -180,8 +184,8 @@ let imm_coherent_cache (execution : symbolic_execution)
     let r = em events _E Read None None None in
     let w = em events _E Write None None None in
     let middle =
-      Uset.transitive_closure
-        (Uset.inplace_union (thread_internal_restriction rf) deps)
+      URelation.transitive_closure
+        (USet.inplace_union (thread_internal_restriction rf) deps)
     in
       semicolon_rel [ r; middle; w ]
   in
@@ -199,9 +203,9 @@ let imm_coherent_cache (execution : symbolic_execution)
   (* ar_ = (rf \ po) ∪ bob ∪ ppo ∪ strong_ *)
   let ar_ =
     thread_external_restriction rf
-    |> Uset.inplace_union bob
-    |> Uset.inplace_union ppo
-    |> Uset.inplace_union strong_
+    |> USet.inplace_union bob
+    |> USet.inplace_union ppo
+    |> USet.inplace_union strong_
   in
 
   (* psc_a = [F_sc];hb *)
@@ -213,7 +217,7 @@ let imm_coherent_cache (execution : symbolic_execution)
   {
     hb;
     rf;
-    rfi = Uset.inverse_relation rf;
+    rfi = URelation.inverse_relation rf;
     ar_;
     ex_e;
     po;
@@ -229,43 +233,46 @@ let imm_coherent_cache (execution : symbolic_execution)
 let imm_coherent (co : (int * int) uset) (cache : imm_cache) : bool =
   let { hb; rfi; po; rf; ar_; psc_a; psc_b; rmw; _ } = cache in
 
-  let thread_external_restriction x = Uset.set_minus x po in
+  let thread_external_restriction x = USet.set_minus x po in
 
   (* fr = rf⁻¹;co *)
   let fr = semicolon_rel [ rfi; co ] in
 
   (* eco = rf ∪ co;rf ∪ co ∪ fr;rf ∪ fr *)
   let eco =
-    Uset.union rf (semicolon_rel [ co; rf ])
-    |> Uset.inplace_union co
-    |> Uset.inplace_union (semicolon_rel [ fr; rf ])
-    |> Uset.inplace_union fr
+    USet.union rf (semicolon_rel [ co; rf ])
+    |> USet.inplace_union co
+    |> USet.inplace_union (semicolon_rel [ fr; rf ])
+    |> USet.inplace_union fr
   in
 
   (* Coherence: hb;eco ∪ hb is irreflexive *)
   if
-    not (Uset.is_irreflexive (Uset.inplace_union (semicolon_rel [ hb; eco ]) hb))
+    not
+      (URelation.is_irreflexive
+         (USet.inplace_union (semicolon_rel [ hb; eco ]) hb)
+      )
   then false
   else
     (* Thin-air *)
     let coe = thread_external_restriction co in
     let detour =
-      Uset.intersection
+      USet.intersection
         (semicolon_rel [ coe; thread_external_restriction rf ])
         po
     in
     let psc = semicolon_rel [ psc_a; eco; psc_b ] in
-    let ar = Uset.union ar_ psc |> Uset.inplace_union detour in
+    let ar = USet.union ar_ psc |> USet.inplace_union detour in
 
-    if not (Uset.acyclic ar) then false
+    if not (URelation.acyclic ar) then false
     else if
       (* Atomicity *)
-      Uset.size rmw = 0
+      USet.size rmw = 0
     then true
     else
       (* rmw ∩ (fre;coe) = ∅ *)
-      Uset.size
-        (Uset.intersection rmw
+      USet.size
+        (USet.intersection rmw
            (semicolon_rel [ thread_external_restriction fr; coe ])
         )
       = 0
@@ -278,21 +285,21 @@ let rc11_coherent_cache (execution : symbolic_execution)
   let ({ po; _ } : symbolic_event_structure) = structure in
   let _E = ex_e in
 
-  let rf = Uset.clone rf in
-  let rmw = Uset.clone ex_rmw in
-  let sb = Uset.clone po in
+  let rf = USet.clone rf in
+  let rmw = USet.clone ex_rmw in
+  let sb = USet.clone po in
 
   (* rs = [W];[po ∩ loc]?;[W_rlx⁺];(rf;rmw)⁺? *)
   let rs =
     let w = em events _E Write None None None in
     let w_rlx = em events _E Write (Some Relaxed) (Some ">") None in
-    let inner = Uset.transitive_closure (semicolon_rel [ rf; rmw ]) in
+    let inner = URelation.transitive_closure (semicolon_rel [ rf; rmw ]) in
       semicolon_rel
         [
           w;
-          Uset.reflexive_closure _E (loc_restrict sb);
+          URelation.reflexive_closure _E (loc_restrict sb);
           w_rlx;
-          Uset.reflexive_closure _E inner;
+          URelation.reflexive_closure _E inner;
         ]
   in
 
@@ -300,36 +307,36 @@ let rc11_coherent_cache (execution : symbolic_execution)
   (* sw = [R_rel⁺ ∪ W_rel⁺ ∪ F_rel⁺];([F];sb)?;rs;rf;[R_rlx⁺];(sb;[F])?;[R_acq⁺ ∪ W_acq⁺ ∪ F_acq⁺] *)
   let sw =
     let rel =
-      Uset.union
+      USet.union
         (em events _E Read (Some Release) (Some ">") None)
         (em events _E Write (Some Release) (Some ">") None)
-      |> Uset.inplace_union (em events _E Fence (Some Release) (Some ">") None)
+      |> USet.inplace_union (em events _E Fence (Some Release) (Some ">") None)
     in
     let fence_sb =
-      Uset.reflexive_closure _E
+      URelation.reflexive_closure _E
         (semicolon_rel [ em events _E Fence None None None; sb ])
     in
     let r_rlx = em events _E Read (Some Relaxed) (Some ">") None in
     let sb_fence =
-      Uset.reflexive_closure _E
+      URelation.reflexive_closure _E
         (semicolon_rel [ sb; em events _E Fence None None None ])
     in
     let acq =
-      Uset.union
+      USet.union
         (em events _E Read (Some Acquire) (Some ">") None)
         (em events _E Write (Some Acquire) (Some ">") None)
-      |> Uset.inplace_union (em events _E Fence (Some Acquire) (Some ">") None)
+      |> USet.inplace_union (em events _E Fence (Some Acquire) (Some ">") None)
     in
       semicolon_rel [ rel; fence_sb; rs; rf; r_rlx; sb_fence; acq ]
   in
 
   (* hb = (sw ∪ sb)⁺ *)
-  let hb = Uset.transitive_closure (Uset.inplace_union sw sb) in
+  let hb = URelation.transitive_closure (USet.inplace_union sw sb) in
 
   {
     sb;
     hb;
-    rfi = Uset.inverse_relation rf;
+    rfi = URelation.inverse_relation rf;
     rf;
     ex_e;
     events;
@@ -347,26 +354,28 @@ let rc11_coherent (co : (int * int) uset) (cache : rc11_cache) : bool =
 
   (* eco = (rf ∪ co ∪ rb)⁺ *)
   let eco =
-    Uset.transitive_closure (Uset.union rf co |> Uset.inplace_union rb)
+    URelation.transitive_closure (USet.union rf co |> USet.inplace_union rb)
   in
 
   (* Atomicity: rmw ∩ (rb;co) = ∅ *)
-  if Uset.size rmw <> 0 then
-    if Uset.size (Uset.intersection rmw (semicolon_rel [ rb; co ])) <> 0 then
+  if USet.size rmw <> 0 then
+    if USet.size (USet.intersection rmw (semicolon_rel [ rb; co ])) <> 0 then
       false
     else if
       (* Coherence: hb;eco ∪ hb is irreflexive *)
       not
-        (Uset.is_irreflexive (Uset.inplace_union (semicolon_rel [ hb; eco ]) hb))
+        (URelation.is_irreflexive
+           (USet.inplace_union (semicolon_rel [ hb; eco ]) hb)
+        )
     then false
     else
       (* SC consistency *)
-      let sb_non_loc = Uset.set_minus sb (loc_restrict sb) in
+      let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
       let scb =
-        Uset.union sb (semicolon_rel [ sb_non_loc; hb ])
-        |> Uset.union (loc_restrict hb)
-        |> Uset.union co
-        |> Uset.union rb
+        USet.union sb (semicolon_rel [ sb_non_loc; hb ])
+        |> USet.union (loc_restrict hb)
+        |> USet.union co
+        |> USet.union rb
       in
 
       let sc_events = em events _E Init (Some SC) None None in
@@ -375,32 +384,35 @@ let rc11_coherent (co : (int * int) uset) (cache : rc11_cache) : bool =
       let psc_base =
         semicolon_rel
           [
-            Uset.inplace_union sc_events
-              (semicolon_rel [ f_sc; Uset.reflexive_closure _E hb ]);
+            USet.inplace_union sc_events
+              (semicolon_rel [ f_sc; URelation.reflexive_closure _E hb ]);
             scb;
-            Uset.inplace_union sc_events
-              (semicolon_rel [ Uset.reflexive_closure _E hb; f_sc ]);
+            USet.inplace_union sc_events
+              (semicolon_rel [ URelation.reflexive_closure _E hb; f_sc ]);
           ]
       in
 
       let psc_f =
         semicolon_rel
-          [ f_sc; Uset.inplace_union (semicolon_rel [ hb; eco; hb ]) hb; f_sc ]
+          [ f_sc; USet.inplace_union (semicolon_rel [ hb; eco; hb ]) hb; f_sc ]
       in
 
-      let psc = Uset.union psc_base psc_f in
-        Uset.acyclic psc
+      let psc = USet.union psc_base psc_f in
+        URelation.acyclic psc
   else if
     (* No RMW operations, just check coherence *)
-    not (Uset.is_irreflexive (Uset.inplace_union (semicolon_rel [ hb; eco ]) hb))
+    not
+      (URelation.is_irreflexive
+         (USet.inplace_union (semicolon_rel [ hb; eco ]) hb)
+      )
   then false
   else
-    let sb_non_loc = Uset.set_minus sb (loc_restrict sb) in
+    let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
     let scb =
-      Uset.union sb (semicolon_rel [ sb_non_loc; hb ])
-      |> Uset.union (loc_restrict hb)
-      |> Uset.union co
-      |> Uset.union rb
+      USet.union sb (semicolon_rel [ sb_non_loc; hb ])
+      |> USet.union (loc_restrict hb)
+      |> USet.union co
+      |> USet.union rb
     in
 
     let sc_events = em events _E Init (Some SC) None None in
@@ -409,21 +421,21 @@ let rc11_coherent (co : (int * int) uset) (cache : rc11_cache) : bool =
     let psc_base =
       semicolon_rel
         [
-          Uset.inplace_union sc_events
-            (semicolon_rel [ f_sc; Uset.reflexive_closure _E hb ]);
+          USet.inplace_union sc_events
+            (semicolon_rel [ f_sc; URelation.reflexive_closure _E hb ]);
           scb;
-          Uset.inplace_union sc_events
-            (semicolon_rel [ Uset.reflexive_closure _E hb; f_sc ]);
+          USet.inplace_union sc_events
+            (semicolon_rel [ URelation.reflexive_closure _E hb; f_sc ]);
         ]
     in
 
     let psc_f =
       semicolon_rel
-        [ f_sc; Uset.inplace_union (semicolon_rel [ hb; eco; hb ]) hb; f_sc ]
+        [ f_sc; USet.inplace_union (semicolon_rel [ hb; eco; hb ]) hb; f_sc ]
     in
 
-    let psc = Uset.union psc_base psc_f in
-      Uset.acyclic psc
+    let psc = USet.union psc_base psc_f in
+      URelation.acyclic psc
 
 (** IMM dependency calculation *)
 let imm_deps (execution : symbolic_execution) (events : (int, event) Hashtbl.t)
@@ -437,7 +449,7 @@ let imm_deps (execution : symbolic_execution) (events : (int, event) Hashtbl.t)
           em events e Read None None None; po; em events e Write None None None;
         ]
     in
-      Uset.filter
+      USet.filter
         (fun (from_id, to_id) ->
           try
             let from_ev = Hashtbl.find events from_id in
@@ -445,7 +457,7 @@ let imm_deps (execution : symbolic_execution) (events : (int, event) Hashtbl.t)
               match (from_ev.rval, to_ev.wval) with
               | Some rv, Some wv ->
                   (* Simple structural equality or symbol dependency check *)
-                  Uset.value_equality (Expr.of_value rv) wv
+                  USet.value_equality (Expr.of_value rv) wv
               | _ -> false
           with Not_found -> false
         )
@@ -455,7 +467,7 @@ let imm_deps (execution : symbolic_execution) (events : (int, event) Hashtbl.t)
   (* ctrl = [R];po where restrict differs *)
   let ctrl =
     let r_po = semicolon_rel [ em events e Read None None None; po ] in
-      Uset.filter
+      USet.filter
         (fun (from_id, to_id) ->
           try
             let from_restrict = Hashtbl.find restrict from_id in
@@ -466,17 +478,17 @@ let imm_deps (execution : symbolic_execution) (events : (int, event) Hashtbl.t)
         r_po
   in
 
-  let addr = Uset.create () in
-  let casdep = Uset.create () in
-  let rex = Uset.create () in
+  let addr = USet.create () in
+  let casdep = USet.create () in
+  let rex = USet.create () in
 
   (* data ∪ ctrl ∪ addr;po? ∪ addr ∪ casdep ∪ [Rex];po *)
   data
-  |> Uset.inplace_union ctrl
-  |> Uset.inplace_union (semicolon_rel [ addr; po ])
-  |> Uset.inplace_union addr
-  |> Uset.inplace_union casdep
-  |> Uset.inplace_union (semicolon_rel [ rex; po ])
+  |> USet.inplace_union ctrl
+  |> USet.inplace_union (semicolon_rel [ addr; po ])
+  |> USet.inplace_union addr
+  |> USet.inplace_union casdep
+  |> USet.inplace_union (semicolon_rel [ rex; po ])
 
 (** Generate all permutations of a list *)
 let rec permutations = function
@@ -501,11 +513,11 @@ let rec permutations = function
 let check_for_coherence (structure : symbolic_event_structure)
     (events : (int, event) Hashtbl.t) (execution : symbolic_execution)
     (restrictions : restrictions) (include_dependencies : bool) : bool Lwt.t =
-  if Uset.size execution.ex_e = 0 then Lwt.return false
+  if USet.size execution.ex_e = 0 then Lwt.return false
   else
     let ({ po; restrict; _ } : symbolic_event_structure) = structure in
     let writes =
-      Uset.filter
+      USet.filter
         (fun ev_id ->
           try
             let event = Hashtbl.find events ev_id in
@@ -515,12 +527,12 @@ let check_for_coherence (structure : symbolic_event_structure)
         execution.ex_e
     in
 
-    if Uset.size writes < 2 then Lwt.return true
+    if USet.size writes < 2 then Lwt.return true
     else
       (* Create location equivalence relation using semantic equality *)
       let%lwt eqlocs =
         let all_events = execution.ex_e in
-          Uset.async_filter
+          USet.async_filter
             (fun (a, b) ->
               if a = b then Lwt.return true
               else
@@ -536,30 +548,32 @@ let check_for_coherence (structure : symbolic_event_structure)
                     | _ -> Lwt.return false
                 with Not_found -> Lwt.return false
             )
-            (Uset.cross all_events all_events
-            |> Uset.filter (fun (a, b) -> a <= b)
+            (URelation.cross all_events all_events
+            |> USet.filter (fun (a, b) -> a <= b)
             )
       in
-      let eqlocs = Uset.inplace_union eqlocs (Uset.inverse_relation eqlocs) in
+      let eqlocs =
+        USet.inplace_union eqlocs (URelation.inverse_relation eqlocs)
+      in
 
       let loc_restrict x =
-        Uset.filter (fun (a, b) -> Uset.mem eqlocs (a, b)) x
+        USet.filter (fun (a, b) -> USet.mem eqlocs (a, b)) x
       in
 
       (* Check if reads from init *)
       let reads_from_init =
-        Uset.exists (fun (_, to_id) -> to_id = 0) execution.rf
+        USet.exists (fun (_, to_id) -> to_id = 0) execution.rf
       in
 
       (* Group writes by location *)
       let writes_per_location =
         let groups = ref [] in
-          Uset.iter
+          USet.iter
             (fun w ->
               let found = ref false in
                 List.iter
                   (fun group ->
-                    if Uset.mem eqlocs (List.hd !group, w) then (
+                    if USet.mem eqlocs (List.hd !group, w) then (
                       (* Add ! here *)
                       group := w :: !group;
                       found := true
@@ -613,12 +627,13 @@ let check_for_coherence (structure : symbolic_event_structure)
               if restrictions.coherent = "rc11" then
                 fun (exec : symbolic_execution) (c : cache) ->
                 match c with
-                | RC11Cache cache -> Uset.acyclic (Uset.union cache.sb exec.rf)
+                | RC11Cache cache ->
+                    URelation.acyclic (USet.union cache.sb exec.rf)
                 | _ -> true
               else fun _ _ -> true
             in
               ( RC11Cache cache,
-                (fun _ _ _ _ _ -> Uset.create ()),
+                (fun _ _ _ _ _ -> USet.create ()),
                 thin,
                 (* Already has the right type: symbolic_execution -> cache -> bool *)
                 fun co c ->
@@ -629,10 +644,10 @@ let check_for_coherence (structure : symbolic_event_structure)
           )
         | _ ->
             let cache =
-              if Uset.size execution.ex_rmw > 0 then
+              if USet.size execution.ex_rmw > 0 then
                 UndefinedCache
                   {
-                    rfi = Some (Uset.inverse_relation execution.rf);
+                    rfi = Some (URelation.inverse_relation execution.rf);
                     rmw = Some execution.ex_rmw;
                   }
               else UndefinedCache { rfi = None; rmw = None }
@@ -641,12 +656,12 @@ let check_for_coherence (structure : symbolic_event_structure)
               match cache with
               | UndefinedCache { rfi = Some rfi; rmw = Some rmw } ->
                   let fr = semicolon_rel [ rfi; co ] in
-                    Uset.size (Uset.intersection rmw (semicolon_rel [ fr; co ]))
+                    USet.size (USet.intersection rmw (semicolon_rel [ fr; co ]))
                     = 0
               | _ -> true
             in
               ( cache,
-                (fun _ _ _ _ _ -> Uset.create ()),
+                (fun _ _ _ _ _ -> USet.create ()),
                 (fun _ _ -> true),
                 coherent (* This one already has the right type *)
               )
@@ -678,14 +693,14 @@ let check_for_coherence (structure : symbolic_event_structure)
         let rec try_all_orders = function
           | [] -> Lwt.return true
           | co_list :: rest ->
-              let co = Uset.transitive_closure (Uset.of_list co_list) in
+              let co = URelation.transitive_closure (USet.of_list co_list) in
                 if coherent_fn co cache_result then try_all_orders rest
                 else Lwt.return false
         in
 
         let rec choose_one i vals =
           if i < 0 then
-            let co = Uset.transitive_closure (Uset.of_list vals) in
+            let co = URelation.transitive_closure (USet.of_list vals) in
               Lwt.return (coherent_fn co cache_result)
           else
             let rec try_perms = function

@@ -1,3 +1,4 @@
+open Uset
 (* Unit tests for histories, futures, and posterior futures *)
 
 open Alcotest
@@ -12,32 +13,32 @@ let make_test_exec ex_e rf dp ppo ex_rmw ex_p conds fix_rf_map justs pointer_map
 (* Helper to create minimal test execution with just events and relations *)
 let make_simple_exec events rf dp ppo =
   make_test_exec events rf dp ppo
-    (Uset.create ()) (* ex_rmw *)
+    (USet.create ()) (* ex_rmw *)
     [] (* ex_p *)
     [] (* conds *)
     (Hashtbl.create 10) (* fix_rf_map *)
     [] (* justs *)
     None (* pointer_map *)
 
-(* Custom testable for int Uset.t *)
+(* Custom testable for int USet.t *)
 let int_uset_testable =
   let pp fmt s =
-    let elements = Uset.values s |> List.sort compare in
+    let elements = USet.values s |> List.sort compare in
       Format.fprintf fmt "{%s}"
         (String.concat ", " (List.map string_of_int elements))
   in
-  let equal s1 s2 = Uset.equal s1 s2 in
+  let equal s1 s2 = USet.equal s1 s2 in
     testable pp equal
 
-(* Custom testable for int Uset.t Uset.t (set of sets) *)
+(* Custom testable for int USet.t USet.t (set of sets) *)
 let int_uset_set_testable =
   let pp fmt ss =
-    let sets = Uset.values ss in
+    let sets = USet.values ss in
       Format.fprintf fmt "{ %a }"
         (Format.pp_print_list
            ~pp_sep:(fun fmt () -> Format.fprintf fmt "; ")
            (fun fmt s ->
-             let elements = Uset.values s |> List.sort compare in
+             let elements = USet.values s |> List.sort compare in
                Format.fprintf fmt "{%s}"
                  (String.concat ", " (List.map string_of_int elements))
            )
@@ -45,32 +46,32 @@ let int_uset_set_testable =
         sets
   in
   let equal ss1 ss2 =
-    Uset.size ss1 = Uset.size ss2
-    && Uset.for_all (fun s1 -> Uset.exists (fun s2 -> Uset.equal s1 s2) ss2) ss1
+    USet.size ss1 = USet.size ss2
+    && USet.for_all (fun s1 -> USet.exists (fun s2 -> USet.equal s1 s2) ss2) ss1
   in
     testable pp equal
 
-(* Custom testable for (int * int) Uset.t (relation/future) *)
+(* Custom testable for (int * int) USet.t (relation/future) *)
 let relation_testable =
   let pp fmt s =
-    let pairs = Uset.values s |> List.sort compare in
+    let pairs = USet.values s |> List.sort compare in
       Format.fprintf fmt "{%s}"
         (String.concat ", "
            (List.map (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) pairs)
         )
   in
-  let equal s1 s2 = Uset.equal s1 s2 in
+  let equal s1 s2 = USet.equal s1 s2 in
     testable pp equal
 
 (* Custom testable for future_set *)
 let future_set_testable =
   let pp fmt fs =
-    let futures = Uset.values fs in
+    let futures = USet.values fs in
       Format.fprintf fmt "{ %a }"
         (Format.pp_print_list
            ~pp_sep:(fun fmt () -> Format.fprintf fmt "; ")
            (fun fmt f ->
-             let pairs = Uset.values f |> List.sort compare in
+             let pairs = USet.values f |> List.sort compare in
                Format.fprintf fmt "{%s}"
                  (String.concat ", "
                     (List.map (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) pairs)
@@ -80,16 +81,16 @@ let future_set_testable =
         futures
   in
   let equal fs1 fs2 =
-    Uset.size fs1 = Uset.size fs2
-    && Uset.for_all (fun f1 -> Uset.exists (fun f2 -> Uset.equal f1 f2) fs2) fs1
+    USet.size fs1 = USet.size fs2
+    && USet.for_all (fun f1 -> USet.exists (fun f2 -> USet.equal f1 f2) fs2) fs1
   in
     testable pp equal
 
 (* Helper to check if a history is downward closed *)
 let is_downward_closed exec history =
   let check_relation rel =
-    Uset.for_all
-      (fun (e1, e2) -> if Uset.mem history e2 then Uset.mem history e1 else true)
+    USet.for_all
+      (fun (e1, e2) -> if USet.mem history e2 then USet.mem history e1 else true)
       rel
   in
     check_relation exec.ppo && check_relation exec.dp && check_relation exec.rf
@@ -98,245 +99,245 @@ let is_downward_closed exec history =
 
 let test_histories_empty_execution () =
   let exec =
-    make_simple_exec (Uset.create ()) (Uset.create ()) (Uset.create ())
-      (Uset.create ())
+    make_simple_exec (USet.create ()) (USet.create ()) (USet.create ())
+      (USet.create ())
   in
   let histories = calculate_histories exec in
     (* Only the empty history should exist *)
-    check int "size" 1 (Uset.size histories);
-    let empty_hist = Uset.create () in
+    check int "size" 1 (USet.size histories);
+    let empty_hist = USet.create () in
       check bool "contains empty" true
-        (Uset.exists (fun h -> Uset.equal h empty_hist) histories)
+        (USet.exists (fun h -> USet.equal h empty_hist) histories)
 
 let test_histories_single_event_no_deps () =
-  let events = Uset.of_list [ 1 ] in
+  let events = USet.of_list [ 1 ] in
   let exec =
-    make_simple_exec events (Uset.create ()) (Uset.create ()) (Uset.create ())
+    make_simple_exec events (USet.create ()) (USet.create ()) (USet.create ())
   in
   let histories = calculate_histories exec in
     (* Should have: {}, {1} *)
-    check int "size" 2 (Uset.size histories);
-    Uset.iter
+    check int "size" 2 (USet.size histories);
+    USet.iter
       (fun h -> check bool "is downward closed" true (is_downward_closed exec h))
       histories
 
 let test_histories_two_independent_events () =
-  let events = Uset.of_list [ 1; 2 ] in
+  let events = USet.of_list [ 1; 2 ] in
   let exec =
-    make_simple_exec events (Uset.create ()) (Uset.create ()) (Uset.create ())
+    make_simple_exec events (USet.create ()) (USet.create ()) (USet.create ())
   in
   let histories = calculate_histories exec in
     (* Should have: {}, {1}, {2}, {1,2} *)
-    check int "size" 4 (Uset.size histories);
-    Uset.iter
+    check int "size" 4 (USet.size histories);
+    USet.iter
       (fun h -> check bool "is downward closed" true (is_downward_closed exec h))
       histories
 
 let test_histories_chain_ppo () =
   (* Event 2 depends on event 1 via ppo: (1,2) in ppo *)
-  let events = Uset.of_list [ 1; 2 ] in
-  let ppo = Uset.of_list [ (1, 2) ] in
-  let exec = make_simple_exec events (Uset.create ()) (Uset.create ()) ppo in
+  let events = USet.of_list [ 1; 2 ] in
+  let ppo = USet.of_list [ (1, 2) ] in
+  let exec = make_simple_exec events (USet.create ()) (USet.create ()) ppo in
   let histories = calculate_histories exec in
     (* Should have: {}, {1}, {1,2} *)
     (* Cannot have {2} alone because 2 depends on 1 *)
-    check int "size" 3 (Uset.size histories);
-    Uset.iter
+    check int "size" 3 (USet.size histories);
+    USet.iter
       (fun h -> check bool "is downward closed" true (is_downward_closed exec h))
       histories;
     (* Verify {2} without {1} is not in histories *)
-    let invalid_hist = Uset.of_list [ 2 ] in
+    let invalid_hist = USet.of_list [ 2 ] in
       check bool "does not contain {2}" false
-        (Uset.exists (fun h -> Uset.equal h invalid_hist) histories)
+        (USet.exists (fun h -> USet.equal h invalid_hist) histories)
 
 let test_histories_multiple_deps () =
   (* Event 3 depends on both 1 and 2 *)
   (* (1,3) in ppo, (2,3) in dp *)
-  let events = Uset.of_list [ 1; 2; 3 ] in
-  let ppo = Uset.of_list [ (1, 3) ] in
-  let dp = Uset.of_list [ (2, 3) ] in
-  let exec = make_simple_exec events (Uset.create ()) dp ppo in
+  let events = USet.of_list [ 1; 2; 3 ] in
+  let ppo = USet.of_list [ (1, 3) ] in
+  let dp = USet.of_list [ (2, 3) ] in
+  let exec = make_simple_exec events (USet.create ()) dp ppo in
   let histories = calculate_histories exec in
     (* Valid histories: {}, {1}, {2}, {1,2}, {1,2,3} *)
     (* Cannot have {3} or {1,3} or {2,3} because 3 needs both 1 and 2 *)
-    check int "size" 5 (Uset.size histories);
-    Uset.iter
+    check int "size" 5 (USet.size histories);
+    USet.iter
       (fun h -> check bool "is downward closed" true (is_downward_closed exec h))
       histories;
     (* Check that {1,2,3} is present *)
-    let full_hist = Uset.of_list [ 1; 2; 3 ] in
+    let full_hist = USet.of_list [ 1; 2; 3 ] in
       check bool "contains {1,2,3}" true
-        (Uset.exists (fun h -> Uset.equal h full_hist) histories)
+        (USet.exists (fun h -> USet.equal h full_hist) histories)
 
 let test_histories_with_rf () =
   (* Event 2 reads from event 1: (1,2) in rf *)
-  let events = Uset.of_list [ 1; 2 ] in
-  let rf = Uset.of_list [ (1, 2) ] in
-  let exec = make_simple_exec events rf (Uset.create ()) (Uset.create ()) in
+  let events = USet.of_list [ 1; 2 ] in
+  let rf = USet.of_list [ (1, 2) ] in
+  let exec = make_simple_exec events rf (USet.create ()) (USet.create ()) in
   let histories = calculate_histories exec in
     (* Should have: {}, {1}, {1,2} *)
-    check int "size" 3 (Uset.size histories);
-    Uset.iter
+    check int "size" 3 (USet.size histories);
+    USet.iter
       (fun h -> check bool "is downward closed" true (is_downward_closed exec h))
       histories
 
 let test_histories_complex_dag () =
   (* Complex DAG: 1 -> 2 -> 4
                     \-> 3 -> 4 *)
-  let events = Uset.of_list [ 1; 2; 3; 4 ] in
-  let ppo = Uset.of_list [ (1, 2); (2, 4) ] in
-  let dp = Uset.of_list [ (1, 3); (3, 4) ] in
-  let exec = make_simple_exec events (Uset.create ()) dp ppo in
+  let events = USet.of_list [ 1; 2; 3; 4 ] in
+  let ppo = USet.of_list [ (1, 2); (2, 4) ] in
+  let dp = USet.of_list [ (1, 3); (3, 4) ] in
+  let exec = make_simple_exec events (USet.create ()) dp ppo in
   let histories = calculate_histories exec in
     (* All histories must be downward closed *)
-    Uset.iter
+    USet.iter
       (fun h -> check bool "is downward closed" true (is_downward_closed exec h))
       histories;
     (* {4} alone is invalid *)
-    let invalid = Uset.of_list [ 4 ] in
+    let invalid = USet.of_list [ 4 ] in
       check bool "does not contain {4}" false
-        (Uset.exists (fun h -> Uset.equal h invalid) histories);
+        (USet.exists (fun h -> USet.equal h invalid) histories);
       (* {1,2,3,4} is valid *)
-      let full = Uset.of_list [ 1; 2; 3; 4 ] in
+      let full = USet.of_list [ 1; 2; 3; 4 ] in
         check bool "contains full" true
-          (Uset.exists (fun h -> Uset.equal h full) histories)
+          (USet.exists (fun h -> USet.equal h full) histories)
 
 (** Tests for calculate_future_set **)
 
 let test_future_set_empty () =
-  let execs = Uset.create () in
+  let execs = USet.create () in
   let futures = calculate_future_set execs in
-    check int "empty execs gives empty futures" 0 (Uset.size futures)
+    check int "empty execs gives empty futures" 0 (USet.size futures)
 
 let test_future_set_single_exec_no_relations () =
-  let events = Uset.of_list [ 1; 2 ] in
+  let events = USet.of_list [ 1; 2 ] in
   let exec =
-    make_simple_exec events (Uset.create ()) (Uset.create ()) (Uset.create ())
+    make_simple_exec events (USet.create ()) (USet.create ()) (USet.create ())
   in
-  let execs = Uset.singleton exec in
+  let execs = USet.singleton exec in
   let futures = calculate_future_set execs in
-    check int "one future" 1 (Uset.size futures);
+    check int "one future" 1 (USet.size futures);
     (* Future should be identity relation: {(1,1), (2,2)} *)
-    let expected = Uset.of_list [ (1, 1); (2, 2) ] in
+    let expected = USet.of_list [ (1, 1); (2, 2) ] in
       check bool "contains identity" true
-        (Uset.exists (fun f -> Uset.equal f expected) futures)
+        (USet.exists (fun f -> USet.equal f expected) futures)
 
 let test_future_set_with_ppo () =
-  let events = Uset.of_list [ 1; 2 ] in
-  let ppo = Uset.of_list [ (1, 2) ] in
-  let exec = make_simple_exec events (Uset.create ()) (Uset.create ()) ppo in
-  let execs = Uset.singleton exec in
+  let events = USet.of_list [ 1; 2 ] in
+  let ppo = USet.of_list [ (1, 2) ] in
+  let exec = make_simple_exec events (USet.create ()) (USet.create ()) ppo in
+  let execs = USet.singleton exec in
   let futures = calculate_future_set execs in
   (* Future should be identity + ppo: {(1,1), (2,2), (1,2)} *)
-  let expected = Uset.of_list [ (1, 1); (2, 2); (1, 2) ] in
+  let expected = USet.of_list [ (1, 1); (2, 2); (1, 2) ] in
     check bool "contains identity + ppo" true
-      (Uset.exists (fun f -> Uset.equal f expected) futures)
+      (USet.exists (fun f -> USet.equal f expected) futures)
 
 let test_future_set_with_dp () =
-  let events = Uset.of_list [ 1; 2 ] in
-  let dp = Uset.of_list [ (1, 2) ] in
-  let exec = make_simple_exec events (Uset.create ()) dp (Uset.create ()) in
-  let execs = Uset.singleton exec in
+  let events = USet.of_list [ 1; 2 ] in
+  let dp = USet.of_list [ (1, 2) ] in
+  let exec = make_simple_exec events (USet.create ()) dp (USet.create ()) in
+  let execs = USet.singleton exec in
   let futures = calculate_future_set execs in
   (* Future should be identity + dp: {(1,1), (2,2), (1,2)} *)
-  let expected = Uset.of_list [ (1, 1); (2, 2); (1, 2) ] in
+  let expected = USet.of_list [ (1, 1); (2, 2); (1, 2) ] in
     check bool "contains identity + dp" true
-      (Uset.exists (fun f -> Uset.equal f expected) futures)
+      (USet.exists (fun f -> USet.equal f expected) futures)
 
 let test_future_set_multiple_execs () =
-  let events1 = Uset.of_list [ 1; 2 ] in
-  let ppo1 = Uset.of_list [ (1, 2) ] in
-  let exec1 = make_simple_exec events1 (Uset.create ()) (Uset.create ()) ppo1 in
+  let events1 = USet.of_list [ 1; 2 ] in
+  let ppo1 = USet.of_list [ (1, 2) ] in
+  let exec1 = make_simple_exec events1 (USet.create ()) (USet.create ()) ppo1 in
 
-  let events2 = Uset.of_list [ 3; 4 ] in
-  let dp2 = Uset.of_list [ (3, 4) ] in
-  let exec2 = make_simple_exec events2 (Uset.create ()) dp2 (Uset.create ()) in
+  let events2 = USet.of_list [ 3; 4 ] in
+  let dp2 = USet.of_list [ (3, 4) ] in
+  let exec2 = make_simple_exec events2 (USet.create ()) dp2 (USet.create ()) in
 
-  let execs = Uset.of_list [ exec1; exec2 ] in
+  let execs = USet.of_list [ exec1; exec2 ] in
   let futures = calculate_future_set execs in
-    check int "two futures" 2 (Uset.size futures)
+    check int "two futures" 2 (USet.size futures)
 
 (** Tests for posterior_future **)
 
 let test_posterior_future_empty_history () =
-  let future = Uset.of_list [ (1, 2); (2, 3); (3, 4) ] in
-  let history = Uset.create () in
+  let future = USet.of_list [ (1, 2); (2, 3); (3, 4) ] in
+  let history = USet.create () in
   let post = posterior_future future history in
     (* With empty history, all pairs should remain *)
     check relation_testable "all pairs remain" future post
 
 let test_posterior_future_full_history () =
-  let future = Uset.of_list [ (1, 2); (2, 3) ] in
-  let history = Uset.of_list [ 1; 2; 3 ] in
+  let future = USet.of_list [ (1, 2); (2, 3) ] in
+  let history = USet.of_list [ 1; 2; 3 ] in
   let post = posterior_future future history in
     (* All first elements are in history, so result should be empty *)
-    check int "empty result" 0 (Uset.size post)
+    check int "empty result" 0 (USet.size post)
 
 let test_posterior_future_partial_history () =
-  let future = Uset.of_list [ (1, 2); (2, 3); (3, 4) ] in
-  let history = Uset.of_list [ 1; 2 ] in
+  let future = USet.of_list [ (1, 2); (2, 3); (3, 4) ] in
+  let history = USet.of_list [ 1; 2 ] in
   let post = posterior_future future history in
   (* Only (3,4) should remain, as 1 and 2 are in history *)
-  let expected = Uset.of_list [ (3, 4) ] in
+  let expected = USet.of_list [ (3, 4) ] in
     check relation_testable "only (3,4)" expected post
 
 let test_posterior_future_no_overlap () =
-  let future = Uset.of_list [ (1, 2); (2, 3) ] in
-  let history = Uset.of_list [ 4; 5 ] in
+  let future = USet.of_list [ (1, 2); (2, 3) ] in
+  let history = USet.of_list [ 4; 5 ] in
   let post = posterior_future future history in
     (* No overlap, all pairs should remain *)
     check relation_testable "all remain" future post
 
 let test_posterior_future_identity_pairs () =
-  let future = Uset.of_list [ (1, 1); (2, 2); (3, 3) ] in
-  let history = Uset.of_list [ 2 ] in
+  let future = USet.of_list [ (1, 1); (2, 2); (3, 3) ] in
+  let history = USet.of_list [ 2 ] in
   let post = posterior_future future history in
   (* Only (2,2) should be removed *)
-  let expected = Uset.of_list [ (1, 1); (3, 3) ] in
+  let expected = USet.of_list [ (1, 1); (3, 3) ] in
     check relation_testable "remove (2,2)" expected post
 
 (** Tests for posterior_future_set **)
 
 let test_posterior_future_set_empty_set () =
-  let future_set = Uset.create () in
-  let history = Uset.of_list [ 1; 2 ] in
+  let future_set = USet.create () in
+  let history = USet.of_list [ 1; 2 ] in
   let post_set = posterior_future_set future_set history in
-    check int "empty result" 0 (Uset.size post_set)
+    check int "empty result" 0 (USet.size post_set)
 
 let test_posterior_future_set_single_future () =
-  let future = Uset.of_list [ (1, 2); (3, 4) ] in
-  let future_set = Uset.singleton future in
-  let history = Uset.of_list [ 1 ] in
+  let future = USet.of_list [ (1, 2); (3, 4) ] in
+  let future_set = USet.singleton future in
+  let history = USet.of_list [ 1 ] in
   let post_set = posterior_future_set future_set history in
-    check int "one result" 1 (Uset.size post_set);
-    let expected = Uset.of_list [ (3, 4) ] in
+    check int "one result" 1 (USet.size post_set);
+    let expected = USet.of_list [ (3, 4) ] in
       check bool "correct posterior" true
-        (Uset.exists (fun f -> Uset.equal f expected) post_set)
+        (USet.exists (fun f -> USet.equal f expected) post_set)
 
 let test_posterior_future_set_multiple_futures () =
-  let future1 = Uset.of_list [ (1, 2); (2, 3) ] in
-  let future2 = Uset.of_list [ (3, 4); (4, 5) ] in
-  let future_set = Uset.of_list [ future1; future2 ] in
-  let history = Uset.of_list [ 1; 3 ] in
+  let future1 = USet.of_list [ (1, 2); (2, 3) ] in
+  let future2 = USet.of_list [ (3, 4); (4, 5) ] in
+  let future_set = USet.of_list [ future1; future2 ] in
+  let history = USet.of_list [ 1; 3 ] in
   let post_set = posterior_future_set future_set history in
-    check int "two results" 2 (Uset.size post_set);
+    check int "two results" 2 (USet.size post_set);
     (* future1 -> {(2,3)}, future2 -> {(4,5)} *)
-    let expected1 = Uset.of_list [ (2, 3) ] in
-    let expected2 = Uset.of_list [ (4, 5) ] in
+    let expected1 = USet.of_list [ (2, 3) ] in
+    let expected2 = USet.of_list [ (4, 5) ] in
       check bool "contains first posterior" true
-        (Uset.exists (fun f -> Uset.equal f expected1) post_set);
+        (USet.exists (fun f -> USet.equal f expected1) post_set);
       check bool "contains second posterior" true
-        (Uset.exists (fun f -> Uset.equal f expected2) post_set)
+        (USet.exists (fun f -> USet.equal f expected2) post_set)
 
 let test_posterior_future_set_all_filtered () =
-  let future = Uset.of_list [ (1, 2); (2, 3) ] in
-  let future_set = Uset.singleton future in
-  let history = Uset.of_list [ 1; 2; 3; 4 ] in
+  let future = USet.of_list [ (1, 2); (2, 3) ] in
+  let future_set = USet.singleton future in
+  let history = USet.of_list [ 1; 2; 3; 4 ] in
   let post_set = posterior_future_set future_set history in
-    check int "one result" 1 (Uset.size post_set);
-    let empty_future = Uset.create () in
+    check int "one result" 1 (USet.size post_set);
+    let empty_future = USet.create () in
       check bool "empty future" true
-        (Uset.exists (fun f -> Uset.equal f empty_future) post_set)
+        (USet.exists (fun f -> USet.equal f empty_future) post_set)
 
 (** Test suite **)
 

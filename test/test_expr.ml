@@ -1,3 +1,4 @@
+open Uset
 open Expr
 open Types
 

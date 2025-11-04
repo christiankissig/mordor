@@ -1,3 +1,4 @@
+open Uset
 (* Main test runner *)
 
 let () =

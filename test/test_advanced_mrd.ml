@@ -1,8 +1,9 @@
 (** Advanced Unit Tests for Symbolic MRD Testing complex elaboration sequences
     and integration scenarios *)
+open Uset
 
 open Types
-open Uset
+open USet
 open Alcotest
 open Lwt.Syntax
 open Expr

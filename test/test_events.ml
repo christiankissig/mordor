@@ -1,4 +1,5 @@
 (** Unit tests for Events module *)
+open Uset
 
 open Alcotest
 open Expr
@@ -305,7 +306,7 @@ let test_container_all () =
   let _ = Events.EventsContainer.add c (make_test_event Fence 0) in
 
   let all = Events.EventsContainer.all c in
-    check int "all returns 3 events" 3 (Uset.size all)
+    check int "all returns 3 events" 3 (USet.size all)
 
 let test_container_map_filter () =
   let c = Events.EventsContainer.create () in
@@ -318,26 +319,26 @@ let test_container_map_filter () =
 
   (* Filter only reads *)
   let reads = Events.EventsContainer.map c all_labels ~typ:Read () in
-    check int "map finds 2 reads" 2 (Uset.size reads);
-    check bool "contains e1" true (Uset.mem reads e1.label);
-    check bool "contains e3" true (Uset.mem reads e3.label);
+    check int "map finds 2 reads" 2 (USet.size reads);
+    check bool "contains e1" true (USet.mem reads e1.label);
+    check bool "contains e3" true (USet.mem reads e3.label);
 
     (* Filter only writes *)
     let writes = Events.EventsContainer.map c all_labels ~typ:Write () in
-      check int "map finds 1 write" 1 (Uset.size writes);
+      check int "map finds 1 write" 1 (USet.size writes);
 
       (* Filter by mode *)
       let acquire_events =
         Events.EventsContainer.map c all_labels ~mode:Acquire ()
       in
-        check int "map finds 1 acquire" 1 (Uset.size acquire_events);
+        check int "map finds 1 acquire" 1 (USet.size acquire_events);
 
         (* Filter by mode with ordering *)
         let relaxed_or_higher =
           Events.EventsContainer.map c all_labels ~mode:Relaxed ~mode_op:">" ()
         in
           check bool "relaxed or higher includes all" true
-            (Uset.size relaxed_or_higher >= 3)
+            (USet.size relaxed_or_higher >= 3)
 
 let test_container_clone () =
   let c1 = Events.EventsContainer.create () in
@@ -346,15 +347,15 @@ let test_container_clone () =
 
   let c2 = Events.EventsContainer.clone c1 in
     check int "cloned size matches"
-      (Uset.size (Events.EventsContainer.all c1))
-      (Uset.size (Events.EventsContainer.all c2));
+      (USet.size (Events.EventsContainer.all c1))
+      (USet.size (Events.EventsContainer.all c2));
     check int "cloned next_label matches" c1.next_label c2.next_label;
 
     (* Add to original, shouldn't affect clone *)
     let _ = Events.EventsContainer.add c1 (make_test_event Fence 0) in
       check bool "clone unaffected by add" true
-        (Uset.size (Events.EventsContainer.all c1)
-        > Uset.size (Events.EventsContainer.all c2)
+        (USet.size (Events.EventsContainer.all c1)
+        > USet.size (Events.EventsContainer.all c2)
         )
 
 let test_container_rewrite () =

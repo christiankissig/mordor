@@ -1,4 +1,5 @@
 (** Unit tests for coherence checking *)
+open Uset
 
 open Alcotest
 open Coherence
@@ -54,11 +55,11 @@ let make_events_table events =
 (** Helper to create empty execution *)
 let make_empty_execution () =
   {
-    ex_e = Uset.create ();
-    rf = Uset.create ();
-    ex_rmw = Uset.create ();
-    dp = Uset.create ();
-    ppo = Uset.create ();
+    ex_e = USet.create ();
+    rf = USet.create ();
+    ex_rmw = USet.create ();
+    dp = USet.create ();
+    ppo = USet.create ();
     ex_p = [];
     conds = [];
     fix_rf_map = Hashtbl.create 10;
@@ -68,23 +69,23 @@ let make_empty_execution () =
 
 (** Test helper: create uset from list *)
 let uset_of_list lst =
-  let uset = Uset.create () in
-    List.iter (fun x -> Uset.add uset x |> ignore) lst;
+  let uset = USet.create () in
+    List.iter (fun x -> USet.add uset x |> ignore) lst;
     uset
 
 (** Test semicolon_rel with empty list *)
 let test_semicolon_empty () =
   let result = semicolon_rel [] in
-    check int "empty composition" 0 (Uset.size result);
+    check int "empty composition" 0 (USet.size result);
     ()
 
 (** Test semicolon_rel with single relation *)
 let test_semicolon_single () =
   let rel = uset_of_list [ (1, 2); (2, 3) ] in
   let result = semicolon_rel [ rel ] in
-    check int "single relation size" 2 (Uset.size result);
-    check bool "contains (1,2)" true (Uset.mem result (1, 2));
-    check bool "contains (2,3)" true (Uset.mem result (2, 3));
+    check int "single relation size" 2 (USet.size result);
+    check bool "contains (1,2)" true (USet.mem result (1, 2));
+    check bool "contains (2,3)" true (USet.mem result (2, 3));
     ()
 
 (** Test semicolon_rel composition *)
@@ -92,9 +93,9 @@ let test_semicolon_compose () =
   let r1 = uset_of_list [ (1, 2); (3, 4) ] in
   let r2 = uset_of_list [ (2, 5); (4, 6) ] in
   let result = semicolon_rel [ r1; r2 ] in
-    check bool "contains (1,5)" true (Uset.mem result (1, 5));
-    check bool "contains (3,6)" true (Uset.mem result (3, 6));
-    check bool "not contains (1,2)" false (Uset.mem result (1, 2));
+    check bool "contains (1,5)" true (USet.mem result (1, 5));
+    check bool "contains (3,6)" true (USet.mem result (3, 6));
+    check bool "not contains (1,2)" false (USet.mem result (1, 2));
     ()
 
 (** Test semicolon_rel with three relations *)
@@ -103,8 +104,8 @@ let test_semicolon_triple () =
   let r2 = uset_of_list [ (2, 3) ] in
   let r3 = uset_of_list [ (3, 4) ] in
   let result = semicolon_rel [ r1; r2; r3 ] in
-    check bool "contains (1,4)" true (Uset.mem result (1, 4));
-    check int "result size" 1 (Uset.size result);
+    check bool "contains (1,4)" true (USet.mem result (1, 4));
+    check int "result size" 1 (USet.size result);
     ()
 
 (** Test em with Write events *)
@@ -119,10 +120,10 @@ let test_em_write_events () =
   in
   let e = uset_of_list [ 1; 2; 3 ] in
   let result = em events e Write None None None in
-    check int "two write events" 2 (Uset.size result);
-    check bool "contains (1,1)" true (Uset.mem result (1, 1));
-    check bool "contains (3,3)" true (Uset.mem result (3, 3));
-    check bool "not contains (2,2)" false (Uset.mem result (2, 2));
+    check int "two write events" 2 (USet.size result);
+    check bool "contains (1,1)" true (USet.mem result (1, 1));
+    check bool "contains (3,3)" true (USet.mem result (3, 3));
+    check bool "not contains (2,2)" false (USet.mem result (2, 2));
     ()
 
 (** Test em with mode filtering *)
@@ -136,8 +137,8 @@ let test_em_with_mode () =
   in
   let e = uset_of_list [ 1; 2 ] in
   let result = em events e Write (Some Release) None None in
-    check int "one release write" 1 (Uset.size result);
-    check bool "contains (1,1)" true (Uset.mem result (1, 1));
+    check int "one release write" 1 (USet.size result);
+    check bool "contains (1,1)" true (USet.mem result (1, 1));
     ()
 
 (** Test em with fence events *)
@@ -152,7 +153,7 @@ let test_em_fence_events () =
   in
   let e = uset_of_list [ 1; 2; 3 ] in
   let result = em events e Fence None None None in
-    check int "two fence events" 2 (Uset.size result);
+    check int "two fence events" 2 (USet.size result);
     ()
 
 (** Test em with strong mode *)
@@ -169,8 +170,8 @@ let test_em_strong_mode () =
   in
   let e = uset_of_list [ 1; 2 ] in
   let result = em events e Write None None (Some Strong) in
-    check int "one strong write" 1 (Uset.size result);
-    check bool "contains (1,1)" true (Uset.mem result (1, 1));
+    check int "one strong write" 1 (USet.size result);
+    check bool "contains (1,1)" true (USet.mem result (1, 1));
     ()
 
 (** Test imm_deps with data dependency *)
@@ -195,7 +196,7 @@ let test_imm_deps_data () =
   let restrict = Hashtbl.create 10 in
   let result = imm_deps (make_empty_execution ()) events po e restrict in
     (* Should detect data dependency since wval references rval *)
-    check bool "has data dependency" true (Uset.size result >= 0);
+    check bool "has data dependency" true (USet.size result >= 0);
     ()
 
 (** Test imm_deps with control dependency *)
@@ -214,7 +215,7 @@ let test_imm_deps_ctrl () =
     Hashtbl.add restrict 2 [ ENum (Z.of_int 2) ];
     let result = imm_deps (make_empty_execution ()) events po e restrict in
       (* Should detect control dependency since restricts differ *)
-      check bool "has control dependency" true (Uset.size result > 0);
+      check bool "has control dependency" true (USet.size result > 0);
       ()
 
 (** Test imm_coherent with simple coherence *)
@@ -228,19 +229,19 @@ let test_imm_coherent_simple () =
   in
   let ex_e = uset_of_list [ 1; 2 ] in
   let po = uset_of_list [ (1, 2) ] in
-  let rf = Uset.create () in
+  let rf = USet.create () in
   let restrict = Hashtbl.create 10 in
   let (structure : symbolic_event_structure) =
     {
       e = ex_e;
       po;
       restrict;
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
       cas_groups = Hashtbl.create 10;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
   in
@@ -248,9 +249,9 @@ let test_imm_coherent_simple () =
     {
       ex_e;
       rf;
-      ex_rmw = Uset.create ();
-      dp = Uset.create ();
-      ppo = Uset.create ();
+      ex_rmw = USet.create ();
+      dp = USet.create ();
+      ppo = USet.create ();
       ex_p = [];
       conds = [];
       fix_rf_map = Hashtbl.create 10;
@@ -276,19 +277,19 @@ let test_rc11_coherent_simple () =
   in
   let ex_e = uset_of_list [ 1; 2 ] in
   let po = uset_of_list [ (1, 2) ] in
-  let rf = Uset.create () in
+  let rf = USet.create () in
   let restrict = Hashtbl.create 10 in
   let structure =
     {
       e = ex_e;
       po;
       restrict;
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
       cas_groups = Hashtbl.create 10;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
   in
@@ -296,9 +297,9 @@ let test_rc11_coherent_simple () =
     {
       ex_e;
       rf;
-      ex_rmw = Uset.create ();
-      dp = Uset.create ();
-      ppo = Uset.create ();
+      ex_rmw = USet.create ();
+      dp = USet.create ();
+      ppo = USet.create ();
       ex_p = [];
       conds = [];
       fix_rf_map = Hashtbl.create 10;
@@ -308,7 +309,7 @@ let test_rc11_coherent_simple () =
   in
   let loc_restrict x = x in
   let cache = rc11_coherent_cache execution structure events loc_restrict in
-  let co = Uset.create () in
+  let co = USet.create () in
   let result = rc11_coherent co cache in
     check bool "simple RC11 coherence passes" true result;
     ()
@@ -337,12 +338,12 @@ let test_imm_coherent_rmw () =
       e = ex_e;
       po;
       restrict;
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
       cas_groups = Hashtbl.create 10;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
   in
@@ -351,8 +352,8 @@ let test_imm_coherent_rmw () =
       ex_e;
       rf;
       ex_rmw = rmw;
-      dp = Uset.create ();
-      ppo = Uset.create ();
+      dp = USet.create ();
+      ppo = USet.create ();
       ex_p = [];
       conds = [];
       fix_rf_map = Hashtbl.create 10;
@@ -372,21 +373,21 @@ let test_imm_coherent_rmw () =
 (** Test cache type construction *)
 let test_cache_types () =
   let events = make_events_table [] in
-  let ex_e = Uset.create () in
-  let po = Uset.create () in
-  let rf = Uset.create () in
+  let ex_e = USet.create () in
+  let po = USet.create () in
+  let rf = USet.create () in
   let restrict = Hashtbl.create 10 in
   let structure =
     {
       e = ex_e;
       po;
       restrict;
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
       cas_groups = Hashtbl.create 10;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
   in
@@ -394,9 +395,9 @@ let test_cache_types () =
     {
       ex_e;
       rf;
-      ex_rmw = Uset.create ();
-      dp = Uset.create ();
-      ppo = Uset.create ();
+      ex_rmw = USet.create ();
+      dp = USet.create ();
+      ppo = USet.create ();
       ex_p = [];
       conds = [];
       fix_rf_map = Hashtbl.create 10;

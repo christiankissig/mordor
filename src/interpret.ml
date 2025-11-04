@@ -4,6 +4,7 @@ open Lwt.Syntax
 open Types
 open Expr
 open Ir
+open Uset
 
 (** Event counter *)
 let event_counter = ref 0
@@ -53,8 +54,8 @@ let add_event (events : events_t) event =
 (** Symbolic Event Structure builders *)
 let dot label structure phi : symbolic_event_structure =
   {
-    e = Uset.union structure.e (Uset.singleton label);
-    po = Uset.union structure.po (Uset.map (fun e -> (label, e)) structure.e);
+    e = USet.union structure.e (USet.singleton label);
+    po = USet.union structure.po (USet.map (fun e -> (label, e)) structure.e);
     rmw = structure.rmw;
     lo = structure.lo;
     restrict = structure.restrict;
@@ -67,45 +68,45 @@ let dot label structure phi : symbolic_event_structure =
 
 let plus a b : symbolic_event_structure =
   {
-    e = Uset.union a.e b.e;
-    po = Uset.union a.po b.po;
-    rmw = Uset.union a.rmw b.rmw;
-    lo = Uset.union a.lo b.lo;
+    e = USet.union a.e b.e;
+    po = USet.union a.po b.po;
+    rmw = USet.union a.rmw b.rmw;
+    lo = USet.union a.lo b.lo;
     restrict = a.restrict;
     (* Simplified merge *)
     cas_groups = a.cas_groups;
     pwg = a.pwg @ b.pwg;
-    fj = Uset.union a.fj b.fj;
-    p = Uset.union a.p b.p;
+    fj = USet.union a.fj b.fj;
+    p = USet.union a.p b.p;
     constraint_ = a.constraint_ @ b.constraint_;
   }
 
 let cross a b : symbolic_event_structure =
   {
-    e = Uset.union a.e b.e;
-    po = Uset.union a.po b.po;
-    rmw = Uset.union a.rmw b.rmw;
-    lo = Uset.union a.lo b.lo;
+    e = USet.union a.e b.e;
+    po = USet.union a.po b.po;
+    rmw = USet.union a.rmw b.rmw;
+    lo = USet.union a.lo b.lo;
     restrict = a.restrict;
     cas_groups = a.cas_groups;
     pwg = a.pwg @ b.pwg;
-    fj = Uset.union a.fj b.fj;
-    p = Uset.union a.p b.p;
+    fj = USet.union a.fj b.fj;
+    p = USet.union a.p b.p;
     constraint_ = a.constraint_ @ b.constraint_;
   }
 
 (** Create empty structure *)
 let empty_structure () : symbolic_event_structure =
   {
-    e = Uset.create ();
-    po = Uset.create ();
-    rmw = Uset.create ();
-    lo = Uset.create ();
+    e = USet.create ();
+    po = USet.create ();
+    rmw = USet.create ();
+    lo = USet.create ();
     restrict = Hashtbl.create 16;
     cas_groups = Hashtbl.create 16;
     pwg = [];
-    fj = Uset.create ();
-    p = Uset.create ();
+    fj = USet.create ();
+    p = USet.create ();
     constraint_ = [];
   }
 

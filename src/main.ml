@@ -4,6 +4,7 @@ open Lwt.Syntax
 open Types
 open Symmrd
 open Eventstructureviz
+open Uset
 
 (* Command line options *)
 type run_mode = Samples | AllLitmusTests | Single
@@ -28,7 +29,7 @@ let print_results (result : result) =
   Printf.printf "Valid: %b\n" result.valid;
   Printf.printf "Undefined Behavior: %b\n" result.ub;
   Printf.printf "Executions: %d\n" (List.length result.executions);
-  Printf.printf "Events: %d\n" (Uset.size result.structure.e);
+  Printf.printf "Events: %d\n" (USet.size result.structure.e);
   Printf.printf "===========================\n";
   flush stdout
 

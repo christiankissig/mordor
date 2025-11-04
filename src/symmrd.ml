@@ -6,6 +6,7 @@ open Events
 open Types
 open Expr
 open Ir
+open Uset
 
 type result = {
   ast : expr list; (* Simplified AST *)
@@ -36,11 +37,11 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   (* Build tree for program order *)
   let build_tree rel =
     let tree = Hashtbl.create 256 in
-      Uset.iter (fun e -> Hashtbl.add tree e (Uset.create ())) e_set;
-      Uset.iter
+      USet.iter (fun e -> Hashtbl.add tree e (USet.create ())) e_set;
+      USet.iter
         (fun (from, to_) ->
           let set = Hashtbl.find tree from in
-            Uset.add set to_ |> ignore
+            USet.add set to_ |> ignore
         )
         rel;
       tree
@@ -55,11 +56,11 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   (* Build ebranch mapping *)
   let ebranch =
     let tbl = Hashtbl.create 16 in
-      Uset.iter
+      USet.iter
         (fun e ->
           let branches =
-            Uset.filter (fun (f, t) -> Uset.mem branch_events f && t = e) po
-            |> Uset.map (fun (f, _) -> f)
+            USet.filter (fun (f, t) -> USet.mem branch_events f && t = e) po
+            |> USet.map (fun (f, _) -> f)
           in
             Hashtbl.add tbl e branches
         )
@@ -69,13 +70,13 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
   let conflicting_branch e1 e2 =
     let branches1 =
-      try Hashtbl.find ebranch e1 with Not_found -> Uset.create ()
+      try Hashtbl.find ebranch e1 with Not_found -> USet.create ()
     in
     let branches2 =
-      try Hashtbl.find ebranch e2 with Not_found -> Uset.create ()
+      try Hashtbl.find ebranch e2 with Not_found -> USet.create ()
     in
-    let common = Uset.intersection branches1 branches2 in
-    let values = Uset.values common in
+    let common = USet.intersection branches1 branches2 in
+    let values = USet.values common in
       match values with
       | [] -> failwith "No conflicting branch found"
       | hd :: tl -> List.fold_left max hd tl
@@ -107,15 +108,15 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
   (* Initialize justifications for writes *)
   let init_justs =
-    Uset.map
+    USet.map
       (fun w ->
         try
           let event = Hashtbl.find events w in
             {
               p = [];
-              d = Uset.create ();
-              fwd = Uset.create ();
-              we = Uset.create ();
+              d = USet.create ();
+              fwd = USet.create ();
+              we = USet.create ();
               w = event;
               op = ("init", None, None);
             }
@@ -127,22 +128,22 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   Logs.debug (fun m ->
       m "Initial justification for event\n\t%s"
         (String.concat "\n\t"
-           (List.map Justifications.to_string (Uset.values init_justs))
+           (List.map Justifications.to_string (USet.values init_justs))
         )
   );
 
   (* Initialize initial PPO relation *)
   let init_ppo =
     if Hashtbl.mem events 0 then
-      Uset.cross (Uset.singleton 0)
-        (Uset.set_minus
-           (Uset.of_list (Hashtbl.fold (fun k _ acc -> k :: acc) events []))
-           (Uset.singleton 0)
+      URelation.cross (USet.singleton 0)
+        (USet.set_minus
+           (USet.of_list (Hashtbl.fold (fun k _ acc -> k :: acc) events []))
+           (USet.singleton 0)
         )
-    else Uset.create ()
+    else USet.create ()
   in
 
-  let fj = Uset.union structure.fj init_ppo in
+  let fj = USet.union structure.fj init_ppo in
 
   (* Build context for elaborations *)
   let elab_ctx =
@@ -168,31 +169,31 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
     if include_dependencies then
       let rec fixed_point (justs : justification uset) =
         Logs.debug (fun m ->
-            m "Fixed-point iteration with %d justifications" (Uset.size justs)
+            m "Fixed-point iteration with %d justifications" (USet.size justs)
         );
         let* va = Elaborations.value_assign elab_ctx justs in
           let* lift = Elaborations.lift elab_ctx va in
             let* weak = Elaborations.weaken elab_ctx lift in
               let* fwd = Elaborations.forward elab_ctx weak in
                 let* filtered =
-                  Elaborations.filter elab_ctx (Uset.union justs fwd)
+                  Elaborations.filter elab_ctx (USet.union justs fwd)
                 in
 
                 let justs_str =
                   String.concat "\n\t"
-                    (Uset.values (Uset.map Justifications.to_string filtered))
+                    (USet.values (USet.map Justifications.to_string filtered))
                 in
-                  if Uset.equal filtered justs then (
+                  if USet.equal filtered justs then (
                     Logs.debug (fun m ->
                         m "Fixed-point reached with %d justifications:\n\t%s"
-                          (Uset.size filtered) justs_str
+                          (USet.size filtered) justs_str
                     );
                     Lwt.return filtered
                   )
                   else (
                     Logs.debug (fun m ->
                         m "Continue elaborating with %d justifications:\n\t%s"
-                          (Uset.size filtered) justs_str
+                          (USet.size filtered) justs_str
                     );
                     fixed_point filtered
                   )
@@ -205,7 +206,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
   Logs.debug (fun m ->
       m "Elaborations complete. Final justifications count: %d"
-        (Uset.size final_justs)
+        (USet.size final_justs)
   );
 
   Logs.debug (fun m -> m "Generating executions...");
@@ -322,7 +323,7 @@ let create_symbolic_event_structure program (opts : options) =
     Interpret.interpret program_stmts [] (Hashtbl.create 16) []
   in
 
-  assert (Hashtbl.length events = Uset.size structure.e);
+  assert (Hashtbl.length events = USet.size structure.e);
 
   Logs.debug (fun m -> m "Program interpreted successfully.");
 

@@ -5,28 +5,29 @@ open Expr
 open Trees
 open Types
 open Utils
+open Uset
 
 (** Utils **)
 
 let to_string (exec : symbolic_execution) : string =
   Printf.sprintf "{\nex_e=%s,\nrf=%s\ndp=%s\nppo=%s\n}"
-    (String.concat ", " (List.map (Printf.sprintf "%d") (Uset.values exec.ex_e)))
+    (String.concat ", " (List.map (Printf.sprintf "%d") (USet.values exec.ex_e)))
     (String.concat ", "
        (List.map
           (fun (e1, e2) -> Printf.sprintf "(%d,%d)" e1 e2)
-          (Uset.values exec.rf)
+          (USet.values exec.rf)
        )
     )
     (String.concat ", "
        (List.map
           (fun (e1, e2) -> Printf.sprintf "(%d,%d)" e1 e2)
-          (Uset.values exec.dp)
+          (USet.values exec.dp)
        )
     )
     (String.concat ", "
        (List.map
           (fun (e1, e2) -> Printf.sprintf "(%d,%d)" e1 e2)
-          (Uset.values exec.ppo)
+          (USet.values exec.ppo)
        )
     )
 
@@ -40,7 +41,7 @@ let disjoint (loc1, val1) (loc2, val2) =
 let origin events read_events malloc_events (s : string) =
   (* Try to find in reads *)
   let in_reads =
-    Uset.filter
+    USet.filter
       (fun x ->
         match get_val events x with
         | Some (ESymbol sym) -> sym = s
@@ -48,13 +49,13 @@ let origin events read_events malloc_events (s : string) =
       )
       read_events
   in
-  let in_reads_vals = Uset.values in_reads in
+  let in_reads_vals = USet.values in_reads in
     match in_reads_vals with
     | e :: _ -> Some e
     | [] -> (
         (* Try to find in mallocs by symbol *)
         let in_mallocs =
-          Uset.filter
+          USet.filter
             (fun x ->
               try
                 let event = Hashtbl.find events x in
@@ -66,7 +67,7 @@ let origin events read_events malloc_events (s : string) =
             )
             malloc_events
         in
-        let in_mallocs_vals = Uset.values in_mallocs in
+        let in_mallocs_vals = USet.values in_mallocs in
           match in_mallocs_vals with
           | e :: _ -> Some e
           | [] -> None
@@ -88,8 +89,8 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
   let find_roots () =
     let all_events = structure.e in
     let has_predecessor = pi_2 structure.po in
-    let roots = Uset.set_minus all_events has_predecessor in
-    let root_list = Uset.values roots in
+    let roots = USet.set_minus all_events has_predecessor in
+    let root_list = USet.values roots in
       match root_list with
       | [] -> (
           if
@@ -97,7 +98,7 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
             Hashtbl.mem events 0
           then [ 0 ]
           else
-            let first_events = Uset.values structure.e in
+            let first_events = USet.values structure.e in
               match first_events with
               | [] -> failwith "No events in structure"
               | hd :: _ -> [ hd ]
@@ -110,9 +111,9 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
     if not (Hashtbl.mem events e) then [ { path = []; p = [] } ]
     else
       let next_uset =
-        try Hashtbl.find po_tree e with Not_found -> Uset.create ()
+        try Hashtbl.find po_tree e with Not_found -> USet.create ()
       in
-      let next = Uset.values next_uset in
+      let next = USet.values next_uset in
 
       if List.length next = 0 then [ { path = [ e ]; p = [] } ]
       else
@@ -138,7 +139,7 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
 
             (* Left branch paths *)
             let n0_paths =
-              if Uset.mem structure.e next0 then
+              if USet.mem structure.e next0 then
                 let restrict_next0 =
                   try Hashtbl.find restrict next0 with Not_found -> []
                 in
@@ -152,7 +153,7 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
 
             (* Right branch paths *)
             let n1_paths =
-              if Uset.mem structure.e next1 then
+              if USet.mem structure.e next1 then
                 let restrict_next1 =
                   try Hashtbl.find restrict next1 with Not_found -> []
                 in
@@ -204,7 +205,7 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
 
 (** Choose compatible justifications for a path *)
 let choose justmap path_events =
-  let path_list = Uset.values path_events in
+  let path_list = USet.values path_events in
 
   let rec choose_rec list i items fwdwe =
     if i = 0 then [ items ]
@@ -212,7 +213,7 @@ let choose justmap path_events =
       let i = i - 1 in
 
       (* Skip if already covered by fwdwe *)
-      if List.length items > 0 && Uset.mem (pi_2 fwdwe) list.(i) then
+      if List.length items > 0 && USet.mem (pi_2 fwdwe) list.(i) then
         choose_rec list i items fwdwe
       else
         (* Get justifications for this event *)
@@ -224,15 +225,15 @@ let choose justmap path_events =
         let compatible =
           List.filter
             (fun just ->
-              let x = Uset.union just.fwd just.we in
+              let x = USet.union just.fwd just.we in
               (* Check no conflicts with existing fwdwe *)
               let pi1_x = pi_1 x in
               let pi2_x = pi_2 x in
               let pi1_fwdwe = pi_1 fwdwe in
               let pi2_fwdwe = pi_2 fwdwe in
 
-              Uset.size (Uset.intersection pi1_x pi2_fwdwe) = 0
-              && Uset.size (Uset.intersection pi2_x pi1_fwdwe) = 0
+              USet.size (USet.intersection pi1_x pi2_fwdwe) = 0
+              && USet.size (USet.intersection pi2_x pi1_fwdwe) = 0
             )
             justs_for_event
         in
@@ -240,14 +241,14 @@ let choose justmap path_events =
         (* Recursively choose for each compatible justification *)
         List.concat_map
           (fun just ->
-            let new_fwdwe = Uset.union fwdwe (Uset.union just.fwd just.we) in
+            let new_fwdwe = USet.union fwdwe (USet.union just.fwd just.we) in
               choose_rec list i (items @ [ just ]) new_fwdwe
           )
           compatible
   in
 
   choose_rec (Array.of_list path_list) (List.length path_list) []
-    (Uset.create ())
+    (USet.create ())
 
 (** Type for a freeze function - validates an RF set for a justification
     combination *)
@@ -269,28 +270,28 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
 
   (* Filter po to only include events in e *)
   let po_filtered =
-    Uset.filter (fun (f, t) -> Uset.mem e f && Uset.mem e t) po
+    USet.filter (fun (f, t) -> USet.mem e f && USet.mem e t) po
   in
 
   (* Remove elided RF edges *)
-  let rf_m = Uset.set_minus rf elided_rf in
-  let rf_e = Uset.union (pi_1 rf_m) (pi_2 rf_m) in
+  let rf_m = USet.set_minus rf elided_rf in
+  let rf_e = USet.union (pi_1 rf_m) (pi_2 rf_m) in
 
   (* Check 1: elided_rf must be subset of rf *)
-  if not (Uset.subset elided_rf rf) then Lwt.return_none
+  if not (USet.subset elided_rf rf) then Lwt.return_none
     (* Check 2: rf_e should not overlap with elided *)
-  else if Uset.exists (fun e -> Uset.mem elided e) rf_e then Lwt.return_none
+  else if USet.exists (fun e -> USet.mem elided e) rf_e then Lwt.return_none
   else
     (* Check 3: All rf edges respect ppo_loc *)
     let rf_respects_ppo =
-      Uset.for_all
+      USet.for_all
         (fun (w, r) ->
-          if Uset.mem ppo_loc (w, r) then
+          if USet.mem ppo_loc (w, r) then
             (* If (w,r) in ppo_loc, check that r is reachable from w *)
             let reachable =
               try
                 let successors = Hashtbl.find ppo_loc_tree w in
-                  Uset.mem successors r
+                  USet.mem successors r
               with Not_found -> false
             in
               reachable
@@ -303,12 +304,12 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
     else
       (* Filter RMW pairs *)
       let rmw_filtered =
-        Uset.filter (fun (f, t) -> Uset.mem e f || Uset.mem e t) structure.rmw
+        USet.filter (fun (f, t) -> USet.mem e f || USet.mem e t) structure.rmw
       in
 
       (* Create environment from RF *)
       let env_rf =
-        Uset.values rf
+        USet.values rf
         |> List.map (fun (w, r) ->
                let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
                let w_val =
@@ -326,7 +327,7 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
       in
 
       let check_rf =
-        Uset.values rf
+        USet.values rf
         |> List.map (fun (w, r) ->
                let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
                let w_loc =
@@ -345,26 +346,26 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
 
       (* Check 1.1: Various consistency checks *)
       let delta =
-        Uset.union
+        USet.union
           (List.fold_left
-             (fun acc j -> Uset.union acc j.fwd)
-             (Uset.create ()) j_list
+             (fun acc j -> USet.union acc j.fwd)
+             (USet.create ()) j_list
           )
           (List.fold_left
-             (fun acc j -> Uset.union acc j.we)
-             (Uset.create ()) j_list
+             (fun acc j -> USet.union acc j.we)
+             (USet.create ()) j_list
           )
       in
       let check_1_1 =
-        Uset.size (Uset.intersection (pi_2 delta) (pi_1 rf_m)) = 0
-        && Uset.equal (Uset.intersection e read_events) (pi_2 rf)
+        USet.size (USet.intersection (pi_2 delta) (pi_1 rf_m)) = 0
+        && USet.equal (USet.intersection e read_events) (pi_2 rf)
       in
 
       if not check_1_1 then Lwt.return_none
       else
         (* Check acyclicity of rhb = dp_ppo ∪ rf *)
-        let rhb = Uset.union dp_ppo rf in
-          if not (Uset.acyclic rhb) then Lwt.return_none
+        let rhb = USet.union dp_ppo rf in
+          if not (URelation.acyclic rhb) then Lwt.return_none
           else
             (* Rewrite predicates *)
             let big_p_exprs = p_combined @ env_rf @ check_rf in
@@ -374,24 +375,24 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
               | None -> Lwt.return_none
               | Some big_p -> (
                   (* Compute atomicity pairs AF *)
-                  let malloc_events = Uset.create () in
+                  let malloc_events = USet.create () in
                   (* TODO: get from structure *)
-                  let a = Uset.union read_events malloc_events in
-                  let a_squared = Uset.cross a a in
+                  let a = USet.union read_events malloc_events in
+                  let a_squared = URelation.cross a a in
 
                   let* af =
-                    Uset.async_filter
+                    USet.async_filter
                       (fun (e_1, e_2) ->
                         if e_1 >= e_2 then Lwt.return_false
                         else
                           (* Check if there's no intermediate event between e_1 and e_2 *)
                           let* has_intermediate =
-                            Uset.async_exists
+                            USet.async_exists
                               (fun ep ->
                                 if
                                   not
-                                    (Uset.mem rhb (e_1, ep)
-                                    && Uset.mem rhb (ep, e_2)
+                                    (USet.mem rhb (e_1, ep)
+                                    && USet.mem rhb (ep, e_2)
                                     )
                                 then Lwt.return_false
                                 else
@@ -418,7 +419,7 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
 
                   (* Create disjointness predicates *)
                   let disj =
-                    Uset.values af
+                    USet.values af
                     |> List.map (fun (a, b) ->
                            let loc_a =
                              match get_loc events a with
@@ -452,12 +453,12 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                       (* Check dslwb (downward-closed same-location write before) *)
                       (* Filter po to only include events in e *)
                       let po_filtered =
-                        Uset.filter
-                          (fun (f, t) -> Uset.mem e f && Uset.mem e t)
+                        USet.filter
+                          (fun (f, t) -> USet.mem e f && USet.mem e t)
                           po
                       in
                       let inv_po_tree =
-                        build_tree e (Uset.inverse_relation po_filtered)
+                        build_tree e (URelation.inverse_relation po_filtered)
                       in
 
                       let check_dslwb w _r =
@@ -488,24 +489,24 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                                     else
                                       let preds =
                                         try Hashtbl.find inv_po_tree r
-                                        with Not_found -> Uset.create ()
+                                        with Not_found -> USet.create ()
                                       in
-                                        Uset.async_for_all f preds
+                                        USet.async_for_all f preds
                               | _ ->
                                   let preds =
                                     try Hashtbl.find inv_po_tree r
-                                    with Not_found -> Uset.create ()
+                                    with Not_found -> USet.create ()
                                   in
-                                    Uset.async_for_all f preds
+                                    USet.async_for_all f preds
                         in
                           let* in_po =
-                            Lwt.return (Uset.mem po_filtered (w, _r))
+                            Lwt.return (USet.mem po_filtered (w, _r))
                           in
                             if not in_po then Lwt.return_false else f _r
                       in
 
                       let* has_dslwb =
-                        Uset.async_exists (fun (w, r) -> check_dslwb w r) rf
+                        USet.async_exists (fun (w, r) -> check_dslwb w r) rf
                       in
 
                       if has_dslwb then Lwt.return_none
@@ -530,18 +531,18 @@ and create_freeze events (structure : symbolic_event_structure) path j_list
     write_events read_events init_ppo statex =
   let* _ = Lwt.return_unit in
 
-  let e = Uset.of_list path.path in
-  let e_squared = Uset.cross e e in
+  let e = USet.of_list path.path in
+  let e_squared = URelation.cross e e in
   let pp = path.p in
 
   (* Compute dependency relation *)
   let dp_pairs =
     List.concat_map
       (fun just ->
-        let syms = Uset.values just.d in
+        let syms = USet.values just.d in
           List.concat_map
             (fun sym ->
-              let malloc_events = Uset.create () in
+              let malloc_events = USet.create () in
                 (* TODO *)
                 match origin events read_events malloc_events sym with
                 | Some orig -> [ (orig, just.w.label) ]
@@ -551,26 +552,26 @@ and create_freeze events (structure : symbolic_event_structure) path j_list
       )
       j_list
   in
-  let dp = Uset.of_list dp_pairs in
+  let dp = USet.of_list dp_pairs in
 
   (* Compute combined fwd and we *)
   let f =
-    List.fold_left (fun acc j -> Uset.union acc j.fwd) (Uset.create ()) j_list
+    List.fold_left (fun acc j -> USet.union acc j.fwd) (USet.create ()) j_list
   in
   let we =
-    List.fold_left (fun acc j -> Uset.union acc j.we) (Uset.create ()) j_list
+    List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list
   in
 
-  let delta = Uset.union f we in
+  let delta = USet.union f we in
   let elided = pi_2 delta in
 
   (* elided_rf: Delta ∩ (W × R) ∩ E² *)
-  let w_cross_r = Uset.cross write_events read_events in
+  let w_cross_r = URelation.cross write_events read_events in
   let elided_rf =
-    Uset.intersection delta w_cross_r |> fun s -> Uset.intersection s e_squared
+    USet.intersection delta w_cross_r |> fun s -> USet.intersection s e_squared
   in
 
-  let _e = Uset.set_minus e elided in
+  let _e = USet.set_minus e elided in
 
   (* Create forwarding context *)
   let con = Forwardingcontext.create ~fwd:f ~we () in
@@ -590,11 +591,11 @@ and create_freeze events (structure : symbolic_event_structure) path j_list
       | Some false -> Lwt.return_none
       | _ ->
           (* Check that all writes in E are either elided or have justifications *)
-          let e_writes = Uset.intersection e write_events in
+          let e_writes = USet.intersection e write_events in
           let check_3 =
-            Uset.for_all
+            USet.for_all
               (fun w ->
-                Uset.mem elided w || List.exists (fun j -> j.w.label = w) j_list
+                USet.mem elided w || List.exists (fun j -> j.w.label = w) j_list
               )
               e_writes
           in
@@ -612,37 +613,37 @@ and create_freeze events (structure : symbolic_event_structure) path j_list
 
                     (* Intersect with po pairs ending at this write *)
                     let po_to_w =
-                      Uset.filter (fun (_, t) -> t = just.w.label) structure.po
+                      USet.filter (fun (_, t) -> t = just.w.label) structure.po
                     in
                     let po_to_w_squared =
-                      Uset.cross (pi_1 po_to_w) (pi_1 po_to_w)
+                      URelation.cross (pi_1 po_to_w) (pi_1 po_to_w)
                     in
-                      Lwt.return (Uset.intersection ppo_j po_to_w_squared)
+                      Lwt.return (USet.intersection ppo_j po_to_w_squared)
                 )
                 j_list
             in
 
-            let ppo = List.fold_left Uset.union (Uset.create ()) ppos in
-            let ppo = Uset.union ppo (Forwardingcontext.ppo_sync con) in
+            let ppo = List.fold_left USet.union (USet.create ()) ppos in
+            let ppo = USet.union ppo (Forwardingcontext.ppo_sync con) in
 
             (* Compute ppo_loc *)
             let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
-            let ppo_loc = Uset.union ppo_loc_base init_ppo in
+            let ppo_loc = USet.union ppo_loc_base init_ppo in
 
             (* Filter out read-read pairs *)
             let ppo_loc =
-              Uset.filter
+              USet.filter
                 (fun (a, b) ->
-                  not (Uset.mem read_events a && Uset.mem read_events b)
+                  not (USet.mem read_events a && USet.mem read_events b)
                 )
                 ppo_loc
             in
 
             (* Compute transitive closure *)
-            let ppo_loc = Uset.transitive_closure ppo_loc in
+            let ppo_loc = URelation.transitive_closure ppo_loc in
             let ppo_loc_tree = build_tree e ppo_loc in
 
-            let dp_ppo = Uset.union dp ppo in
+            let dp_ppo = USet.union dp ppo in
 
             (* Return the freeze validation function *)
             let freeze_fn rf =
@@ -662,9 +663,9 @@ and build_justcombos events structure paths write_events read_events init_ppo
       (fun path ->
         (* Filter path to only write events *)
         let path_writes =
-          List.filter (fun e -> Uset.mem write_events e) path.path
+          List.filter (fun e -> USet.mem write_events e) path.path
         in
-        let path_writes_uset = Uset.of_list path_writes in
+        let path_writes_uset = USet.of_list path_writes in
 
         (* Get compatible justification combinations *)
         let js_combinations = choose justmap path_writes_uset in
@@ -676,13 +677,13 @@ and build_justcombos events structure paths write_events read_events init_ppo
               (* Compute combined fwd and we *)
               let fwd =
                 List.fold_left
-                  (fun acc j -> Uset.union acc j.fwd)
-                  (Uset.create ()) j_list
+                  (fun acc j -> USet.union acc j.fwd)
+                  (USet.create ()) j_list
               in
               let we =
                 List.fold_left
-                  (fun acc j -> Uset.union acc j.we)
-                  (Uset.create ()) j_list
+                  (fun acc j -> USet.union acc j.we)
+                  (USet.create ()) j_list
               in
 
               (* Create forwarding context *)
@@ -706,7 +707,7 @@ and build_justcombos events structure paths write_events read_events init_ppo
         in
 
         let freeze_fns_filtered = List.filter_map Fun.id freeze_fns in
-          Lwt.return (Uset.of_list path.path, freeze_fns_filtered)
+          Lwt.return (USet.of_list path.path, freeze_fns_filtered)
       )
       paths
   in
@@ -739,7 +740,7 @@ let generate_executions (events : (int, event) Hashtbl.t)
 
   (* Build adjacency relations *)
   let po_tree = build_tree structure.e structure.po in
-  let inv_po_tree = build_tree structure.e (Uset.inverse_relation po) in
+  let inv_po_tree = build_tree structure.e (URelation.inverse_relation po) in
 
   (* Generate all paths through the control flow *)
   let paths = gen_paths events structure structure.restrict in
@@ -763,27 +764,27 @@ let generate_executions (events : (int, event) Hashtbl.t)
                 ||
                 try
                   let preds = Hashtbl.find inv_po_tree r in
-                    Uset.for_all f preds
+                    USet.for_all f preds
                 with Not_found -> true
             )
           | _ -> (
               try
                 let preds = Hashtbl.find inv_po_tree r in
-                  Uset.for_all f preds
+                  USet.for_all f preds
               with Not_found -> true
             )
     in
-      Uset.mem po (w, _r) && f _r
+      USet.mem po (w, _r) && f _r
   in
 
   (* Compute initial RF relation: writes × reads that are not in po^-1 and not dslwb *)
-  let inv_po = Uset.inverse_relation po in
-  let w_with_init = Uset.union write_events (Uset.singleton 0) in
-  let w_cross_r = Uset.cross w_with_init read_events in
-  let w_cross_r_minus_inv_po = Uset.set_minus w_cross_r inv_po in
+  let inv_po = URelation.inverse_relation po in
+  let w_with_init = USet.union write_events (USet.singleton 0) in
+  let w_cross_r = URelation.cross w_with_init read_events in
+  let w_cross_r_minus_inv_po = USet.set_minus w_cross_r inv_po in
 
   let* _rf_pairs =
-    Uset.async_filter
+    USet.async_filter
       (fun (w, r) ->
         if dslwb w r then Lwt.return_false
         else if w = 0 then Lwt.return_true
@@ -809,7 +810,7 @@ let generate_executions (events : (int, event) Hashtbl.t)
 
   (* Build justification map: write label -> list of justifications *)
   let justmap = Hashtbl.create 16 in
-    Uset.iter
+    USet.iter
       (fun (just : justification) ->
         let label = just.w.label in
         let existing = try Hashtbl.find justmap label with Not_found -> [] in
@@ -827,7 +828,7 @@ let generate_executions (events : (int, event) Hashtbl.t)
     let paths_with_uset = List.map (fun p -> { p with path = p.path }) paths in
 
     (* Filter function for RF enumeration *)
-    let rf_filter = Uset.intersection (Uset.cross e_set e_set) po in
+    let rf_filter = USet.intersection (URelation.cross e_set e_set) po in
 
     (* Enumerate RF sets - simplified version *)
     (* In full version, this would use a more sophisticated RF enumeration *)
@@ -835,7 +836,7 @@ let generate_executions (events : (int, event) Hashtbl.t)
       (* For each path, try to build executions *)
       Lwt_list.map_p
         (fun path ->
-          let path_uset = Uset.of_list path.path in
+          let path_uset = USet.of_list path.path in
 
           (* Get freeze functions for this path *)
           let freeze_fns =
@@ -867,7 +868,7 @@ let generate_executions (events : (int, event) Hashtbl.t)
           let fix_rf_map = Hashtbl.create 16 in
 
           (* Build initial mapping from RF *)
-          Uset.iter
+          USet.iter
             (fun (w, r) ->
               let just_w =
                 List.find_opt (fun j -> j.w.label = w) freeze_res.justs

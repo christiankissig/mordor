@@ -2,6 +2,7 @@
 
 open Types
 open Expr
+open Uset
 open Printf
 
 (** Mode utility functions *)
@@ -31,21 +32,23 @@ module ModeOps = struct
   let write m = try checked_write m with _ -> Relaxed
 
   (* Mode ordering: Relaxed < Acquire, Relaxed < Release, Acquire < SC, Release < SC *)
-  let mode_order : (mode * mode) Uset.t =
+  let mode_order : (mode * mode) USet.t =
     let all_modes =
-      Uset.of_list [ Relaxed; Acquire; Release; SC; Normal; Strong; Nonatomic ]
+      USet.of_list [ Relaxed; Acquire; Release; SC; Normal; Strong; Nonatomic ]
     in
     let base_order =
-      Uset.of_list
+      USet.of_list
         [ (Relaxed, Acquire); (Relaxed, Release); (Acquire, SC); (Release, SC) ]
     in
-      base_order |> Uset.transitive_closure |> Uset.reflexive_closure all_modes
+      base_order
+      |> URelation.transitive_closure
+      |> URelation.reflexive_closure all_modes
 
-  let mode_le m1 m2 = Uset.mem mode_order (m1, m2)
+  let mode_le m1 m2 = USet.mem mode_order (m1, m2)
 end
 
-(** Value equality from Uset module *)
-let value_equality = Uset.value_equality
+(** Value equality from USet module *)
+let value_equality = USet.value_equality
 
 (** Event predicates *)
 let is_read e = e.typ = Read
@@ -330,8 +333,8 @@ module EventsContainer = struct
 
   (** Map events matching criteria to a USet of their labels *)
   let map t event_labels ?typ ?mode ?mode_op ?second_mode () =
-    let result = Uset.create () in
-      Uset.iter
+    let result = USet.create () in
+      USet.iter
         (fun label ->
           match get t label with
           | None -> ()
@@ -355,14 +358,14 @@ module EventsContainer = struct
                 | Some sm -> e.strong = Some sm
               in
                 if type_match && mode_match && second_mode_match then
-                  Uset.add result label |> ignore
+                  USet.add result label |> ignore
         )
         event_labels;
       result
 
   let all t =
-    let result = Uset.create () in
-      Hashtbl.iter (fun label _ -> Uset.add result label |> ignore) t.events;
+    let result = USet.create () in
+      Hashtbl.iter (fun label _ -> USet.add result label |> ignore) t.events;
       result
 
   let clone t =
@@ -443,7 +446,7 @@ let loce events e x =
 
 (* Event type filters *)
 let filter_events events e_set typ =
-  Uset.filter
+  USet.filter
     (fun e ->
       try
         let event = Hashtbl.find events e in

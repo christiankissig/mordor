@@ -3,6 +3,7 @@
 open Graph
 open Expr
 open Types
+open Uset
 
 module EventStructureViz = struct
   (** Output format type *)
@@ -47,10 +48,10 @@ module EventStructureViz = struct
   module G = Imperative.Digraph.ConcreteLabeled (Vertex) (Edge)
 
   (** Perform transitive reduction on program order edges *)
-  let transitive_reduction_po (po : (int * int) uset) : (int * int) uset =
+  let transitive_reduction (po : (int * int) uset) : (int * int) uset =
     (* Build adjacency map *)
     let adj = Hashtbl.create 100 in
-      Uset.iter
+      USet.iter
         (fun (src, dst) ->
           let neighbors = try Hashtbl.find adj src with Not_found -> [] in
             Hashtbl.replace adj src (dst :: neighbors)
@@ -94,11 +95,11 @@ module EventStructureViz = struct
       in
 
       (* Keep only non-transitive edges *)
-      let reduced = ref (Uset.create ()) in
-        Uset.iter
+      let reduced = ref (USet.create ()) in
+        USet.iter
           (fun ((src, dst) as edge) ->
             if not (has_indirect_path src dst) then
-              reduced := Uset.add !reduced edge
+              reduced := USet.add !reduced edge
           )
           po;
 
@@ -115,10 +116,10 @@ module EventStructureViz = struct
       Printf.printf "Events table contains the following events IDS: ";
       Hashtbl.iter (fun k _v -> Printf.printf "%d " k) events;
       Printf.printf "\nEvent structure has the following event IDs: ";
-      Uset.iter (fun eid -> Printf.printf "%d " eid) ses.e;
+      USet.iter (fun eid -> Printf.printf "%d " eid) ses.e;
       Printf.printf "\nStarting to add vertices...\n";
 
-      Uset.iter
+      USet.iter
         (fun event_id ->
           Printf.printf "Adding vertex for event ID: %d\n" event_id;
           flush stdout;
@@ -133,10 +134,10 @@ module EventStructureViz = struct
         ses.e;
 
       (* Apply transitive reduction to po *)
-      let po_reduced = transitive_reduction_po ses.po in
+      let po_reduced = transitive_reduction ses.po in
 
       (* Add program order edges *)
-      Uset.iter
+      USet.iter
         (fun (src, dst) ->
           let v_src = Hashtbl.find vertex_map src in
           let v_dst = Hashtbl.find vertex_map dst in
@@ -145,7 +146,7 @@ module EventStructureViz = struct
         po_reduced;
 
       (* Add RMW edges *)
-      Uset.iter
+      USet.iter
         (fun (src, dst) ->
           let v_src = Hashtbl.find vertex_map src in
           let v_dst = Hashtbl.find vertex_map dst in
@@ -154,7 +155,7 @@ module EventStructureViz = struct
         ses.rmw;
 
       (* Add lock order edges *)
-      Uset.iter
+      USet.iter
         (fun (src, dst) ->
           let v_src = Hashtbl.find vertex_map src in
           let v_dst = Hashtbl.find vertex_map dst in
@@ -163,7 +164,7 @@ module EventStructureViz = struct
         ses.lo;
 
       (* Add fork-join edges *)
-      Uset.iter
+      USet.iter
         (fun (src, dst) ->
           let v_src = Hashtbl.find vertex_map src in
           let v_dst = Hashtbl.find vertex_map dst in

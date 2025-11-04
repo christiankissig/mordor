@@ -4,6 +4,7 @@ open Expr
 open Lwt.Syntax
 open Printf
 open Types
+open Uset
 
 (** Solver context *)
 type context = {
@@ -220,8 +221,8 @@ let simplify_disjunction clauses =
 (** Get all symbols from a list of expressions *)
 let get_all_symbols exprs =
   let symbols = List.flatten (List.map Expr.get_symbols exprs) in
-  let uset = Uset.of_list symbols in
-    Uset.values uset
+  let uset = USet.of_list symbols in
+    USet.values uset
 
 (** Solve with Z3 and return ranges or concrete values *)
 let solve_with_ranges solver =

@@ -1,3 +1,4 @@
+open Uset
 open Lwt.Syntax
 open Alcotest
 open Elaborations
@@ -107,29 +108,29 @@ let create_mock_context () =
   Hashtbl.add events 2 e2;
   Hashtbl.add events 3 e3;
 
-  let e_set = Uset.of_list [ 0; 1; 2; 3 ] in
+  let e_set = USet.of_list [ 0; 1; 2; 3 ] in
   let structure : symbolic_event_structure =
     {
       e = e_set;
-      po = Uset.of_list [ (1, 2) ];
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      po = USet.of_list [ (1, 2) ];
+      rmw = USet.create ();
+      lo = USet.create ();
       restrict = Hashtbl.create 10;
       cas_groups = Hashtbl.create 10;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
   in
 
-  let branch_events = Uset.create () in
-  let read_events = Uset.of_list [ 2 ] in
-  let write_events = Uset.of_list [ 0; 1; 3 ] in
-  let malloc_events = Uset.create () in
-  let po = Uset.of_list [ (1, 2) ] in
-  let rmw = Uset.create () in
-  let fj = Uset.create () in
+  let branch_events = USet.create () in
+  let read_events = USet.of_list [ 2 ] in
+  let write_events = USet.of_list [ 0; 1; 3 ] in
+  let malloc_events = USet.create () in
+  let po = USet.of_list [ (1, 2) ] in
+  let rmw = USet.create () in
+  let fj = USet.create () in
 
   let val_fn i =
     match Hashtbl.find_opt events i with
@@ -181,17 +182,17 @@ let create_mock_justification label predicates =
     {
       w;
       p = predicates;
-      fwd = Uset.create ();
-      we = Uset.create ();
-      d = Uset.create ();
+      fwd = USet.create ();
+      we = USet.create ();
+      d = USet.create ();
       op = ("init", None, None);
     }
 
 (* Tests for lifted cache *)
 let test_lifted_cache_create () =
   let cache = create_lifted_cache () in
-    check int "cache t is empty" 0 (Uset.size cache.t);
-    check int "cache to_ is empty" 0 (Uset.size cache.to_);
+    check int "cache t is empty" 0 (USet.size cache.t);
+    check int "cache to_ is empty" 0 (USet.size cache.to_);
     ()
 
 let test_lifted_cache_add () =
@@ -200,8 +201,8 @@ let test_lifted_cache_add () =
   let just1 = create_mock_justification 1 [ pred ] in
   let just2 = create_mock_justification 2 [ pred ] in
     lifted_add cache (just1, just2);
-    check int "cache t has one entry" 1 (Uset.size cache.t);
-    check bool "cache contains pair" true (Uset.mem cache.t (just1, just2));
+    check int "cache t has one entry" 1 (USet.size cache.t);
+    check bool "cache contains pair" true (USet.mem cache.t (just1, just2));
     ()
 
 let test_lifted_cache_has_not_found () =
@@ -306,8 +307,8 @@ let test_lifted_cache_has_matches_fwd_we () =
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
 
   (* Create justifications with specific fwd and we sets *)
-  let fwd_set = Uset.of_list [ (1, 2); (2, 3) ] in
-  let we_set = Uset.of_list [ (3, 4) ] in
+  let fwd_set = USet.of_list [ (1, 2); (2, 3) ] in
+  let we_set = USet.of_list [ (3, 4) ] in
 
   let just1 =
     { (create_mock_justification 1 [ pred ]) with fwd = fwd_set; we = we_set }
@@ -366,7 +367,7 @@ let test_lifted_cache_has_returns_modified_justifications () =
           ()
     | None ->
         (* Debug: check if cache has any entries *)
-        Printf.printf "cache.to_ size: %d\n" (Uset.size cache.to_);
+        Printf.printf "cache.to_ size: %d\n" (USet.size cache.to_);
         Printf.printf "just1.w.label: %d, just1_query.w.label: %d\n"
           just1.w.label just1_query.w.label;
         Printf.printf "just2.w.label: %d, just2_query.w.label: %d\n"
@@ -405,13 +406,13 @@ let test_lifted_cache_clear () =
   lifted_to cache (just1, just2) [ result_just ];
 
   check bool "cache has data before clear" true
-    (Uset.size cache.t > 0 || Uset.size cache.to_ > 0);
+    (USet.size cache.t > 0 || USet.size cache.to_ > 0);
 
   (* Clear *)
   lifted_clear cache;
 
-  check int "cache t empty after clear" 0 (Uset.size cache.t);
-  check int "cache to_ empty after clear" 0 (Uset.size cache.to_);
+  check int "cache t empty after clear" 0 (USet.size cache.t);
+  check int "cache to_ empty after clear" 0 (USet.size cache.to_);
   ()
 
 let test_lifted_cache_has_no_match_different_write_labels () =
@@ -437,9 +438,9 @@ let test_lifted_cache_has_no_match_different_write_labels () =
 (* Tests for filter function *)
 let test_filter_empty () =
   let ctx = create_mock_context () in
-  let justs = Uset.create () in
+  let justs = USet.create () in
     let* result = filter ctx justs in
-      check int "empty filter" 0 (Uset.size result);
+      check int "empty filter" 0 (USet.size result);
       Lwt.return_unit
 
 let test_filter_valid () =
@@ -447,8 +448,8 @@ let test_filter_valid () =
   (* Create a valid boolean predicate: 1 = 1 *)
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
-    let* result = filter ctx (Uset.singleton just) in
-      check bool "filter keeps valid" true (Uset.size result >= 0);
+    let* result = filter ctx (USet.singleton just) in
+      check bool "filter keeps valid" true (USet.size result >= 0);
       Lwt.return_unit
 
 let test_filter_removes_covered () =
@@ -456,10 +457,10 @@ let test_filter_removes_covered () =
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = create_mock_justification 1 [ pred; pred ] in
   let just2 = create_mock_justification 1 [ pred ] in
-  let justs = Uset.of_list [ just1; just2 ] in
+  let justs = USet.of_list [ just1; just2 ] in
     (* just2 covers just1 as it has fewer predicates *)
     let* result = filter ctx justs in
-      check bool "filter removes covered" true (Uset.size result <= 2);
+      check bool "filter removes covered" true (USet.size result <= 2);
       Lwt.return_unit
 
 (* Tests for value_assign function *)
@@ -467,9 +468,9 @@ let test_value_assign_no_variables () =
   let ctx = create_mock_context () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
-  let justs = Uset.singleton just in
+  let justs = USet.singleton just in
     let* result = value_assign ctx justs in
-      check int "value_assign size preserved" 1 (Uset.size result);
+      check int "value_assign size preserved" 1 (USet.size result);
       Lwt.return_unit
 
 let test_value_assign_with_variable () =
@@ -501,43 +502,43 @@ let test_value_assign_with_variable () =
     {
       w;
       p = [ pred ];
-      fwd = Uset.create ();
-      we = Uset.create ();
-      d = Uset.create ();
+      fwd = USet.create ();
+      we = USet.create ();
+      d = USet.create ();
       op = ("init", None, None);
     }
   in
-  let justs = Uset.singleton just in
+  let justs = USet.singleton just in
     let* result = value_assign ctx justs in
-      check bool "value_assign processes variables" true (Uset.size result > 0);
+      check bool "value_assign processes variables" true (USet.size result > 0);
       Lwt.return_unit
 
 (* Tests for fprime function *)
 let test_fprime_basic () =
   let ctx = create_mock_context () in
-  let pred_fn _e = Uset.create () in
-  let ppo_loc = Uset.of_list [ (1, 2) ] in
+  let pred_fn _e = USet.create () in
+  let ppo_loc = USet.of_list [ (1, 2) ] in
   let result = fprime ctx pred_fn ppo_loc in
     (* fprime filters po edges that are in ppo_loc and satisfy predicate *)
-    check bool "fprime returns edges" true (Uset.size result >= 0);
+    check bool "fprime returns edges" true (USet.size result >= 0);
     ()
 
 let test_fprime_empty_ppo () =
   let ctx = create_mock_context () in
-  let pred_fn _e = Uset.create () in
-  let ppo_loc = Uset.create () in
+  let pred_fn _e = USet.create () in
+  let ppo_loc = USet.create () in
   let result = fprime ctx pred_fn ppo_loc in
-    check int "fprime empty ppo" 0 (Uset.size result);
+    check int "fprime empty ppo" 0 (USet.size result);
     ()
 
 (* Tests for fwd function *)
 let test_fwd_basic () =
   let ctx = create_mock_context () in
-  let pred_fn _e = Uset.create () in
+  let pred_fn _e = USet.create () in
   let fwd_ctx = Forwardingcontext.create () in
-  let ppo_loc = Uset.of_list [ (1, 2) ] in
+  let ppo_loc = USet.of_list [ (1, 2) ] in
   let result = fwd ctx pred_fn fwd_ctx ppo_loc in
-    check bool "fwd returns filtered edges" true (Uset.size result >= 0);
+    check bool "fwd returns filtered edges" true (USet.size result >= 0);
     ()
 
 let test_fwd_filters_volatile () =
@@ -567,54 +568,54 @@ let test_fwd_filters_volatile () =
   in
     Hashtbl.add ctx.events 4 volatile_event;
 
-    let pred_fn _e = Uset.singleton 1 in
+    let pred_fn _e = USet.singleton 1 in
     let fwd_ctx = Forwardingcontext.create () in
-    let ppo_loc = Uset.of_list [ (1, 4) ] in
+    let ppo_loc = USet.of_list [ (1, 4) ] in
     let result = fwd ctx pred_fn fwd_ctx ppo_loc in
       (* Volatile events should be filtered out *)
       check bool "fwd filters volatile" true
-        (not (Uset.exists (fun (_, e) -> e = 4) result));
+        (not (USet.exists (fun (_, e) -> e = 4) result));
       ()
 
 (* Tests for we function *)
 let test_we_basic () =
   let ctx = create_mock_context () in
-  let pred_fn _e = Uset.create () in
+  let pred_fn _e = USet.create () in
   let we_ctx = Forwardingcontext.create () in
-  let ppo_loc = Uset.of_list [ (1, 3) ] in
+  let ppo_loc = USet.of_list [ (1, 3) ] in
   let result = we ctx pred_fn we_ctx ppo_loc in
-    check bool "we returns edges" true (Uset.size result >= 0);
+    check bool "we returns edges" true (USet.size result >= 0);
     ()
 
 let test_we_write_to_write () =
   let ctx = create_mock_context () in
   (* Add write-to-write edge in po *)
-  let po = Uset.add ctx.po (1, 3) in
+  let po = USet.add ctx.po (1, 3) in
   let ctx = { ctx with po } in
 
-  let pred_fn _e = Uset.singleton 1 in
+  let pred_fn _e = USet.singleton 1 in
   let we_ctx = Forwardingcontext.create () in
-  let ppo_loc = Uset.of_list [ (1, 3) ] in
+  let ppo_loc = USet.of_list [ (1, 3) ] in
   let result = we ctx pred_fn we_ctx ppo_loc in
     (* we should only include write-to-write edges *)
-    check bool "we write-to-write" true (Uset.size result >= 0);
+    check bool "we write-to-write" true (USet.size result >= 0);
     ()
 
 (* Tests for forward function *)
 let test_forward_empty () =
   let ctx = create_mock_context () in
-  let justs = Uset.create () in
+  let justs = USet.create () in
     let* result = forward ctx justs in
-      check int "forward empty" 0 (Uset.size result);
+      check int "forward empty" 0 (USet.size result);
       Lwt.return_unit
 
 let test_forward_single_justification () =
   let ctx = create_mock_context () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
-  let justs = Uset.singleton just in
+  let justs = USet.singleton just in
     let* result = forward ctx justs in
-      check bool "forward produces results" true (Uset.size result >= 0);
+      check bool "forward produces results" true (USet.size result >= 0);
       Lwt.return_unit
 
 let test_forward_with_pwg () =
@@ -623,17 +624,17 @@ let test_forward_with_pwg () =
   let structure = { ctx.structure with pwg = [ pred ] } in
   let ctx = { ctx with structure } in
   let just = create_mock_justification 1 [ pred ] in
-  let justs = Uset.singleton just in
+  let justs = USet.singleton just in
     let* result = forward ctx justs in
-      check bool "forward with pwg" true (Uset.size result >= 0);
+      check bool "forward with pwg" true (USet.size result >= 0);
       Lwt.return_unit
 
 (* Tests for conflict function *)
 let test_conflict_no_branches () =
   let ctx = create_mock_context () in
-  let events = Uset.of_list [ 1; 2; 3 ] in
+  let events = USet.of_list [ 1; 2; 3 ] in
   let result = conflict ctx events in
-    check int "conflict no branches" 0 (Uset.size result);
+    check int "conflict no branches" 0 (USet.size result);
     ()
 
 let test_conflict_with_branches () =
@@ -712,17 +713,17 @@ let test_conflict_with_branches () =
   Hashtbl.add ctx.events 11 event_11;
   Hashtbl.add ctx.events 12 event_12;
 
-  let branch_events = Uset.singleton 10 in
-  let e_set = Uset.add ctx.e_set 10 in
-  let e_set = Uset.add e_set 11 in
-  let e_set = Uset.add e_set 12 in
-  let po = Uset.add ctx.po (10, 11) in
-  let po = Uset.add po (10, 12) in
+  let branch_events = USet.singleton 10 in
+  let e_set = USet.add ctx.e_set 10 in
+  let e_set = USet.add e_set 11 in
+  let e_set = USet.add e_set 12 in
+  let po = USet.add ctx.po (10, 11) in
+  let po = USet.add po (10, 12) in
   let ctx = { ctx with branch_events; po; e_set } in
 
-  let events = Uset.of_list [ 10; 11; 12 ] in
+  let events = USet.of_list [ 10; 11; 12 ] in
   let result = conflict ctx events in
-    check bool "conflict with branches" true (Uset.size result >= 0);
+    check bool "conflict with branches" true (USet.size result >= 0);
     ()
 
 (* Tests for lift function *)
@@ -730,10 +731,10 @@ let test_lift_identity () =
   let ctx = create_mock_context () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred ] in
-  let justs = Uset.singleton just in
+  let justs = USet.singleton just in
     let* result = lift ctx justs in
       (* lift currently returns input unchanged (simplified) *)
-      check int "lift identity" (Uset.size justs) (Uset.size result);
+      check int "lift identity" (USet.size justs) (USet.size result);
       Lwt.return_unit
 
 (* Tests for weaken function *)
@@ -741,10 +742,10 @@ let test_weaken_no_pwg () =
   let ctx = create_mock_context () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = create_mock_justification 1 [ pred; pred ] in
-  let justs = Uset.singleton just in
+  let justs = USet.singleton just in
     let* result = weaken ctx justs in
       (* With no PWG, should return input unchanged *)
-      check int "weaken no pwg" (Uset.size justs) (Uset.size result);
+      check int "weaken no pwg" (USet.size justs) (USet.size result);
       Lwt.return_unit
 
 let test_weaken_with_pwg () =
@@ -753,11 +754,11 @@ let test_weaken_with_pwg () =
   let structure = { ctx.structure with pwg = [ pred ] } in
   let ctx = { ctx with structure } in
   let just = create_mock_justification 1 [ pred; pred ] in
-  let justs = Uset.singleton just in
+  let justs = USet.singleton just in
     let* result = weaken ctx justs in
-      check bool "weaken with pwg" true (Uset.size result > 0);
+      check bool "weaken with pwg" true (USet.size result > 0);
       (* Predicates implied by PWG should be removed *)
-      let just' = List.hd (Uset.values result) in
+      let just' = List.hd (USet.values result) in
         check bool "weaken removes implied" true
           (List.length just'.p <= List.length just.p);
         Lwt.return_unit
@@ -771,9 +772,9 @@ let test_weaken_preserves_non_implied () =
   (* Create predicate that is NOT implied by PWG: y = 2 (different variable) *)
   let not_pwg = EBinOp (EVar "y", "=", ENum (Z.of_int 2)) in
   let just = create_mock_justification 1 [ not_pwg ] in
-  let justs = Uset.singleton just in
+  let justs = USet.singleton just in
     let* result = weaken ctx justs in
-    let just' = List.hd (Uset.values result) in
+    let just' = List.hd (USet.values result) in
       (* Non-implied predicate should be preserved *)
       check bool "weaken preserves non-implied" true (List.length just'.p > 0);
       Lwt.return_unit
@@ -784,7 +785,7 @@ let test_strengthen_basic () =
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = create_mock_justification 1 [ pred ] in
   let just2 = create_mock_justification 2 [ pred ] in
-  let ppo = Uset.create () in
+  let ppo = USet.create () in
   let con = Forwardingcontext.create () in
     let* result = strengthen ctx just1 just2 ppo con in
       check bool "strengthen returns results" true (List.length result >= 0);
@@ -796,7 +797,7 @@ let test_strengthen_disjoint_predicates () =
   let pred2 = EBinOp (EVar "y", "=", ENum (Z.of_int 2)) in
   let just1 = create_mock_justification 1 [ pred1 ] in
   let just2 = create_mock_justification 2 [ pred2 ] in
-  let ppo = Uset.create () in
+  let ppo = USet.create () in
   let con = Forwardingcontext.create () in
     let* result = strengthen ctx just1 just2 ppo con in
       check bool "strengthen disjoint" true (List.length result >= 0);

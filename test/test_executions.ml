@@ -1,3 +1,4 @@
+open Uset
 open Alcotest
 open Executions
 open Events
@@ -40,20 +41,20 @@ let create_test_events () =
     events
 
 let create_test_structure () =
-  let e = Uset.of_list [ 1; 2; 3; 4 ] in
-  let po = Uset.of_list [ (1, 2); (2, 3); (3, 4) ] in
+  let e = USet.of_list [ 1; 2; 3; 4 ] in
+  let po = USet.of_list [ (1, 2); (2, 3); (3, 4) ] in
   let restrict = Hashtbl.create 4 in
   let cas_groups = Hashtbl.create 4 in
     {
       e;
       po;
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
       restrict;
       cas_groups;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
 
@@ -86,8 +87,8 @@ let test_origin_from_reads () =
   let sym_event = create_test_event 2 Read ~rval:(VSymbol "s1") () in
     Hashtbl.replace events 2 sym_event;
 
-    let read_events = Uset.of_list [ 2; 4 ] in
-    let malloc_events = Uset.create () in
+    let read_events = USet.of_list [ 2; 4 ] in
+    let malloc_events = USet.create () in
 
     let result = origin events read_events malloc_events "s1" in
       match result with
@@ -99,8 +100,8 @@ let test_origin_from_mallocs () =
   let malloc_event = create_test_event 5 Malloc ~rval:(VSymbol "s2") () in
     Hashtbl.add events 5 malloc_event;
 
-    let read_events = Uset.create () in
-    let malloc_events = Uset.of_list [ 5 ] in
+    let read_events = USet.create () in
+    let malloc_events = USet.of_list [ 5 ] in
 
     let result = origin events read_events malloc_events "s2" in
       match result with
@@ -109,8 +110,8 @@ let test_origin_from_mallocs () =
 
 let test_origin_not_found () =
   let events = create_test_events () in
-  let read_events = Uset.of_list [ 2; 4 ] in
-  let malloc_events = Uset.create () in
+  let read_events = USet.of_list [ 2; 4 ] in
+  let malloc_events = USet.create () in
 
   let result = origin events read_events malloc_events "nonexistent" in
     check (option int) "should not find origin" None result
@@ -141,21 +142,21 @@ let test_gen_paths_with_branch () =
   in
     Hashtbl.add events 5 branch_event;
 
-    let e = Uset.of_list [ 1; 2; 3; 4; 5 ] in
-    let po = Uset.of_list [ (1, 2); (2, 5); (5, 3); (5, 4) ] in
+    let e = USet.of_list [ 1; 2; 3; 4; 5 ] in
+    let po = USet.of_list [ (1, 2); (2, 5); (5, 3); (5, 4) ] in
     let restrict = Hashtbl.create 4 in
     let cas_groups = Hashtbl.create 4 in
     let structure =
       {
         e;
         po;
-        rmw = Uset.create ();
-        lo = Uset.create ();
+        rmw = USet.create ();
+        lo = USet.create ();
         restrict;
         cas_groups;
         pwg = [];
-        fj = Uset.create ();
-        p = Uset.create ();
+        fj = USet.create ();
+        p = USet.create ();
         constraint_ = [];
       }
     in
@@ -168,21 +169,21 @@ let test_gen_paths_with_branch () =
 
 let test_gen_paths_empty_structure () =
   let events = create_test_events () in
-  let e = Uset.create () in
-  let po = Uset.create () in
+  let e = USet.create () in
+  let po = USet.create () in
   let restrict = Hashtbl.create 4 in
   let cas_groups = Hashtbl.create 4 in
   let structure =
     {
       e;
       po;
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
       restrict;
       cas_groups;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
   in
@@ -195,21 +196,21 @@ let test_gen_paths_empty_structure () =
 
 let test_gen_paths_single_event () =
   let events = create_test_events () in
-  let e = Uset.of_list [ 1 ] in
-  let po = Uset.create () in
+  let e = USet.of_list [ 1 ] in
+  let po = USet.create () in
   let restrict = Hashtbl.create 4 in
   let cas_groups = Hashtbl.create 4 in
   let structure =
     {
       e;
       po;
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
       restrict;
       cas_groups;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
   in
@@ -226,7 +227,7 @@ let test_gen_paths_single_event () =
 
 let test_choose_empty_path () =
   let justmap = Hashtbl.create 4 in
-  let path_events = Uset.create () in
+  let path_events = USet.create () in
 
   let result = choose justmap path_events in
     check int "should return one empty combination" 1 (List.length result);
@@ -236,7 +237,7 @@ let test_choose_empty_path () =
 
 let test_choose_single_event_no_justifications () =
   let justmap = Hashtbl.create 4 in
-  let path_events = Uset.of_list [ 1 ] in
+  let path_events = USet.of_list [ 1 ] in
 
   let result = choose justmap path_events in
     (* No justifications means no valid combinations *)
@@ -248,16 +249,16 @@ let test_choose_single_event_with_justification () =
   let just =
     {
       p = [];
-      d = Uset.create ();
-      fwd = Uset.create ();
-      we = Uset.create ();
+      d = USet.create ();
+      fwd = USet.create ();
+      we = USet.create ();
       w = w_event;
       op = ("test", None, None);
     }
   in
     Hashtbl.add justmap 1 [ just ];
 
-    let path_events = Uset.of_list [ 1 ] in
+    let path_events = USet.of_list [ 1 ] in
     let result = choose justmap path_events in
 
     check bool "should return at least one combination" true
@@ -271,9 +272,9 @@ let test_choose_incompatible_justifications () =
   let just1 =
     {
       p = [];
-      d = Uset.create ();
-      fwd = Uset.of_list [ (2, 3) ];
-      we = Uset.create ();
+      d = USet.create ();
+      fwd = USet.of_list [ (2, 3) ];
+      we = USet.create ();
       w = w_event1;
       op = ("test", None, None);
     }
@@ -283,10 +284,10 @@ let test_choose_incompatible_justifications () =
   let just2 =
     {
       p = [];
-      d = Uset.create ();
-      fwd = Uset.of_list [ (3, 2) ];
+      d = USet.create ();
+      fwd = USet.of_list [ (3, 2) ];
       (* Conflicts with just1 *)
-      we = Uset.create ();
+      we = USet.create ();
       w = w_event2;
       op = ("test", None, None);
     }
@@ -295,7 +296,7 @@ let test_choose_incompatible_justifications () =
   Hashtbl.add justmap 1 [ just1 ];
   Hashtbl.add justmap 2 [ just2 ];
 
-  let path_events = Uset.of_list [ 1; 2 ] in
+  let path_events = USet.of_list [ 1; 2 ] in
   let result = choose justmap path_events in
 
   (* Should filter out incompatible combinations *)
@@ -323,11 +324,11 @@ let test_freeze_result_creation () =
   let freeze_res =
     {
       justs = [];
-      e = Uset.create ();
-      dp = Uset.create ();
-      ppo = Uset.create ();
-      rf = Uset.create ();
-      rmw = Uset.create ();
+      e = USet.create ();
+      dp = USet.create ();
+      ppo = USet.create ();
+      rf = USet.create ();
+      rmw = USet.create ();
       pp = [];
       conds = [];
     }
@@ -343,21 +344,21 @@ let test_gen_paths_with_missing_event () =
     Hashtbl.add events 1 (create_test_event 1 Write ());
 
     (* Event 2 is referenced in PO but doesn't exist *)
-    let e = Uset.of_list [ 1; 2 ] in
-    let po = Uset.of_list [ (1, 2) ] in
+    let e = USet.of_list [ 1; 2 ] in
+    let po = USet.of_list [ (1, 2) ] in
     let restrict = Hashtbl.create 4 in
     let cas_groups = Hashtbl.create 4 in
     let structure =
       {
         e;
         po;
-        rmw = Uset.create ();
-        lo = Uset.create ();
+        rmw = USet.create ();
+        lo = USet.create ();
         restrict;
         cas_groups;
         pwg = [];
-        fj = Uset.create ();
-        p = Uset.create ();
+        fj = USet.create ();
+        p = USet.create ();
         constraint_ = [];
       }
     in
@@ -388,8 +389,8 @@ let test_origin_with_multiple_matches () =
     let event2 = create_test_event 4 Read ~rval:(VSymbol "s1") () in
       Hashtbl.replace events 4 event2;
 
-      let read_events = Uset.of_list [ 2; 4 ] in
-      let malloc_events = Uset.create () in
+      let read_events = USet.of_list [ 2; 4 ] in
+      let malloc_events = USet.create () in
 
       let result = origin events read_events malloc_events "s1" in
         (* Should return one of the matching events *)
@@ -401,21 +402,21 @@ let test_gen_paths_with_cycle () =
   let events = create_test_events () in
 
   (* Create a cycle in PO (which shouldn't normally happen, but test handling) *)
-  let e = Uset.of_list [ 1; 2; 3 ] in
-  let po = Uset.of_list [ (1, 2); (2, 3); (3, 1) ] in
+  let e = USet.of_list [ 1; 2; 3 ] in
+  let po = USet.of_list [ (1, 2); (2, 3); (3, 1) ] in
   let restrict = Hashtbl.create 4 in
   let cas_groups = Hashtbl.create 4 in
   let structure =
     {
       e;
       po;
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
       restrict;
       cas_groups;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
   in
@@ -434,21 +435,21 @@ let test_path_generation_integration () =
   let events = create_test_events () in
 
   (* Create a more complex structure with multiple paths *)
-  let e = Uset.of_list [ 1; 2; 3; 4 ] in
-  let po = Uset.of_list [ (1, 2); (1, 3); (2, 4); (3, 4) ] in
+  let e = USet.of_list [ 1; 2; 3; 4 ] in
+  let po = USet.of_list [ (1, 2); (1, 3); (2, 4); (3, 4) ] in
   let restrict = Hashtbl.create 4 in
   let cas_groups = Hashtbl.create 4 in
   let structure =
     {
       e;
       po;
-      rmw = Uset.create ();
-      lo = Uset.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
       restrict;
       cas_groups;
       pwg = [];
-      fj = Uset.create ();
-      p = Uset.create ();
+      fj = USet.create ();
+      p = USet.create ();
       constraint_ = [];
     }
   in
@@ -470,9 +471,9 @@ let test_justification_map_building () =
   let just1 =
     {
       p = [];
-      d = Uset.create ();
-      fwd = Uset.create ();
-      we = Uset.create ();
+      d = USet.create ();
+      fwd = USet.create ();
+      we = USet.create ();
       w = w_event1;
       op = ("test", None, None);
     }
@@ -482,9 +483,9 @@ let test_justification_map_building () =
   let just2 =
     {
       p = [];
-      d = Uset.create ();
-      fwd = Uset.create ();
-      we = Uset.create ();
+      d = USet.create ();
+      fwd = USet.create ();
+      we = USet.create ();
       w = w_event2;
       op = ("test", None, None);
     }
@@ -517,15 +518,15 @@ let test_path_order_preservation () =
   (* Check if paths preserve PO order (either forward or reverse) *)
   let check_path path_info =
     let path = path_info.path in
-    let path_set = Uset.of_list path in
+    let path_set = USet.of_list path in
 
     let violations_forward = ref 0 in
     let violations_reverse = ref 0 in
     let total_checks = ref 0 in
 
-    Uset.iter
+    USet.iter
       (fun (a, b) ->
-        if Uset.mem path_set a && Uset.mem path_set b then incr total_checks;
+        if USet.mem path_set a && USet.mem path_set b then incr total_checks;
         let a_pos = find_index a path in
         let b_pos = find_index b path in
           match (a_pos, b_pos) with
@@ -553,9 +554,9 @@ let test_justification_compatibility_symmetry () =
   let just1 =
     {
       p = [];
-      d = Uset.create ();
-      fwd = Uset.of_list [ (1, 2) ];
-      we = Uset.create ();
+      d = USet.create ();
+      fwd = USet.of_list [ (1, 2) ];
+      we = USet.create ();
       w = w_event1;
       op = ("test", None, None);
     }
@@ -565,17 +566,17 @@ let test_justification_compatibility_symmetry () =
   let just2 =
     {
       p = [];
-      d = Uset.create ();
-      fwd = Uset.of_list [ (3, 4) ];
-      we = Uset.create ();
+      d = USet.create ();
+      fwd = USet.of_list [ (3, 4) ];
+      we = USet.create ();
       w = w_event2;
       op = ("test", None, None);
     }
   in
 
   (* These justifications should be compatible *)
-  let x1 = Uset.union just1.fwd just1.we in
-  let x2 = Uset.union just2.fwd just2.we in
+  let x1 = USet.union just1.fwd just1.we in
+  let x2 = USet.union just2.fwd just2.we in
 
   let pi1_x1 = pi_1 x1 in
   let pi2_x1 = pi_2 x1 in
@@ -583,13 +584,13 @@ let test_justification_compatibility_symmetry () =
   let pi2_x2 = pi_2 x2 in
 
   let compat_1_2 =
-    Uset.size (Uset.intersection pi1_x1 pi2_x2) = 0
-    && Uset.size (Uset.intersection pi2_x1 pi1_x2) = 0
+    USet.size (USet.intersection pi1_x1 pi2_x2) = 0
+    && USet.size (USet.intersection pi2_x1 pi1_x2) = 0
   in
 
   let compat_2_1 =
-    Uset.size (Uset.intersection pi1_x2 pi2_x1) = 0
-    && Uset.size (Uset.intersection pi2_x2 pi1_x1) = 0
+    USet.size (USet.intersection pi1_x2 pi2_x1) = 0
+    && USet.size (USet.intersection pi2_x2 pi1_x1) = 0
   in
 
   check bool "compatibility should be symmetric" compat_1_2 compat_2_1

@@ -1,3 +1,4 @@
+open Uset
 open Solver
 open Types
 open Expr
