@@ -5,6 +5,7 @@ open Types
 open Symmrd
 open Eventstructureviz
 open Uset
+open Context
 
 (* Command line options *)
 type run_mode = Samples | AllLitmusTests | Single
@@ -21,18 +22,37 @@ let recursive = ref false
 
 (* Run verification *)
 let verify_program program options =
-  let* result = create_symbolic_event_structure program options in
-    Lwt.return result
+  let context = make_context options in
+    context.litmus <- Some program;
+    Lwt.return context
+    |> Parse.step_parse_program
+    |> Interpret.step_interpret
+    |> Symmrd.step_calculate_dependencies
 
 (* Pretty print results *)
-let print_results (result : result) =
+let print_results (ctx : mordor_ctx) =
   Printf.printf "=== Verification Results ===\n";
-  Printf.printf "Valid: %b\n" result.valid;
-  Printf.printf "Undefined Behavior: %b\n" result.ub;
-  Printf.printf "Executions: %d\n" (List.length result.executions);
-  Printf.printf "Events: %d\n" (USet.size result.structure.e);
-  Printf.printf "===========================\n";
-  flush stdout
+  match ctx.valid with
+  | None -> Printf.printf "Valid: Unknown\n"
+  | Some valid -> (
+      Printf.printf "Valid: %b\n" valid;
+      match ctx.undefined_beahviour with
+      | None -> Printf.printf "Undefined Behavior: Unknown\n"
+      | Some ub -> (
+          Printf.printf "Undefined Behavior: %b\n" ub;
+          match ctx.executions with
+          | None -> Printf.printf "Executions: Unknown\n"
+          | Some executions -> (
+              Printf.printf "Executions: %d\n" (USet.size executions);
+              match ctx.structure with
+              | None -> Printf.printf "Events: Unknown\n"
+              | Some structure ->
+                  Printf.printf "Events: %d\n" (USet.size structure.e);
+                  Printf.printf "===========================\n";
+                  flush stdout
+            )
+        )
+    )
 
 (* Example programs *)
 let example_programs =
@@ -111,7 +131,7 @@ let run_tests tests =
 
 let parse_single name program =
   Logs.info (fun m -> m "Parsing program %s." name);
-  let _ast, _program_stmts = Symmrd.parse_program program in
+  let _ast, _program_stmts = Parse.parse_program program in
     Logs.info (fun m -> m "Parsed program %s successfully." name);
     (* Generate Isabelle output if output mode is Isa *)
     ( match !output_mode with
@@ -159,7 +179,7 @@ let parse_tests tests =
 
 let interpret_single name program =
   Logs.info (fun m -> m "Interpreting program %s." name);
-  let _, program_stmts = Symmrd.parse_program program in
+  let _, program_stmts = Parse.parse_program program in
     let* _result =
       Interpret.interpret program_stmts [] (Hashtbl.create 16) []
     in
@@ -195,16 +215,19 @@ let futures_single name program =
         let futures_json =
           (* Create JSON representation of futures *)
           let executions_json =
-            result.executions
-            |> List.mapi (fun i _exec ->
-                   Printf.sprintf
-                     "    {\n\
-                     \      \"execution\": %d,\n\
-                     \      \"futures\": {}\n\
-                     \    }"
-                     i
-               )
-            |> String.concat ",\n"
+            match result.executions with
+            | None -> "[]"
+            | Some execs ->
+                USet.values execs
+                |> List.mapi (fun i _exec ->
+                       Printf.sprintf
+                         "    {\n\
+                         \      \"execution\": %d,\n\
+                         \      \"futures\": {}\n\
+                         \    }"
+                         i
+                   )
+                |> String.concat ",\n"
           in
             Printf.sprintf
               "{\n  \"program\": \"%s\",\n  \"executions\": [\n%s\n  ]\n}\n"
@@ -242,8 +265,14 @@ let futures_single name program =
              (* TODO: Add Isabelle formalization of futures *)\n\n\
              end\n"
             theory_name name
-            (List.length result.executions)
-            (USet.size result.structure.e)
+            ( match result.executions with
+            | None -> 0
+            | Some execs -> USet.size execs
+            )
+            ( match result.structure with
+            | None -> 0
+            | Some structure -> USet.size structure.e
+            )
         in
         let oc = open_out output_file in
           output_string oc isa_content;
@@ -253,8 +282,15 @@ let futures_single name program =
     | _ ->
         Printf.printf "Program: %s\n" name;
         Printf.printf "Number of executions: %d\n"
-          (List.length result.executions);
-        Printf.printf "Number of events: %d\n" (USet.size result.structure.e);
+          ( match result.executions with
+          | None -> 0
+          | Some executions -> USet.size executions
+          );
+        Printf.printf "Number of events: %d\n"
+          ( match result.structure with
+          | None -> 0
+          | Some structure -> USet.size structure.e
+          );
         flush stdout
     );
     Lwt.return_unit

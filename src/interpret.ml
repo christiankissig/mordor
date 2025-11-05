@@ -1,11 +1,12 @@
 (** Program interpreter *)
 
-open Lwt.Syntax
-open Types
+open Context
+open Events
 open Expr
 open Ir
+open Lwt.Syntax
+open Types
 open Uset
-open Events
 
 (** Event counter *)
 let event_counter = ref 0
@@ -301,3 +302,18 @@ let interpret ast defacto restrictions constraint_ =
   let structure' = dot init_event'.label structure [] in
 
   Lwt.return (structure', events.events)
+
+(** Pipeline step for interpretation **)
+let step_interpret (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  let* ctx = lwt_ctx in
+    match (ctx.program_stmts, ctx.litmus_constraints) with
+    | Some stmts, Some constraints ->
+        let* structure, events = interpret stmts [] (Hashtbl.create 16) [] in
+          ctx.structure <- Some structure;
+          ctx.events <- Some events;
+          Lwt.return ctx
+    | _ ->
+        Logs.err (fun m ->
+            m "No program statements or constraints for interpretation."
+        );
+        Lwt.return ctx

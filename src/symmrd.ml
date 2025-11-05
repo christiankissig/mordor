@@ -4,19 +4,9 @@ open Context
 open Events
 open Executions
 open Expr
-open Ir
 open Lwt.Syntax
 open Types
 open Uset
-
-type result = {
-  ast : expr list; (* Simplified AST *)
-  structure : symbolic_event_structure;
-  events : (int, event) Hashtbl.t;
-  executions : symbolic_execution list;
-  valid : bool;
-  ub : bool; (* undefined behavior *)
-}
 
 (** Calculate dependencies and justifications *)
 
@@ -208,110 +198,38 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
   Lwt.return (structure, final_justs, executions)
 
-(** Convert parsed AST expressions to IR format *)
-let convert_expr = Parse.ast_expr_to_expr
+let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
+    =
+  let* ctx = lwt_ctx in
 
-(** Convert parsed AST statements to IR format *)
-let rec convert_stmt = function
-  | Ast.SThreads { threads } ->
-      let ir_threads = List.map (List.map convert_stmt) threads in
-        Threads { threads = ir_threads }
-  | Ast.SRegisterStore { register; expr } ->
-      let ir_expr = convert_expr expr in
-        RegisterStore { register; expr = ir_expr }
-  | Ast.SGlobalStore { global; expr; assign } ->
-      let ir_expr = convert_expr expr in
-        GlobalStore { global; expr = ir_expr; assign }
-  | Ast.SGlobalLoad { register; global; load } ->
-      GlobalLoad { register; global; load }
-  | Ast.SStore { address; expr; assign } ->
-      let ir_address = convert_expr address in
-      let ir_expr = convert_expr expr in
-        DerefStore { address = ir_address; expr = ir_expr; assign }
-  | Ast.SLoad { register; address; load } ->
-      let ir_address = convert_expr address in
-        DerefLoad { register; address = ir_address; load }
-  | Ast.SIf { condition; then_body; else_body } ->
-      let ir_condition = convert_expr condition in
-      let ir_then_body = List.map convert_stmt then_body in
-      let ir_else_body = Option.map (List.map convert_stmt) else_body in
-        If
-          {
-            condition = ir_condition;
-            then_body = ir_then_body;
-            else_body = ir_else_body;
-          }
-  | Ast.SWhile { condition; body } ->
-      let ir_condition = convert_expr condition in
-      let ir_body = List.map convert_stmt body in
-        While { condition = ir_condition; body = ir_body }
-  | Ast.SDo { body; condition } ->
-      let ir_condition = convert_expr condition in
-      let ir_body = List.map convert_stmt body in
-        Do { body = ir_body; condition = ir_condition }
-  | Ast.SFence { mode } -> Fence { mode }
-  | Ast.SLock { global } -> Lock { global }
-  | Ast.SUnlock { global } -> Unlock { global }
-  | Ast.SFree { register } -> Free { register }
-  | Ast.SLabeled { label; stmt } ->
-      let ir_stmt = convert_stmt stmt in
-        Labeled { label; stmt = ir_stmt }
-  | Ast.SCAS { register; address; expected; desired; mode } ->
-      let ir_address = convert_expr address in
-      let ir_expected = convert_expr expected in
-      let ir_desired = convert_expr desired in
-        Cas
-          {
-            register;
-            address = ir_address;
-            expected = ir_expected;
-            desired = ir_desired;
-            mode;
-          }
-  | Ast.SFADD { register; address; operand; mode } ->
-      let ir_address = convert_expr address in
-      let ir_operand = convert_expr operand in
-        Fadd { register; address = ir_address; operand = ir_operand; mode }
-  | Ast.SMalloc { register; size } ->
-      let ir_size = convert_expr size in
-        Malloc { register; size = ir_size }
-
-(** Parse program *)
-let parse_program program =
-  Logs.debug (fun m -> m "Parsing program...");
-
-  try
-    let litmus = Parse.parse program in
-    let constraints =
-      List.map Parse.ast_expr_to_expr
-        ( match litmus.config with
-        | Some c -> c.constraint_
-        | None -> []
+  (* Create restrictions for coherence checking *)
+  let coherence_restrictions =
+    {
+      Coherence.coherent =
+        ( try ctx.options.coherent with _ -> "imm"
         )
-    in
-    let program_stmts = List.map convert_stmt litmus.program in
-      (constraints, program_stmts)
-  with
-  | Failure msg ->
-      Logs.err (fun m -> m "Parse error: %s" msg);
-      ([], [])
-  | e ->
-      Logs.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
-      ([], [])
-
-let step_parse_program (ctx : mordor_ctx) : mordor_ctx Lwt.t =
-  let* () = Lwt.return_unit in
-    match ctx.litmus with
-    | Some program ->
-        let constraints, statements = parse_program program in
-          Lwt.return
-            {
-              ctx with
-              litmus_constraints = Some constraints;
-              program_stmts = Some statements;
-            }
-    | None ->
-        Logs.err (fun m -> m "No program provided for parsing.");
+        (* default to IMM if not specified *);
+    }
+  in
+    match
+      (ctx.program_stmts, ctx.litmus_constraints, ctx.structure, ctx.events)
+    with
+    | Some stmts, Some constraints, Some structure, Some events ->
+        let* structure, justs, executions =
+          calculate_dependencies constraints structure events
+            ~exhaustive:(ctx.options.exhaustive || false)
+            ~include_dependencies:(ctx.options.dependencies || true)
+            ~just_structure:(ctx.options.just_structure || false)
+            ~restrictions:coherence_restrictions
+        in
+          ctx.structure <- Some structure;
+          ctx.justifications <- Some justs;
+          ctx.executions <- Some (USet.of_list executions);
+          Lwt.return ctx
+    | _ ->
+        Logs.err (fun m ->
+            m "Program statements or litmus constraints not available."
+        );
         Lwt.return ctx
 
 (** Main entry point *)
@@ -319,7 +237,7 @@ let create_symbolic_event_structure program (opts : options) =
   let* _ = Lwt.return_unit in
 
   (* Parse program - get both constraints and program statements *)
-  let ast, program_stmts = parse_program program in
+  let ast, program_stmts = Parse.parse_program program in
 
   (* Interpret program *)
   let* structure, events =

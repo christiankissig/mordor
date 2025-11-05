@@ -4,39 +4,53 @@ open Ir
 
 type mordor_ctx = {
   (* pipeline config *)
-  opts : options;
+  options : options;
   (* inputs *)
-  litmus_name : string option;
-  litmus_file : string option;
-  litmus : string option;
+  mutable litmus_name : string option;
+  mutable litmus_file : string option;
+  mutable litmus : string option;
   (* parser *)
-  litmus_constraints : expr list option;
-  program_stmts : ir_stmt list option;
+  mutable litmus_constraints : expr list option;
+  mutable program_stmts : ir_stmt list option;
   (* event structures *)
-  event_ids : int USet.t option;
-  events : (int, event) Hashtbl.t option;
+  mutable events : (int, event) Hashtbl.t option;
+  mutable structure : symbolic_event_structure option;
   (* justifications *)
-  justifications : justification USet.t option;
+  mutable justifications : justification USet.t option;
   (* executions *)
-  executions : symbolic_execution USet.t option;
+  mutable executions : symbolic_execution USet.t option;
   (* futures *)
-  futures : future USet.t option;
+  mutable futures : future USet.t option;
   (* visualisation *)
-  output : string option;
+  mutable output : string option;
+  (* verification results could be added here *)
+  mutable valid : bool option;
+  mutable undefined_beahviour : bool option;
 }
 
-let make_context opts =
+let make_context options =
   {
-    opts;
+    options;
     litmus_name = None;
     litmus_file = None;
     litmus = None;
     litmus_constraints = None;
     program_stmts = None;
-    event_ids = None;
     events = None;
+    structure = None;
     justifications = None;
     executions = None;
     futures = None;
     output = None;
+    valid = None;
+    undefined_beahviour = None;
   }
+
+type result = {
+  ast : expr list; (* Simplified AST *)
+  structure : symbolic_event_structure;
+  events : (int, event) Hashtbl.t;
+  executions : symbolic_execution list;
+  valid : bool;
+  ub : bool; (* undefined behavior *)
+}
