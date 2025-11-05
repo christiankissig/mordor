@@ -103,6 +103,40 @@ let lifted_clear cache =
   USet.clear cache.t |> ignore;
   USet.clear cache.to_ |> ignore
 
+(* calculate pre-justifications for write events *)
+let pre_justifications events e_set =
+  let write_events = Events.filter_events events e_set Write in
+    USet.map
+      (fun w ->
+        try
+          let event = Hashtbl.find events w in
+            {
+              p = [];
+              d =
+                USet.flatten
+                  (USet.map
+                     (fun (e_opt : expr option) : string uset ->
+                       match e_opt with
+                       | Some e -> USet.of_list (Expr.get_symbols e)
+                       | None -> USet.create ()
+                     )
+                     (USet.of_list
+                        [
+                          event.loc;
+                          Option.map Expr.of_value event.rval;
+                          event.wval;
+                        ]
+                     )
+                  );
+              fwd = USet.create ();
+              we = USet.create ();
+              w = event;
+              op = ("init", None, None);
+            }
+        with Not_found -> failwith "Event not found"
+      )
+      write_events
+
 let filter elab_ctx (justs : justification uset) =
   Logs.debug (fun m -> m "Filtering %d justifications..." (USet.size justs));
 

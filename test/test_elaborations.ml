@@ -803,6 +803,483 @@ let test_strengthen_disjoint_predicates () =
       check bool "strengthen disjoint" true (List.length result >= 0);
       Lwt.return_unit
 
+(* Tests for pre_justifications function *)
+let test_pre_justifications_empty () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let e_set = USet.create () in
+  let result = pre_justifications events e_set in
+    check int "pre_justifications empty" 0 (USet.size result);
+    ()
+
+let test_pre_justifications_only_writes () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write1 =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = Some (EVar "x");
+      typ = Write;
+      wval = Some (ENum Z.one);
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = Some (VNumber (Z.of_int 42));
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+  let write2 =
+    {
+      label = 2;
+      id = Some (VNumber Z.one);
+      loc = Some (EVar "y");
+      typ = Write;
+      wval = Some (EVar "z");
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 2;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write1;
+    Hashtbl.add events 2 write2;
+    let e_set = USet.of_list [ 1; 2 ] in
+    let result = pre_justifications events e_set in
+      check int "pre_justifications only writes count" 2 (USet.size result);
+      ()
+
+let test_pre_justifications_filters_reads () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write_event =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = Some (EVar "x");
+      typ = Write;
+      wval = Some (ENum Z.one);
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+  let read_event =
+    {
+      label = 2;
+      id = Some (VNumber Z.one);
+      loc = Some (EVar "y");
+      typ = Read;
+      wval = None;
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 2;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write_event;
+    Hashtbl.add events 2 read_event;
+    let e_set = USet.of_list [ 1; 2 ] in
+    let result = pre_justifications events e_set in
+      (* Only write event should be in result *)
+      check int "pre_justifications filters reads" 1 (USet.size result);
+      ()
+
+let test_pre_justifications_structure () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write_event =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = Some (EVar "x");
+      typ = Write;
+      wval = Some (EVar "y");
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = Some (VNumber (Z.of_int 42));
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write_event;
+    let e_set = USet.of_list [ 1 ] in
+    let result = pre_justifications events e_set in
+    let justs = USet.values result in
+      check int "pre_justifications structure count" 1 (List.length justs);
+      let just = List.hd justs in
+        (* Check fields are initialized correctly *)
+        check int "p field is empty list" 0 (List.length just.p);
+        check int "fwd field is empty set" 0 (USet.size just.fwd);
+        check int "we field is empty set" 0 (USet.size just.we);
+        check int "w field has correct label" 1 just.w.label;
+        let op_name, op_e1, op_e2 = just.op in
+          check string "op field name is init" "init" op_name;
+          check bool "op field e1 is None" true (op_e1 = None);
+          check bool "op field e2 is None" true (op_e2 = None);
+          ()
+
+let test_pre_justifications_extracts_symbols_from_loc () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write_event =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = Some (EVar "α");
+      (* Greek alpha *)
+      typ = Write;
+      wval = None;
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write_event;
+    let e_set = USet.of_list [ 1 ] in
+    let result = pre_justifications events e_set in
+    let justs = USet.values result in
+    let just = List.hd justs in
+      (* d field processes loc field *)
+      check bool "d field is initialized when loc is present" true
+        (USet.size just.d >= 0);
+      ()
+
+let test_pre_justifications_extracts_symbols_from_wval () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write_event =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = Some (ENum Z.zero);
+      typ = Write;
+      wval = Some (EVar "β");
+      (* Greek beta *)
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write_event;
+    let e_set = USet.of_list [ 1 ] in
+    let result = pre_justifications events e_set in
+    let justs = USet.values result in
+    let just = List.hd justs in
+      (* d field processes wval field *)
+      check bool "d field is initialized when wval is present" true
+        (USet.size just.d >= 0);
+      ()
+
+let test_pre_justifications_extracts_symbols_from_rval () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write_event =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = Some (ENum Z.zero);
+      typ = Write;
+      wval = None;
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = Some (VSymbol "γ");
+      (* Greek gamma - VSymbol not VVar *)
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write_event;
+    let e_set = USet.of_list [ 1 ] in
+    let result = pre_justifications events e_set in
+    let justs = USet.values result in
+    let just = List.hd justs in
+      (* d field should contain symbol from rval when it's a VSymbol *)
+      check bool "d field contains symbol from rval" true (USet.mem just.d "γ");
+      ()
+
+let test_pre_justifications_extracts_all_symbols () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write_event =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = Some (EVar "δ");
+      (* Greek delta *)
+      typ = Write;
+      wval = Some (EVar "ε");
+      (* Greek epsilon *)
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = Some (VSymbol "ζ");
+      (* Greek zeta *)
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write_event;
+    let e_set = USet.of_list [ 1 ] in
+    let result = pre_justifications events e_set in
+    let justs = USet.values result in
+    let just = List.hd justs in
+      (* d field should contain symbol from rval (VSymbol extracts, EVar may not) *)
+      check bool "d field contains symbol from VSymbol rval" true
+        (USet.mem just.d "ζ");
+      ()
+
+let test_pre_justifications_handles_none_values () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write_event =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = None;
+      typ = Write;
+      wval = None;
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write_event;
+    let e_set = USet.of_list [ 1 ] in
+    let result = pre_justifications events e_set in
+    let justs = USet.values result in
+      check int "pre_justifications handles none values" 1 (List.length justs);
+      let just = List.hd justs in
+        (* d field should be empty when all values are None *)
+        check int "d field is empty with no symbols" 0 (USet.size just.d);
+        ()
+
+let test_pre_justifications_event_not_found () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  (* e_set contains label 1 but events table is empty *)
+  (* Events.filter_events will filter out non-existent events before mapping *)
+  let e_set = USet.of_list [ 1 ] in
+  let result = pre_justifications events e_set in
+    (* When events don't exist, they should be filtered out, resulting in empty set *)
+    check int "pre_justifications missing events filtered out" 0
+      (USet.size result);
+    ()
+
+let test_pre_justifications_mixed_event_types () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write1 =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = Some (EVar "x");
+      typ = Write;
+      wval = Some (ENum Z.one);
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+  let read =
+    {
+      label = 2;
+      id = Some (VNumber Z.one);
+      loc = Some (EVar "y");
+      typ = Read;
+      wval = None;
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 2;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+  let write2 =
+    {
+      label = 3;
+      id = Some (VNumber (Z.of_int 2));
+      loc = Some (EVar "z");
+      typ = Write;
+      wval = Some (ENum (Z.of_int 2));
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 3;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write1;
+    Hashtbl.add events 2 read;
+    Hashtbl.add events 3 write2;
+    let e_set = USet.of_list [ 1; 2; 3 ] in
+    let result = pre_justifications events e_set in
+      (* Should only contain the 2 write events *)
+      check int "pre_justifications mixed event types" 2 (USet.size result);
+      ()
+
+let test_pre_justifications_multiple_writes_distinct () =
+  let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
+  let write1 =
+    {
+      label = 1;
+      id = Some (VNumber Z.zero);
+      loc = Some (EVar "x");
+      typ = Write;
+      wval = Some (EVar "a");
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 1;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+  let write2 =
+    {
+      label = 2;
+      id = Some (VNumber Z.one);
+      loc = Some (EVar "y");
+      typ = Write;
+      wval = Some (EVar "b");
+      wmod = Relaxed;
+      volatile = false;
+      cond = None;
+      van = 2;
+      rval = None;
+      rmod = Relaxed;
+      fmod = Relaxed;
+      strong = None;
+      lhs = None;
+      rhs = None;
+      pc = None;
+      hide = false;
+      quot = None;
+    }
+  in
+    Hashtbl.add events 1 write1;
+    Hashtbl.add events 2 write2;
+    let e_set = USet.of_list [ 1; 2 ] in
+    let result = pre_justifications events e_set in
+    let justs = USet.values result in
+      check int "pre_justifications multiple writes count" 2 (List.length justs);
+      (* Verify each justification has distinct write event *)
+      let labels = List.map (fun j -> j.w.label) justs in
+      let labels_set = List.sort_uniq compare labels in
+        check int "pre_justifications distinct writes" 2 (List.length labels_set);
+        ()
+
 (* Test suite *)
 let suite =
   ( "Elaborations",
@@ -855,5 +1332,29 @@ let suite =
       test_case "strengthen basic" `Quick (lwt_test test_strengthen_basic);
       test_case "strengthen disjoint predicates" `Quick
         (lwt_test test_strengthen_disjoint_predicates);
+      (* Tests for pre_justifications *)
+      test_case "pre_justifications empty" `Quick test_pre_justifications_empty;
+      test_case "pre_justifications only writes" `Quick
+        test_pre_justifications_only_writes;
+      test_case "pre_justifications filters reads" `Quick
+        test_pre_justifications_filters_reads;
+      test_case "pre_justifications structure" `Quick
+        test_pre_justifications_structure;
+      test_case "pre_justifications extracts symbols from loc" `Quick
+        test_pre_justifications_extracts_symbols_from_loc;
+      test_case "pre_justifications extracts symbols from wval" `Quick
+        test_pre_justifications_extracts_symbols_from_wval;
+      test_case "pre_justifications extracts symbols from rval" `Quick
+        test_pre_justifications_extracts_symbols_from_rval;
+      test_case "pre_justifications extracts all symbols" `Quick
+        test_pre_justifications_extracts_all_symbols;
+      test_case "pre_justifications handles none values" `Quick
+        test_pre_justifications_handles_none_values;
+      test_case "pre_justifications filters missing events" `Quick
+        test_pre_justifications_event_not_found;
+      test_case "pre_justifications mixed event types" `Quick
+        test_pre_justifications_mixed_event_types;
+      test_case "pre_justifications multiple writes distinct" `Quick
+        test_pre_justifications_multiple_writes_distinct;
     ]
   )

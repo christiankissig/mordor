@@ -107,38 +107,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   in
 
   (* Initialize justifications for writes *)
-  let pre_justs =
-    USet.map
-      (fun w ->
-        try
-          let event = Hashtbl.find events w in
-            {
-              p = [];
-              d =
-                USet.flatten
-                  (USet.map
-                     (fun (e_opt : expr option) : string uset ->
-                       match e_opt with
-                       | Some e -> USet.of_list (Expr.get_symbols e)
-                       | None -> USet.create ()
-                     )
-                     (USet.of_list
-                        [
-                          event.loc;
-                          Option.map Expr.of_value event.rval;
-                          event.wval;
-                        ]
-                     )
-                  );
-              fwd = USet.create ();
-              we = USet.create ();
-              w = event;
-              op = ("init", None, None);
-            }
-        with Not_found -> failwith "Event not found"
-      )
-      write_events
-  in
+  let pre_justs = Elaborations.pre_justifications events e_set in
 
   Logs.debug (fun m ->
       m "Pre-justifications for event\n\t%s"
