@@ -847,8 +847,9 @@ module TestOrigin = struct
 
       let read_events = USet.singleton 1 in
       let malloc_events = USet.create () in
+      let all_events = USet.union read_events malloc_events in
 
-      let orig = origin events read_events malloc_events "α" in
+      let orig = origin events all_events "α" in
 
       ( match orig with
       | Some label -> check int "origin_read_label" 1 label
@@ -863,8 +864,9 @@ module TestOrigin = struct
 
       let read_events = USet.create () in
       let malloc_events = USet.singleton 1 in
+      let all_events = USet.union read_events malloc_events in
 
-      let orig = origin events read_events malloc_events "π" in
+      let orig = origin events all_events "π" in
 
       ( match orig with
       | Some label -> check int "origin_alloc_label" 1 label
@@ -876,8 +878,9 @@ module TestOrigin = struct
     let events = Hashtbl.create 10 in
     let read_events = USet.create () in
     let malloc_events = USet.create () in
+    let all_events = USet.union read_events malloc_events in
 
-    let orig = origin events read_events malloc_events "ξ" in
+    let orig = origin events all_events "ξ" in
 
     check bool "origin_not_found" true (orig = None);
     Printf.printf "PASS: Origin function returns None for unknown symbol\n"

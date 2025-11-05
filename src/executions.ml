@@ -38,7 +38,10 @@ let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
   EBinOp (loc1, "!=", loc2)
 
-let origin events read_events malloc_events (s : string) =
+let origin (events : (int, event) Hashtbl.t) (e_set : int uset) (s : string) =
+  let read_events = filter_events events e_set Read in
+  let malloc_events = filter_events events e_set Malloc in
+
   (* Try to find in reads *)
   let in_reads =
     USet.filter
@@ -544,7 +547,7 @@ and create_freeze events (structure : symbolic_event_structure) path j_list
             (fun sym ->
               let malloc_events = USet.create () in
                 (* TODO *)
-                match origin events read_events malloc_events sym with
+                match origin events structure.e sym with
                 | Some orig -> [ (orig, just.w.label) ]
                 | None -> []
             )

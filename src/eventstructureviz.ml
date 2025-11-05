@@ -15,10 +15,12 @@ module EventStructureViz = struct
     | Write -> "W"
     | RMW -> "RMW"
     | Fence -> "F"
-    | Lock -> "Lock"
-    | Unlock -> "Unlock"
-    | Init -> "Init"
-    | _ -> "Event"
+    | Lock -> "L"
+    | Unlock -> "U"
+    | Init -> "I"
+    | Malloc -> "A"
+    | Free -> "D"
+    | _ -> "E"
 
   (** Vertex type with event information *)
   module Vertex = struct
@@ -202,27 +204,24 @@ module EventStructureViz = struct
 
       (* Build label *)
       let label_lines =
-        [ Printf.sprintf "E%d: %s" v.V.id (event_type_to_string evt.typ) ]
+        [ Printf.sprintf "e%d: %s" v.V.id (event_type_to_string evt.typ) ]
       in
 
       let label_lines =
         match evt.loc with
-        | Some loc ->
-            label_lines @ [ Printf.sprintf "loc: %s" (Expr.to_string loc) ]
+        | Some loc -> label_lines @ [ Expr.to_string loc ]
         | None -> label_lines
       in
 
       let label_lines =
         match evt.rval with
-        | Some rval ->
-            label_lines @ [ Printf.sprintf "rval: %s" (Value.to_string rval) ]
+        | Some rval -> label_lines @ [ Value.to_string rval ]
         | None -> label_lines
       in
 
       let label_lines =
         match evt.wval with
-        | Some wval ->
-            label_lines @ [ Printf.sprintf "wval: %s" (Expr.to_string wval) ]
+        | Some wval -> label_lines @ [ Expr.to_string wval ]
         | None -> label_lines
       in
 
@@ -233,7 +232,7 @@ module EventStructureViz = struct
             v.V.constraints
       in
 
-      let label = String.concat "\\n" label_lines in
+      let label = String.concat " " label_lines in
 
       (* Special styling for root node *)
       if v.V.id = 0 then

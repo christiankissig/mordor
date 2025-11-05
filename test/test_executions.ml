@@ -89,8 +89,9 @@ let test_origin_from_reads () =
 
     let read_events = USet.of_list [ 2; 4 ] in
     let malloc_events = USet.create () in
+    let all_events = USet.union read_events malloc_events in
 
-    let result = origin events read_events malloc_events "s1" in
+    let result = origin events all_events "s1" in
       match result with
       | Some e -> check int "should find event 2" 2 e
       | None -> fail "Expected to find origin event"
@@ -102,8 +103,9 @@ let test_origin_from_mallocs () =
 
     let read_events = USet.create () in
     let malloc_events = USet.of_list [ 5 ] in
+    let all_events = USet.union read_events malloc_events in
 
-    let result = origin events read_events malloc_events "s2" in
+    let result = origin events all_events "s2" in
       match result with
       | Some e -> check int "should find event 5" 5 e
       | None -> fail "Expected to find origin event"
@@ -112,8 +114,9 @@ let test_origin_not_found () =
   let events = create_test_events () in
   let read_events = USet.of_list [ 2; 4 ] in
   let malloc_events = USet.create () in
+  let all_events = USet.union read_events malloc_events in
 
-  let result = origin events read_events malloc_events "nonexistent" in
+  let result = origin events all_events "nonexistent" in
     check (option int) "should not find origin" None result
 
 (** Test Path Generation *)
@@ -391,8 +394,9 @@ let test_origin_with_multiple_matches () =
 
       let read_events = USet.of_list [ 2; 4 ] in
       let malloc_events = USet.create () in
+      let all_events = USet.union read_events malloc_events in
 
-      let result = origin events read_events malloc_events "s1" in
+      let result = origin events all_events "s1" in
         (* Should return one of the matching events *)
         match result with
         | Some e -> check bool "should find an event" true (e = 2 || e = 4)

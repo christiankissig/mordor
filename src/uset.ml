@@ -17,6 +17,7 @@ module USet : sig
   val clear : 'a t -> 'a t
   val clone : 'a t -> 'a t
   val union : 'a t -> 'a t -> 'a t
+  val flatten : 'a t t -> 'a t
   val inplace_union : 'a t -> 'a t -> 'a t
   val intersection : 'a t -> 'a t -> 'a t
   val set_minus : 'a t -> 'a t -> 'a t
@@ -97,6 +98,14 @@ end = struct
 
   (** Union - creates new set *)
   let union s1 s2 = Hash_set.union s1 s2
+
+  (** Flatten a set of sets into a single set *)
+  let flatten ss =
+    let result = Hash_set.Poly.create () in
+      Hash_set.iter ss ~f:(fun s ->
+          Hash_set.iter s ~f:(fun x -> Hash_set.add result x)
+      );
+      result
 
   (** In-place union (mutates s1 and returns it) *)
   let inplace_union s1 s2 =

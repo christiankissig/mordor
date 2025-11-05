@@ -605,7 +605,7 @@ let conflict (elab_ctx : context) events =
   USet.fold (fun acc s -> USet.union acc s) branch_results (USet.create ())
 
 (** Helper: Parse dependency symbol to get origin event label *)
-let origin s =
+let syntactic_origin s =
   (* Dependency symbols are typically formatted as "symbol@label" *)
   try
     let parts = String.split_on_char '@' s in
@@ -964,7 +964,8 @@ let lift elab_ctx justs =
                                           (fun s_2 ->
                                             relabel_equivalent elab_ctx con
                                               statex p_1 p_2 relabelPairs _pred
-                                              (origin s_1) (origin s_2)
+                                              (syntactic_origin s_1)
+                                              (syntactic_origin s_2)
                                           )
                                           just_2.d
                                       )

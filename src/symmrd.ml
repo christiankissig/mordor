@@ -107,14 +107,29 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   in
 
   (* Initialize justifications for writes *)
-  let init_justs =
+  let pre_justs =
     USet.map
       (fun w ->
         try
           let event = Hashtbl.find events w in
             {
               p = [];
-              d = USet.create ();
+              d =
+                USet.flatten
+                  (USet.map
+                     (fun (e_opt : expr option) : string uset ->
+                       match e_opt with
+                       | Some e -> USet.of_list (Expr.get_symbols e)
+                       | None -> USet.create ()
+                     )
+                     (USet.of_list
+                        [
+                          event.loc;
+                          Option.map Expr.of_value event.rval;
+                          event.wval;
+                        ]
+                     )
+                  );
               fwd = USet.create ();
               we = USet.create ();
               w = event;
@@ -126,9 +141,9 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   in
 
   Logs.debug (fun m ->
-      m "Initial justification for event\n\t%s"
+      m "Pre-justifications for event\n\t%s"
         (String.concat "\n\t"
-           (List.map Justifications.to_string (USet.values init_justs))
+           (List.map Justifications.to_string (USet.values pre_justs))
         )
   );
 
@@ -199,9 +214,9 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
                   )
       in
 
-      let* filtered_init = Elaborations.filter elab_ctx init_justs in
+      let* filtered_init = Elaborations.filter elab_ctx pre_justs in
         fixed_point filtered_init
-    else Lwt.return init_justs
+    else Lwt.return pre_justs
   in
 
   Logs.debug (fun m ->
