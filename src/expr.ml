@@ -9,6 +9,8 @@ let is_symbol s =
 
 (** Mutual recursion for Value and Expr *)
 module rec Value : sig
+  type t = value_type
+
   val number : Z.t -> value_type
   val symbol : string -> value_type
   val var : string -> value_type
@@ -19,6 +21,8 @@ module rec Value : sig
   val subst : value_type -> value_type -> value_type -> value_type
   val is_number : value_type -> bool
 end = struct
+  type t = value_type
+
   let number n = VNumber n
   let symbol s = VSymbol s
   let var s = VVar s

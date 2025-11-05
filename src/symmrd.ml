@@ -1,11 +1,12 @@
 (** Mordor - Main dependency calculation algorithm *)
 
-open Lwt.Syntax
-open Executions
+open Context
 open Events
-open Types
+open Executions
 open Expr
 open Ir
+open Lwt.Syntax
+open Types
 open Uset
 
 type result = {
@@ -297,6 +298,21 @@ let parse_program program =
   | e ->
       Logs.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
       ([], [])
+
+let step_parse_program (ctx : mordor_ctx) : mordor_ctx Lwt.t =
+  let* () = Lwt.return_unit in
+    match ctx.litmus with
+    | Some program ->
+        let constraints, statements = parse_program program in
+          Lwt.return
+            {
+              ctx with
+              litmus_constraints = Some constraints;
+              program_stmts = Some statements;
+            }
+    | None ->
+        Logs.err (fun m -> m "No program provided for parsing.");
+        Lwt.return ctx
 
 (** Main entry point *)
 let create_symbolic_event_structure program (opts : options) =

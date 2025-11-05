@@ -1,12 +1,12 @@
 (** Advanced Unit Tests for Symbolic MRD Testing complex elaboration sequences
     and integration scenarios *)
-open Uset
-
-open Types
-open USet
 open Alcotest
-open Lwt.Syntax
+
+open Events
 open Expr
+open Lwt.Syntax
+open Types
+open Uset
 
 module TestUtils = struct
   let make_symbol name = VSymbol name
@@ -32,12 +32,12 @@ module TestExample9_1 = struct
     let e2_initial =
       {
         p = [];
-        d = of_list [ "r1" ];
-        fwd = create ();
-        we = create ();
+        d = USet.of_list [ "r1" ];
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 2) with
+            (Event.create Write 2 ()) with
             id = Some (make_var "y");
             loc = Some (Expr.of_value (make_var "y"));
             wval = Some (EBinOp (ENum Z.one, "/", EUnOp ("!", ESymbol "r1")));
@@ -50,12 +50,12 @@ module TestExample9_1 = struct
     let e3_initial =
       {
         p = [];
-        d = of_list [ "r1" ];
-        fwd = create ();
-        we = create ();
+        d = USet.of_list [ "r1" ];
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 3) with
+            (Event.create Write 3 ()) with
             id = Some (make_var "z");
             loc = Some (Expr.of_value (make_var "z"));
             wval = Some (ESymbol "r1");
@@ -70,12 +70,12 @@ module TestExample9_1 = struct
     let e2_optimized =
       {
         p = [];
-        d = create ();
-        fwd = create ();
-        we = create ();
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 2) with
+            (Event.create Write 2 ()) with
             id = Some (make_var "y");
             loc = Some (Expr.of_value (make_var "y"));
             wval = Some (ENum Z.one);
@@ -88,12 +88,12 @@ module TestExample9_1 = struct
     let e3_optimized =
       {
         p = [];
-        d = create ();
-        fwd = create ();
-        we = create ();
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 3) with
+            (Event.create Write 3 ()) with
             id = Some (make_var "z");
             loc = Some (Expr.of_value (make_var "z"));
             wval = Some (ENum Z.zero);
@@ -103,10 +103,10 @@ module TestExample9_1 = struct
       }
     in
 
-    check bool "initial_y_depends_on_r1" true (mem e2_initial.d "r1");
-    check bool "initial_z_depends_on_r1" true (mem e3_initial.d "r1");
-    check int "optimized_y_no_deps" 0 (size e2_optimized.d);
-    check int "optimized_z_no_deps" 0 (size e3_optimized.d);
+    check bool "initial_y_depends_on_r1" true (USet.mem e2_initial.d "r1");
+    check bool "initial_z_depends_on_r1" true (USet.mem e3_initial.d "r1");
+    check int "optimized_y_no_deps" 0 (USet.size e2_optimized.d);
+    check int "optimized_z_no_deps" 0 (USet.size e3_optimized.d);
     ()
 end
 
@@ -122,12 +122,12 @@ module TestExample10_1 = struct
     let e5_write =
       {
         p = [];
-        d = of_list [ "r1" ];
-        fwd = create ();
-        we = create ();
+        d = USet.of_list [ "r1" ];
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 5) with
+            (Event.create Write 5 ()) with
             loc = Some (EBinOp (ESymbol "rp", "+", ESymbol "r1"));
             wval = Some (ENum Z.zero);
             wmod = Relaxed;
@@ -139,12 +139,12 @@ module TestExample10_1 = struct
     let e6_read =
       {
         p = [];
-        d = create ();
-        fwd = create ();
-        we = create ();
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Read 6) with
+            (Event.create Read 6 ()) with
             id = Some (VSymbol "rp");
             loc = Some (ESymbol "rp");
             rval = Some (VSymbol "r2");
@@ -155,7 +155,7 @@ module TestExample10_1 = struct
     in
 
     (* Without strengthening: must assume possible aliasing *)
-    check bool "pointer_write_depends_on_r1" true (mem e5_write.d "r1");
+    check bool "pointer_write_depends_on_r1" true (USet.mem e5_write.d "r1");
     ()
 
   let test_pointer_aliasing_strengthened () =
@@ -163,13 +163,13 @@ module TestExample10_1 = struct
     let e7_write_strengthened =
       {
         p = [ EBinOp (ESymbol "r1", "≠", ENum Z.zero) ];
-        d = of_list [ "r1" ];
+        d = USet.of_list [ "r1" ];
         (* Still depends on r1 for address *)
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 7) with
+            (Event.create Write 7 ()) with
             loc = Some (EBinOp (ESymbol "rp", "+", ESymbol "r1"));
             wval = Some (ENum Z.zero);
             wmod = Relaxed;
@@ -195,12 +195,12 @@ module TestExample12_1 = struct
     let e4_initial =
       {
         p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
-        d = of_list [ "r2" ];
-        fwd = create ();
-        we = create ();
+        d = USet.of_list [ "r2" ];
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 4) with
+            (Event.create Write 4 ()) with
             id = Some (make_var "y");
             loc = Some (Expr.of_value (make_var "y"));
             wval = Some (ESymbol "r2");
@@ -213,14 +213,14 @@ module TestExample12_1 = struct
     let e4_forwarded =
       {
         p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
-        d = of_list [ "r1" ];
+        d = USet.of_list [ "r1" ];
         (* Now depends on r1 *)
-        fwd = of_list [ (1, 2) ];
+        fwd = USet.of_list [ (1, 2) ];
         (* Forwarding edge *)
-        we = create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 4) with
+            (Event.create Write 4 ()) with
             id = Some (make_var "y");
             loc = Some (Expr.of_value (make_var "y"));
             wval = Some (ESymbol "r1");
@@ -230,10 +230,10 @@ module TestExample12_1 = struct
       }
     in
 
-    check bool "initial_depends_r2" true (mem e4_initial.d "r2");
-    check bool "initial_no_forwarding" false (mem e4_initial.fwd (1, 2));
-    check bool "forwarded_depends_r1" true (mem e4_forwarded.d "r1");
-    check bool "forwarded_has_edge" true (mem e4_forwarded.fwd (1, 2));
+    check bool "initial_depends_r2" true (USet.mem e4_initial.d "r2");
+    check bool "initial_no_forwarding" false (USet.mem e4_initial.fwd (1, 2));
+    check bool "forwarded_depends_r1" true (USet.mem e4_forwarded.d "r1");
+    check bool "forwarded_has_edge" true (USet.mem e4_forwarded.fwd (1, 2));
     ()
 end
 
@@ -257,13 +257,13 @@ module TestExample13_1 = struct
     let e4_true =
       {
         p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
-        d = of_list [ "rw1" ];
+        d = USet.of_list [ "rw1" ];
         (* Read w in true branch *)
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 4) with
+            (Event.create Write 4 ()) with
             id = Some (make_var "z");
             loc = Some (Expr.of_value (make_var "z"));
             wval = Some (ESymbol "rw1");
@@ -276,13 +276,13 @@ module TestExample13_1 = struct
     let e7_false =
       {
         p = [ EBinOp (ESymbol "r1", "≠", ENum Z.one) ];
-        d = of_list [ "rw2" ];
+        d = USet.of_list [ "rw2" ];
         (* Read w in false branch *)
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 7) with
+            (Event.create Write 7 ()) with
             id = Some (make_var "z");
             loc = Some (Expr.of_value (make_var "z"));
             wval = Some (ESymbol "rw2");
@@ -297,13 +297,13 @@ module TestExample13_1 = struct
       {
         p = [];
         (* ⊤ after lifting *)
-        d = of_list [ "rw1" ];
+        d = USet.of_list [ "rw1" ];
         (* or "rw2" - either works *)
-        fwd = create ();
-        we = create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 4) with
+            (Event.create Write 4 ()) with
             id = Some (make_var "z");
             loc = Some (Expr.of_value (make_var "z"));
             wval = Some (ESymbol "rw1");
@@ -344,12 +344,12 @@ module TestStoreStoreForwarding = struct
             EBinOp (ESymbol "r1", "=", ENum Z.one);
             EBinOp (ESymbol "r2", "=", ENum Z.zero);
           ];
-        d = create ();
-        fwd = create ();
-        we = create ();
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 6) with
+            (Event.create Write 6 ()) with
             id = Some (make_var "y");
             loc = Some (Expr.of_value (make_var "y"));
             wval = Some (ENum Z.one);
@@ -367,13 +367,13 @@ module TestStoreStoreForwarding = struct
             EBinOp (ESymbol "r1", "=", ENum Z.one);
             EBinOp (ESymbol "r2", "=", ENum Z.zero);
           ];
-        d = create ();
-        fwd = create ();
-        we = of_list [ (4, 2) ];
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.of_list [ (4, 2) ];
         (* Write 4 elides write 2 *)
         w =
           {
-            (make_event Write 6) with
+            (Event.create Write 6 ()) with
             id = Some (make_var "y");
             loc = Some (Expr.of_value (make_var "y"));
             wval = Some (ENum Z.one);
@@ -383,8 +383,8 @@ module TestStoreStoreForwarding = struct
       }
     in
 
-    check int "no_initial_elision" 0 (size e6_initial_true.we);
-    check bool "forwarded_has_elision" true (mem e6_forwarded.we (4, 2));
+    check int "no_initial_elision" 0 (USet.size e6_initial_true.we);
+    check bool "forwarded_has_elision" true (USet.mem e6_forwarded.we (4, 2));
     ()
 end
 
@@ -412,17 +412,17 @@ module TestElaborationSequences = struct
 
   let test_fwd_lift_sequence () =
     (* Forward r1->r2, then lift equivalent writes *)
-    let fwd_edges = of_list [ (1, 2) ] in
+    let fwd_edges = USet.of_list [ (1, 2) ] in
 
     let e3_after_fwd =
       {
         p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
-        d = of_list [ "r1" ];
+        d = USet.of_list [ "r1" ];
         fwd = fwd_edges;
-        we = create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 3) with
+            (Event.create Write 3 ()) with
             id = Some (make_var "y");
             loc = Some (Expr.of_value (make_var "y"));
             wval = Some (ESymbol "r1");
@@ -435,12 +435,12 @@ module TestElaborationSequences = struct
     let e5_after_fwd =
       {
         p = [ EBinOp (ESymbol "r1", "≠", ENum Z.one) ];
-        d = create ();
+        d = USet.create ();
         fwd = fwd_edges;
-        we = create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 5) with
+            (Event.create Write 5 ()) with
             id = Some (make_var "y");
             loc = Some (Expr.of_value (make_var "y"));
             wval = Some (ENum Z.one);
@@ -455,12 +455,12 @@ module TestElaborationSequences = struct
     let e3_after_lift =
       {
         p = [];
-        d = create ();
+        d = USet.create ();
         fwd = fwd_edges;
-        we = create ();
+        we = USet.create ();
         w =
           {
-            (make_event Write 3) with
+            (Event.create Write 3 ()) with
             id = Some (make_var "y");
             loc = Some (Expr.of_value (make_var "y"));
             wval = Some (ENum Z.one);
@@ -470,7 +470,7 @@ module TestElaborationSequences = struct
       }
     in
 
-    check bool "fwd_has_edges" true (size e3_after_fwd.fwd > 0);
+    check bool "fwd_has_edges" true (USet.size e3_after_fwd.fwd > 0);
     check int "lift_removes_pred" 0 (List.length e3_after_lift.p);
     Lwt.return_unit
 end
@@ -487,14 +487,14 @@ module TestPreservedProgramOrder = struct
     *)
 
     (* Test synchronization ordering *)
-    let e1 = { (make_event Read 1) with rmod = Acquire } in
-    let e2 = { (make_event Write 2) with wmod = Relaxed } in
+    let e1 = { (Event.create Read 1 ()) with rmod = Acquire } in
+    let e2 = { (Event.create Write 2 ()) with wmod = Relaxed } in
 
     (* (1, 2) should be in ≤ because e1 is acquire *)
     check bool "acq_read_orders_following" true (e1.rmod = Acquire);
 
-    let e3 = { (make_event Write 3) with wmod = Release } in
-    let e4 = { (make_event Read 4) with rmod = Relaxed } in
+    let e3 = { (Event.create Write 3 ()) with wmod = Release } in
+    let e4 = { (Event.create Read 4 ()) with rmod = Relaxed } in
 
     (* (3, 4) should be in ≤ because e3 is release *)
     check bool "rel_write_orders_following" true (e3.wmod = Release);
@@ -504,10 +504,14 @@ module TestPreservedProgramOrder = struct
   let test_ppo_same_location () =
     (* Same location accesses are ordered by ≤_alias *)
     let e1 =
-      { (make_event Write 1) with id = Some (make_var "x"); wmod = Relaxed }
+      {
+        (Event.create Write 1 ()) with
+        id = Some (make_var "x");
+        wmod = Relaxed;
+      }
     in
     let e2 =
-      { (make_event Read 2) with id = Some (make_var "x"); rmod = Relaxed }
+      { (Event.create Read 2 ()) with id = Some (make_var "x"); rmod = Relaxed }
     in
 
     (* Under predicate ⊤, x = x, so (1,2) in ≤ *)
@@ -516,9 +520,9 @@ module TestPreservedProgramOrder = struct
 
   let test_ppo_allocation_order () =
     (* Allocation and free events are totally ordered by ≤_xco *)
-    let e1 = { (make_event Malloc 1) with rval = Some (VSymbol "π1") } in
-    let e2 = { (make_event Malloc 2) with rval = Some (VSymbol "π2") } in
-    let e3 = { (make_event Free 3) with id = Some (VSymbol "π1") } in
+    let e1 = { (Event.create Malloc 1 ()) with rval = Some (VSymbol "π1") } in
+    let e2 = { (Event.create Malloc 2 ()) with rval = Some (VSymbol "π2") } in
+    let e3 = { (Event.create Free 3 ()) with id = Some (VSymbol "π1") } in
 
     (* (1,2), (2,3), (1,3) all in ≤ *)
     check bool "alloc_events_ordered" true (e1.typ = Malloc && e2.typ = Malloc);
@@ -531,11 +535,11 @@ module TestDependencyCalculation = struct
     Printf.printf "\n=== Testing Dependency Calculation ===\n";
 
     (* dp = ⋃{j∈J} (O(j_P) ∪ O(j_D)) × {w} *)
-    let e1 = { (make_event Read 1) with rval = Some (VSymbol "α") } in
-    let e2 = { (make_event Read 2) with rval = Some (VSymbol "β") } in
+    let e1 = { (Event.create Read 1 ()) with rval = Some (VSymbol "α") } in
+    let e2 = { (Event.create Read 2 ()) with rval = Some (VSymbol "β") } in
     let e3 =
       {
-        (make_event Write 3) with
+        (Event.create Write 3 ()) with
         wval = Some (EBinOp (ESymbol "α", "+", ESymbol "β"));
       }
     in
@@ -544,9 +548,9 @@ module TestDependencyCalculation = struct
     let just =
       {
         p = [];
-        d = of_list [ "α"; "β" ];
-        fwd = create ();
-        we = create ();
+        d = USet.of_list [ "α"; "β" ];
+        fwd = USet.create ();
+        we = USet.create ();
         w = e3;
         op = ("test", None, None);
       }
@@ -554,27 +558,29 @@ module TestDependencyCalculation = struct
 
     (* Origin of α is e1, origin of β is e2 *)
     (* So dp should include (1,3) and (2,3) *)
-    check bool "just_depends_alpha" true (mem just.d "α");
-    check bool "just_depends_beta" true (mem just.d "β");
+    check bool "just_depends_alpha" true (USet.mem just.d "α");
+    check bool "just_depends_beta" true (USet.mem just.d "β");
     Printf.printf "PASS: Dependencies calculated from justification\n"
 
   let test_dp_with_control_deps () =
     (* Control dependencies from predicates *)
-    let e1 = { (make_event Read 1) with rval = Some (VSymbol "α") } in
+    let e1 = { (Event.create Read 1 ()) with rval = Some (VSymbol "α") } in
     let e2 =
       {
-        (make_event Branch 2) with
+        (Event.create Branch 2 ()) with
         cond = Some (EBinOp (ESymbol "α", "=", ENum Z.one));
       }
     in
-    let e3 = { (make_event Write 3) with wval = Some (ENum (Z.of_int 42)) } in
+    let e3 =
+      { (Event.create Write 3 ()) with wval = Some (ENum (Z.of_int 42)) }
+    in
 
     let just =
       {
         p = [ EBinOp (ESymbol "α", "=", ENum Z.one) ];
-        d = create ();
-        fwd = create ();
-        we = create ();
+        d = USet.create ();
+        fwd = USet.create ();
+        we = USet.create ();
         w = e3;
         op = ("test_ctrl", None, None);
       }

@@ -1,5 +1,6 @@
-open Uset
+open Events
 open Types
+open Uset
 
 (** Test default options *)
 let test_default_options () =
@@ -123,9 +124,9 @@ let test_zh_alpha () =
   Alcotest.(check bool) "zh_alpha is not empty" true (String.length zh_alpha > 0);
   Alcotest.(check int) "zh_alpha has expected length" 30 (String.length zh_alpha)
 
-(** Test make_event *)
+(** Test Event.create *)
 let test_make_event () =
-  let evt = make_event Read 42 in
+  let evt = Event.create Read 42 () in
     Alcotest.(check int) "event label is 42" 42 evt.label;
     Alcotest.(check int) "event van is 42" 42 evt.van;
     Alcotest.(check bool) "event id is None" true (evt.id = None);
@@ -141,9 +142,9 @@ let test_make_event () =
     Alcotest.(check bool) "event quot is None" true (evt.quot = None)
 
 let test_make_event_types () =
-  let read_evt = make_event Read 1 in
-  let write_evt = make_event Write 2 in
-  let fence_evt = make_event Fence 3 in
+  let read_evt = Event.create Read 1 () in
+  let write_evt = Event.create Write 2 () in
+  let fence_evt = Event.create Fence 3 () in
     Alcotest.(check string)
       "Read event type" "R"
       (event_type_to_string read_evt.typ);

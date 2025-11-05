@@ -1,9 +1,10 @@
-open Uset
+open Events
 open Expr
 open Interpret
 open Ir
 open Lwt.Syntax
 open Types
+open Uset
 
 (** Helper to run Lwt tests *)
 let run_lwt f () = Lwt_main.run (f ())
@@ -62,7 +63,7 @@ let test_create_events () =
 let test_add_event () =
   reset_counters ();
   let events = create_events () in
-  let evt = make_event Read 0 in
+  let evt = Event.create Read 0 () in
   let added_evt = add_event events evt in
     Alcotest.(check int) "event label assigned" 0 added_evt.label;
     Alcotest.(check int) "event van assigned" 0 added_evt.van;
@@ -73,8 +74,8 @@ let test_add_event () =
 let test_add_multiple_events () =
   reset_counters ();
   let events = create_events () in
-  let evt1 = make_event Read 0 in
-  let evt2 = make_event Write 0 in
+  let evt1 = Event.create Read 0 () in
+  let evt2 = Event.create Write 0 () in
   let _ = add_event events evt1 in
   let added_evt2 = add_event events evt2 in
     Alcotest.(check int) "second event label" 1 added_evt2.label;

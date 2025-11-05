@@ -4,40 +4,28 @@ open Uset
 open Alcotest
 open Expr
 open Types
+open Events
 
 (** Helper to create test events *)
-let make_test_event typ label = Types.make_event typ label
+let make_test_event typ label = Event.create typ label ()
 
-let make_read label id rval rmod =
-  {
-    (Types.make_event Read label) with
-    id = Some (VSymbol id);
-    loc = Some (ESymbol id);
-    rval = Some (VSymbol rval);
-    rmod;
-  }
+let make_read label (id : string) rval rmod =
+  let id_val = if is_symbol id then VSymbol id else VVar id in
+  let loc = if is_symbol id then ESymbol id else EVar id in
+    Event.create Read label ~id:id_val ~loc ~rval:(VSymbol rval) ~rmod ()
 
-let make_write label id wval wmod =
-  {
-    (Types.make_event Write label) with
-    id = Some (VSymbol id);
-    loc = Some (ESymbol id);
-    wval = Some (ESymbol wval);
-    wmod;
-  }
+let make_write label (id : string) wval wmod =
+  let id_val = if is_symbol id then VSymbol id else VVar id in
+  let loc = if is_symbol id then ESymbol id else EVar id in
+    Event.create Write label ~id:id_val ~loc ~wval:(ESymbol wval) ~wmod ()
 
-let make_fence label fmod = { (Types.make_event Fence label) with fmod }
+let make_fence label fmod = Event.create Fence label ~fmod ()
 
-let make_rmw label id rval wval rmod wmod =
-  {
-    (Types.make_event RMW label) with
-    id = Some (VSymbol id);
-    loc = Some (ESymbol id);
-    rval = Some (VSymbol rval);
-    wval = Some (ESymbol wval);
-    rmod;
-    wmod;
-  }
+let make_rmw label (id : string) rval wval rmod wmod =
+  let id_val = if is_symbol id then VSymbol id else VVar id in
+  let loc = if is_symbol id then ESymbol id else EVar id in
+    Event.create RMW label ~id:id_val ~loc ~rval:(VSymbol rval)
+      ~wval:(ESymbol wval) ~rmod ~wmod ()
 
 (** Test ModeOps *)
 let test_mode_to_string_or () =
@@ -78,24 +66,24 @@ let test_mode_ordering () =
 let test_event_predicates () =
   let cases =
     [
-      ("is_read", true, Events.is_read, Read);
-      ("not,is_read", false, Events.is_read, Write);
-      ("is_write", true, Events.is_write, Write);
-      ("is_fence", true, Events.is_fence, Fence);
-      ("is_lock", true, Events.is_lock, Lock);
-      ("is_unlock", true, Events.is_unlock, Unlock);
-      ("is_malloc", true, Events.is_malloc, Malloc);
-      ("is_free", true, Events.is_free, Free);
-      ("is_rmw", true, Events.is_rmw, RMW);
-      ("is_read_write,read", true, Events.is_read_write, Read);
-      ("is_read_write,write", true, Events.is_read_write, Write);
-      ("not,is_read_write,fence", false, Events.is_read_write, Fence);
-      ("is_mem_func,malloc", true, Events.is_mem_func, Malloc);
-      ("is_mem_func,free", true, Events.is_mem_func, Free);
-      ("is_lock_unlock,lock", true, Events.is_lock_unlock, Lock);
-      ("is_lock_unlock,unlock", true, Events.is_lock_unlock, Unlock);
-      ("is_ordering,fence", true, Events.is_ordering, Fence);
-      ("is_ordering,lock", true, Events.is_ordering, Lock);
+      ("is_read", true, Event.is_read, Read);
+      ("not,is_read", false, Event.is_read, Write);
+      ("is_write", true, Event.is_write, Write);
+      ("is_fence", true, Event.is_fence, Fence);
+      ("is_lock", true, Event.is_lock, Lock);
+      ("is_unlock", true, Event.is_unlock, Unlock);
+      ("is_malloc", true, Event.is_malloc, Malloc);
+      ("is_free", true, Event.is_free, Free);
+      ("is_rmw", true, Event.is_rmw, RMW);
+      ("is_read_write,read", true, Event.is_read_write, Read);
+      ("is_read_write,write", true, Event.is_read_write, Write);
+      ("not,is_read_write,fence", false, Event.is_read_write, Fence);
+      ("is_mem_func,malloc", true, Event.is_mem_func, Malloc);
+      ("is_mem_func,free", true, Event.is_mem_func, Free);
+      ("is_lock_unlock,lock", true, Event.is_lock_unlock, Lock);
+      ("is_lock_unlock,unlock", true, Event.is_lock_unlock, Unlock);
+      ("is_ordering,fence", true, Event.is_ordering, Fence);
+      ("is_ordering,lock", true, Event.is_ordering, Lock);
     ]
   in
 
@@ -115,47 +103,47 @@ let test_has_fields () =
   let branch_ev = make_test_event Branch 4 in
   let malloc_ev = make_test_event Malloc 5 in
 
-  check bool "read has_id" true (Events.has_id read_ev);
-  check bool "write has_id" true (Events.has_id write_ev);
-  check bool "fence not has_id" false (Events.has_id fence_ev);
+  check bool "read has_id" true (Event.has_id read_ev);
+  check bool "write has_id" true (Event.has_id write_ev);
+  check bool "fence not has_id" false (Event.has_id fence_ev);
 
-  check bool "read has_val" true (Events.has_val read_ev);
-  check bool "fence not has_val" false (Events.has_val fence_ev);
+  check bool "read has_val" true (Event.has_val read_ev);
+  check bool "fence not has_val" false (Event.has_val fence_ev);
 
-  check bool "read has_rval" true (Events.has_rval read_ev);
-  check bool "write not has_rval" false (Events.has_rval write_ev);
+  check bool "read has_rval" true (Event.has_rval read_ev);
+  check bool "write not has_rval" false (Event.has_rval write_ev);
 
-  check bool "write has_wval" true (Events.has_wval write_ev);
-  check bool "read not has_wval" false (Events.has_wval read_ev);
+  check bool "write has_wval" true (Event.has_wval write_ev);
+  check bool "read not has_wval" false (Event.has_wval read_ev);
 
-  check bool "branch has_cond" true (Events.has_cond branch_ev);
-  check bool "read not has_cond" false (Events.has_cond read_ev);
+  check bool "branch has_cond" true (Event.has_cond branch_ev);
+  check bool "read not has_cond" false (Event.has_cond read_ev);
 
-  check bool "malloc has_id" true (Events.has_id malloc_ev);
-  check bool "malloc has_rval" true (Events.has_rval malloc_ev);
-  check bool "malloc has_wval" true (Events.has_wval malloc_ev)
+  check bool "malloc has_id" true (Event.has_id malloc_ev);
+  check bool "malloc has_rval" true (Event.has_rval malloc_ev);
+  check bool "malloc has_wval" true (Event.has_wval malloc_ev)
 
 let test_get_fields () =
   let read_ev = make_read 1 "x" "v1" Relaxed in
   let write_ev = make_write 2 "y" "v2" Release in
 
   check bool "get_id read" true
-    ( match Events.get_id read_ev with
-    | VSymbol "x" -> true
+    ( match Event.get_id read_ev with
+    | VVar "x" -> true
     | _ -> false
     );
   check bool "get_rval read" true
-    ( match Events.get_rval read_ev with
+    ( match Event.get_rval read_ev with
     | VSymbol "v1" -> true
     | _ -> false
     );
   check bool "get_id write" true
-    ( match Events.get_id write_ev with
-    | VSymbol "y" -> true
+    ( match Event.get_id write_ev with
+    | VVar "y" -> true
     | _ -> false
     );
   check bool "get_wval write" true
-    ( match Events.get_wval write_ev with
+    ( match Event.get_wval write_ev with
     | ESymbol "v2" -> true
     | _ -> false
     );
@@ -163,7 +151,7 @@ let test_get_fields () =
   let fence_ev = make_test_event Fence 3 in
     check_raises "get_id on fence fails"
       (Failure "Event 3 type does not support id") (fun () ->
-        Events.get_id fence_ev |> ignore
+        Event.get_id fence_ev |> ignore
     )
 
 let test_event_order () =
@@ -171,14 +159,13 @@ let test_event_order () =
   let write_ev = make_write 2 "y" "v" Release in
   let fence_ev = make_fence 3 SC in
 
-  check bool "read order is acquire" true (Events.event_order read_ev = Acquire);
-  check bool "write order is release" true
-    (Events.event_order write_ev = Release);
-  check bool "fence order is sc" true (Events.event_order fence_ev = SC)
+  check bool "read order is acquire" true (Event.event_order read_ev = Acquire);
+  check bool "write order is release" true (Event.event_order write_ev = Release);
+  check bool "fence order is sc" true (Event.event_order fence_ev = SC)
 
 (** Test event creation *)
 let test_event_creation () =
-  let e = Types.make_event Read 1 in
+  let e = Event.create Read 1 () in
     check int "label is 1" 1 e.label;
     check int "van equals label" 1 e.van;
     check bool "type is read" true (e.typ = Read);
@@ -186,22 +173,14 @@ let test_event_creation () =
     check bool "default rmod is relaxed" true (e.rmod = Relaxed)
 
 let test_fence_creation () =
-  let e =
-    Events.make_event_with Fence 1 ~id:None ~rval:None ~wval:None ~rmod:None
-      ~wmod:None ~fmod:(Some SC) ~cond:None ~volatile:false ~strong:None
-      ~lhs:None ~rhs:None ~pc:None
-  in
+  let e = Event.create Fence 1 ~fmod:SC ~volatile:false () in
     check bool "fence rmod adjusted" true (e.rmod = Acquire);
     check bool "fence wmod adjusted" true (e.wmod = Release);
     check bool "fence fmod is sc" true (e.fmod = SC)
 
 let test_malloc_creation () =
   let rval = VSymbol "α" in
-  let e =
-    Events.make_event_with Malloc 1 ~id:None ~rval:(Some rval)
-      ~wval:(Some (ENum Z.one)) ~rmod:None ~wmod:None ~fmod:None ~cond:None
-      ~volatile:false ~strong:None ~lhs:None ~rhs:None ~pc:None
-  in
+  let e = Event.create Malloc 1 ~rval ~wval:(ENum Z.one) ~volatile:false () in
     check bool "malloc id set to rval" true
       ( match e.id with
       | Some (VSymbol "α") -> true
@@ -210,14 +189,10 @@ let test_malloc_creation () =
 
 let test_clone_event () =
   let e1 = make_read 1 "x" "v" Acquire in
-    Printf.printf "Original event: %s\n" (Events.event_to_string e1);
-    let e2 = Events.clone_event e1 in
-      Printf.printf "Cloned event: %s\n" (Events.event_to_string e2);
-      let result = Events.event_equal e1 e2 in
-        Printf.printf "Events equal: %b\n" result;
-        flush stdout;
-        check bool "cloned event equals original" true (Events.event_equal e1 e2);
-        check bool "cloned event same label" true (e1.label = e2.label)
+  let e2 = Event.clone e1 in
+  let result = Event.equal e1 e2 in
+    check bool "cloned event equals original" true (Event.equal e1 e2);
+    check bool "cloned event same label" true (e1.label = e2.label)
 
 (** Test event to string *)
 let test_event_to_string () =
@@ -226,18 +201,17 @@ let test_event_to_string () =
   let write_rel = make_write 3 "y" "v3" Release in
   let fence_sc = make_fence 4 SC in
 
-  check string "read relaxed" "1: R x v1" (Events.event_to_string read_rlx);
-  check string "read acquire" "2: Racq x v2" (Events.event_to_string read_acq);
-  check string "write release" "3: Wrel y v3" (Events.event_to_string write_rel);
-  check string "fence sc" "4: Fsc" (Events.event_to_string fence_sc);
+  check string "read relaxed" "1: R x v1" (Event.to_string read_rlx);
+  check string "read acquire" "2: Racq x v2" (Event.to_string read_acq);
+  check string "write release" "3: Wrel y v3" (Event.to_string write_rel);
+  check string "fence sc" "4: Fsc" (Event.to_string fence_sc);
 
   let volatile_read = { read_rlx with volatile = true } in
-    check string "volatile read" "1: vR x v1"
-      (Events.event_to_string volatile_read)
+    check string "volatile read" "1: vR x v1" (Event.to_string volatile_read)
 
 let test_rmw_to_string () =
   let rmw = make_rmw 1 "x" "v1" "v2" Acquire Release in
-  let s = Events.event_to_string rmw in
+  let s = Event.to_string rmw in
     check bool "rmw contains id" true (String.contains s 'x');
     check bool "rmw contains R" true (String.contains s 'R');
     check bool "rmw contains W" true (String.contains s 'W')
@@ -248,20 +222,20 @@ let test_event_equality () =
   let e3 = make_read 1 "y" "v" Relaxed in
   let e4 = make_read 2 "x" "v" Relaxed in
 
-  check bool "equal events" true (Events.event_equal e1 e2);
-  check bool "different id" false (Events.event_equal e1 e3);
-  check bool "different label" false (Events.event_equal e1 e4)
+  check bool "equal events" true (Event.equal e1 e2);
+  check bool "different id" false (Event.equal e1 e3);
+  check bool "different label" false (Event.equal e1 e4)
 
 (** Test EventsContainer *)
 let test_container_create () =
-  let c = Events.EventsContainer.create () in
+  let c = EventsContainer.create () in
     check int "initial next_label" 1 c.next_label;
     check int "initial next_van" 1 c.next_van
 
 let test_container_add () =
-  let c = Events.EventsContainer.create () in
+  let c = EventsContainer.create () in
   let e1 = make_test_event Read 0 in
-  let e1' = Events.EventsContainer.add c e1 in
+  let e1' = EventsContainer.add c e1 in
 
   check int "auto assigned label" 1 e1'.label;
   check int "auto assigned van" 1 e1'.van;
@@ -269,91 +243,87 @@ let test_container_add () =
   check int "next_van incremented" 2 c.next_van;
 
   let e2 = make_test_event Write 0 in
-  let e2' = Events.EventsContainer.add c ~label:10 e2 in
+  let e2' = EventsContainer.add c ~label:10 e2 in
     check int "explicit label" 10 e2'.label;
     check int "next_label updated" 11 c.next_label
 
 let test_container_get () =
-  let c = Events.EventsContainer.create () in
+  let c = EventsContainer.create () in
   let e = make_test_event Read 0 in
-  let e' = Events.EventsContainer.add c e in
+  let e' = EventsContainer.add c e in
 
-  match Events.EventsContainer.get c e'.label with
+  match EventsContainer.get c e'.label with
   | Some retrieved ->
-      check bool "retrieved event matches" true (Events.event_equal e' retrieved)
+      check bool "retrieved event matches" true (Event.equal e' retrieved)
   | None -> fail "event not found"
 
 let test_container_all () =
-  let c = Events.EventsContainer.create () in
-  let _ = Events.EventsContainer.add c (make_test_event Read 0) in
-  let _ = Events.EventsContainer.add c (make_test_event Write 0) in
-  let _ = Events.EventsContainer.add c (make_test_event Fence 0) in
+  let c = EventsContainer.create () in
+  let _ = EventsContainer.add c (make_test_event Read 0) in
+  let _ = EventsContainer.add c (make_test_event Write 0) in
+  let _ = EventsContainer.add c (make_test_event Fence 0) in
 
-  let all = Events.EventsContainer.all c in
+  let all = EventsContainer.all c in
     check int "all returns 3 events" 3 (USet.size all)
 
 let test_container_map_filter () =
-  let c = Events.EventsContainer.create () in
-  let e1 = Events.EventsContainer.add c (make_read 0 "x" "v1" Relaxed) in
-  let _e2 = Events.EventsContainer.add c (make_write 0 "y" "v2" Release) in
-  let e3 = Events.EventsContainer.add c (make_read 0 "z" "v3" Acquire) in
-  let _e4 = Events.EventsContainer.add c (make_fence 0 SC) in
+  let c = EventsContainer.create () in
+  let e1 = EventsContainer.add c (make_read 0 "x" "v1" Relaxed) in
+  let _e2 = EventsContainer.add c (make_write 0 "y" "v2" Release) in
+  let e3 = EventsContainer.add c (make_read 0 "z" "v3" Acquire) in
+  let _e4 = EventsContainer.add c (make_fence 0 SC) in
 
-  let all_labels = Events.EventsContainer.all c in
+  let all_labels = EventsContainer.all c in
 
   (* Filter only reads *)
-  let reads = Events.EventsContainer.map c all_labels ~typ:Read () in
+  let reads = EventsContainer.map c all_labels ~typ:Read () in
     check int "map finds 2 reads" 2 (USet.size reads);
     check bool "contains e1" true (USet.mem reads e1.label);
     check bool "contains e3" true (USet.mem reads e3.label);
 
     (* Filter only writes *)
-    let writes = Events.EventsContainer.map c all_labels ~typ:Write () in
+    let writes = EventsContainer.map c all_labels ~typ:Write () in
       check int "map finds 1 write" 1 (USet.size writes);
 
       (* Filter by mode *)
-      let acquire_events =
-        Events.EventsContainer.map c all_labels ~mode:Acquire ()
-      in
+      let acquire_events = EventsContainer.map c all_labels ~mode:Acquire () in
         check int "map finds 1 acquire" 1 (USet.size acquire_events);
 
         (* Filter by mode with ordering *)
         let relaxed_or_higher =
-          Events.EventsContainer.map c all_labels ~mode:Relaxed ~mode_op:">" ()
+          EventsContainer.map c all_labels ~mode:Relaxed ~mode_op:">" ()
         in
           check bool "relaxed or higher includes all" true
             (USet.size relaxed_or_higher >= 3)
 
 let test_container_clone () =
-  let c1 = Events.EventsContainer.create () in
-  let _ = Events.EventsContainer.add c1 (make_test_event Read 0) in
-  let _ = Events.EventsContainer.add c1 (make_test_event Write 0) in
+  let c1 = EventsContainer.create () in
+  let _ = EventsContainer.add c1 (make_test_event Read 0) in
+  let _ = EventsContainer.add c1 (make_test_event Write 0) in
 
-  let c2 = Events.EventsContainer.clone c1 in
+  let c2 = EventsContainer.clone c1 in
     check int "cloned size matches"
-      (USet.size (Events.EventsContainer.all c1))
-      (USet.size (Events.EventsContainer.all c2));
+      (USet.size (EventsContainer.all c1))
+      (USet.size (EventsContainer.all c2));
     check int "cloned next_label matches" c1.next_label c2.next_label;
 
     (* Add to original, shouldn't affect clone *)
-    let _ = Events.EventsContainer.add c1 (make_test_event Fence 0) in
+    let _ = EventsContainer.add c1 (make_test_event Fence 0) in
       check bool "clone unaffected by add" true
-        (USet.size (Events.EventsContainer.all c1)
-        > USet.size (Events.EventsContainer.all c2)
-        )
+        (USet.size (EventsContainer.all c1) > USet.size (EventsContainer.all c2))
 
 let test_container_rewrite () =
-  let c = Events.EventsContainer.create () in
-  let e = Events.EventsContainer.add c (make_read 0 "x" "v1" Relaxed) in
+  let c = EventsContainer.create () in
+  let e = EventsContainer.add c (make_read 0 "x" "v1" Relaxed) in
   let new_e = make_read e.label "y" "v2" Acquire in
 
-  let _ = Events.EventsContainer.rewrite c e.label new_e in
+  let _ = EventsContainer.rewrite c e.label new_e in
 
-  match Events.EventsContainer.get c e.label with
+  match EventsContainer.get c e.label with
   | Some retrieved ->
       check bool "rewritten event has new id" true
-        ( match Events.get_id retrieved with
-        | VSymbol "y" -> true
+        ( match Event.get_id retrieved with
+        | VVar "y" -> true
         | _ -> false
         )
   | None -> fail "event not found after rewrite"

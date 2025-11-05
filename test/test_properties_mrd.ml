@@ -2,6 +2,7 @@
     properties from the paper *)
 
 open Alcotest
+open Events
 open Types
 open Uset
 
@@ -257,7 +258,7 @@ module PropertyJustificationMonotonicity = struct
   let test_initial_justifications_are_strongest () =
     (* J₀ ⊆ J₁ ⊆ J₂ ⊆ ... ⊆ J *)
     (* Initial justifications capture all syntactic dependencies *)
-    let e = { (make_event Write 1) with wval = Some (ESymbol "α") } in
+    let e = { (Event.create Write 1 ()) with wval = Some (ESymbol "α") } in
 
     let j0 =
       {
@@ -285,7 +286,7 @@ module PropertyJustificationMonotonicity = struct
         d = USet.of_list [ "x"; "y" ];
         fwd = USet.create ();
         we = USet.create ();
-        w = { (make_event Write 1) with wval = Some (ENum Z.zero) };
+        w = { (Event.create Write 1 ()) with wval = Some (ENum Z.zero) };
         op = ("before", None, None);
       }
     in
@@ -297,7 +298,7 @@ module PropertyJustificationMonotonicity = struct
         d = USet.of_list [ "x"; "y" ];
         fwd = USet.create ();
         we = USet.create ();
-        w = { (make_event Write 1) with wval = Some (ENum Z.zero) };
+        w = { (Event.create Write 1 ()) with wval = Some (ENum Z.zero) };
         op = ("weakened", None, None);
       }
     in

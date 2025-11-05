@@ -102,19 +102,19 @@ dune build
 ## Profiling
 
 ```bash
-OCAML_LANDMARKS=on dune exec smrd
+OCAML_LANDMARKS=on dune exec mordor
 ```
 
 ## Running
 
 ```bash
-dune exec smrd
+dune exec mordor
 ```
 
 with stacktraces
 
 ```bash
-OCAMLRUNPARAM=b dune exec smrd
+OCAMLRUNPARAM=b dune exec mordor
 ```
 
 ## Command Line Interface
@@ -151,91 +151,60 @@ MoRDor supports several commands for analyzing litmus tests and generating outpu
 
 ```bash
 # Parse a single litmus test
-dune exec smrd -- parse --single test.lit
+dune exec mordor -- parse --single test.lit
 
 # Parse with Isabelle output
-dune exec smrd -- parse --single test.lit --output-mode isa
+dune exec mordor -- parse --single test.lit --output-mode isa
 
 # Parse all tests in a directory
-dune exec smrd -- parse --all-litmus-tests ./litmus_tests
+dune exec mordor -- parse --all-litmus-tests ./litmus_tests
 
 # Parse recursively with Isabelle output
-dune exec smrd -- parse --all-litmus-tests ./litmus_tests -r --output-mode isa
+dune exec mordor -- parse --all-litmus-tests ./litmus_tests -r --output-mode isa
 ```
 
 #### Computing Futures
 
 ```bash
 # Compute futures with JSON output
-dune exec smrd -- futures --single test.lit --output-mode json
+dune exec mordor -- futures --single test.lit --output-mode json
 
 # Compute futures with Isabelle output
-dune exec smrd -- futures --single test.lit --output-mode isa --output-file MyFutures.thy
+dune exec mordor -- futures --single test.lit --output-mode isa --output-file MyFutures.thy
 
 # Compute futures (stdout summary)
-dune exec smrd -- futures --single test.lit
+dune exec mordor -- futures --single test.lit
 ```
 
 #### Visualizing Event Structures
 
 ```bash
 # Generate DOT visualization
-dune exec smrd -- visual-es --single test.lit --output-mode dot --output-file output.dot
+dune exec mordor -- visual-es --single test.lit --output-mode dot --output-file output.dot
 
 # Generate JSON visualization
-dune exec smrd -- visual-es --single test.lit --output-mode json
+dune exec mordor -- visual-es --single test.lit --output-mode json
 ```
 
 #### Running Verification
 
 ```bash
 # Run verification on built-in samples
-dune exec smrd -- run --samples
+dune exec mordor -- run --samples
 
 # Run verification on all tests in directory
-dune exec smrd -- run --all-litmus-tests ./litmus_tests
+dune exec mordor -- run --all-litmus-tests ./litmus_tests
 
 # Run verification recursively
-dune exec smrd -- run --all-litmus-tests ./litmus_tests -r
+dune exec mordor -- run --all-litmus-tests ./litmus_tests -r
 
 # Run verification on single file
-dune exec smrd -- run --single test.lit
+dune exec mordor -- run --single test.lit
 ```
 
 ### Isabelle Output Format
 
 When using `--output-mode isa`, MoRDor generates Isabelle/HOL theory files (`.thy`) suitable for formal verification.
-
-#### Parse Command Output
-```isabelle
-theory ProgramName
-  imports Main
-begin
-
-(* Parsed from test.lit *)
-
-(* TODO: Add Isabelle formalization *)
-
-end
-```
-
-#### Futures Command Output
-```isabelle
-theory ProgramName_futures
-  imports Main
-begin
-
-(* Futures for program: test.lit *)
-
-(* Number of executions: 4 *)
-(* Number of events: 12 *)
-
-(* TODO: Add Isabelle formalization of futures *)
-
-end
-```
-
-Theory files are automatically named based on the input file, or you can specify a custom name with `--output-file`.
 
 ## Output Formats
 

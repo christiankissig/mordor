@@ -129,9 +129,6 @@ type event = {
   quot : int option;
 }
 
-(** Create a default event with given type and label *)
-val make_event : event_type -> int -> event
-
 (** {1 Symbolic Event Structure} *)
 
 (** Symbolic event structure representing program execution *)

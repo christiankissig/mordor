@@ -1,6 +1,7 @@
 open Types
 open Expr
 open Uset
+open Events
 
 let to_string (just : justification) : string =
   Printf.sprintf "{%s}, {%s} |-({%s},{%s}) %s"
@@ -18,4 +19,4 @@ let to_string (just : justification) : string =
           (USet.values just.we)
        )
     )
-    (Events.event_to_string just.w)
+    (Event.to_string just.w)

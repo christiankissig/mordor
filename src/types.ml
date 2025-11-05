@@ -138,29 +138,6 @@ type event = {
   quot : int option;
 }
 
-(** Create default event *)
-let make_event typ label =
-  {
-    label;
-    van = label;
-    typ;
-    id = None;
-    loc = None;
-    rval = None;
-    wval = None;
-    rmod = Relaxed;
-    wmod = Relaxed;
-    fmod = Relaxed;
-    cond = None;
-    volatile = false;
-    strong = None;
-    lhs = None;
-    rhs = None;
-    pc = None;
-    hide = false;
-    quot = None;
-  }
-
 (** Symbolic Event Structure *)
 type symbolic_event_structure = {
   e : int uset; (* Set of event IDs *)

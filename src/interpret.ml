@@ -5,6 +5,7 @@ open Types
 open Expr
 open Ir
 open Uset
+open Events
 
 (** Event counter *)
 let event_counter = ref 0
@@ -147,7 +148,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
               let* cont = interpret_statements rest env' phi events in
                 Lwt.return cont
         | GlobalStore { global; expr; assign } ->
-            let base_evt : event = make_event Write 0 in
+            let base_evt : event = Event.create Write 0 () in
             let evt =
               {
                 base_evt with
@@ -162,7 +163,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
               let* cont = interpret_statements rest env phi events in
                 Lwt.return (dot event'.label cont phi)
         | DerefStore { address; expr; assign } ->
-            let base_evt : event = make_event Write 0 in
+            let base_evt : event = Event.create Write 0 () in
             let evt =
               {
                 base_evt with
@@ -177,7 +178,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
                 Lwt.return (dot event'.label cont phi)
         | DerefLoad { register; address; load } ->
             let rval = VSymbol (next_greek ()) in
-            let base_evt : event = make_event Read 0 in
+            let base_evt : event = Event.create Read 0 () in
             let evt =
               {
                 base_evt with
@@ -194,7 +195,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
                 Lwt.return (dot event'.label cont phi)
         | GlobalLoad { register; global; load } ->
             let rval = VSymbol (next_greek ()) in
-            let base_evt : event = make_event Read 0 in
+            let base_evt : event = Event.create Read 0 () in
             let evt =
               {
                 base_evt with
@@ -232,13 +233,13 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
           (* Simplified - ignore loops for now *)
           Lwt.return (empty_structure ()) *)
         | Fence { mode } ->
-            let base_evt : event = make_event Fence 0 in
+            let base_evt : event = Event.create Fence 0 () in
             let evt = { base_evt with fmod = mode } in
             let event' = add_event events evt in
               let* cont = interpret_statements rest env phi events in
                 Lwt.return (dot event'.label cont phi)
         | Lock { global } ->
-            let base_evt : event = make_event Lock 0 in
+            let base_evt : event = Event.create Lock 0 () in
             let evt =
               match global with
               | Some g -> { base_evt with id = Some (VVar g) }
@@ -248,7 +249,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
               let* cont = interpret_statements rest env phi events in
                 Lwt.return (dot event'.label cont phi)
         | Unlock { global } ->
-            let base_evt : event = make_event Unlock 0 in
+            let base_evt : event = Event.create Unlock 0 () in
             let evt =
               match global with
               | Some g -> { base_evt with id = Some (VVar g) }
@@ -259,7 +260,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
                 Lwt.return (dot event'.label cont phi)
         | Malloc { register; size } ->
             let rval = VSymbol (next_zh ()) in
-            let base_evt : event = make_event Malloc 0 in
+            let base_evt : event = Event.create Malloc 0 () in
             let evt = { base_evt with rval = Some rval } in
             let event' = add_event events evt in
             let env' = Hashtbl.copy env in
@@ -267,7 +268,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
               let* cont = interpret_statements rest env' phi events in
                 Lwt.return (dot event'.label cont phi)
         | Free { register } ->
-            let base_evt : event = make_event Free 0 in
+            let base_evt : event = Event.create Free 0 () in
             let evt = base_evt in
             let event' = add_event events evt in
               let* cont = interpret_statements rest env phi events in
@@ -291,8 +292,10 @@ let interpret ast defacto restrictions constraint_ =
   let events = create_events () in
   let env = Hashtbl.create 32 in
 
-  let init_event = make_event Init 0 in
-  let init_event' = add_event events { (make_event Init 4) with label = 0 } in
+  let init_event = Event.create Init 0 () in
+  let init_event' =
+    add_event events { (Event.create Init 4 ()) with label = 0 }
+  in
 
   let* structure = interpret_statements ast env [] events in
   let structure' = dot init_event'.label structure [] in

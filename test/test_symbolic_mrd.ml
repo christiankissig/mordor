@@ -3,6 +3,7 @@
 
 open Alcotest
 open Coherence
+open Events
 open Executions
 open Expr
 open Types
@@ -16,7 +17,7 @@ module TestUtils = struct
 
   (** Create a simple read event *)
   let make_read_event label loc symbol mode =
-    let ev = make_event Read label in
+    let ev = Event.create Read label () in
       {
         ev with
         id = Some loc;
@@ -27,7 +28,7 @@ module TestUtils = struct
 
   (** Create a simple write event *)
   let make_write_event label loc value mode =
-    let ev = make_event Write label in
+    let ev = Event.create Write label () in
       {
         ev with
         id = Some loc;
@@ -38,17 +39,17 @@ module TestUtils = struct
 
   (** Create a branch event *)
   let make_branch_event label condition =
-    let ev = make_event Branch label in
+    let ev = Event.create Branch label () in
       { ev with cond = Some condition }
 
   (** Create an allocation event *)
   let make_alloc_event label symbol size =
-    let ev = make_event Malloc label in
+    let ev = Event.create Malloc label () in
       { ev with rval = Some symbol; wval = Some (Expr.of_value size) }
 
   (** Create a free event *)
   let make_free_event label loc =
-    let ev = make_event Free label in
+    let ev = Event.create Free label () in
       { ev with loc = Some loc }
 end
 

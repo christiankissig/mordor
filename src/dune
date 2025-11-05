@@ -10,6 +10,7 @@
  (modules
   ast
   coherence
+  context
   elaborations
   events
   executions

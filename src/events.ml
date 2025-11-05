@@ -47,246 +47,307 @@ module ModeOps = struct
   let mode_le m1 m2 = USet.mem mode_order (m1, m2)
 end
 
-(** Value equality from USet module *)
-let value_equality = USet.value_equality
+module Event : sig
+  type t = event
 
-(** Event predicates *)
-let is_read e = e.typ = Read
+  val create :
+    event_type ->
+    int ->
+    ?id:Value.t ->
+    ?loc:Expr.t ->
+    ?rval:Value.t ->
+    ?wval:Expr.t ->
+    ?rmod:mode ->
+    ?wmod:mode ->
+    ?fmod:mode ->
+    ?cond:Expr.t ->
+    ?volatile:bool ->
+    ?strong:mode ->
+    ?lhs:int ->
+    ?rhs:int ->
+    ?pc:int ->
+    unit ->
+    event
 
-let is_write e = e.typ = Write
-let is_fence e = e.typ = Fence
-let is_lock e = e.typ = Lock
-let is_unlock e = e.typ = Unlock
-let is_init e = e.typ = Init
-let is_branch e = e.typ = Branch
-let is_loop e = e.typ = Loop
-let is_malloc e = e.typ = Malloc
-let is_free e = e.typ = Free
-let is_rmw e = e.typ = RMW || e.typ = CRMW
-let is_crmw e = e.typ = CRMW
-let is_read_write e = is_read e || is_write e
-let is_mem_func e = is_malloc e || is_free e
-let is_lock_unlock e = is_lock e || is_unlock e
-let is_ordering e = is_lock_unlock e || is_fence e
+  val clone : event -> event
+  val to_string : event -> string
+  val equal : event -> event -> bool
+  val is_read : event -> bool
+  val is_write : event -> bool
+  val is_fence : event -> bool
+  val is_lock : event -> bool
+  val is_unlock : event -> bool
+  val is_init : event -> bool
+  val is_branch : event -> bool
+  val is_loop : event -> bool
+  val is_malloc : event -> bool
+  val is_free : event -> bool
+  val is_rmw : event -> bool
+  val is_crmw : event -> bool
+  val is_read_write : event -> bool
+  val is_mem_func : event -> bool
+  val is_lock_unlock : event -> bool
+  val is_ordering : event -> bool
+  val get_id : event -> Value.t
+  val get_wval : event -> Expr.t
+  val get_rval : event -> Value.t
+  val get_cond : event -> Expr.t
+  val has_id : event -> bool
+  val has_val : event -> bool
+  val has_wval : event -> bool
+  val has_rval : event -> bool
+  val has_cond : event -> bool
+  val event_order : event -> mode
+end = struct
+  type t = event
 
-(** Event field accessors with validation *)
-let has_id e =
-  match e.typ with
-  | Read | Write | Malloc | Free | RMW | CRMW -> true
-  | _ -> false
+  (** Event predicates *)
+  let is_read e = e.typ = Read
 
-let has_val e =
-  match e.typ with
-  | Read | Write | Malloc -> true
-  | _ -> false
+  let is_write e = e.typ = Write
+  let is_fence e = e.typ = Fence
+  let is_lock e = e.typ = Lock
+  let is_unlock e = e.typ = Unlock
+  let is_init e = e.typ = Init
+  let is_branch e = e.typ = Branch
+  let is_loop e = e.typ = Loop
+  let is_malloc e = e.typ = Malloc
+  let is_free e = e.typ = Free
+  let is_rmw e = e.typ = RMW || e.typ = CRMW
+  let is_crmw e = e.typ = CRMW
+  let is_read_write e = is_read e || is_write e
+  let is_mem_func e = is_malloc e || is_free e
+  let is_lock_unlock e = is_lock e || is_unlock e
+  let is_ordering e = is_lock_unlock e || is_fence e
 
-let has_wval e =
-  match e.typ with
-  | Write | Malloc | RMW | CRMW -> true
-  | _ -> false
+  (** Event field accessors with validation *)
+  let has_id e =
+    match e.typ with
+    | Read | Write | Malloc | Free | RMW | CRMW -> true
+    | _ -> false
 
-let has_rval e =
-  match e.typ with
-  | Read | Malloc | RMW | CRMW -> true
-  | _ -> false
+  let has_val e =
+    match e.typ with
+    | Read | Write | Malloc -> true
+    | _ -> false
 
-let has_cond e =
-  match e.typ with
-  | Branch | Loop | RMW | CRMW -> true
-  | _ -> false
+  let has_wval e =
+    match e.typ with
+    | Write | Malloc | RMW | CRMW -> true
+    | _ -> false
 
-let get_id e =
-  if has_id e then
-    match e.id with
-    | Some id -> id
-    | None -> failwith (sprintf "Event %d does not have an id" e.label)
-  else failwith (sprintf "Event %d type does not support id" e.label)
+  let has_rval e =
+    match e.typ with
+    | Read | Malloc | RMW | CRMW -> true
+    | _ -> false
 
-let get_wval e =
-  if has_wval e then
-    match e.wval with
-    | Some v -> v
-    | None -> failwith (sprintf "Event %d does not have a wval" e.label)
-  else failwith (sprintf "Event %d type does not support wval" e.label)
+  let has_cond e =
+    match e.typ with
+    | Branch | Loop | RMW | CRMW -> true
+    | _ -> false
 
-let get_rval e =
-  if has_rval e then
-    match e.rval with
-    | Some v -> v
-    | None -> failwith (sprintf "Event %d does not have an rval" e.label)
-  else failwith (sprintf "Event %d type does not support rval" e.label)
+  let get_id e =
+    if has_id e then
+      match e.id with
+      | Some id -> id
+      | None -> failwith (sprintf "Event %d does not have an id" e.label)
+    else failwith (sprintf "Event %d type does not support id" e.label)
 
-let get_cond e =
-  if has_cond e then
-    match e.cond with
-    | Some c -> c
-    | None -> failwith (sprintf "Event %d does not have a cond" e.label)
-  else failwith (sprintf "Event %d type does not support cond" e.label)
+  let get_wval e =
+    if has_wval e then
+      match e.wval with
+      | Some v -> v
+      | None -> failwith (sprintf "Event %d does not have a wval" e.label)
+    else failwith (sprintf "Event %d type does not support wval" e.label)
 
-(** Get event ordering mode *)
-let event_order e =
-  match e.typ with
-  | Read -> e.rmod
-  | Write -> e.wmod
-  | Fence -> e.fmod
-  | Init -> e.wmod
-  | Lock | Unlock -> Relaxed
-  | Malloc | Branch | Loop | Free -> Relaxed
-  | RMW | CRMW -> failwith "RMW/CRMW order not directly accessible"
+  let get_rval e =
+    if has_rval e then
+      match e.rval with
+      | Some v -> v
+      | None -> failwith (sprintf "Event %d does not have an rval" e.label)
+    else failwith (sprintf "Event %d type does not support rval" e.label)
 
-(** Create event with specialized initialization *)
-let make_event_with typ label ~id ~rval ~wval ~rmod ~wmod ~fmod ~cond ~volatile
-    ~strong ~lhs ~rhs ~pc =
-  let base = make_event typ label in
-  let rmod =
-    match rmod with
-    | Some m -> m
-    | None -> Relaxed
-  in
-  let wmod =
-    match wmod with
-    | Some m -> m
-    | None -> Relaxed
-  in
-  let fmod =
-    match fmod with
-    | Some m -> m
-    | None -> Relaxed
-  in
-    match typ with
-    | Fence ->
-        {
-          base with
-          rmod = ModeOps.read fmod;
-          wmod = ModeOps.write fmod;
-          fmod;
-          id;
-          rval;
-          wval;
-          cond;
-          volatile;
-          strong;
-          lhs;
-          rhs;
-          pc;
-        }
-    | Malloc ->
-        {
-          base with
-          id = rval;
-          (* For malloc, id is set to rval *)
-          rval;
-          wval;
-          rmod;
-          wmod;
-          fmod;
-          cond;
-          volatile;
-          strong;
-          lhs;
-          rhs;
-          pc;
-        }
-    | _ ->
-        {
-          base with
-          id;
-          rval;
-          wval;
-          rmod;
-          wmod;
-          fmod;
-          cond;
-          volatile;
-          strong;
-          lhs;
-          rhs;
-          pc;
-        }
+  let get_cond e =
+    if has_cond e then
+      match e.cond with
+      | Some c -> c
+      | None -> failwith (sprintf "Event %d does not have a cond" e.label)
+    else failwith (sprintf "Event %d type does not support cond" e.label)
 
-(** Clone an event *)
-let clone_event e = { e with label = e.label }
+  (** Get event ordering mode *)
+  let event_order e =
+    match e.typ with
+    | Read -> e.rmod
+    | Write -> e.wmod
+    | Fence -> e.fmod
+    | Init -> e.wmod
+    | Lock | Unlock -> Relaxed
+    | Malloc | Branch | Loop | Free -> Relaxed
+    | RMW | CRMW -> failwith "RMW/CRMW order not directly accessible"
 
-(** Event to string *)
-let event_to_string e =
-  if is_init e then ""
-  else
-    let volatile_prefix = if e.volatile then "v" else "" in
-    let main_str =
-      match e.typ with
-      | Init -> ""
-      | Read ->
-          sprintf "R%s %s %s"
-            (ModeOps.to_string_or e.rmod)
-            (Option.fold ~none:"_" ~some:Expr.to_string e.loc)
-            (Option.fold ~none:"_" ~some:Value.to_string e.rval)
-      | Write ->
-          sprintf "W%s %s %s"
-            (ModeOps.to_string_or e.wmod)
-            (Option.fold ~none:"_" ~some:Expr.to_string e.loc)
-            (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
-      | Lock -> Option.fold ~none:"" ~some:Value.to_string e.id
-      | Unlock -> Option.fold ~none:"" ~some:Value.to_string e.id
-      | Fence -> sprintf "F%s" (ModeOps.to_string_or e.fmod)
-      | Branch ->
-          sprintf "[%s]" (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
-      | Loop ->
-          sprintf "%s%s%s" Unicode.langle
-            (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
-            Unicode.rangle
+  (** Create event with specialized initialization *)
+  let create typ label ?id ?loc ?rval ?wval ?(rmod = Relaxed) ?(wmod = Relaxed)
+      ?(fmod = Relaxed) ?cond ?(volatile = false) ?strong ?lhs ?rhs ?pc () =
+    let base =
+      {
+        label;
+        van = label;
+        typ;
+        id = None;
+        loc = None;
+        rval = None;
+        wval = None;
+        rmod = Relaxed;
+        wmod = Relaxed;
+        fmod = Relaxed;
+        cond = None;
+        volatile = false;
+        strong = None;
+        lhs = None;
+        rhs = None;
+        pc = None;
+        hide = false;
+        quot = None;
+      }
+    in
+      match typ with
+      | Fence ->
+          {
+            base with
+            rmod = ModeOps.read fmod;
+            wmod = ModeOps.write fmod;
+            fmod;
+            id;
+            loc;
+            rval;
+            wval;
+            cond;
+            volatile;
+            strong;
+            lhs;
+            rhs;
+            pc;
+          }
       | Malloc ->
-          sprintf "Alloc %s %s"
-            (Option.fold ~none:"_" ~some:Value.to_string e.rval)
-            (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
-      | Free ->
-          sprintf "Free %s" (Option.fold ~none:"_" ~some:Value.to_string e.id)
-      | RMW ->
-          sprintf "%s . R%s %s . W%s %s"
-            (Option.fold ~none:"_" ~some:Value.to_string e.id)
-            (ModeOps.to_string_or e.rmod)
-            (Option.fold ~none:"_" ~some:Value.to_string e.rval)
-            (ModeOps.to_string_or e.wmod)
-            (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
-      | CRMW ->
-          let rmod_extra =
-            if e.rmod <> e.fmod then sprintf "+%s" (ModeOps.to_string_or e.rmod)
-            else ""
-          in
-            sprintf "%s . R%s %s . [%s]%s . %s %s"
-              (Option.fold ~none:"_" ~some:Value.to_string e.id)
-              (ModeOps.to_string_or e.fmod)
+          {
+            base with
+            id = rval;
+            loc;
+            rval;
+            wval;
+            rmod;
+            wmod;
+            fmod;
+            cond;
+            volatile;
+            strong;
+            lhs;
+            rhs;
+            pc;
+          }
+      | _ ->
+          {
+            base with
+            id;
+            loc;
+            rval;
+            wval;
+            rmod;
+            wmod;
+            fmod;
+            cond;
+            volatile;
+            strong;
+            lhs;
+            rhs;
+            pc;
+          }
+
+  (** Clone an event *)
+  let clone e = { e with label = e.label }
+
+  (** Event to string *)
+  let to_string e =
+    if is_init e then ""
+    else
+      let volatile_prefix = if e.volatile then "v" else "" in
+      let main_str =
+        match e.typ with
+        | Init -> ""
+        | Read ->
+            sprintf "R%s %s %s"
+              (ModeOps.to_string_or e.rmod)
+              (Option.fold ~none:"_" ~some:Expr.to_string e.loc)
               (Option.fold ~none:"_" ~some:Value.to_string e.rval)
+        | Write ->
+            sprintf "W%s %s %s"
+              (ModeOps.to_string_or e.wmod)
+              (Option.fold ~none:"_" ~some:Expr.to_string e.loc)
+              (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
+        | Lock -> Option.fold ~none:"" ~some:Value.to_string e.id
+        | Unlock -> Option.fold ~none:"" ~some:Value.to_string e.id
+        | Fence -> sprintf "F%s" (ModeOps.to_string_or e.fmod)
+        | Branch ->
+            sprintf "[%s]" (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
+        | Loop ->
+            sprintf "%s%s%s" Unicode.langle
               (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
-              rmod_extra
+              Unicode.rangle
+        | Malloc ->
+            sprintf "Alloc %s %s"
+              (Option.fold ~none:"_" ~some:Value.to_string e.rval)
+              (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
+        | Free ->
+            sprintf "Free %s" (Option.fold ~none:"_" ~some:Value.to_string e.id)
+        | RMW ->
+            sprintf "%s . R%s %s . W%s %s"
+              (Option.fold ~none:"_" ~some:Value.to_string e.id)
+              (ModeOps.to_string_or e.rmod)
+              (Option.fold ~none:"_" ~some:Value.to_string e.rval)
               (ModeOps.to_string_or e.wmod)
               (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
-    in
-      sprintf "%d: %s%s" e.van volatile_prefix main_str
+        | CRMW ->
+            let rmod_extra =
+              if e.rmod <> e.fmod then
+                sprintf "+%s" (ModeOps.to_string_or e.rmod)
+              else ""
+            in
+              sprintf "%s . R%s %s . [%s]%s . %s %s"
+                (Option.fold ~none:"_" ~some:Value.to_string e.id)
+                (ModeOps.to_string_or e.fmod)
+                (Option.fold ~none:"_" ~some:Value.to_string e.rval)
+                (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
+                rmod_extra
+                (ModeOps.to_string_or e.wmod)
+                (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
+      in
+        sprintf "%d: %s%s" e.van volatile_prefix main_str
 
-(** Event equality *)
-let event_equal e1 e2 =
-  e1.label = e2.label
-  && e1.typ = e2.typ
-  && ( match (e1.id, e2.id) with
-     | None, None -> true
-     | Some v1, Some v2 -> Value.equal v1 v2
-     | _ -> false
-     )
-  && ( match (e1.loc, e2.loc) with
-     | None, None -> true
-     | Some v1, Some v2 -> Expr.equal v1 v2
-     | _ -> false
-     )
-  && ( match (e1.rval, e2.rval) with
-     | None, None -> true
-     | Some v1, Some v2 -> Value.equal v1 v2
-     | _ -> false
-     )
-  &&
-  match (e1.wval, e2.wval) with
-  | None, None -> true
-  | Some v1, Some v2 -> Expr.equal v1 v2
-  | _ -> false
+  (** Event equality *)
+  let equal e1 e2 =
+    e1.label = e2.label
+    && e1.typ = e2.typ
+    && ( match (e1.id, e2.id) with
+       | None, None -> true
+       | Some v1, Some v2 -> Value.equal v1 v2
+       | _ -> false
+       )
+    && ( match (e1.loc, e2.loc) with
+       | None, None -> true
+       | Some v1, Some v2 -> Expr.equal v1 v2
+       | _ -> false
+       )
+    && ( match (e1.rval, e2.rval) with
+       | None, None -> true
+       | Some v1, Some v2 -> Value.equal v1 v2
+       | _ -> false
+       )
+    &&
+    match (e1.wval, e2.wval) with
+    | None, None -> true
+    | Some v1, Some v2 -> Expr.equal v1 v2
+    | _ -> false
+end
 
 (** Events container/manager *)
 module EventsContainer = struct
@@ -347,8 +408,8 @@ module EventsContainer = struct
               let mode_match =
                 match (mode, mode_op) with
                 | None, _ -> true
-                | Some m, None -> event_order e = m
-                | Some m, Some ">" -> ModeOps.mode_le m (event_order e)
+                | Some m, None -> Event.event_order e = m
+                | Some m, Some ">" -> ModeOps.mode_le m (Event.event_order e)
                 | Some _, Some op ->
                     failwith (sprintf "ModeOp '%s' not supported" op)
               in
@@ -373,7 +434,7 @@ module EventsContainer = struct
       new_t.next_label <- t.next_label;
       new_t.next_van <- t.next_van;
       Hashtbl.iter
-        (fun label e -> Hashtbl.replace new_t.events label (clone_event e))
+        (fun label e -> Hashtbl.replace new_t.events label (Event.clone e))
         t.events;
       new_t
 
