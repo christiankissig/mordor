@@ -18,41 +18,63 @@ let test_default_options () =
 
 (** Test event_type_to_string *)
 let test_event_type_to_string () =
-  Alcotest.(check string) "Read converts to R" "R" (event_type_to_string Read);
-  Alcotest.(check string) "Write converts to W" "W" (event_type_to_string Write);
-  Alcotest.(check string) "Lock converts to L" "L" (event_type_to_string Lock);
-  Alcotest.(check string)
-    "Unlock converts to U" "U"
-    (event_type_to_string Unlock);
-  Alcotest.(check string) "Fence converts to F" "F" (event_type_to_string Fence);
-  Alcotest.(check string) "Init converts to empty" "" (event_type_to_string Init);
-  Alcotest.(check string)
-    "Branch converts to empty" ""
-    (event_type_to_string Branch);
-  Alcotest.(check string) "Loop converts to empty" "" (event_type_to_string Loop);
-  Alcotest.(check string)
-    "Malloc converts to Alloc" "Alloc"
-    (event_type_to_string Malloc);
-  Alcotest.(check string)
-    "Free converts to Free" "Free"
-    (event_type_to_string Free);
-  Alcotest.(check string) "RMW converts to empty" "" (event_type_to_string RMW);
-  Alcotest.(check string) "CRMW converts to empty" "" (event_type_to_string CRMW)
+  let cases =
+    [
+      (Read, "R", "Read");
+      (Write, "W", "Write");
+      (Lock, "L", "Lock");
+      (Unlock, "U", "Unlock");
+      (Fence, "F", "Fence");
+      (Init, "", "Init");
+      (Branch, "", "Branch");
+      (Loop, "", "Loop");
+      (Malloc, "Alloc", "Malloc");
+      (Free, "Free", "Free");
+      (RMW, "", "RMW");
+      (CRMW, "", "CRMW");
+    ]
+  in
+    List.iter
+      (fun (input, expected, name) ->
+        Alcotest.(check string)
+          (name ^ " converts to " ^ if expected = "" then "empty" else expected)
+          expected
+          (event_type_to_string input)
+      )
+      cases
 
 (** Test mode_to_string *)
 let test_mode_to_string () =
-  Alcotest.(check string)
-    "Relaxed converts to rlx" "rlx" (mode_to_string Relaxed);
-  Alcotest.(check string)
-    "Acquire converts to acq" "acq" (mode_to_string Acquire);
-  Alcotest.(check string)
-    "Release converts to rel" "rel" (mode_to_string Release);
-  Alcotest.(check string) "SC converts to sc" "sc" (mode_to_string SC);
-  Alcotest.(check string) "Normal converts to empty" "" (mode_to_string Normal);
-  Alcotest.(check string)
-    "Strong converts to strong" "strong" (mode_to_string Strong);
-  Alcotest.(check string)
-    "Nonatomic converts to na" "na" (mode_to_string Nonatomic)
+  let cases =
+    [
+      (Relaxed, "rlx");
+      (Acquire, "acq");
+      (Release, "rel");
+      (SC, "sc");
+      (Normal, "");
+      (Strong, "strong");
+      (Nonatomic, "na");
+    ]
+  in
+    List.iter
+      (fun (mode, expected) ->
+        let mode_name =
+          match mode with
+          | Relaxed -> "Relaxed"
+          | Acquire -> "Acquire"
+          | Release -> "Release"
+          | SC -> "SC"
+          | Normal -> "Normal"
+          | Strong -> "Strong"
+          | Nonatomic -> "Nonatomic"
+        in
+          Alcotest.(check string)
+            (Printf.sprintf "%s converts to %s" mode_name
+               (if expected = "" then "empty" else expected)
+            )
+            expected (mode_to_string mode)
+      )
+      cases
 
 (** Test mode_to_string_or *)
 let test_mode_to_string_or () =

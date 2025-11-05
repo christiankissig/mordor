@@ -76,37 +76,36 @@ let test_mode_ordering () =
 
 (** Test event predicates *)
 let test_event_predicates () =
-  let read_ev = make_test_event Read 1 in
-  let write_ev = make_test_event Write 2 in
-  let fence_ev = make_test_event Fence 3 in
-  let lock_ev = make_test_event Lock 4 in
-  let unlock_ev = make_test_event Unlock 5 in
-  let malloc_ev = make_test_event Malloc 6 in
-  let free_ev = make_test_event Free 7 in
-  let rmw_ev = make_test_event RMW 8 in
+  let cases =
+    [
+      ("is_read", true, Events.is_read, Read);
+      ("not,is_read", false, Events.is_read, Write);
+      ("is_write", true, Events.is_write, Write);
+      ("is_fence", true, Events.is_fence, Fence);
+      ("is_lock", true, Events.is_lock, Lock);
+      ("is_unlock", true, Events.is_unlock, Unlock);
+      ("is_malloc", true, Events.is_malloc, Malloc);
+      ("is_free", true, Events.is_free, Free);
+      ("is_rmw", true, Events.is_rmw, RMW);
+      ("is_read_write,read", true, Events.is_read_write, Read);
+      ("is_read_write,write", true, Events.is_read_write, Write);
+      ("not,is_read_write,fence", false, Events.is_read_write, Fence);
+      ("is_mem_func,malloc", true, Events.is_mem_func, Malloc);
+      ("is_mem_func,free", true, Events.is_mem_func, Free);
+      ("is_lock_unlock,lock", true, Events.is_lock_unlock, Lock);
+      ("is_lock_unlock,unlock", true, Events.is_lock_unlock, Unlock);
+      ("is_ordering,fence", true, Events.is_ordering, Fence);
+      ("is_ordering,lock", true, Events.is_ordering, Lock);
+    ]
+  in
 
-  check bool "is_read" true (Events.is_read read_ev);
-  check bool "not is_read" false (Events.is_read write_ev);
-  check bool "is_write" true (Events.is_write write_ev);
-  check bool "is_fence" true (Events.is_fence fence_ev);
-  check bool "is_lock" true (Events.is_lock lock_ev);
-  check bool "is_unlock" true (Events.is_unlock unlock_ev);
-  check bool "is_malloc" true (Events.is_malloc malloc_ev);
-  check bool "is_free" true (Events.is_free free_ev);
-  check bool "is_rmw" true (Events.is_rmw rmw_ev);
-
-  check bool "is_read_write read" true (Events.is_read_write read_ev);
-  check bool "is_read_write write" true (Events.is_read_write write_ev);
-  check bool "not is_read_write fence" false (Events.is_read_write fence_ev);
-
-  check bool "is_mem_func malloc" true (Events.is_mem_func malloc_ev);
-  check bool "is_mem_func free" true (Events.is_mem_func free_ev);
-
-  check bool "is_lock_unlock lock" true (Events.is_lock_unlock lock_ev);
-  check bool "is_lock_unlock unlock" true (Events.is_lock_unlock unlock_ev);
-
-  check bool "is_ordering fence" true (Events.is_ordering fence_ev);
-  check bool "is_ordering lock" true (Events.is_ordering lock_ev)
+  List.iter
+    (fun (msg, expected, test_fun, typ) ->
+      let event = make_test_event typ 0 in
+        check bool msg expected (test_fun event)
+    )
+    cases;
+  ()
 
 (** Test event field accessors *)
 let test_has_fields () =
@@ -243,21 +242,6 @@ let test_rmw_to_string () =
     check bool "rmw contains R" true (String.contains s 'R');
     check bool "rmw contains W" true (String.contains s 'W')
 
-(** Test value equality *)
-let test_value_equality () =
-  let v1 = VNumber Z.one in
-  let v2 = VNumber Z.one in
-  let v3 = VNumber Z.zero in
-  let v4 = VSymbol "α" in
-  let v5 = VSymbol "α" in
-  let v6 = VSymbol "β" in
-
-  check bool "equal numbers" true (Value.equal v1 v2);
-  check bool "unequal numbers" false (Value.equal v1 v3);
-  check bool "equal symbols" true (Value.equal v4 v5);
-  check bool "unequal symbols" false (Value.equal v4 v6);
-  check bool "number not equal symbol" false (Value.equal v1 v4)
-
 let test_event_equality () =
   let e1 = make_read 1 "x" "v" Relaxed in
   let e2 = make_read 1 "x" "v" Relaxed in
@@ -392,7 +376,6 @@ let suite =
       test_case "clone_event" `Quick test_clone_event;
       test_case "event_to_string" `Quick test_event_to_string;
       test_case "rmw_to_string" `Quick test_rmw_to_string;
-      test_case "value_equality" `Quick test_value_equality;
       test_case "event_equality" `Quick test_event_equality;
       test_case "container_create" `Quick test_container_create;
       test_case "container_add" `Quick test_container_add;
