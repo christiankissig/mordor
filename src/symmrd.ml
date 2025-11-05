@@ -243,6 +243,9 @@ let rec convert_stmt = function
       let ir_address = convert_expr address in
       let ir_expr = convert_expr expr in
         DerefStore { address = ir_address; expr = ir_expr; assign }
+  | Ast.SLoad { register; address; load } ->
+      let ir_address = convert_expr address in
+        DerefLoad { register; address = ir_address; load }
   | Ast.SIf { condition; then_body; else_body } ->
       let ir_condition = convert_expr condition in
       let ir_then_body = List.map convert_stmt then_body in

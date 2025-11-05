@@ -39,31 +39,29 @@ let parse_expr src =
 
 (** Conversion functions to Types module *)
 
-(** Convert ast_expr to expr *)
-let rec ast_expr_to_expr : ast_expr -> expr = function
-  | EInt n -> ENum n
-  | ERegister r -> EVar r
-  | EGlobal g -> EVar g
-  | EAtLoc l -> EVar l
-  | EASet s -> EVar ("." ^ s)
-  | EBinOp (l, op, r) -> EBinOp (ast_expr_to_expr l, op, ast_expr_to_expr r)
-  | EUnOp (op, e) -> EUnOp (op, ast_expr_to_expr e)
+(** Convert ast_expr to Types.expr *)
+let rec ast_expr_to_expr : ast_expr -> Types.expr = function
+  | EInt n -> Types.ENum n
+  | ERegister r -> Types.EVar r
+  | EGlobal g -> Types.EVar g
+  | EAtLoc l -> Types.EVar l
+  | EASet s -> Types.EVar ("." ^ s)
+  | EBinOp (l, op, r) ->
+      Types.EBinOp (ast_expr_to_expr l, op, ast_expr_to_expr r)
+  | EUnOp (op, e) -> Types.EUnOp (op, ast_expr_to_expr e)
   | ETuple (e1, e2) ->
       (* Represent tuple as a special binop *)
-      EBinOp (ast_expr_to_expr e1, ",", ast_expr_to_expr e2)
-  | ELoad { address; load } ->
-      (* Represent load as a special unary operation *)
-      EUnOp ("load", ast_expr_to_expr address)
+      Types.EBinOp (ast_expr_to_expr e1, ",", ast_expr_to_expr e2)
 
-(** Convert ast_mode to mode *)
-let ast_mode_to_mode : mode -> mode = function
-  | Nonatomic -> Nonatomic
-  | Relaxed -> Relaxed
-  | Release -> Release
-  | Acquire -> Acquire
-  | SC -> SC
-  | Normal -> Normal
-  | Strong -> Strong
+(** Convert ast_mode to Types.mode *)
+let ast_mode_to_mode : mode -> Types.mode = function
+  | Nonatomic -> Types.Nonatomic
+  | Relaxed -> Types.Relaxed
+  | Release -> Types.Release
+  | Acquire -> Types.Acquire
+  | SC -> Types.SC
+  | Normal -> Types.Normal
+  | Strong -> Types.Strong
 
 (** Helper to convert expression lists *)
 let convert_expr_list exprs = List.map ast_expr_to_expr exprs

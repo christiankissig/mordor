@@ -1,10 +1,10 @@
-open Uset
-open Lwt.Syntax
 open Alcotest
 open Elaborations
 open Expr
+open Lwt.Syntax
 open Trees
 open Types
+open Uset
 
 (* Helper to run Lwt tests *)
 let lwt_test fn () = Lwt_main.run (fn ())

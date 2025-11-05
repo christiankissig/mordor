@@ -13,13 +13,13 @@ type ast_expr =
   | EBinOp of ast_expr * string * ast_expr
   | EUnOp of string * ast_expr
   | ETuple of ast_expr * ast_expr
-  | ELoad of { address : ast_expr; load : assign_info }
 
 type ast_stmt =
   | SThreads of { threads : ast_stmt list list }
   | SRegisterStore of { register : string; expr : ast_expr }
   | SGlobalStore of { global : string; expr : ast_expr; assign : assign_info }
   | SGlobalLoad of { register : string; global : string; load : assign_info }
+  | SLoad of { register : string; address : ast_expr; load : assign_info }
   | SStore of { address : ast_expr; expr : ast_expr; assign : assign_info }
   | SCAS of {
       register : string;
@@ -86,14 +86,6 @@ let rec expr_to_string (expr : ast_expr) : string =
   | EUnOp (op, rhs) -> Printf.sprintf "EUnOp %s %s" op (expr_to_string rhs)
   | ETuple (lhs, rhs) ->
       Printf.sprintf "ETuple %s , %s" (expr_to_string lhs) (expr_to_string rhs)
-  | ELoad { address; load } -> (
-      match load with
-      | { mode; volatile } ->
-          Printf.sprintf "ELoad %s with mode %s and volatile %b"
-            (expr_to_string address)
-            (Types.mode_to_string mode)
-            volatile
-    )
 
 (** String representation functions for AST statements *)
 let rec to_string (stmt : ast_stmt) : string =
@@ -118,6 +110,11 @@ let rec to_string (stmt : ast_stmt) : string =
   | SGlobalLoad { register; global; load } ->
       Printf.sprintf "SGlobalLoad %s := load %s with mode %s and volatile %b"
         register global
+        (Types.mode_to_string load.mode)
+        load.volatile
+  | SLoad { register; address; load } ->
+      Printf.sprintf "SLoad %s from address %s with mode %s and volatile %b"
+        register (expr_to_string address)
         (Types.mode_to_string load.mode)
         load.volatile
   | SStore { address; expr; assign } ->

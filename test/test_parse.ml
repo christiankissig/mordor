@@ -206,14 +206,6 @@ let test_parse_tuple () =
     | ETuple (ERegister "r0", ERegister "r1") -> ()
     | _ -> Alcotest.fail "Expected tuple (r0, r1)"
 
-let test_parse_load_expr () =
-  let expr = parse_expr "load(relaxed, x)" in
-    match expr with
-    | ELoad
-        { address = EGlobal "x"; load = { mode = Relaxed; volatile = false } }
-      -> ()
-    | _ -> Alcotest.fail "Expected load(relaxed, x)"
-
 let test_parse_forall () =
   let expr = parse_expr "forall r0" in
     match expr with
@@ -302,7 +294,14 @@ let test_parse_register_load_global () =
   let src = "%% r0 := x" in
   let ast = parse src in
     match ast.program with
-    | [ SRegisterStore { register = "r0"; expr = EGlobal "x" } ] -> ()
+    | [
+     SGlobalLoad
+       {
+         register = "r0";
+         global = "x";
+         load = { mode = Relaxed; volatile = false };
+       };
+    ] -> ()
     | _ -> Alcotest.fail "Expected r0 := x"
 
 let test_parse_deref_store () =
@@ -313,20 +312,27 @@ let test_parse_deref_store () =
     | _ -> Alcotest.fail "Expected *r0 := 42"
 
 let test_parse_load_explicit () =
-  let src = "%% r0 := load(acquire, x)" in
+  let src = "%% r0 :acq= x" in
   let ast = parse src in
     match ast.program with
     | [
-     SRegisterStore
-       { register = "r0"; expr = ELoad { load = { mode = Acquire; _ }; _ } };
+     SGlobalLoad { register = "r0"; global = "x"; load = { mode = Acquire; _ } };
     ] -> ()
     | _ -> Alcotest.fail "Expected r0 := load(acquire, x)"
 
 let test_parse_store_explicit () =
-  let src = "%% store(release, x, 1)" in
+  let src = "%% x :rel= 1" in
   let ast = parse src in
     match ast.program with
-    | [ SStore { assign = { mode = Release; _ }; _ } ] -> ()
+    | [
+     SGlobalStore
+       {
+         global = "x";
+         expr = EInt n;
+         assign = { mode = Release; volatile = false };
+       };
+    ]
+      when n = Z.one -> ()
     | _ -> Alcotest.fail "Expected store(release, x, 1)"
 
 let test_parse_if_simple () =
@@ -452,8 +458,9 @@ let test_parse_multiple_labels () =
 let test_parse_multiple_statements () =
   let src = "%% x := 1; y := 2; r0 := x" in
   let ast = parse src in
+    Printf.printf "%s\n" (ast_litmus_to_string ast);
     match ast.program with
-    | [ SGlobalStore _; SGlobalStore _; SRegisterStore _ ] -> ()
+    | [ SGlobalStore _; SGlobalStore _; SGlobalLoad _ ] -> ()
     | _ -> Alcotest.fail "Expected 3 statements"
 
 let test_parse_thread_parallel () =
@@ -479,8 +486,7 @@ let test_parse_multiple_threads () =
     | [
      SThreads
        {
-         threads =
-           [ [ SGlobalStore _ ]; [ SGlobalStore _ ]; [ SRegisterStore _ ] ];
+         threads = [ [ SGlobalStore _ ]; [ SGlobalStore _ ]; [ SGlobalLoad _ ] ];
        };
     ] -> ()
     | _ -> Alcotest.fail "Expected 3 threads"
@@ -727,7 +733,6 @@ let suite =
         test_parse_precedence_mul_add;
       Alcotest.test_case "Parse parentheses" `Quick test_parse_parentheses;
       Alcotest.test_case "Parse tuple" `Quick test_parse_tuple;
-      Alcotest.test_case "Parse load expr" `Quick test_parse_load_expr;
       Alcotest.test_case "Parse forall" `Quick test_parse_forall;
       Alcotest.test_case "Parse complex expression" `Quick
         test_parse_complex_expr;

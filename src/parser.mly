@@ -145,40 +145,99 @@ label:
 
 stmt_base:
 
-  (* Volatile pointer load pattern: :v= *reg := expr *)
-  | mode=volatile_assign_mode STAR reg=REGISTER ASSIGN e=expr
-    { let load, assign = mode in
-      SRegisterStore {
+  (* Register assign from register: reg1 := reg2 *)
+  (* needed to contrast load from global below *)
+    reg1=REGISTER ASSIGN reg2=REGISTER
+    { SRegisterStore { register = reg1; expr = ERegister reg2 } }
+
+  (** Load from global variables **)
+
+  (* Load from global with default memory order: reg := global *)
+  | reg=REGISTER ASSIGN global=GLOBAL
+    { SGlobalLoad {
         register = reg;
-        expr = ELoad { address = e; load }
+        global;
+        load = { mode = Relaxed; volatile = false }
+    } }
+  (* Volatile load from global pattern 2: reg := :v= global *)
+  | mode=volatile_assign_mode reg=REGISTER ASSIGN global=GLOBAL
+    { let load, assign = mode in
+      SGlobalLoad {
+        register = reg;
+        global;
+        load
       } }
+  (* Explicit load from global with memory order: reg :mode= global *)
+  | reg=REGISTER mode=assign_mode global=GLOBAL
+    { SGlobalLoad {
+      register = reg;
+        global;
+        load = mode
+      } }
+
+  (** Loads from pointers **)
+
+  (* Pointer load: reg := *expr *)
+  | reg=REGISTER ASSIGN STAR e=expr
+    { SLoad {
+        register = reg;
+        address = e;
+        load = { mode = Relaxed; volatile = false }
+    } }
+
+  (* Volatile pointer load pattern 2: reg := :v= *expr *)
+  | mode=volatile_assign_mode reg=REGISTER ASSIGN STAR e=expr
+    { let load, assign = mode in
+      SLoad {
+        register = reg;
+        address = e;
+        load
+      } }
+
+  (* Explicit pointer load: reg :mode= *expr *)
+  | reg=REGISTER ASSIGN mode=assign_mode STAR e=expr
+    { SLoad {
+        register = reg;
+        address = e;
+        load = mode
+      } }
+
+  (** Register store *)
 
   (* Regular register store: reg := expr *)
   | reg=REGISTER ASSIGN e=expr
     { SRegisterStore { register = reg; expr = e } }
 
+  (** Stores to global variables **)
+
+  (* Global store with default memory order: global := expr *)
+  | global=GLOBAL ASSIGN e=expr
+    { SGlobalStore { global; expr = e; assign = { mode = Relaxed; volatile =
+      false } } }
+
   (* Global store with memory order: global :mode= expr *)
   | global=GLOBAL mode=assign_mode e=expr
     { SGlobalStore { global; expr = e; assign = mode } }
 
-  (* Pointer store: *expr := expr *)
+  (* Volatile global store pattern 2: global :v= expr *)
+  | global=GLOBAL mode=volatile_assign_mode e=expr
+    { let load, assign = mode in
+      SGlobalStore { global; expr = e; assign } }
+
+  (** Stores to pointers **)
+
+    (* Pointer store: *expr := expr *)
   | STAR e1=expr ASSIGN e2=expr
     { SStore { address = e1; expr = e2; assign = { mode = Relaxed; volatile = false } } }
 
-  (* Explicit load: reg := load(mode, expr) *)
-  | reg=REGISTER ASSIGN LOAD LPAREN mode=memory_order COMMA e=expr RPAREN
-    { SRegisterStore {
-        register = reg;
-        expr = ELoad { address = e; load = { mode; volatile = false } }
-      } }
+  (* Volatile pointer store pattern 2: *expr :v= expr *)
+  |  STAR e1=expr mode=volatile_assign_mode e2=expr
+    { let load, assign = mode in
+      SStore { address = e1; expr = e2; assign } }
 
-  (* Explicit store: store(mode, addr, val) *)
-  | STORE LPAREN mode=memory_order COMMA e1=expr COMMA e2=expr RPAREN
-    { SStore {
-        address = e1;
-        expr = e2;
-        assign = { mode; volatile = false }
-      } }
+  (* Explicit pointer store: *expr :mode= expr *)
+  | STAR e1=expr mode=assign_mode e2=expr
+    { SStore { address = e1; expr = e2; assign = mode } }
 
   (* CAS: reg := cas(mode, addr, expected, desired) *)
   | reg=REGISTER ASSIGN CAS LPAREN mode=memory_order COMMA e1=expr COMMA e2=expr COMMA e3=expr RPAREN
@@ -304,9 +363,6 @@ expr:
   | MINUS e=expr %prec BANG { EUnOp ("-", e) }
   | STAR e=expr %prec BANG { EUnOp ("*", e) }
   | AMPERSAND e=expr %prec BANG { EUnOp ("&", e) }
-
-  | LOAD LPAREN mode=memory_order COMMA e=expr RPAREN
-    { ELoad { address = e; load = { mode; volatile = false } } }
 
   | FORALL e=expr { EUnOp ("forall", e) }
 

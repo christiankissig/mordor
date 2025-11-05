@@ -8,6 +8,7 @@ type ir_stmt =
   | GlobalStore of { global : string; expr : expr; assign : assign_info }
   | GlobalLoad of { register : string; global : string; load : assign_info }
   | DerefStore of { address : expr; expr : expr; assign : assign_info }
+  | DerefLoad of { register : string; address : expr; load : assign_info }
   | If of {
       condition : expr;
       then_body : ir_stmt list;
@@ -53,6 +54,10 @@ let rec to_string (stmt : ir_stmt) : string =
       Printf.sprintf "Store *%s := %s with mode %s" (Expr.to_string address)
         (Expr.to_string expr)
         (Types.mode_to_string assign.mode)
+  | DerefLoad { register; address; load } ->
+      Printf.sprintf "%s := Load *%s with mode %s" register
+        (Expr.to_string address)
+        (Types.mode_to_string load.mode)
   | If { condition; then_body; else_body } ->
       let then_str = String.concat "; " (List.map to_string then_body) in
       let else_str =

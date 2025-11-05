@@ -1,5 +1,5 @@
-open Lwt.Syntax
 open Expr
+open Lwt.Syntax
 open Trees
 open Types
 open Uset
