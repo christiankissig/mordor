@@ -45,8 +45,6 @@ rule token = parse
   | "free"                { Parser.FREE }
   | "lock"                { Parser.LOCK }
   | "unlock"              { Parser.UNLOCK }
-  | "load"                { Parser.LOAD }
-  | "store"               { Parser.STORE }
   | "allow"               { Parser.ALLOW }
   | "forbid"              { Parser.FORBID }
   | "name"                { Parser.NAME }

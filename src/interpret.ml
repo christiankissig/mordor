@@ -175,6 +175,23 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
             let event' = add_event events evt in
               let* cont = interpret_statements rest env phi events in
                 Lwt.return (dot event'.label cont phi)
+        | DerefLoad { register; address; load } ->
+            let rval = VSymbol (next_greek ()) in
+            let base_evt : event = make_event Read 0 in
+            let evt =
+              {
+                base_evt with
+                loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                rval = Some rval;
+                rmod = load.mode;
+                volatile = load.volatile;
+              }
+            in
+            let event' = add_event events evt in
+            let env' = Hashtbl.copy env in
+              Hashtbl.replace env' register (Expr.of_value rval);
+              let* cont = interpret_statements rest env' phi events in
+                Lwt.return (dot event'.label cont phi)
         | GlobalLoad { register; global; load } ->
             let rval = VSymbol (next_greek ()) in
             let base_evt : event = make_event Read 0 in
