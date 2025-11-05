@@ -8,7 +8,7 @@ open Uset
 
 (* Command line options *)
 type run_mode = Samples | AllLitmusTests | Single
-type output_mode = Json | Html | Dot
+type output_mode = Json | Html | Dot | Isa
 type command = Run | Parse | Interpret | VisualEs | Dependencies | Futures
 
 let command = ref None
@@ -17,6 +17,7 @@ let run_mode = ref Samples
 let litmus_dir = ref "litmus_tests"
 let single_file = ref None
 let output_file = ref None
+let recursive = ref false
 
 (* Run verification *)
 let verify_program program options =
@@ -64,25 +65,33 @@ name = LB
 
 (* Read all .lit files from a directory *)
 let read_litmus_files dir =
-  try
-    let files = Sys.readdir dir in
-    let lit_files =
-      Array.to_list files
-      |> List.filter (fun f -> Filename.check_suffix f ".lit")
-      |> List.map (fun f -> Filename.concat dir f)
-    in
-      List.map
-        (fun path ->
-          let name = Filename.basename path in
-          let ic = open_in path in
-          let content = really_input_string ic (in_channel_length ic) in
-            close_in ic;
-            (name, content)
-        )
-        lit_files
-  with Sys_error msg ->
-    Printf.eprintf "Error reading directory: %s\n" msg;
-    []
+  let rec read_dir_recursive path =
+    try
+      let files = Sys.readdir path in
+        List.concat
+          (Array.to_list files
+          |> List.map (fun f ->
+                 let full_path = Filename.concat path f in
+                   if Sys.is_directory full_path && !recursive then
+                     read_dir_recursive full_path
+                   else if Filename.check_suffix f ".lit" then [ full_path ]
+                   else []
+             )
+          )
+    with Sys_error msg ->
+      Printf.eprintf "Error reading directory %s: %s\n" path msg;
+      []
+  in
+  let lit_files = read_dir_recursive dir in
+    List.map
+      (fun path ->
+        let name = Filename.basename path in
+        let ic = open_in path in
+        let content = really_input_string ic (in_channel_length ic) in
+          close_in ic;
+          (name, content)
+      )
+      lit_files
 
 let run_single name program =
   Printf.printf "Running program %s.\n" name;
@@ -104,6 +113,41 @@ let parse_single name program =
   Logs.info (fun m -> m "Parsing program %s." name);
   let _ast, _program_stmts = Symmrd.parse_program program in
     Logs.info (fun m -> m "Parsed program %s successfully." name);
+    (* Generate Isabelle output if output mode is Isa *)
+    ( match !output_mode with
+    | Some Isa ->
+        let output_file =
+          match !output_file with
+          | None ->
+              (* Generate filename from program name *)
+              let base_name =
+                if Filename.check_suffix name ".lit" then
+                  Filename.chop_suffix name ".lit"
+                else name
+              in
+                base_name ^ ".thy"
+          | Some f -> f
+        in
+        let isa_content =
+          Printf.sprintf
+            "theory %s\n\
+            \  imports Main\n\
+             begin\n\n\
+             (* Parsed from %s *)\n\n\
+             (* TODO: Add Isabelle formalization *)\n\n\
+             end\n"
+            (String.capitalize_ascii
+               (Filename.basename (Filename.chop_extension output_file))
+            )
+            name
+        in
+        let oc = open_out output_file in
+          output_string oc isa_content;
+          close_out oc;
+          Printf.printf "Generated Isabelle file: %s\n" output_file;
+          flush stdout
+    | _ -> ()
+    );
     Lwt.return_unit
 
 let parse_tests tests =
@@ -130,10 +174,102 @@ let interpret_tests tests =
     flush stdout;
     Lwt.return_unit
 
+let futures_single name program =
+  Logs.info (fun m -> m "Computing futures for program %s." name);
+  let* result = verify_program program default_options in
+    Logs.info (fun m -> m "Computed futures for program %s successfully." name);
+    (* Generate output based on output mode *)
+    ( match !output_mode with
+    | Some Json ->
+        let output_file =
+          match !output_file with
+          | None ->
+              let base_name =
+                if Filename.check_suffix name ".lit" then
+                  Filename.chop_suffix name ".lit"
+                else name
+              in
+                base_name ^ "_futures.json"
+          | Some f -> f
+        in
+        let futures_json =
+          (* Create JSON representation of futures *)
+          let executions_json =
+            result.executions
+            |> List.mapi (fun i _exec ->
+                   Printf.sprintf
+                     "    {\n\
+                     \      \"execution\": %d,\n\
+                     \      \"futures\": {}\n\
+                     \    }"
+                     i
+               )
+            |> String.concat ",\n"
+          in
+            Printf.sprintf
+              "{\n  \"program\": \"%s\",\n  \"executions\": [\n%s\n  ]\n}\n"
+              name executions_json
+        in
+        let oc = open_out output_file in
+          output_string oc futures_json;
+          close_out oc;
+          Printf.printf "Generated futures JSON file: %s\n" output_file;
+          flush stdout
+    | Some Isa ->
+        let output_file =
+          match !output_file with
+          | None ->
+              let base_name =
+                if Filename.check_suffix name ".lit" then
+                  Filename.chop_suffix name ".lit"
+                else name
+              in
+                base_name ^ "_futures.thy"
+          | Some f -> f
+        in
+        let theory_name =
+          String.capitalize_ascii
+            (Filename.basename (Filename.chop_extension output_file))
+        in
+        let isa_content =
+          Printf.sprintf
+            "theory %s\n\
+            \  imports Main\n\
+             begin\n\n\
+             (* Futures for program: %s *)\n\n\
+             (* Number of executions: %d *)\n\
+             (* Number of events: %d *)\n\n\
+             (* TODO: Add Isabelle formalization of futures *)\n\n\
+             end\n"
+            theory_name name
+            (List.length result.executions)
+            (USet.size result.structure.e)
+        in
+        let oc = open_out output_file in
+          output_string oc isa_content;
+          close_out oc;
+          Printf.printf "Generated Isabelle futures file: %s\n" output_file;
+          flush stdout
+    | _ ->
+        Printf.printf "Program: %s\n" name;
+        Printf.printf "Number of executions: %d\n"
+          (List.length result.executions);
+        Printf.printf "Number of events: %d\n" (USet.size result.structure.e);
+        flush stdout
+    );
+    Lwt.return_unit
+
+let futures_tests tests =
+  let* () =
+    Lwt_list.iter_s (fun (name, prog) -> futures_single name prog) tests
+  in
+    flush stdout;
+    Lwt.return_unit
+
 let visualize_event_structure (mode : output_mode) output_file (name, program) =
   Printf.printf "Visualizing event structure for program %s.\n" name;
   flush stdout;
-  let opts = { default_options with just_structure = true } in
+  let opts = { default_options with just_structure = false } in
     let* result = create_symbolic_event_structure program opts in
       match mode with
       | Json ->
@@ -163,14 +299,18 @@ let visualize_event_structure (mode : output_mode) output_file (name, program) =
       | Html ->
           Printf.eprintf "HTML output not implemented yet.\n";
           Lwt.return_unit
+      | Isa ->
+          Printf.eprintf
+            "Error: Isabelle output is only valid for the parse command.\n";
+          Lwt.return_unit
 
 let usage_msg =
   "Usage: main COMMAND [OPTIONS]\n\n\
    Commands:\n\
   \  parse         Parse the input program\n\
   \  interpret     Run verification\n\
-  \  visual-es     Visualize event structure\n\
-  \  futures       Compute futures\n\n\
+  \  visual-es     Visualize event structure (single file only)\n\
+  \  futures       Compute futures (single file only)\n\n\
    Options:"
 
 let parse_output_mode s =
@@ -178,20 +318,23 @@ let parse_output_mode s =
   | "json" -> Json
   | "html" -> Html
   | "dot" -> Dot
+  | "isa" | "isabelle" -> Isa
   | _ ->
       Printf.eprintf
-        "Error: Invalid output mode '%s' (must be json, html, or dot)\n" s;
+        "Error: Invalid output mode '%s' (must be json, html, dot, or isa)\n" s;
       exit 1
 
 let specs =
   [
     ( "--output-mode",
       Arg.String (fun s -> output_mode := Some (parse_output_mode s)),
-      " Output mode for visual-es command: json, html, or dot"
+      " Output mode: json/dot/html (for visual-es), or isa/json (for \
+       parse/futures)"
     );
     ( "--output-file",
       Arg.String (fun s -> output_file := Some s),
-      " Output file for visual-es command (default: stdout)"
+      " Output file for visual-es, parse, or futures command (default: stdout \
+       or auto-generated)"
     );
     ( "--samples",
       Arg.Unit (fun () -> run_mode := Samples),
@@ -205,6 +348,10 @@ let specs =
         ),
       " Process all .lit files in the specified directory (default: \
        litmus_tests)"
+    );
+    ( "-r",
+      Arg.Set recursive,
+      " Scan directories recursively (use with --all-litmus-tests)"
     );
     ( "--single",
       Arg.String
@@ -282,6 +429,14 @@ let main () =
   | Run -> run_tests tests
   | Parse -> parse_tests tests
   | Interpret -> interpret_tests tests
+  | Futures ->
+      if List.length tests <> 1 then (
+        Printf.eprintf
+          "Error: futures command requires exactly one input program (use \
+           --single)\n";
+        exit 1
+      );
+      futures_tests tests
   | VisualEs ->
       if List.length tests <> 1 then (
         Printf.eprintf
