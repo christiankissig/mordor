@@ -12,7 +12,7 @@ open Uset
 
 let calculate_dependencies ast (structure : symbolic_event_structure)
     (events : (int, event) Hashtbl.t) ~exhaustive ~include_dependencies
-    ~just_structure ~restrictions =
+    ~restrictions =
   let e_set = structure.e in
   let restrict = structure.restrict in
   let rmw = structure.rmw in
@@ -188,10 +188,8 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
   (* Build executions if not just structure *)
   let* executions =
-    if just_structure then Lwt.return []
-    else (* Use the full execution generation *)
-      generate_executions events structure final_justs structure.constraint_
-        init_ppo ~include_dependencies ~restrictions
+    generate_executions events structure final_justs structure.constraint_
+      init_ppo ~include_dependencies ~restrictions
   in
 
   Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));
@@ -219,7 +217,6 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
           calculate_dependencies constraints structure events
             ~exhaustive:(ctx.options.exhaustive || false)
             ~include_dependencies:(ctx.options.dependencies || true)
-            ~just_structure:(ctx.options.just_structure || false)
             ~restrictions:coherence_restrictions
         in
           ctx.structure <- Some structure;
@@ -263,7 +260,6 @@ let create_symbolic_event_structure program (opts : options) =
     calculate_dependencies ast structure events
       ~exhaustive:(opts.exhaustive || false)
       ~include_dependencies:(opts.dependencies || true)
-      ~just_structure:(opts.just_structure || false)
       ~restrictions:coherence_restrictions
   in
 

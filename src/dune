@@ -12,6 +12,7 @@
   coherence
   context
   elaborations
+  episodicity
   events
   executions
   expr

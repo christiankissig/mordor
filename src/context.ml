@@ -8,7 +8,6 @@ type output_mode = Json | Html | Dot | Isa
 
 type options = {
   dependencies : bool;
-  just_structure : bool; (* TODO deprecate *)
   exhaustive : bool;
   forcerc11 : bool;
   forceimm : bool;
@@ -19,7 +18,6 @@ type options = {
 let default_options =
   {
     dependencies = true;
-    just_structure = false;
     exhaustive = false;
     forcerc11 = false;
     forceimm = false;
@@ -55,6 +53,8 @@ type mordor_ctx = {
   (* verification results could be added here *)
   mutable valid : bool option;
   mutable undefined_behaviour : bool option;
+  (* episodicity checks *)
+  mutable is_episodic : bool option;
 }
 
 let make_context options ?(output_mode = Json) ?(output_file = "stdout") () =
@@ -75,6 +75,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout") () =
     output_file;
     valid = None;
     undefined_behaviour = None;
+    is_episodic = None;
   }
 
 (** result type *)
