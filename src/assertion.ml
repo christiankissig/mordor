@@ -2,21 +2,12 @@
 
 open Types
 open Uset
+open Expr
 
 (** {1 Helper Modules} *)
 
 (** Expression utilities *)
 module ExprUtil = struct
-  (** Get all symbol names from an expression *)
-  let rec get_symbols = function
-    | ESymbol s -> [ s ]
-    | EVar s -> [ s ]
-    | EBinOp (e1, _, e2) -> get_symbols e1 @ get_symbols e2
-    | EUnOp (_, e) -> get_symbols e
-    | EOr lst ->
-        List.flatten (List.map (List.map get_symbols) lst) |> List.flatten
-    | ENum _ | EBoolean _ -> []
-
   (** Substitute variable with expression *)
   let rec subst expr var_expr new_expr =
     if expr = var_expr then new_expr
@@ -28,43 +19,6 @@ module ExprUtil = struct
       | EOr lst ->
           EOr (List.map (List.map (fun e -> subst e var_expr new_expr)) lst)
       | _ -> expr
-
-  (** Convert value to expression *)
-  let of_value = function
-    | VNumber n -> ENum n
-    | VSymbol s -> ESymbol s
-    | VVar v -> EVar v
-    | VBoolean b -> EBoolean b
-
-  (** Convert expression to string for hashing *)
-  let rec to_string = function
-    | ENum n -> Z.to_string n
-    | ESymbol s -> s
-    | EVar v -> v
-    | EBoolean b -> string_of_bool b
-    | EBinOp (e1, op, e2) ->
-        Printf.sprintf "(%s %s %s)" (to_string e1) op (to_string e2)
-    | EUnOp (op, e) -> Printf.sprintf "%s(%s)" op (to_string e)
-    | EOr lst ->
-        let inner =
-          List.map (fun l -> String.concat " ∧ " (List.map to_string l)) lst
-        in
-          String.concat " ∨ " inner
-end
-
-(** Value utilities *)
-module ValueUtil = struct
-  (** Check if a value is not a variable *)
-  let is_not_var = function
-    | VVar _ -> false
-    | _ -> true
-
-  (** Convert value to string *)
-  let to_string = function
-    | VNumber n -> Z.to_string n
-    | VSymbol s -> s
-    | VVar v -> v
-    | VBoolean b -> string_of_bool b
 end
 
 (** {1 Model Options} *)
@@ -251,8 +205,7 @@ let check_assertion assertion_opt executions structure events ~exhaustive =
             USet.iter
               (fun label ->
                 let loc = get_event_loc events label in
-                  if ValueUtil.is_not_var loc then
-                    result := (label, loc) :: !result
+                  if Value.is_not_var loc then result := (label, loc) :: !result
               )
               all_pointer_events;
             !result
@@ -277,12 +230,12 @@ let check_assertion assertion_opt executions structure events ~exhaustive =
                       | None -> VVar ("r" ^ string_of_int r)
                     in
                     let rf_value =
-                      let rval_str = ValueUtil.to_string read_rval in
+                      let rval_str = Value.to_string read_rval in
                         match
                           Hashtbl.find_opt execution.fix_rf_map rval_str
                         with
                         | Some v -> v
-                        | None -> ExprUtil.of_value read_rval
+                        | None -> Expr.of_value read_rval
                     in
                     let restriction =
                       match Hashtbl.find_opt structure.restrict w with
@@ -290,7 +243,7 @@ let check_assertion assertion_opt executions structure events ~exhaustive =
                       | None -> []
                     in
                     let equality =
-                      EBinOp (ExprUtil.of_value read_rval, "=", rf_value)
+                      EBinOp (Expr.of_value read_rval, "=", rf_value)
                     in
                       rf_conditions :=
                         restriction @ [ equality ] @ !rf_conditions
@@ -322,11 +275,10 @@ let check_assertion assertion_opt executions structure events ~exhaustive =
                             (fun var value acc ->
                               ExprUtil.subst acc (EVar var) value
                             )
-                            execution.fix_rf_map
-                            (ExprUtil.of_value loc_value)
+                            execution.fix_rf_map (Expr.of_value loc_value)
                         in
                         (* Extract symbol if it's a single symbol *)
-                        let symbols = ExprUtil.get_symbols substituted in
+                        let symbols = Expr.get_symbols substituted in
                           if List.length symbols = 1 then
                             Hashtbl.add pointer_map_of event_label
                               (List.hd symbols)
@@ -362,7 +314,7 @@ let check_assertion assertion_opt executions structure events ~exhaustive =
                           let free_event = Hashtbl.find events free in
                           let free_id =
                             match free_event.id with
-                            | Some id -> ValueUtil.to_string id
+                            | Some id -> Value.to_string id
                             | None -> ""
                           in
 

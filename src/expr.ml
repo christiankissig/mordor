@@ -20,6 +20,7 @@ module rec Value : sig
   val to_string : value_type -> string
   val subst : value_type -> value_type -> value_type -> value_type
   val is_number : value_type -> bool
+  val is_not_var : value_type -> bool
 end = struct
   type t = value_type
 
@@ -54,6 +55,10 @@ end = struct
   let is_number = function
     | VNumber _ -> true
     | _ -> false
+
+  let is_not_var = function
+    | VVar _ -> false
+    | _ -> true
 end
 
 and Expr : sig
