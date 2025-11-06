@@ -6,6 +6,17 @@ open Uset
 
 type output_mode = Json | Html | Dot | Isa
 
+let parse_output_mode s =
+  match String.lowercase_ascii s with
+  | "json" -> Json
+  | "html" -> Html
+  | "dot" -> Dot
+  | "isa" | "isabelle" -> Isa
+  | _ ->
+      Printf.eprintf
+        "Error: Invalid output mode '%s' (must be json, html, dot, or isa)\n" s;
+      exit 1
+
 type options = {
   dependencies : bool;
   exhaustive : bool;
@@ -38,6 +49,7 @@ type mordor_ctx = {
   mutable litmus_constraints : expr list option;
   mutable program_stmts : ir_stmt list option;
   (* event structures *)
+  step_counter : int;
   mutable events : (int, event) Hashtbl.t option;
   mutable structure : symbolic_event_structure option;
   (* justifications *)
@@ -57,7 +69,8 @@ type mordor_ctx = {
   mutable is_episodic : bool option;
 }
 
-let make_context options ?(output_mode = Json) ?(output_file = "stdout") () =
+let make_context options ?(output_mode = Json) ?(output_file = "stdout")
+    ?(step_counter = 5) () =
   {
     options;
     litmus_name = None;
@@ -65,6 +78,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout") () =
     litmus = None;
     litmus_constraints = None;
     program_stmts = None;
+    step_counter;
     events = None;
     structure = None;
     justifications = None;

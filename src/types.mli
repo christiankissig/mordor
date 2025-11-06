@@ -117,6 +117,7 @@ type event = {
 type symbolic_event_structure = {
   e : int uset;
   po : (int * int) uset;
+  po_iter : (int * int) uset;
   rmw : (int * int) uset;
   lo : (int * int) uset;
   restrict : (int, expr list) Hashtbl.t;

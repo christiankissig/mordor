@@ -58,6 +58,7 @@ let dot label structure phi : symbolic_event_structure =
   {
     e = USet.union structure.e (USet.singleton label);
     po = USet.union structure.po (USet.map (fun e -> (label, e)) structure.e);
+    po_iter = USet.create ();
     rmw = structure.rmw;
     lo = structure.lo;
     restrict = structure.restrict;
@@ -72,6 +73,7 @@ let plus a b : symbolic_event_structure =
   {
     e = USet.union a.e b.e;
     po = USet.union a.po b.po;
+    po_iter = USet.create ();
     rmw = USet.union a.rmw b.rmw;
     lo = USet.union a.lo b.lo;
     restrict = a.restrict;
@@ -87,6 +89,7 @@ let cross a b : symbolic_event_structure =
   {
     e = USet.union a.e b.e;
     po = USet.union a.po b.po;
+    po_iter = USet.create ();
     rmw = USet.union a.rmw b.rmw;
     lo = USet.union a.lo b.lo;
     restrict = a.restrict;
@@ -102,6 +105,7 @@ let empty_structure () : symbolic_event_structure =
   {
     e = USet.create ();
     po = USet.create ();
+    po_iter = USet.create ();
     rmw = USet.create ();
     lo = USet.create ();
     restrict = Hashtbl.create 16;

@@ -113,6 +113,7 @@ let create_mock_context () =
     {
       e = e_set;
       po = USet.of_list [ (1, 2) ];
+      po_iter = USet.create ();
       rmw = USet.create ();
       lo = USet.create ();
       restrict = Hashtbl.create 10;

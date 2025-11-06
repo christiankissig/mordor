@@ -16,6 +16,7 @@ let litmus_dir = ref "litmus_tests"
 let single_file = ref None
 let output_file = ref None
 let recursive = ref false
+let step_counter = ref None
 
 (* Example programs *)
 let example_programs =
@@ -135,26 +136,29 @@ let parse_tests tests options =
   in
     Lwt.return_unit
 
-let interpret_single name program options =
+let interpret_single name program options step_counter =
   Logs.info (fun m -> m "Interpreting program %s." name);
-  let context = make_context options () in
+  let context = make_context options ~step_counter () in
     context.litmus <- Some program;
     Lwt.return context
     |> Parse.step_parse_program
     |> Interpret.step_interpret
     |> print_results
 
-let interpret_tests tests options =
+let interpret_tests tests options step_counter =
   let* () =
     Lwt_list.iter_s
-      (fun (name, prog) -> interpret_single name prog options)
+      (fun (name, prog) -> interpret_single name prog options step_counter)
       tests
   in
     flush stdout;
     Lwt.return_unit
 
-let futures_single (name, program) options output_mode output_file =
-  let context = make_context options ~output_mode ~output_file () in
+let futures_single (name, program) options output_mode output_file step_counter
+    =
+  let context =
+    make_context options ~output_mode ~output_file ~step_counter ()
+  in
     context.litmus_name <- Some name;
     context.litmus <- Some program;
     Lwt.return context
@@ -165,8 +169,11 @@ let futures_single (name, program) options output_mode output_file =
     |> Futures.print_futures
     |> print_results
 
-let visualize_es_single (name, program) options output_mode output_file =
-  let context = make_context options ~output_mode ~output_file () in
+let visualize_es_single (name, program) options output_mode output_file
+    step_counter =
+  let context =
+    make_context options ~output_mode ~output_file ~step_counter ()
+  in
     context.litmus_name <- Some name;
     context.litmus <- Some program;
     Lwt.return context
@@ -184,33 +191,9 @@ let usage_msg =
   \  futures       Compute futures (single file only)\n\n\
    Options:"
 
-let parse_output_mode s =
-  match String.lowercase_ascii s with
-  | "json" -> Json
-  | "html" -> Html
-  | "dot" -> Dot
-  | "isa" | "isabelle" -> Isa
-  | _ ->
-      Printf.eprintf
-        "Error: Invalid output mode '%s' (must be json, html, dot, or isa)\n" s;
-      exit 1
-
 let specs =
   [
-    ( "--output-mode",
-      Arg.String (fun s -> output_mode := Some (parse_output_mode s)),
-      " Output mode: json/dot/html (for visual-es), or isa/json (for \
-       parse/futures)"
-    );
-    ( "--output-file",
-      Arg.String (fun s -> output_file := Some s),
-      " Output file for visual-es, parse, or futures command (default: stdout \
-       or auto-generated)"
-    );
-    ( "--samples",
-      Arg.Unit (fun () -> run_mode := Samples),
-      " Run built-in sample programs (default)"
-    );
+    (* inputs *)
     ( "--all-litmus-tests",
       Arg.String
         (fun dir ->
@@ -231,6 +214,26 @@ let specs =
           single_file := Some filename
         ),
       " Process a single .lit file specified by filename"
+    );
+    ( "--samples",
+      Arg.Unit (fun () -> run_mode := Samples),
+      " Run built-in sample programs (default)"
+    );
+    (* outputs *)
+    ( "--output-mode",
+      Arg.String (fun s -> output_mode := Some (parse_output_mode s)),
+      " Output mode: json/dot/html (for visual-es), or isa/json (for \
+       parse/futures)"
+    );
+    ( "--output-file",
+      Arg.String (fun s -> output_file := Some s),
+      " Output file for visual-es, parse, or futures command (default: stdout \
+       or auto-generated)"
+    );
+    (* interpreter options *)
+    ( "--step-counter",
+      Arg.Int (fun n -> step_counter := Some n),
+      " Number of steps for interpretation (default: 5)"
     );
   ]
 
@@ -309,17 +312,20 @@ let main () =
   match cmd with
   | Run -> run_tests tests
   | Parse -> parse_tests tests options
-  | Interpret -> interpret_tests tests options
+  | Interpret ->
+      interpret_tests tests options (Option.value !step_counter ~default:5)
   | Futures ->
       assert_single_test;
       futures_single (List.hd tests) options
         (Option.value !output_mode ~default:Json)
         (Option.value !output_file ~default:"stdout")
+        (Option.value !step_counter ~default:5)
   | VisualEs ->
       assert_single_test;
       visualize_es_single (List.hd tests) options
         (Option.value !output_mode ~default:Dot)
         (Option.value !output_file ~default:"stdout")
+        (Option.value !step_counter ~default:5)
   | _ ->
       Printf.printf "TODO: not implemented yet\n";
       Lwt.return_unit

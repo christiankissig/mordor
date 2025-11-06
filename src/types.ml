@@ -26,6 +26,7 @@ let event_type_to_string = function
   | Malloc -> "A"
   | Free -> "D"
   | RMW -> "RMW"
+  | CRMW -> "CRMW"
   | _ -> "E"
 
 (** Memory ordering modes *)
@@ -117,6 +118,7 @@ type event = {
 type symbolic_event_structure = {
   e : int uset; (* Set of event IDs *)
   po : (int * int) uset; (* Program order relation *)
+  po_iter : (int * int) uset; (* Program order across loop iterations *)
   rmw : (int * int) uset; (* Read-modify-write pairs *)
   lo : (int * int) uset; (* Lock order *)
   restrict : (int, expr list) Hashtbl.t; (* Event restrictions *)

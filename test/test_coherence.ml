@@ -235,6 +235,7 @@ let test_imm_coherent_simple () =
     {
       e = ex_e;
       po;
+      po_iter = USet.create ();
       restrict;
       rmw = USet.create ();
       lo = USet.create ();
@@ -283,6 +284,7 @@ let test_rc11_coherent_simple () =
     {
       e = ex_e;
       po;
+      po_iter = USet.create ();
       restrict;
       rmw = USet.create ();
       lo = USet.create ();
@@ -337,6 +339,7 @@ let test_imm_coherent_rmw () =
     {
       e = ex_e;
       po;
+      po_iter = USet.create ();
       restrict;
       rmw = USet.create ();
       lo = USet.create ();
@@ -381,6 +384,7 @@ let test_cache_types () =
     {
       e = ex_e;
       po;
+      po_iter = USet.create ();
       restrict;
       rmw = USet.create ();
       lo = USet.create ();

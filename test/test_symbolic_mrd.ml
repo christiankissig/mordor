@@ -712,6 +712,7 @@ module TestSymbolicEventStructure = struct
       {
         e = USet.create ();
         po = USet.create ();
+        po_iter = USet.create ();
         rmw = USet.create ();
         lo = USet.create ();
         restrict = Hashtbl.create 10;
@@ -732,6 +733,7 @@ module TestSymbolicEventStructure = struct
       {
         e = USet.of_list [ 1; 2; 3 ];
         po = USet.of_list [ (1, 2); (2, 3) ];
+        po_iter = USet.create ();
         rmw = USet.create ();
         lo = USet.create ();
         restrict = Hashtbl.create 10;
@@ -753,6 +755,7 @@ module TestSymbolicEventStructure = struct
       {
         e = USet.of_list [ 1; 2; 3; 4 ];
         po = USet.create ();
+        po_iter = USet.create ();
         rmw = USet.of_list [ (1, 2); (3, 4) ];
         (* Two RMW operations *)
         lo = USet.create ();
@@ -773,6 +776,7 @@ module TestSymbolicEventStructure = struct
       {
         e = USet.create ();
         po = USet.create ();
+        po_iter = USet.create ();
         rmw = USet.create ();
         lo = USet.create ();
         restrict = Hashtbl.create 10;

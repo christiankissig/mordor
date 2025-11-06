@@ -48,6 +48,7 @@ let create_test_structure () =
     {
       e;
       po;
+      po_iter = USet.create ();
       rmw = USet.create ();
       lo = USet.create ();
       restrict;
@@ -153,6 +154,7 @@ let test_gen_paths_with_branch () =
       {
         e;
         po;
+        po_iter = USet.create ();
         rmw = USet.create ();
         lo = USet.create ();
         restrict;
@@ -180,6 +182,7 @@ let test_gen_paths_empty_structure () =
     {
       e;
       po;
+      po_iter = USet.create ();
       rmw = USet.create ();
       lo = USet.create ();
       restrict;
@@ -207,6 +210,7 @@ let test_gen_paths_single_event () =
     {
       e;
       po;
+      po_iter = USet.create ();
       rmw = USet.create ();
       lo = USet.create ();
       restrict;
@@ -355,6 +359,7 @@ let test_gen_paths_with_missing_event () =
       {
         e;
         po;
+        po_iter = USet.create ();
         rmw = USet.create ();
         lo = USet.create ();
         restrict;
@@ -414,6 +419,7 @@ let test_gen_paths_with_cycle () =
     {
       e;
       po;
+      po_iter = USet.create ();
       rmw = USet.create ();
       lo = USet.create ();
       restrict;
@@ -447,6 +453,7 @@ let test_path_generation_integration () =
     {
       e;
       po;
+      po_iter = USet.create ();
       rmw = USet.create ();
       lo = USet.create ();
       restrict;
