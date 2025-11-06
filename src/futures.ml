@@ -1,3 +1,5 @@
+open Context
+open Lwt.Syntax
 open Types
 open Uset
 
@@ -116,3 +118,71 @@ let posterior_future_set_explicit (future_set : future_set)
       )
       future_set;
     result
+
+let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
+  let* ctx = lwt_ctx in
+  let name =
+    match ctx.litmus_name with
+    | Some n -> n
+    | None -> "unknown_program"
+  in
+  let program =
+    match ctx.litmus with
+    | Some p -> p
+    | None -> ""
+  in
+
+  Logs.info (fun m -> m "Computing futures for program %s." name);
+  (* Generate output based on output mode *)
+  match ctx.output_mode with
+  | Json -> (
+      let futures_json =
+        (* Create JSON representation of futures *)
+        let executions_json =
+          match ctx.executions with
+          | None -> "[]"
+          | Some execs ->
+              USet.values execs
+              |> List.mapi (fun i _exec ->
+                     Printf.sprintf
+                       "    {\n\
+                       \      \"execution\": %d,\n\
+                       \      \"futures\": {}\n\
+                       \    }"
+                       i
+                 )
+              |> String.concat ",\n"
+        in
+          Printf.sprintf
+            "{\n  \"program\": \"%s\",\n  \"executions\": [\n%s\n  ]\n}\n" name
+            executions_json
+      in
+        match ctx.output_file with
+        | "stdout" ->
+            Printf.printf "Generated futures JSON file: %s\n" futures_json;
+            flush stdout;
+            Lwt.return ctx
+        | _ ->
+            let oc = open_out ctx.output_file in
+              output_string oc futures_json;
+              close_out oc;
+              Printf.printf "Generated futures JSON file: %s\n" ctx.output_file;
+              flush stdout;
+              Lwt.return ctx
+    )
+  | _ ->
+      Logs.err (fun m -> m "Unsupported output mode for futures.");
+      Lwt.return ctx
+
+let step_futures (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  let* ctx = lwt_ctx in
+    match ctx.executions with
+    | Some execs ->
+        Logs.debug (fun m -> m "Calculating futures...");
+        let future_set = calculate_future_set execs in
+          ctx.futures <- Some future_set;
+          Logs.debug (fun m -> m "Futures calculated.");
+          Lwt.return ctx
+    | None ->
+        Logs.err (fun m -> m "No executions available to calculate futures.");
+        Lwt.return ctx

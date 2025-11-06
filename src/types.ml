@@ -1,28 +1,4 @@
-(** Core type definitions for Mordor *)
-
 open Uset
-
-(** Options *)
-type options = {
-  dependencies : bool;
-  just_structure : bool;
-  exhaustive : bool;
-  forcerc11 : bool;
-  forceimm : bool;
-  forcenocoh : bool;
-  coherent : string;
-}
-
-let default_options =
-  {
-    dependencies = true;
-    just_structure = false;
-    exhaustive = false;
-    forcerc11 = false;
-    forceimm = false;
-    forcenocoh = false;
-    coherent = "rc11";
-  }
 
 (** Event types *)
 type event_type =
@@ -45,13 +21,12 @@ let event_type_to_string = function
   | Lock -> "L"
   | Unlock -> "U"
   | Fence -> "F"
-  | Init -> ""
-  | Branch -> ""
-  | Loop -> ""
-  | Malloc -> "Alloc"
-  | Free -> "Free"
-  | RMW -> ""
-  | CRMW -> ""
+  | Init -> "I"
+  | Branch -> "B"
+  | Malloc -> "A"
+  | Free -> "D"
+  | RMW -> "RMW"
+  | _ -> "E"
 
 (** Memory ordering modes *)
 type mode = Relaxed | Acquire | Release | SC | Normal | Strong | Nonatomic

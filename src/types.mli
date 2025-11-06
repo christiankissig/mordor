@@ -1,23 +1,5 @@
 open Uset
 
-(** Core type definitions for sMRD *)
-
-(** {1 Options} *)
-
-(** Configuration options for sMRD *)
-type options = {
-  dependencies : bool;
-  just_structure : bool;
-  exhaustive : bool;
-  forcerc11 : bool;
-  forceimm : bool;
-  forcenocoh : bool;
-  coherent : string;
-}
-
-(** Default option values *)
-val default_options : options
-
 (** {1 Event Types} *)
 
 (** Types of memory and control flow events *)

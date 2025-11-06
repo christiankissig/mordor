@@ -1,6 +1,33 @@
+open Ir
 open Types
 open Uset
-open Ir
+
+(** configuration options *)
+
+type output_mode = Json | Html | Dot | Isa
+
+type options = {
+  dependencies : bool;
+  just_structure : bool; (* TODO deprecate *)
+  exhaustive : bool;
+  forcerc11 : bool;
+  forceimm : bool;
+  forcenocoh : bool;
+  coherent : string;
+}
+
+let default_options =
+  {
+    dependencies = true;
+    just_structure = false;
+    exhaustive = false;
+    forcerc11 = false;
+    forceimm = false;
+    forcenocoh = false;
+    coherent = "rc11";
+  }
+
+(** context for pipeline *)
 
 type mordor_ctx = {
   (* pipeline config *)
@@ -23,12 +50,14 @@ type mordor_ctx = {
   mutable futures : future USet.t option;
   (* visualisation *)
   mutable output : string option;
+  output_mode : output_mode;
+  output_file : string;
   (* verification results could be added here *)
   mutable valid : bool option;
-  mutable undefined_beahviour : bool option;
+  mutable undefined_behaviour : bool option;
 }
 
-let make_context options =
+let make_context options ?(output_mode = Json) ?(output_file = "stdout") () =
   {
     options;
     litmus_name = None;
@@ -42,9 +71,15 @@ let make_context options =
     executions = None;
     futures = None;
     output = None;
+    output_mode;
+    output_file;
     valid = None;
-    undefined_beahviour = None;
+    undefined_behaviour = None;
   }
+
+(** result type *)
+
+(* TODO deprecate this in favor of mordor_ctx *)
 
 type result = {
   ast : expr list; (* Simplified AST *)

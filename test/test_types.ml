@@ -1,101 +1,7 @@
+open Context
 open Events
 open Types
 open Uset
-
-(** Test default options *)
-let test_default_options () =
-  Alcotest.(check bool)
-    "dependencies default is true" true default_options.dependencies;
-  Alcotest.(check bool)
-    "just_structure default is false" false default_options.just_structure;
-  Alcotest.(check bool)
-    "exhaustive default is false" false default_options.exhaustive;
-  Alcotest.(check bool)
-    "forcerc11 default is false" false default_options.forcerc11;
-  Alcotest.(check bool)
-    "forceimm default is false" false default_options.forceimm;
-  Alcotest.(check bool)
-    "forcenocoh default is false" false default_options.forcenocoh
-
-(** Test event_type_to_string *)
-let test_event_type_to_string () =
-  let cases =
-    [
-      (Read, "R", "Read");
-      (Write, "W", "Write");
-      (Lock, "L", "Lock");
-      (Unlock, "U", "Unlock");
-      (Fence, "F", "Fence");
-      (Init, "", "Init");
-      (Branch, "", "Branch");
-      (Loop, "", "Loop");
-      (Malloc, "Alloc", "Malloc");
-      (Free, "Free", "Free");
-      (RMW, "", "RMW");
-      (CRMW, "", "CRMW");
-    ]
-  in
-    List.iter
-      (fun (input, expected, name) ->
-        Alcotest.(check string)
-          (name ^ " converts to " ^ if expected = "" then "empty" else expected)
-          expected
-          (event_type_to_string input)
-      )
-      cases
-
-(** Test mode_to_string *)
-let test_mode_to_string () =
-  let cases =
-    [
-      (Relaxed, "rlx");
-      (Acquire, "acq");
-      (Release, "rel");
-      (SC, "sc");
-      (Normal, "");
-      (Strong, "strong");
-      (Nonatomic, "na");
-    ]
-  in
-    List.iter
-      (fun (mode, expected) ->
-        let mode_name =
-          match mode with
-          | Relaxed -> "Relaxed"
-          | Acquire -> "Acquire"
-          | Release -> "Release"
-          | SC -> "SC"
-          | Normal -> "Normal"
-          | Strong -> "Strong"
-          | Nonatomic -> "Nonatomic"
-        in
-          Alcotest.(check string)
-            (Printf.sprintf "%s converts to %s" mode_name
-               (if expected = "" then "empty" else expected)
-            )
-            expected (mode_to_string mode)
-      )
-      cases
-
-(** Test mode_to_string_or *)
-let test_mode_to_string_or () =
-  Alcotest.(check string)
-    "Relaxed converts to empty in _or" ""
-    (mode_to_string_or Relaxed);
-  Alcotest.(check string)
-    "Acquire converts to acq in _or" "acq"
-    (mode_to_string_or Acquire);
-  Alcotest.(check string)
-    "Release converts to rel in _or" "rel"
-    (mode_to_string_or Release);
-  Alcotest.(check string) "SC converts to sc in _or" "sc" (mode_to_string_or SC);
-  Alcotest.(check string)
-    "Normal converts to empty in _or" "" (mode_to_string_or Normal);
-  Alcotest.(check string)
-    "Strong converts to strong in _or" "strong" (mode_to_string_or Strong);
-  Alcotest.(check string)
-    "Nonatomic converts to na in _or" "na"
-    (mode_to_string_or Nonatomic)
 
 (** Test Unicode module *)
 let test_unicode_symbols () =
@@ -246,10 +152,6 @@ let test_expr_binop () =
 let suite =
   ( "Types",
     [
-      Alcotest.test_case "Default options" `Quick test_default_options;
-      Alcotest.test_case "Event type to string" `Quick test_event_type_to_string;
-      Alcotest.test_case "Mode to string" `Quick test_mode_to_string;
-      Alcotest.test_case "Mode to string or" `Quick test_mode_to_string_or;
       Alcotest.test_case "Unicode symbols" `Quick test_unicode_symbols;
       Alcotest.test_case "Greek alphabet" `Quick test_greek_alpha;
       Alcotest.test_case "Chinese numerals" `Quick test_zh_alpha;

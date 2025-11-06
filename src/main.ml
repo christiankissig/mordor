@@ -1,15 +1,12 @@
 (** Mordor - Main Loop *)
 
+open Context
 open Lwt.Syntax
 open Types
-open Symmrd
-open Eventstructureviz
 open Uset
-open Context
 
 (* Command line options *)
 type run_mode = Samples | AllLitmusTests | Single
-type output_mode = Json | Html | Dot | Isa
 type command = Run | Parse | Interpret | VisualEs | Dependencies | Futures
 
 let command = ref None
@@ -19,40 +16,6 @@ let litmus_dir = ref "litmus_tests"
 let single_file = ref None
 let output_file = ref None
 let recursive = ref false
-
-(* Run verification *)
-let verify_program program options =
-  let context = make_context options in
-    context.litmus <- Some program;
-    Lwt.return context
-    |> Parse.step_parse_program
-    |> Interpret.step_interpret
-    |> Symmrd.step_calculate_dependencies
-
-(* Pretty print results *)
-let print_results (ctx : mordor_ctx) =
-  Printf.printf "=== Verification Results ===\n";
-  match ctx.valid with
-  | None -> Printf.printf "Valid: Unknown\n"
-  | Some valid -> (
-      Printf.printf "Valid: %b\n" valid;
-      match ctx.undefined_beahviour with
-      | None -> Printf.printf "Undefined Behavior: Unknown\n"
-      | Some ub -> (
-          Printf.printf "Undefined Behavior: %b\n" ub;
-          match ctx.executions with
-          | None -> Printf.printf "Executions: Unknown\n"
-          | Some executions -> (
-              Printf.printf "Executions: %d\n" (USet.size executions);
-              match ctx.structure with
-              | None -> Printf.printf "Events: Unknown\n"
-              | Some structure ->
-                  Printf.printf "Events: %d\n" (USet.size structure.e);
-                  Printf.printf "===========================\n";
-                  flush stdout
-            )
-        )
-    )
 
 (* Example programs *)
 let example_programs =
@@ -82,6 +45,30 @@ name = LB
   |}
     );
   ]
+
+(* Pretty print results *)
+let print_results (lwt_ctx : mordor_ctx Lwt.t) =
+  let* ctx = lwt_ctx in
+    Printf.printf "=== Verification Results ===\n";
+    ( match ctx.valid with
+    | None -> Printf.printf "Valid: Unknown\n"
+    | Some valid -> Printf.printf "Valid: %b\n" valid
+    );
+    ( match ctx.undefined_behaviour with
+    | None -> Printf.printf "Undefined Behavior: Unknown\n"
+    | Some ub -> Printf.printf "Undefined Behavior: %b\n" ub
+    );
+    ( match ctx.executions with
+    | None -> Printf.printf "Executions: Unknown\n"
+    | Some executions -> Printf.printf "Executions: %d\n" (USet.size executions)
+    );
+    ( match ctx.structure with
+    | None -> Printf.printf "Events: Unknown\n"
+    | Some structure -> Printf.printf "Events: %d\n" (USet.size structure.e)
+    );
+    Printf.printf "===========================\n";
+    flush stdout;
+    Lwt.return_unit
 
 (* Read all .lit files from a directory *)
 let read_litmus_files dir =
@@ -113,15 +100,22 @@ let read_litmus_files dir =
       )
       lit_files
 
+(* Run verification *)
+let verify_program program options =
+  let context = make_context options () in
+    context.litmus <- Some program;
+    Lwt.return context
+    |> Parse.step_parse_program
+    |> Interpret.step_interpret
+    |> Symmrd.step_calculate_dependencies
+
 let run_single name program =
   Printf.printf "Running program %s.\n" name;
   Printf.printf "===================\n";
   Printf.printf "\n=== Running: %s ===\n" name;
   Printf.printf "Program:\n%s\n\n" program;
   flush stdout;
-  let* result = verify_program program default_options in
-    print_results result;
-    Lwt.return_unit
+  verify_program program default_options |> print_results
 
 let run_tests tests =
   Logs.info (fun m -> m "Running %d tests." (List.length tests));
@@ -129,216 +123,57 @@ let run_tests tests =
     flush stdout;
     Lwt.return_unit
 
-let parse_single name program =
-  Logs.info (fun m -> m "Parsing program %s." name);
-  let _ast, _program_stmts = Parse.parse_program program in
-    Logs.info (fun m -> m "Parsed program %s successfully." name);
-    (* Generate Isabelle output if output mode is Isa *)
-    ( match !output_mode with
-    | Some Isa ->
-        let output_file =
-          match !output_file with
-          | None ->
-              (* Generate filename from program name *)
-              let base_name =
-                if Filename.check_suffix name ".lit" then
-                  Filename.chop_suffix name ".lit"
-                else name
-              in
-                base_name ^ ".thy"
-          | Some f -> f
-        in
-        let isa_content =
-          Printf.sprintf
-            "theory %s\n\
-            \  imports Main\n\
-             begin\n\n\
-             (* Parsed from %s *)\n\n\
-             (* TODO: Add Isabelle formalization *)\n\n\
-             end\n"
-            (String.capitalize_ascii
-               (Filename.basename (Filename.chop_extension output_file))
-            )
-            name
-        in
-        let oc = open_out output_file in
-          output_string oc isa_content;
-          close_out oc;
-          Printf.printf "Generated Isabelle file: %s\n" output_file;
-          flush stdout
-    | _ -> ()
-    );
-    Lwt.return_unit
+let parse_single name program options =
+  let context = make_context options () in
+    context.litmus_name <- Some name;
+    context.litmus <- Some program;
+    Lwt.return context |> Parse.step_parse_program |> print_results
 
-let parse_tests tests =
+let parse_tests tests options =
   let* () =
-    Lwt_list.iter_s (fun (name, prog) -> parse_single name prog) tests
+    Lwt_list.iter_s (fun (name, prog) -> parse_single name prog options) tests
   in
-    flush stdout;
     Lwt.return_unit
 
-let interpret_single name program =
+let interpret_single name program options =
   Logs.info (fun m -> m "Interpreting program %s." name);
-  let _, program_stmts = Parse.parse_program program in
-    let* _result =
-      Interpret.interpret program_stmts [] (Hashtbl.create 16) []
-    in
-      Printf.printf "Interpreted program %s successfully.\n" name;
-      flush stdout;
-      Lwt.return_unit
+  let context = make_context options () in
+    context.litmus <- Some program;
+    Lwt.return context
+    |> Parse.step_parse_program
+    |> Interpret.step_interpret
+    |> print_results
 
-let interpret_tests tests =
+let interpret_tests tests options =
   let* () =
-    Lwt_list.iter_s (fun (name, prog) -> interpret_single name prog) tests
+    Lwt_list.iter_s
+      (fun (name, prog) -> interpret_single name prog options)
+      tests
   in
     flush stdout;
     Lwt.return_unit
 
-let futures_single name program =
-  Logs.info (fun m -> m "Computing futures for program %s." name);
-  let* result = verify_program program default_options in
-    Logs.info (fun m -> m "Computed futures for program %s successfully." name);
-    (* Generate output based on output mode *)
-    ( match !output_mode with
-    | Some Json ->
-        let output_file =
-          match !output_file with
-          | None ->
-              let base_name =
-                if Filename.check_suffix name ".lit" then
-                  Filename.chop_suffix name ".lit"
-                else name
-              in
-                base_name ^ "_futures.json"
-          | Some f -> f
-        in
-        let futures_json =
-          (* Create JSON representation of futures *)
-          let executions_json =
-            match result.executions with
-            | None -> "[]"
-            | Some execs ->
-                USet.values execs
-                |> List.mapi (fun i _exec ->
-                       Printf.sprintf
-                         "    {\n\
-                         \      \"execution\": %d,\n\
-                         \      \"futures\": {}\n\
-                         \    }"
-                         i
-                   )
-                |> String.concat ",\n"
-          in
-            Printf.sprintf
-              "{\n  \"program\": \"%s\",\n  \"executions\": [\n%s\n  ]\n}\n"
-              name executions_json
-        in
-        let oc = open_out output_file in
-          output_string oc futures_json;
-          close_out oc;
-          Printf.printf "Generated futures JSON file: %s\n" output_file;
-          flush stdout
-    | Some Isa ->
-        let output_file =
-          match !output_file with
-          | None ->
-              let base_name =
-                if Filename.check_suffix name ".lit" then
-                  Filename.chop_suffix name ".lit"
-                else name
-              in
-                base_name ^ "_futures.thy"
-          | Some f -> f
-        in
-        let theory_name =
-          String.capitalize_ascii
-            (Filename.basename (Filename.chop_extension output_file))
-        in
-        let isa_content =
-          Printf.sprintf
-            "theory %s\n\
-            \  imports Main\n\
-             begin\n\n\
-             (* Futures for program: %s *)\n\n\
-             (* Number of executions: %d *)\n\
-             (* Number of events: %d *)\n\n\
-             (* TODO: Add Isabelle formalization of futures *)\n\n\
-             end\n"
-            theory_name name
-            ( match result.executions with
-            | None -> 0
-            | Some execs -> USet.size execs
-            )
-            ( match result.structure with
-            | None -> 0
-            | Some structure -> USet.size structure.e
-            )
-        in
-        let oc = open_out output_file in
-          output_string oc isa_content;
-          close_out oc;
-          Printf.printf "Generated Isabelle futures file: %s\n" output_file;
-          flush stdout
-    | _ ->
-        Printf.printf "Program: %s\n" name;
-        Printf.printf "Number of executions: %d\n"
-          ( match result.executions with
-          | None -> 0
-          | Some executions -> USet.size executions
-          );
-        Printf.printf "Number of events: %d\n"
-          ( match result.structure with
-          | None -> 0
-          | Some structure -> USet.size structure.e
-          );
-        flush stdout
-    );
-    Lwt.return_unit
+let futures_single (name, program) options output_mode output_file =
+  let context = make_context options ~output_mode ~output_file () in
+    context.litmus_name <- Some name;
+    context.litmus <- Some program;
+    Lwt.return context
+    |> Parse.step_parse_program
+    |> Interpret.step_interpret
+    |> Symmrd.step_calculate_dependencies
+    |> Futures.step_futures
+    |> Futures.print_futures
+    |> print_results
 
-let futures_tests tests =
-  let* () =
-    Lwt_list.iter_s (fun (name, prog) -> futures_single name prog) tests
-  in
-    flush stdout;
-    Lwt.return_unit
-
-let visualize_event_structure (mode : output_mode) output_file (name, program) =
-  Printf.printf "Visualizing event structure for program %s.\n" name;
-  flush stdout;
-  let opts = { default_options with just_structure = false } in
-    let* result = create_symbolic_event_structure program opts in
-      match mode with
-      | Json ->
-          let json =
-            EventStructureViz.visualize EventStructureViz.JSON result.structure
-              result.events
-          in
-            ( if output_file = "stdout" then Printf.printf "%s\n" json
-              else
-                let oc = open_out output_file in
-                  output_string oc json;
-                  close_out oc
-            );
-            Lwt.return_unit
-      | Dot ->
-          let dot =
-            EventStructureViz.visualize EventStructureViz.DOT result.structure
-              result.events
-          in
-            ( if output_file = "stdout" then Printf.printf "%s\n" dot
-              else
-                let oc = open_out output_file in
-                  output_string oc dot;
-                  close_out oc
-            );
-            Lwt.return_unit
-      | Html ->
-          Printf.eprintf "HTML output not implemented yet.\n";
-          Lwt.return_unit
-      | Isa ->
-          Printf.eprintf
-            "Error: Isabelle output is only valid for the parse command.\n";
-          Lwt.return_unit
+let visualize_es_single (name, program) options output_mode output_file =
+  let context = make_context options ~output_mode ~output_file () in
+    context.litmus_name <- Some name;
+    context.litmus <- Some program;
+    Lwt.return context
+    |> Parse.step_parse_program
+    |> Interpret.step_interpret
+    |> Eventstructureviz.step_visualize_event_structure
+    |> print_results
 
 let usage_msg =
   "Usage: main COMMAND [OPTIONS]\n\n\
@@ -460,41 +295,31 @@ let main () =
       )
   in
 
+  let options = default_options in
+
+  let assert_single_test =
+    if List.length tests <> 1 then (
+      Printf.eprintf
+        "Error: command requires exactly one input program (use --single)\n";
+      exit 1
+    )
+  in
+
   (* Handle the command *)
   match cmd with
   | Run -> run_tests tests
-  | Parse -> parse_tests tests
-  | Interpret -> interpret_tests tests
+  | Parse -> parse_tests tests options
+  | Interpret -> interpret_tests tests options
   | Futures ->
-      if List.length tests <> 1 then (
-        Printf.eprintf
-          "Error: futures command requires exactly one input program (use \
-           --single)\n";
-        exit 1
-      );
-      futures_tests tests
+      assert_single_test;
+      futures_single (List.hd tests) options
+        (Option.value !output_mode ~default:Json)
+        (Option.value !output_file ~default:"stdout")
   | VisualEs ->
-      if List.length tests <> 1 then (
-        Printf.eprintf
-          "Error: visual-es command requires exactly one input program\n";
-        exit 1
-      );
-      let output_file =
-        match !output_file with
-        | None -> "stdout"
-        | Some f -> f
-      in
-        Printf.printf "Generating visualization to %s\n" output_file;
-        let mode =
-          match !output_mode with
-          | None ->
-              Printf.eprintf
-                "Error: --output-mode is required for visual-es command\n";
-              Printf.eprintf "Valid modes: json, html, dot\n";
-              exit 1
-          | Some m -> m
-        in
-          visualize_event_structure mode output_file (List.hd tests)
+      assert_single_test;
+      visualize_es_single (List.hd tests) options
+        (Option.value !output_mode ~default:Dot)
+        (Option.value !output_file ~default:"stdout")
   | _ ->
       Printf.printf "TODO: not implemented yet\n";
       Lwt.return_unit

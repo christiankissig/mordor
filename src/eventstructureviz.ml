@@ -1,27 +1,13 @@
 (** Graph Visualization Module for Symbolic Event Structures using OCamlGraph *)
 
+open Context
 open Graph
 open Expr
 open Types
 open Uset
+open Lwt.Syntax
 
 module EventStructureViz = struct
-  (** Output format type *)
-  type output_format = DOT | JSON
-
-  (** Format event type as string *)
-  let event_type_to_string = function
-    | Read -> "R"
-    | Write -> "W"
-    | RMW -> "RMW"
-    | Fence -> "F"
-    | Lock -> "L"
-    | Unlock -> "U"
-    | Init -> "I"
-    | Malloc -> "A"
-    | Free -> "D"
-    | _ -> "E"
-
   (** Vertex type with event information *)
   module Vertex = struct
     type t = { id : int; event : event; constraints : expr list }
@@ -366,31 +352,66 @@ module EventStructureViz = struct
         Buffer.contents buf
 
   (** Main visualization function *)
-  let visualize (format : output_format) (ses : symbolic_event_structure)
+  let visualize (format : output_mode) (ses : symbolic_event_structure)
       (events : (int, event) Hashtbl.t) : string =
     let g = build_graph ses events in
       match format with
-      | DOT -> to_dot g
-      | JSON -> to_json g
+      | Dot -> to_dot g
+      | Json -> to_json g
+      | _ ->
+          Logs.err (fun m -> m "Unsupported output format for visualization.");
+          ""
 
   (** Write visualization to file *)
-  let write_to_file (filename : string) (format : output_format)
+  let write_to_file (filename : string) (format : output_mode)
       (ses : symbolic_event_structure) (events : (int, event) Hashtbl.t) : unit
       =
     let g = build_graph ses events in
       match format with
-      | DOT ->
-          let oc = open_out filename in
-            DotExport.output_graph oc g;
-            close_out oc
-      | JSON ->
+      | Dot ->
+          if filename = "stdout" then (
+            let dot_content = to_dot g in
+              Printf.printf "%s\n" dot_content;
+              flush stdout
+          )
+          else
+            let oc = open_out filename in
+              DotExport.output_graph oc g;
+              close_out oc
+      | Json ->
           let content = to_json g in
-          let oc = open_out filename in
-            output_string oc content;
-            close_out oc
+            if filename = "stdout" then (
+              Printf.printf "%s\n" content;
+              flush stdout
+            )
+            else
+              let oc = open_out filename in
+                output_string oc content;
+                close_out oc
+      | _ -> Logs.err (fun m -> m "Unsupported output format for visualization.")
 
   (** Export graph for further processing *)
   let get_graph (ses : symbolic_event_structure)
       (events : (int, event) Hashtbl.t) : G.t =
     build_graph ses events
 end
+
+let step_visualize_event_structure (lwt_ctx : mordor_ctx Lwt.t) :
+    mordor_ctx Lwt.t =
+  let* ctx = lwt_ctx in
+
+  match (ctx.structure, ctx.events) with
+  | Some structure, Some events ->
+      EventStructureViz.write_to_file ctx.output_file ctx.output_mode structure
+        events;
+
+      Logs.info (fun m ->
+          m "Event structure visualization written to %s" ctx.output_file
+      );
+
+      Lwt.return ctx
+  | _ ->
+      Logs.err (fun m ->
+          m "Event structure or events not available for visualization."
+      );
+      Lwt.return ctx
