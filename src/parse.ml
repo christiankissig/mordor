@@ -1,3 +1,4 @@
+open Assertion
 open Ast
 open Context
 open Ir
@@ -124,6 +125,35 @@ let rec convert_stmt = function
       let ir_size = ast_expr_to_expr size in
         Malloc { register; size = ir_size }
 
+and convert_litmus (ast_litmus : ast_litmus) : ir_litmus =
+  let name =
+    match ast_litmus.config with
+    | Some config -> config.name
+    | None -> "unnamed_litmus"
+  in
+  let assertions =
+    match ast_litmus.assertion with
+    | Some assertion -> [ convert_assertion assertion ]
+    | None -> []
+  in
+  let program = List.map convert_stmt ast_litmus.program in
+    { name; assertions; program }
+
+and convert_assertion (assertion : ast_assertion) : ir_assertion =
+  match assertion with
+  | AOutcome { outcome; condition; model } ->
+      let ir_condition = ast_expr_to_expr condition in
+      let ir_outcome = outcome_of_string outcome in
+        Outcome { outcome = ir_outcome; condition = ir_condition; model }
+  | AModel { model } -> Model { model }
+  | AChained { model; outcome; rest } ->
+      Chained
+        {
+          model;
+          outcome = outcome_of_string outcome;
+          rest = convert_litmus rest;
+        }
+
 (** Parse program *)
 let parse_program program =
   Logs.debug (fun m -> m "Parsing program...");
@@ -138,22 +168,28 @@ let parse_program program =
         )
     in
     let program_stmts = List.map convert_stmt litmus.program in
-      (constraints, program_stmts)
+    let assertions =
+      match litmus.assertion with
+      | Some assertion -> [ convert_assertion assertion ]
+      | None -> []
+    in
+      (constraints, program_stmts, assertions)
   with
   | Failure msg ->
       Logs.err (fun m -> m "Parse error: %s" msg);
-      ([], [])
+      ([], [], [])
   | e ->
       Logs.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
-      ([], [])
+      ([], [], [])
 
 let step_parse_program (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
     match ctx.litmus with
     | Some program ->
-        let constraints, statements = parse_program program in
+        let constraints, statements, assertions = parse_program program in
           ctx.litmus_constraints <- Some constraints;
           ctx.program_stmts <- Some statements;
+          ctx.assertions <- Some assertions;
           Lwt.return ctx
     | None ->
         Logs.err (fun m -> m "No program provided for parsing.");

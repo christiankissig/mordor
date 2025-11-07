@@ -234,7 +234,7 @@ let create_symbolic_event_structure program (opts : options) =
   let* _ = Lwt.return_unit in
 
   (* Parse program - get both constraints and program statements *)
-  let ast, program_stmts = Parse.parse_program program in
+  let ast, program_stmts, _ = Parse.parse_program program in
 
   (* Interpret program *)
   let* structure, events =

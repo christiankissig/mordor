@@ -1,8 +1,12 @@
-(** Assertion checking and refinement for symbolic memory model checking *)
-
+open Context
+open Expr
+open Ir
 open Types
 open Uset
-open Expr
+open Events
+open Lwt.Syntax
+
+(** Assertion checking and refinement for symbolic memory model checking *)
 
 (** {1 Helper Modules} *)
 
@@ -69,8 +73,6 @@ let model_names =
 
 (** {1 Assertion Types} *)
 
-type outcome = Allow | Forbid
-
 let outcome_of_string = function
   | "allow" -> Allow
   | "forbid" -> Forbid
@@ -83,7 +85,7 @@ let string_of_outcome = function
 type assertion_condition = CondExpr of expr | CondUB
 
 type assertion = {
-  outcome : outcome;
+  outcome : ir_assertion_outcome;
   condition : assertion_condition;
   model : string option;
 }
@@ -111,16 +113,6 @@ let get_event_loc events event_label =
         )
     )
 
-(** Filter events by type from a set *)
-let filter_events_by_type events e_set typ =
-  USet.filter
-    (fun label ->
-      match Hashtbl.find_opt events label with
-      | Some e -> e.typ = typ
-      | None -> false
-    )
-    e_set
-
 (** Parallel map for lists using Lwt *)
 let lwt_pmap f lst = Lwt_list.map_p f lst
 
@@ -146,11 +138,10 @@ let lwt_pall f lst =
     Lwt.return (List.for_all (fun x -> x) results)
 
 (** Main assertion checking function *)
-let check_assertion assertion_opt executions structure events ~exhaustive =
-  (* Early return for missing assertion *)
-  match assertion_opt with
-  | None -> Lwt.return { valid = true; ub = false; ub_reasons = [] }
-  | Some assertion ->
+let check_assertion (assertion : ir_assertion) executions structure events
+    ~exhaustive =
+  match assertion with
+  | Outcome { outcome; condition; model } ->
       (* Check for no executions in exhaustive mode *)
       let%lwt () =
         if exhaustive && List.length executions = 0 then
@@ -160,40 +151,24 @@ let check_assertion assertion_opt executions structure events ~exhaustive =
 
       (* Handle non-exhaustive forbid case *)
       let%lwt () =
-        if
-          (not exhaustive)
-          && assertion.outcome = Forbid
-          && List.length executions = 0
+        if (not exhaustive) && outcome = Forbid && List.length executions = 0
         then Lwt.return ()
         else Lwt.return ()
       in
 
-      if
-        (not exhaustive)
-        && assertion.outcome = Forbid
-        && List.length executions = 0
-      then Lwt.return { valid = true; ub = false; ub_reasons = [] }
+      if (not exhaustive) && outcome = Forbid && List.length executions = 0 then
+        Lwt.return { valid = true; ub = false; ub_reasons = [] }
       else
-        (* Parse conditions *)
-        let conditions =
-          match assertion.condition with
-          | CondUB -> []
-          | CondExpr condition_expr ->
-              (* This would use Expression.of to split disjunctions and flatten *)
-              (* For now, we'll use a simplified version *)
-              [ [ condition_expr ] ]
-        in
-
         let ub_reasons = ref [] in
-        let expected = assertion.outcome = Allow in
+        let expected = outcome = Allow in
         let curr = ref false in
 
         (* Helper to get pointers (events with locations that are not variables) *)
         let get_pointers () =
-          let read_events = filter_events_by_type events structure.e Read in
-          let write_events = filter_events_by_type events structure.e Write in
-          let free_events = filter_events_by_type events structure.e Free in
-          let malloc_events = filter_events_by_type events structure.e Malloc in
+          let read_events = filter_events events structure.e Read in
+          let write_events = filter_events events structure.e Write in
+          let free_events = filter_events events structure.e Free in
+          let malloc_events = filter_events events structure.e Malloc in
 
           let all_pointer_events =
             USet.union
@@ -286,11 +261,9 @@ let check_assertion assertion_opt executions structure events ~exhaustive =
                       pointers;
 
                     (* Get all malloc, free, read, write events *)
-                    let all_frees =
-                      filter_events_by_type events execution.ex_e Free
-                    in
+                    let all_frees = filter_events events execution.ex_e Free in
                     let all_alloc =
-                      filter_events_by_type events execution.ex_e Malloc
+                      filter_events events execution.ex_e Malloc
                     in
 
                     (* All events that use pointers (read, write, malloc) *)
@@ -379,24 +352,11 @@ let check_assertion assertion_opt executions structure events ~exhaustive =
                       (* Check conditions if not already satisfied *)
                       if not !curr then (
                         let%lwt conds_satisfied =
-                          if List.length conditions = 0 then Lwt.return true
-                          else
-                            lwt_psome
-                              (fun cond_list ->
-                                Solver.is_sat (rf_conditions @ cond_list)
-                              )
-                              conditions
+                          Solver.is_sat (condition :: rf_conditions)
                         in
 
                         (* Check extended assertions *)
-                        let%lwt extended_ok =
-                          match assertion.condition with
-                          | CondUB -> Lwt.return true
-                          | CondExpr _condition_expr ->
-                              (* Call structure.checkLocAssertion and checkExtendedAssertion *)
-                              (* These would need to be defined in the structure module *)
-                              Lwt.return true
-                        in
+                        let%lwt extended_ok = Lwt.return true in
 
                         curr := conds_satisfied && extended_ok;
                         Lwt.return ()
@@ -408,13 +368,10 @@ let check_assertion assertion_opt executions structure events ~exhaustive =
 
         (* Compute final result *)
         let ub = List.length !ub_reasons > 0 in
-        let valid =
-          match assertion.condition with
-          | CondUB -> ub <> (assertion.outcome = Allow)
-          | CondExpr _ -> !curr = expected
-        in
+        let valid = !curr = expected in
 
         Lwt.return { valid; ub; ub_reasons = List.rev !ub_reasons }
+  | _ -> Lwt.fail_with "Unsupported assertion type"
 
 (** {1 Refinement Checking} *)
 
@@ -493,3 +450,40 @@ let do_check_refinement _ast =
       events = Hashtbl.create 0;
       valid = false;
     }
+
+let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  let%lwt ctx = ctx in
+    match (ctx.structure, ctx.executions, ctx.events) with
+    | Some structure, Some executions, Some events ->
+        let execution_list = USet.to_list executions in
+          let* assertion_result : assertion_result =
+            match ctx.assertions with
+            | None | Some [] ->
+                Lwt.return { valid = true; ub = false; ub_reasons = [] }
+            | Some assertions ->
+                Lwt_list.fold_left_s
+                  (fun (acc : assertion_result) (assertion : ir_assertion) ->
+                    let* (res : assertion_result) =
+                      check_assertion assertion execution_list structure events
+                        ~exhaustive:ctx.options.exhaustive
+                    in
+                      if not res.valid then Lwt.return res
+                      else
+                        Lwt.return
+                          {
+                            valid = acc.valid && res.valid;
+                            ub = acc.ub || res.ub;
+                            ub_reasons = acc.ub_reasons @ res.ub_reasons;
+                          }
+                  )
+                  { valid = true; ub = false; ub_reasons = [] }
+                  assertions
+          in
+            ctx.valid <- Some assertion_result.valid;
+            ctx.undefined_behaviour <- Some assertion_result.ub;
+            Lwt.return ctx
+    | _ ->
+        Logs.err (fun m ->
+            m "Event structure or executions not available for assertion check."
+        );
+        Lwt.return ctx

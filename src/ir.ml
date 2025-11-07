@@ -2,7 +2,16 @@ open Ast
 open Expr
 open Types
 
-type ir_stmt =
+type ir_assertion_outcome = Allow | Forbid
+type ir_assertion_check = { model : string; condition : ir_assertion_outcome }
+
+type ir_litmus = {
+  name : string;
+  assertions : ir_assertion list;
+  program : ir_stmt list;
+}
+
+and ir_stmt =
   | Threads of { threads : ir_stmt list list }
   | RegisterStore of { register : string; expr : expr }
   | GlobalStore of { global : string; expr : expr; assign : assign_info }
@@ -30,6 +39,19 @@ type ir_stmt =
   | Fadd of { register : string; address : expr; operand : expr; mode : mode }
   | Malloc of { register : string; size : expr }
   | Labeled of { label : string list; stmt : ir_stmt }
+
+and ir_assertion =
+  | Outcome of {
+      outcome : ir_assertion_outcome;
+      condition : expr;
+      model : string option;
+    }
+  | Model of { model : string }
+  | Chained of {
+      model : string;
+      outcome : ir_assertion_outcome;
+      rest : ir_litmus;
+    }
 
 let rec to_string (stmt : ir_stmt) : string =
   match stmt with

@@ -1,35 +1,11 @@
 open Uset
 
-(** Event types *)
-type event_type =
-  | Read
-  | Write
-  | Lock
-  | Unlock
-  | Fence
-  | Init
-  | Branch
-  | Loop
-  | Malloc
-  | Free
-  | RMW
-  | CRMW
+(** Basic types *)
 
-let event_type_to_string = function
-  | Read -> "R"
-  | Write -> "W"
-  | Lock -> "L"
-  | Unlock -> "U"
-  | Fence -> "F"
-  | Init -> "I"
-  | Branch -> "B"
-  | Malloc -> "A"
-  | Free -> "D"
-  | RMW -> "RMW"
-  | CRMW -> "CRMW"
-  | _ -> "E"
+type 'a uset = 'a USet.t
 
 (** Memory ordering modes *)
+
 type mode = Relaxed | Acquire | Release | SC | Normal | Strong | Nonatomic
 
 let mode_to_string = function
@@ -73,8 +49,6 @@ let greek_alpha = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖ�
 (** Chinese numerals for allocation symbols *)
 let zh_alpha = "一二三四五六七八九十"
 
-type 'a uset = 'a USet.t
-
 (** Value representation *)
 type value_type =
   | VNumber of Z.t
@@ -91,6 +65,35 @@ and expr =
   | ESymbol of string
   | EBoolean of bool
   | ENum of Z.t
+
+(** Event types *)
+type event_type =
+  | Read
+  | Write
+  | Lock
+  | Unlock
+  | Fence
+  | Init
+  | Branch
+  | Loop
+  | Malloc
+  | Free
+  | RMW
+  | CRMW
+
+let event_type_to_string = function
+  | Read -> "R"
+  | Write -> "W"
+  | Lock -> "L"
+  | Unlock -> "U"
+  | Fence -> "F"
+  | Init -> "I"
+  | Branch -> "B"
+  | Malloc -> "A"
+  | Free -> "D"
+  | RMW -> "RMW"
+  | CRMW -> "CRMW"
+  | _ -> "E"
 
 (** Event structure *)
 type event = {
@@ -114,7 +117,7 @@ type event = {
   quot : int option;
 }
 
-(** Symbolic Event Structure *)
+(** Symbolic Event Structures *)
 type symbolic_event_structure = {
   e : int uset; (* Set of event IDs *)
   po : (int * int) uset; (* Program order relation *)
@@ -129,8 +132,35 @@ type symbolic_event_structure = {
   constraint_ : expr list; (* Constraints *)
 }
 
-(** Continuation type *)
-type ('a, 'b) continuation = { lines : 'a list ref; default : unit -> 'b Lwt.t }
+(** Justifications *)
+type justification = {
+  p : expr list; (* Predicates/conditions *)
+  d : string uset; (* Dependency symbols *)
+  fwd : (int * int) uset; (* Forwarding edges (event pairs) *)
+  we : (int * int) uset; (* Write-elision edges (event pairs) *)
+  w : event; (* The write event being justified *)
+  op : string * justification option * expr option; (* Operation tag *)
+}
+
+(** Symbolic Executions *)
+type symbolic_execution = {
+  ex_e : int uset; (* Event set *)
+  rf : (int * int) uset; (* Reads-from relation *)
+  dp : (int * int) uset; (* Dependencies *)
+  ppo : (int * int) uset; (* Preserved program order *)
+  ex_rmw : (int * int) uset; (* RMW pairs *)
+  ex_p : expr list; (* Predicates *)
+  conds : expr list; (* Conditions *)
+  fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
+  justs : justification list; (* Justifications *)
+  pointer_map : (int, value_type) Hashtbl.t option; (* Pointer mappings *)
+}
+
+(** Futures *)
+type future = (int * int) uset
+
+type future_set = future uset
+type history = int uset
 
 (** Function map type *)
 type ('a, 'b) func = { map : ('a, 'b) Hashtbl.t; default : unit -> 'b }
@@ -149,32 +179,3 @@ let func_get f key =
   match func_find f key with
   | Some v -> v
   | None -> f.default ()
-
-type justification = {
-  p : expr list; (* Predicates/conditions *)
-  d : string uset; (* Dependency symbols *)
-  fwd : (int * int) uset; (* Forwarding edges (event pairs) *)
-  we : (int * int) uset; (* Write-elision edges (event pairs) *)
-  w : event; (* The write event being justified *)
-  op : string * justification option * expr option; (* Operation tag *)
-}
-
-(** Symbolic Execution *)
-type symbolic_execution = {
-  ex_e : int uset; (* Event set *)
-  rf : (int * int) uset; (* Reads-from relation *)
-  dp : (int * int) uset; (* Dependencies *)
-  ppo : (int * int) uset; (* Preserved program order *)
-  ex_rmw : (int * int) uset; (* RMW pairs *)
-  ex_p : expr list; (* Predicates *)
-  conds : expr list; (* Conditions *)
-  fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
-  justs : justification list; (* Justifications *)
-  pointer_map : (int, value_type) Hashtbl.t option; (* Pointer mappings *)
-}
-
-(** Future set type *)
-type future = (int * int) uset
-
-type future_set = future uset
-type history = int uset

@@ -48,6 +48,7 @@ type mordor_ctx = {
   (* parser *)
   mutable litmus_constraints : expr list option;
   mutable program_stmts : ir_stmt list option;
+  mutable assertions : ir_assertion list option;
   (* event structures *)
   step_counter : int;
   mutable events : (int, event) Hashtbl.t option;
@@ -77,6 +78,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     litmus_file = None;
     litmus = None;
     litmus_constraints = None;
+    assertions = None;
     program_stmts = None;
     step_counter;
     events = None;

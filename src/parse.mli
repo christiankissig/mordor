@@ -12,7 +12,7 @@ val parse : string -> ast_litmus
 val parse_expr : string -> ast_expr
 
 (** Parse a program (list of statements) from a string *)
-val parse_program : string -> expr list * ir_stmt list
+val parse_program : string -> expr list * ir_stmt list * ir_assertion list
 
 (** Convert parser AST expression to Types.expr *)
 val ast_expr_to_expr : ast_expr -> Types.expr

@@ -128,11 +128,6 @@ type symbolic_event_structure = {
   constraint_ : expr list;
 }
 
-(** {1 Continuation Type} *)
-
-(** Continuation with mutable line buffer and default computation *)
-type ('a, 'b) continuation = { lines : 'a list ref; default : unit -> 'b Lwt.t }
-
 (** {1 Function Maps} *)
 
 (** Function map type with default value *)
