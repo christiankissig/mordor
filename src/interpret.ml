@@ -125,11 +125,11 @@ let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr
 
 (* TODO handle labels *)
 (* TODO check id makes sense here *)
-(* TODO step counter *)
 
 (** Interpret IR - create symbolic event structures *)
 
-let rec interpret_statements (stmts : ir_stmt list) env phi events =
+let interpret_statements_base ~recurse (stmts : ir_stmt list) env phi events =
+  (* note that negative step counters are treated as infinite steps *)
   match stmts with
   | [] -> Lwt.return (empty_structure ())
   | stmt :: rest ->
@@ -140,7 +140,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
             let interpret_threads ts =
               List.fold_left
                 (fun acc t ->
-                  let* t_structure = interpret_statements t env phi events in
+                  let* t_structure = recurse t env phi events in
                     let* acc_structure = acc in
                       Lwt.return (cross acc_structure t_structure)
                 )
@@ -150,7 +150,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
               interpret_threads threads
         | RegisterStore { register; expr } ->
             let env' = update_env env register expr in
-              let* cont = interpret_statements rest env' phi events in
+              let* cont = recurse rest env' phi events in
                 Lwt.return cont
         | GlobalStore { global; expr; assign } ->
             let base_evt : event = Event.create Write 0 () in
@@ -165,7 +165,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
               }
             in
             let event' = add_event events evt in
-              let* cont = interpret_statements rest env phi events in
+              let* cont = recurse rest env phi events in
                 Lwt.return (dot event'.label cont phi)
         | DerefStore { address; expr; assign } ->
             let base_evt : event = Event.create Write 0 () in
@@ -179,7 +179,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
               }
             in
             let event' = add_event events evt in
-              let* cont = interpret_statements rest env phi events in
+              let* cont = recurse rest env phi events in
                 Lwt.return (dot event'.label cont phi)
         | DerefLoad { register; address; load } ->
             let rval = VSymbol (next_greek ()) in
@@ -196,7 +196,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
             let event' = add_event events evt in
             let env' = Hashtbl.copy env in
               Hashtbl.replace env' register (Expr.of_value rval);
-              let* cont = interpret_statements rest env' phi events in
+              let* cont = recurse rest env' phi events in
                 Lwt.return (dot event'.label cont phi)
         | GlobalLoad { register; global; load } ->
             let rval = VSymbol (next_greek ()) in
@@ -214,34 +214,26 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
             let event' = add_event events evt in
             let env' = Hashtbl.copy env in
               Hashtbl.replace env' register (Expr.of_value rval);
-              let* cont = interpret_statements rest env' phi events in
+              let* cont = recurse rest env' phi events in
                 Lwt.return (dot event'.label cont phi)
         | If { condition; then_body; else_body } -> (
             let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
               let* then_structure =
-                interpret_statements then_body env (cond_val :: phi) events
+                recurse then_body env (cond_val :: phi) events
               in
                 match else_body with
                 | Some eb ->
                     let* else_structure =
-                      interpret_statements eb env
-                        (Expr.unop "~" cond_val :: phi)
-                        events
+                      recurse eb env (Expr.unop "~" cond_val :: phi) events
                     in
                       Lwt.return (plus then_structure else_structure)
                 | None -> Lwt.return then_structure
           )
-        (* | `While (condition, body) ->
-          (* Simplified - ignore loops for now *)
-          Lwt.return (empty_structure ()) *)
-        (* | `Do (body, condition) ->
-          (* Simplified - ignore loops for now *)
-          Lwt.return (empty_structure ()) *)
         | Fence { mode } ->
             let base_evt : event = Event.create Fence 0 () in
             let evt = { base_evt with fmod = mode } in
             let event' = add_event events evt in
-              let* cont = interpret_statements rest env phi events in
+              let* cont = recurse rest env phi events in
                 Lwt.return (dot event'.label cont phi)
         | Lock { global } ->
             let base_evt : event = Event.create Lock 0 () in
@@ -251,7 +243,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
               | None -> base_evt
             in
             let event' = add_event events evt in
-              let* cont = interpret_statements rest env phi events in
+              let* cont = recurse rest env phi events in
                 Lwt.return (dot event'.label cont phi)
         | Unlock { global } ->
             let base_evt : event = Event.create Unlock 0 () in
@@ -261,7 +253,7 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
               | None -> base_evt
             in
             let event' = add_event events evt in
-              let* cont = interpret_statements rest env phi events in
+              let* cont = recurse rest env phi events in
                 Lwt.return (dot event'.label cont phi)
         | Malloc { register; size } ->
             let rval = VSymbol (next_zh ()) in
@@ -270,21 +262,14 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
             let event' = add_event events evt in
             let env' = Hashtbl.copy env in
               Hashtbl.replace env' register (Expr.of_value rval);
-              let* cont = interpret_statements rest env' phi events in
+              let* cont = recurse rest env' phi events in
                 Lwt.return (dot event'.label cont phi)
         | Free { register } ->
             let base_evt : event = Event.create Free 0 () in
             let evt = base_evt in
             let event' = add_event events evt in
-              let* cont = interpret_statements rest env phi events in
+              let* cont = recurse rest env phi events in
                 Lwt.return (dot event'.label cont phi)
-        | Labeled { label; stmt } ->
-            (* TODO *)
-            Logs.warn (fun m ->
-                m "Labeled event encountered: %s" (String.concat "; " label)
-            );
-            let* structure = interpret_statements [ stmt ] env phi events in
-              Lwt.return structure
         | _ ->
             (* Simplified - return empty structure for unhandled cases *)
             Logs.err (fun m -> m "Statement not handled: %s" (Ir.to_string stmt));
@@ -292,8 +277,50 @@ let rec interpret_statements (stmts : ir_stmt list) env phi events =
       in
         Lwt.return structure
 
-(** Main interpret function *)
-let interpret ast defacto restrictions constraint_ =
+(** No interpretation of while statements *)
+
+let rec interpret_statements stmts env phi events =
+  interpret_statements_base ~recurse:interpret_statements stmts env phi events
+
+(** Step-counter semantics of unbounded loops *)
+
+let rec interpret_statements_step_counter step_counter stmts env phi events =
+  if step_counter = 0 then Lwt.return (empty_structure ())
+  else
+    match stmts with
+    | Do { body; condition } :: rest ->
+        let unrolled =
+          body
+          @ If
+              {
+                condition;
+                then_body = [ Do { body; condition } ];
+                else_body = None;
+              }
+            :: rest
+        in
+          interpret_statements_step_counter (step_counter - 1) unrolled env phi
+            events
+    | While { condition; body } :: rest ->
+        let unrolled =
+          If
+            {
+              condition;
+              then_body = body @ [ While { condition; body } ];
+              else_body = None;
+            }
+          :: rest
+        in
+          interpret_statements_step_counter (step_counter - 1) unrolled env phi
+            events
+    | _ ->
+        interpret_statements_base
+          ~recurse:(interpret_statements_step_counter step_counter)
+          stmts env phi events
+
+(** Generic interpretation function **)
+
+let interpret_generic ~stmt_semantics stmts defacto restrictions constraint_ =
   let events = create_events () in
   let env = Hashtbl.create 32 in
 
@@ -302,17 +329,27 @@ let interpret ast defacto restrictions constraint_ =
     add_event events { (Event.create Init 4 ()) with label = 0 }
   in
 
-  let* structure = interpret_statements ast env [] events in
+  let* structure = stmt_semantics stmts env [] events in
+  (* prefix with init event *)
   let structure' = dot init_event'.label structure [] in
 
   Lwt.return (structure', events.events)
+
+(** Default interpretation function **)
+
+let interpret stmts env restrictions constraint_ =
+  interpret_generic ~stmt_semantics:interpret_statements stmts env restrictions
+    constraint_
 
 (** Pipeline step for interpretation **)
 let step_interpret (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
     match (ctx.program_stmts, ctx.litmus_constraints) with
     | Some stmts, Some constraints ->
-        let* structure, events = interpret stmts [] (Hashtbl.create 16) [] in
+        let* structure, events =
+          interpret_generic ~stmt_semantics:interpret_statements stmts []
+            (Hashtbl.create 16) []
+        in
           ctx.structure <- Some structure;
           ctx.events <- Some events;
           Lwt.return ctx

@@ -2,11 +2,11 @@
 opam-version: "2.0"
 synopsis: "Symbolic Memory Relaxation Dependency analyzer"
 description: "OCaml implementation of sMRD memory model verifier"
-maintainer: ["maintainer@example.com"]
-authors: ["sMRD Contributors"]
+maintainer: ["dev@kissig.fastmail.fm"]
+authors: ["Christian Kissig <dev@kissig.fastmail.fm>"]
 license: "MIT"
-homepage: "https://github.com/username/smrd"
-bug-reports: "https://github.com/username/smrd/issues"
+homepage: "https://github.com/christiankissig/mordor"
+bug-reports: "https://github.com/christiankissig/mordor/issues"
 depends: [
   "ocaml" {>= "4.14"}
   "core"
@@ -36,4 +36,4 @@ build: [
     "@doc" {with-doc}
   ]
 ]
-dev-repo: "git+https://github.com/username/smrd.git"
+dev-repo: "git+https://github.com/christiankissig/mordor.git"

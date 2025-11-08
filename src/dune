@@ -36,7 +36,7 @@
  (flags
   (:standard -g -w -26-27))
  (libraries core ocamlgraph logs logs.fmt lwt lwt.unix z3 zarith)
- (public_name smrd)
+ (public_name mordor)
  (preprocess
   (pps lwt_ppx)))
 
