@@ -187,11 +187,11 @@ statement_list:
   | s=statement { [s] }
   | s=statement SEMICOLON rest=statement_list { s :: rest }
   | s=statement SEMICOLON { [s] }
-  ;
+;
 
-(* Statement with optional labels *)
 statement:
-  | labels=label_list s=stmt_base {
+  (* Statement with optional labels *)
+| labels=label_list s=stmt_base {
       inc_pc ();
       make_ast_node
         ~thread_ctx:(Some (current_thread_ctx()))
@@ -199,6 +199,7 @@ statement:
         ~loop_ctx:(Some (current_loop_ctx()))
         (make_labeled labels s)
     }
+  (* Parallel threads *)
   | threads=threads SEMICOLON? {
       make_ast_node
         ~thread_ctx:(Some (current_thread_ctx()))

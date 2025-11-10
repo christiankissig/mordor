@@ -158,26 +158,28 @@ and convert_litmus ast_litmus =
   let program = List.map convert_stmt ast_litmus.program in
     { name; assertions; program }
 
-(** Parse program *)
-let parse_and_convert_litmus src =
+(** Parse litmus to AST and convert from AST to IR *)
+
+let parse_and_convert_litmus ~validate_ast src =
   Logs.debug (fun m -> m "Parsing program...");
 
   try
-    let litmus = parse_litmus src in
-    let constraints =
-      List.map ast_expr_to_expr
-        ( match litmus.config with
-        | Some c -> c.constraint_
+    let litmus_ast = parse_litmus src in
+      validate_ast litmus_ast;
+      let constraints =
+        List.map ast_expr_to_expr
+          ( match litmus_ast.config with
+          | Some c -> c.constraint_
+          | None -> []
+          )
+      in
+      let program_stmts = List.map convert_stmt litmus_ast.program in
+      let assertions =
+        match litmus_ast.assertion with
+        | Some assertion -> [ convert_assertion assertion ]
         | None -> []
-        )
-    in
-    let program_stmts = List.map convert_stmt litmus.program in
-    let assertions =
-      match litmus.assertion with
-      | Some assertion -> [ convert_assertion assertion ]
-      | None -> []
-    in
-      (constraints, program_stmts, assertions)
+      in
+        (constraints, program_stmts, assertions)
   with
   | Failure msg ->
       Logs.err (fun m -> m "Parse error: %s" msg);
@@ -186,17 +188,60 @@ let parse_and_convert_litmus src =
       Logs.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
       ([], [], [])
 
-let step_parse_litmus (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
-  let* ctx = lwt_ctx in
-    match ctx.litmus with
-    | Some program ->
-        let constraints, statements, assertions =
-          parse_and_convert_litmus program
-        in
-          ctx.litmus_constraints <- Some constraints;
-          ctx.program_stmts <- Some statements;
-          ctx.assertions <- Some assertions;
+(** Post-parse validation on ASTs *)
+
+(* Validate that there are no thread spawns inside loops *)
+let rec validate_no_threads_under_loop (ast : ast_node list) : bool =
+  let rec traverse handle_threads handle_loop nodes =
+    List.for_all
+      (fun (node : Ast.ast_node) ->
+        match node.stmt with
+        | Ast.SThreads { threads } -> handle_threads threads
+        | Ast.SWhile { condition; body } | Ast.SDo { body; condition } ->
+            handle_loop body
+        | Ast.SIf { condition; then_body; else_body } ->
+            traverse handle_threads handle_loop then_body
+            && Option.value
+                 (Option.map (traverse handle_threads handle_loop) else_body)
+                 ~default:true
+        | _ -> true
+      )
+      nodes
+  in
+  (* no_threads: forbid threads everywhere *)
+  let rec no_threads nodes =
+    traverse
+      (fun _ -> false) (* threads not allowed *)
+      no_threads (* recurse into loop bodies *)
+      nodes
+  in
+    (* Main validation: allow threads at top level, but check loop bodies *)
+    traverse
+      (* validate thread bodies *)
+      (fun threads -> List.for_all validate_no_threads_under_loop threads
+      )
+      no_threads (* inside loops, use no_threads checker *)
+      ast
+
+(** Pipeline step for parsing litmus tests *)
+
+let step_parse_litmus (ctx_lwt : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  let validate_ast (litmus_ast : ast_litmus) : unit =
+    if not (validate_no_threads_under_loop (litmus_ast : ast_litmus).program)
+    then
+      failwith "Validation error: Thread spawns inside loops are not allowed."
+    else ()
+  in
+    let* ctx = ctx_lwt in
+      match ctx.litmus with
+      | Some program ->
+          let constraints, statements, assertions =
+            parse_and_convert_litmus ~validate_ast program
+          in
+            ctx.litmus_constraints <- Some constraints;
+            ctx.program_stmts <- Some statements;
+            ctx.assertions <- Some assertions;
+            Lwt.return ctx
+      | None ->
+          Logs.err (fun m -> m "No program provided for parsing.");
           Lwt.return ctx
-    | None ->
-        Logs.err (fun m -> m "No program provided for parsing.");
-        Lwt.return ctx

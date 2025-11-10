@@ -16,7 +16,9 @@ val parse_expr : string -> ast_expr
 
 (** Parse a program (list of statements) from a string *)
 val parse_and_convert_litmus :
-  string -> expr list * ir_node list * ir_assertion list
+  validate_ast:(ast_litmus -> unit) ->
+  string ->
+  expr list * ir_node list * ir_assertion list
 
 (** Convert parser AST expression to Types.expr *)
 val ast_expr_to_expr : ast_expr -> Types.expr
@@ -29,3 +31,6 @@ val convert_expr_list : ast_expr list -> Types.expr list
 
 (** Pipeline step for parser *)
 val step_parse_litmus : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
+
+(** Validate that there are no thread spawns inside loops *)
+val validate_no_threads_under_loop : ast_node list -> bool

@@ -40,8 +40,8 @@ type src_ctx = { pc : int }
    The loop context for statements in the outer loop would be
    { lid = 0; loops = [i1] }, while the loop context for statements in the
    inner loop would be { lid = 1; loops = [i1; i2] }.
+   *)
 type loop_ctx = { lid : int; loops : int list }
-*)
 
 (* Information about memory assignments (loads/stores) : memory mode and volatile
    flag *)
