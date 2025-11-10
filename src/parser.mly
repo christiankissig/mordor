@@ -11,6 +11,52 @@ let make_labeled labels stmt =
   if labels = [] then stmt
   else SLabeled { label = List.rev labels; stmt }
 
+
+
+(* type metadata ={ *)
+(*   thread_ctx: thread_ctx; *)
+(*   src_ctx: src_ctx;  *)
+(* } *)
+
+(* Mutable context stack *)
+let thread_ctx_stack = ref [{tid = 0; path = []}]
+let src_ctx_stack = ref [{pc = 0}]
+
+
+let current_thread_ctx () = List.hd !thread_ctx_stack
+let current_src_ctx () = List.hd !src_ctx_stack
+
+(* let make_metadata () = { *)
+(*   thread_ctx = current_ctx (); *)
+(* } *)
+
+let push_thread () =
+  let curr_thread_ctx = current_thread_ctx () in
+  let new_thread_ctx = {
+    tid = 0;
+    path = curr_thread_ctx.path @ [curr_thread_ctx.tid]
+  } in
+  let curr_src_ctx = current_src_ctx () in
+  let new_src_ctx = {
+    pc = 0
+  } in
+  thread_ctx_stack := new_thread_ctx :: !thread_ctx_stack;
+  src_ctx_stack := new_src_ctx :: !src_ctx_stack
+
+let pop_thread () =
+  thread_ctx_stack := List.tl !thread_ctx_stack;
+  src_ctx_stack := List.tl !src_ctx_stack
+
+let inc_thread_id () =
+  let curr = current_thread_ctx () in
+  let updated = {curr with tid = curr.tid + 1} in
+  thread_ctx_stack := updated :: (List.tl !thread_ctx_stack)
+
+let inc_pc () =
+  let curr = current_src_ctx () in
+  let updated ={ pc = curr.pc + 1 } in
+  src_ctx_stack := updated :: (List.tl !src_ctx_stack)
+
 %}
 
 (* Token declarations *)
@@ -113,13 +159,25 @@ program:
   ;
 
 threads:
-  | t=thread { [t] }
-  | t=thread PARALLEL rest=threads { t :: rest }
+  | t1=thread PARALLEL t2=thread {
+      inc_thread_id();
+      let threads = [t1] in
+      inc_thread_id();
+      threads @ [t2]
+    }
+  | t=thread PARALLEL rest=threads { inc_thread_id(); t :: rest }
   ;
 
-(* Thread - statements enclosed in braces *)
 thread:
-  | LBRACE stmts=statement_list RBRACE { stmts }
+  | LBRACE
+    stmts=statement_list
+    RBRACE
+    {
+      push_thread();
+      let result = stmts in
+      pop_thread();
+      result
+    }
   ;
 
 statement_list:
@@ -130,8 +188,19 @@ statement_list:
 
 (* Statement with optional labels *)
 statement:
-  | labels=label_list s=stmt_base { make_labeled labels s }
-  | threads=threads SEMICOLON? { SThreads { threads } }
+  | labels=label_list s=stmt_base {
+      inc_pc ();
+      make_ast_node
+        ~thread_ctx:(Some (current_thread_ctx()))
+        ~src_ctx:(Some (current_src_ctx()))
+        (make_labeled labels s)
+    }
+  | threads=threads SEMICOLON? {
+      make_ast_node
+        ~thread_ctx:(Some (current_thread_ctx()))
+        ~src_ctx:(Some (current_src_ctx()))
+        (SThreads { threads })
+    }
   ;
 
 label_list:
@@ -296,7 +365,7 @@ stmt_base:
 
 block_or_stmt:
   | LBRACE stmts=statement_list RBRACE { stmts }
-  | s=stmt_base { [s] }
+  | s=statement { [ s ] }
   ;
 
 else_clause:

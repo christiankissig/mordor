@@ -1,7 +1,8 @@
 open Types
 
-(** AST types for sMRD parser *)
-
+(* AST Annotations *)
+type thread_ctx = { tid : int; path : int list }
+type src_ctx = { pc : int }
 type assign_info = { mode : mode; volatile : bool }
 
 type ast_expr =
@@ -15,7 +16,7 @@ type ast_expr =
   | ETuple of ast_expr * ast_expr
 
 type ast_stmt =
-  | SThreads of { threads : ast_stmt list list }
+  | SThreads of { threads : ast_node list list }
   | SRegisterStore of { register : string; expr : ast_expr }
   | SGlobalStore of { global : string; expr : ast_expr; assign : assign_info }
   | SGlobalLoad of { register : string; global : string; load : assign_info }
@@ -36,17 +37,28 @@ type ast_stmt =
     }
   | SIf of {
       condition : ast_expr;
-      then_body : ast_stmt list;
-      else_body : ast_stmt list option;
+      then_body : ast_node list;
+      else_body : ast_node list option;
     }
-  | SWhile of { condition : ast_expr; body : ast_stmt list }
-  | SDo of { body : ast_stmt list; condition : ast_expr }
+  | SWhile of { condition : ast_expr; body : ast_node list }
+  | SDo of { body : ast_node list; condition : ast_expr }
   | SFence of { mode : mode }
   | SLock of { global : string option }
   | SUnlock of { global : string option }
   | SMalloc of { register : string; size : ast_expr }
   | SFree of { register : string }
   | SLabeled of { label : string list; stmt : ast_stmt }
+
+and ast_node = {
+  stmt : ast_stmt;
+  thread_ctx : thread_ctx option;
+  src_ctx : src_ctx option;
+}
+
+let get_ast_stmt (node : ast_node) : ast_stmt = node.stmt
+
+let make_ast_node ?(thread_ctx = None) ?(src_ctx = None) stmt =
+  { stmt; thread_ctx; src_ctx }
 
 type ast_config = {
   name : string;
@@ -55,7 +67,7 @@ type ast_config = {
   constraint_ : ast_expr list;
 }
 
-type ast_thread = ast_stmt list
+type ast_thread = ast_node list
 
 type ast_assertion =
   | AOutcome of {
@@ -68,7 +80,7 @@ type ast_assertion =
 
 and ast_litmus = {
   config : ast_config option;
-  program : ast_stmt list; (* List of parallel threads *)
+  program : ast_node list; (* List of parallel threads *)
   assertion : ast_assertion option;
 }
 
@@ -88,7 +100,8 @@ let rec expr_to_string (expr : ast_expr) : string =
       Printf.sprintf "ETuple %s , %s" (expr_to_string lhs) (expr_to_string rhs)
 
 (** String representation functions for AST statements *)
-let rec to_string (stmt : ast_stmt) : string =
+
+let rec stmt_to_string stmt =
   match stmt with
   | SThreads { threads } ->
       Printf.sprintf "SThreads %s"
@@ -168,7 +181,11 @@ let rec to_string (stmt : ast_stmt) : string =
   | SFree { register } -> Printf.sprintf "SFree %s" register
   | SLabeled { label; stmt } ->
       Printf.sprintf "SLabeled [%s]: %s" (String.concat "; " label)
-        (to_string stmt)
+        (stmt_to_string stmt)
+
+and to_string (node : ast_node) : string =
+  let stmt = node.stmt in
+    stmt_to_string stmt
 
 (** String representation for entire litmus test *)
 let ast_litmus_to_string (litmus : ast_litmus) : string =

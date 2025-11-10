@@ -59,7 +59,8 @@ let convert_expr_list exprs = List.map ast_expr_to_expr exprs
 
 let make_ir_node stmt = { stmt; annotations = () }
 
-let convert_stmt_open ~recurse = function
+(* TODO rec to handle label case; use ctx annotation instead *)
+let rec convert_stmt_open ~recurse = function
   | Ast.SThreads { threads } ->
       let ir_threads = List.map (List.map recurse) threads in
         Threads { threads = ir_threads }
@@ -101,8 +102,8 @@ let convert_stmt_open ~recurse = function
   | Ast.SUnlock { global } -> Unlock { global }
   | Ast.SFree { register } -> Free { register }
   | Ast.SLabeled { label; stmt } ->
-      let ir_stmt = recurse stmt in
-        Labeled { label; stmt = ir_stmt }
+      let ir_stmt = convert_stmt_open ~recurse stmt in
+        Labeled { label; stmt = make_ir_node ir_stmt }
   | Ast.SCAS { register; address; expected; desired; mode } ->
       let ir_address = ast_expr_to_expr address in
       let ir_expected = ast_expr_to_expr expected in
@@ -123,9 +124,8 @@ let convert_stmt_open ~recurse = function
       let ir_size = ast_expr_to_expr size in
         Malloc { register; size = ir_size }
 
-let rec convert_stmt (stmt : ast_stmt) : ir_node =
-  let ir_stmt = convert_stmt_open ~recurse:convert_stmt stmt in
-    make_ir_node ir_stmt
+let rec convert_stmt ast_node =
+  convert_stmt_open ~recurse:convert_stmt ast_node.stmt |> make_ir_node
 
 (** Convert parsed AST litmus test to IR format *)
 
