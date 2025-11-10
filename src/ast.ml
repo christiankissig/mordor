@@ -3,6 +3,7 @@ open Types
 (* AST Annotations *)
 type thread_ctx = { tid : int; path : int list }
 type src_ctx = { pc : int }
+type loop_ctx = { lid : int; loops : int list }
 type assign_info = { mode : mode; volatile : bool }
 
 type ast_expr =
@@ -53,12 +54,14 @@ and ast_node = {
   stmt : ast_stmt;
   thread_ctx : thread_ctx option;
   src_ctx : src_ctx option;
+  loop_ctx : loop_ctx option;
 }
 
 let get_ast_stmt (node : ast_node) : ast_stmt = node.stmt
 
-let make_ast_node ?(thread_ctx = None) ?(src_ctx = None) stmt =
-  { stmt; thread_ctx; src_ctx }
+let make_ast_node ?(thread_ctx = None) ?(src_ctx = None) ?(loop_ctx = None) stmt
+    =
+  { stmt; thread_ctx; src_ctx; loop_ctx }
 
 type ast_config = {
   name : string;

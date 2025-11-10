@@ -11,8 +11,6 @@ let make_labeled labels stmt =
   if labels = [] then stmt
   else SLabeled { label = List.rev labels; stmt }
 
-
-
 (* type metadata ={ *)
 (*   thread_ctx: thread_ctx; *)
 (*   src_ctx: src_ctx;  *)
@@ -21,10 +19,11 @@ let make_labeled labels stmt =
 (* Mutable context stack *)
 let thread_ctx_stack = ref [{tid = 0; path = []}]
 let src_ctx_stack = ref [{pc = 0}]
-
+let loop_ctx_stack = ref [{lid = 0; loops = []}]
 
 let current_thread_ctx () = List.hd !thread_ctx_stack
 let current_src_ctx () = List.hd !src_ctx_stack
+let current_loop_ctx () = List.hd !loop_ctx_stack
 
 (* let make_metadata () = { *)
 (*   thread_ctx = current_ctx (); *)
@@ -56,6 +55,22 @@ let inc_pc () =
   let curr = current_src_ctx () in
   let updated ={ pc = curr.pc + 1 } in
   src_ctx_stack := updated :: (List.tl !src_ctx_stack)
+
+let push_loop () =
+  let curr = List.hd !loop_ctx_stack in
+  let new_loop = {
+    lid = 0;
+    loops = curr.loops @ [curr.lid]
+  } in
+  loop_ctx_stack := new_loop :: !loop_ctx_stack
+
+let pop_loop () =
+  loop_ctx_stack := List.tl !loop_ctx_stack
+
+let inc_loop_id () =
+  let curr = List.hd !loop_ctx_stack in
+  let updated = {curr with lid = curr.lid + 1} in
+  loop_ctx_stack := updated :: (List.tl !loop_ctx_stack)
 
 %}
 
@@ -193,12 +208,14 @@ statement:
       make_ast_node
         ~thread_ctx:(Some (current_thread_ctx()))
         ~src_ctx:(Some (current_src_ctx()))
+        ~loop_ctx:(Some (current_loop_ctx()))
         (make_labeled labels s)
     }
   | threads=threads SEMICOLON? {
       make_ast_node
         ~thread_ctx:(Some (current_thread_ctx()))
         ~src_ctx:(Some (current_src_ctx()))
+        ~loop_ctx:(Some (current_loop_ctx()))
         (SThreads { threads })
     }
   ;
@@ -331,11 +348,22 @@ stmt_base:
   | IF LPAREN cond=expr RPAREN then_body=block_or_stmt else_part=else_clause?
     { SIf { condition = cond; then_body; else_body = else_part } }
 
-  | WHILE LPAREN cond=expr RPAREN body=block_or_stmt
-    { SWhile { condition = cond; body } }
+  | WHILE LPAREN cond=expr RPAREN body=block_or_stmt {
+      inc_loop_id();
+      push_loop();
+      let result = SWhile { condition = cond; body } in
+      pop_loop();
+      result
+    }
 
   | DO body=block_or_stmt WHILE LPAREN cond=expr RPAREN
-    { SDo { body; condition = cond } }
+    {
+      inc_loop_id();
+      push_loop();
+      let result = SDo { body; condition = cond } in
+      pop_loop();
+      result
+    }
 
   (* Fence *)
   | FENCE LPAREN mode=memory_order RPAREN
