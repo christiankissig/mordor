@@ -9,13 +9,14 @@ type ir_assertion = unit Ir.ir_assertion
 type ir_node = unit Ir.ir_node
 
 (** Parse a complete litmus test from a string *)
-val parse : string -> ast_litmus
+val parse_litmus : string -> ast_litmus
 
 (** Parse a single expression from a string *)
 val parse_expr : string -> ast_expr
 
 (** Parse a program (list of statements) from a string *)
-val parse_program : string -> expr list * ir_node list * ir_assertion list
+val parse_and_convert_litmus :
+  string -> expr list * ir_node list * ir_assertion list
 
 (** Convert parser AST expression to Types.expr *)
 val ast_expr_to_expr : ast_expr -> Types.expr
@@ -27,4 +28,4 @@ val ast_mode_to_mode : mode -> Types.mode
 val convert_expr_list : ast_expr list -> Types.expr list
 
 (** Pipeline step for parser *)
-val step_parse_program : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
+val step_parse_litmus : mordor_ctx Lwt.t -> mordor_ctx Lwt.t

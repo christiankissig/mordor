@@ -10,9 +10,10 @@ type ir_node = unit Ir.ir_node
 type ir_assertion = unit Ir.ir_assertion
 
 (** Parse a litmus test from a string *)
-let parse src =
+
+let parse prsr src =
   let lexbuf = Lexing.from_string src in
-    try Parser.litmus Lexer.token lexbuf with
+    try prsr Lexer.token lexbuf with
     | Lexer.Lexer_error msg -> failwith (Printf.sprintf "Lexer error: %s" msg)
     | Parser.Error ->
         let pos = lexbuf.lex_curr_p in
@@ -22,18 +23,8 @@ let parse src =
         in
           failwith msg
 
-(** Parse an expression from a string *)
-let parse_expr src =
-  let lexbuf = Lexing.from_string src in
-    try Parser.expr_only Lexer.token lexbuf with
-    | Lexer.Lexer_error msg -> failwith (Printf.sprintf "Lexer error: %s" msg)
-    | Parser.Error ->
-        let pos = lexbuf.Lexing.lex_curr_p in
-          failwith
-            (Printf.sprintf "Parse error at line %d, column %d"
-               pos.Lexing.pos_lnum
-               (pos.Lexing.pos_cnum - pos.Lexing.pos_bol)
-            )
+let parse_litmus = parse Parser.litmus
+let parse_expr = parse Parser.expr_only
 
 (** Conversion functions to Types module *)
 
@@ -168,11 +159,11 @@ and convert_litmus ast_litmus =
     { name; assertions; program }
 
 (** Parse program *)
-let parse_program program =
+let parse_and_convert_litmus src =
   Logs.debug (fun m -> m "Parsing program...");
 
   try
-    let litmus = parse program in
+    let litmus = parse_litmus src in
     let constraints =
       List.map ast_expr_to_expr
         ( match litmus.config with
@@ -195,11 +186,13 @@ let parse_program program =
       Logs.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
       ([], [], [])
 
-let step_parse_program (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+let step_parse_litmus (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
     match ctx.litmus with
     | Some program ->
-        let constraints, statements, assertions = parse_program program in
+        let constraints, statements, assertions =
+          parse_and_convert_litmus program
+        in
           ctx.litmus_constraints <- Some constraints;
           ctx.program_stmts <- Some statements;
           ctx.assertions <- Some assertions;

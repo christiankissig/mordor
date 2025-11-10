@@ -234,7 +234,7 @@ let test_parse_notin_operator () =
 
 let test_parse_register_store () =
   let src = "%% r0 := 42" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SRegisterStore { register = "r0"; expr = EInt n } ]
       when Z.equal n (Z.of_int 42) -> ()
@@ -242,14 +242,14 @@ let test_parse_register_store () =
 
 let test_parse_register_store_expr () =
   let src = "%% r0 := r1 + 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SRegisterStore { register = "r0"; expr = EBinOp _ } ] -> ()
     | _ -> Alcotest.fail "Expected r0 := r1 + 1"
 
 let test_parse_global_store_simple () =
   let src = "%% x := 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [
      SGlobalStore
@@ -264,35 +264,35 @@ let test_parse_global_store_simple () =
 
 let test_parse_global_store_relaxed () =
   let src = "%% x :rlx= 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SGlobalStore { global = "x"; assign = { mode = Relaxed; _ }; _ } ] -> ()
     | _ -> Alcotest.fail "Expected x :rlx= 1"
 
 let test_parse_global_store_release () =
   let src = "%% x :rel= 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SGlobalStore { global = "x"; assign = { mode = Release; _ }; _ } ] -> ()
     | _ -> Alcotest.fail "Expected x :rel= 1"
 
 let test_parse_global_store_acquire () =
   let src = "%% x :acq= 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SGlobalStore { global = "x"; assign = { mode = Acquire; _ }; _ } ] -> ()
     | _ -> Alcotest.fail "Expected x :acq= 1"
 
 let test_parse_global_store_sc () =
   let src = "%% x :sc= 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SGlobalStore { global = "x"; assign = { mode = SC; _ }; _ } ] -> ()
     | _ -> Alcotest.fail "Expected x :sc= 1"
 
 let test_parse_register_load_global () =
   let src = "%% r0 := x" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [
      SGlobalLoad
@@ -306,14 +306,14 @@ let test_parse_register_load_global () =
 
 let test_parse_deref_store () =
   let src = "%% *r0 := 42" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SStore { address = ERegister "r0"; expr = EInt _; _ } ] -> ()
     | _ -> Alcotest.fail "Expected *r0 := 42"
 
 let test_parse_load_explicit () =
   let src = "%% r0 :acq= x" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [
      SGlobalLoad { register = "r0"; global = "x"; load = { mode = Acquire; _ } };
@@ -322,7 +322,7 @@ let test_parse_load_explicit () =
 
 let test_parse_store_explicit () =
   let src = "%% x :rel= 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [
      SGlobalStore
@@ -337,119 +337,119 @@ let test_parse_store_explicit () =
 
 let test_parse_if_simple () =
   let src = "%% if (r0 == 1) r1 := 2" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SIf { condition = EBinOp _; then_body = _; else_body = None } ] -> ()
     | _ -> Alcotest.fail "Expected if statement"
 
 let test_parse_if_else () =
   let src = "%% if (r0 == 1) r1 := 2 else r1 := 3" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SIf { condition = EBinOp _; then_body = _; else_body = Some _ } ] -> ()
     | _ -> Alcotest.fail "Expected if-else statement"
 
 let test_parse_if_block () =
   let src = "%% if (r0 == 1) { r1 := 2; r2 := 3 }" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SIf { then_body = [ _; _ ]; _ } ] -> ()
     | _ -> Alcotest.fail "Expected if with block"
 
 let test_parse_while_loop () =
   let src = "%% while (r0 < 10) r0 := r0 + 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SWhile { condition = EBinOp _; body = _ } ] -> ()
     | _ -> Alcotest.fail "Expected while loop"
 
 let test_parse_do_while () =
   let src = "%% do r0 := r0 + 1 while (r0 < 10)" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SDo { body = _; condition = EBinOp _ } ] -> ()
     | _ -> Alcotest.fail "Expected do-while loop"
 
 let test_parse_fence () =
   let src = "%% fence(sc)" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SFence { mode = SC } ] -> ()
     | _ -> Alcotest.fail "Expected fence(sc)"
 
 let test_parse_fence_acquire () =
   let src = "%% fence(acquire)" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SFence { mode = Acquire } ] -> ()
     | _ -> Alcotest.fail "Expected fence(acquire)"
 
 let test_parse_cas () =
   let src = "%% r0 := cas(sc, x, 0, 1)" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SCAS { register = "r0"; mode = SC; _ } ] -> ()
     | _ -> Alcotest.fail "Expected CAS operation"
 
 let test_parse_fadd () =
   let src = "%% r0 := fadd(relaxed, x, 1)" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SFADD { register = "r0"; mode = Relaxed; _ } ] -> ()
     | _ -> Alcotest.fail "Expected FADD operation"
 
 let test_parse_lock () =
   let src = "%% lock" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SLock { global = None } ] -> ()
     | _ -> Alcotest.fail "Expected lock"
 
 let test_parse_lock_with_global () =
   let src = "%% lock mutex" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SLock { global = Some "mutex" } ] -> ()
     | _ -> Alcotest.fail "Expected lock mutex"
 
 let test_parse_unlock () =
   let src = "%% unlock" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SUnlock { global = None } ] -> ()
     | _ -> Alcotest.fail "Expected unlock"
 
 let test_parse_unlock_with_global () =
   let src = "%% unlock mutex" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SUnlock { global = Some "mutex" } ] -> ()
     | _ -> Alcotest.fail "Expected unlock mutex"
 
 let test_parse_malloc_stmt () =
   let src = "%% r0 := malloc(8)" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SMalloc { register = "r0"; size = EInt _; _ } ] -> ()
     | _ -> Alcotest.fail "Expected r0 := malloc(8)"
 
 let test_parse_free () =
   let src = "%% free(r0)" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SFree { register = "r0" } ] -> ()
     | _ -> Alcotest.fail "Expected free(r0)"
 
 let test_parse_labeled_stmt () =
   let src = "%% `label` x := 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SLabeled { label = [ "label" ]; stmt = SGlobalStore _ } ] -> ()
     | _ -> Alcotest.fail "Expected labeled statement"
 
 let test_parse_multiple_labels () =
   let src = "%% `label1` `label2` x := 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [ SLabeled { label = [ "label2"; "label1" ]; stmt = SGlobalStore _ } ] ->
         ()
@@ -457,7 +457,7 @@ let test_parse_multiple_labels () =
 
 let test_parse_multiple_statements () =
   let src = "%% x := 1; y := 2; r0 := x" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     Printf.printf "%s\n" (ast_litmus_to_string ast);
     match ast.program with
     | [ SGlobalStore _; SGlobalStore _; SGlobalLoad _ ] -> ()
@@ -465,7 +465,7 @@ let test_parse_multiple_statements () =
 
 let test_parse_thread_parallel () =
   let src = "%% {x := 1} ||| {y := 2}" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [
      SThreads
@@ -481,7 +481,7 @@ let test_parse_thread_parallel () =
 
 let test_parse_multiple_threads () =
   let src = "%% {x := 1} ||| {y := 2} ||| {r0 := x}" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.program with
     | [
      SThreads
@@ -495,21 +495,21 @@ let test_parse_multiple_threads () =
 
 let test_parse_config_name () =
   let src = "name = mytest\n%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config -> Alcotest.(check string) "config name" "mytest" config.name
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_name_with_numbers () =
   let src = "name = test123\n%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config -> Alcotest.(check string) "config name" "test123" config.name
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_values () =
   let src = "values = {0, 1, 2}\n%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config ->
         Alcotest.(check int) "3 values" 3 (List.length config.values)
@@ -517,7 +517,7 @@ let test_parse_config_values () =
 
 let test_parse_config_values_hex () =
   let src = "values = {0x0, 0x1, 0xFF}\n%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config ->
         Alcotest.(check int) "3 hex values" 3 (List.length config.values)
@@ -525,7 +525,7 @@ let test_parse_config_values_hex () =
 
 let test_parse_config_defacto () =
   let src = "[r0 = 1]\n%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config ->
         Alcotest.(check int)
@@ -535,7 +535,7 @@ let test_parse_config_defacto () =
 
 let test_parse_config_multiple_defacto () =
   let src = "[r0 = 1]\n[x = 0]\n%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config ->
         Alcotest.(check int)
@@ -545,7 +545,7 @@ let test_parse_config_multiple_defacto () =
 
 let test_parse_config_constraint () =
   let src = "[[r0 = 1]]\n%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config ->
         Alcotest.(check int) "1 constraint" 1 (List.length config.constraint_)
@@ -553,7 +553,7 @@ let test_parse_config_constraint () =
 
 let test_parse_config_multiple_constraints () =
   let src = "[[r0 = 1]]\n[[x = 0]]\n%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config ->
         Alcotest.(check int) "2 constraints" 2 (List.length config.constraint_)
@@ -561,7 +561,7 @@ let test_parse_config_multiple_constraints () =
 
 let test_parse_full_config () =
   let src = "name = test\nvalues = {0, 1}\n[x = 0]\n[[r0 = 1]]\n%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config ->
         Alcotest.(check string) "name" "test" config.name;
@@ -572,7 +572,7 @@ let test_parse_full_config () =
 
 let test_parse_minimal_config () =
   let src = "%%r := 0" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config ->
         Alcotest.(check string) "empty name" "" config.name;
@@ -583,42 +583,42 @@ let test_parse_minimal_config () =
 
 let test_parse_assertion_allow () =
   let src = "x := 1;\n%% allow r0 = 1 []" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.assertion with
     | Some (AOutcome { outcome = "allow"; condition = EBinOp _; _ }) -> ()
     | _ -> Alcotest.fail "Expected allow assertion"
 
 let test_parse_assertion_forbid () =
   let src = "x := 1;\n%% forbid r0 = 1 []" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.assertion with
     | Some (AOutcome { outcome = "forbid"; _ }) -> ()
     | _ -> Alcotest.fail "Expected forbid assertion"
 
 let test_parse_assertion_with_model () =
   let src = "x := 1;\n%% allow r0 = 1 [sc]" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.assertion with
     | Some (AOutcome { outcome = "allow"; model = Some "sc"; _ }) -> ()
     | _ -> Alcotest.fail "Expected assertion with sc model"
 
 let test_parse_assertion_complex_condition () =
   let src = "x := 1;\n%% forbid r0 = 1 && r1 = 0 []" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.assertion with
     | Some (AOutcome { condition = EBinOp (_, "&&", _); _ }) -> ()
     | _ -> Alcotest.fail "Expected complex condition"
 
 let test_parse_assertion_model_only () =
   let src = "x := 1;\n%% [rc11]" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.assertion with
     | Some (AModel { model = "rc11" }) -> ()
     | _ -> Alcotest.fail "Expected model-only assertion"
 
 let test_parse_no_assertion () =
   let src = "x := 1" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.assertion with
     | None -> ()
     | _ -> Alcotest.fail "Expected no assertion"
@@ -633,7 +633,7 @@ let test_parse_message_passing () =
      {x := 1; y := 1} ||| {r0 := y; r1 := x}\n\
      %% forbid r0 = 1 && r1 = 0 []"
   in
-  let ast = parse src in
+  let ast = parse_litmus src in
     ( match ast.config with
     | Some config -> Alcotest.(check string) "MP test name" "MP" config.name
     | None -> Alcotest.fail "Expected config section"
@@ -649,7 +649,7 @@ let test_parse_store_buffer () =
      {x := 1; r0 := y} ||| {y := 1; r1 := x}\n\
      %% forbid r0 = 0 && r1 = 0 []"
   in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config -> Alcotest.(check string) "SB test name" "SB" config.name
     | None -> Alcotest.fail "Expected config section"
@@ -658,17 +658,17 @@ let test_parse_load_buffering () =
   let src =
     "%%\n{r0 := x; y := 1} ||| {r1 := y; x := 1}\n%% forbid r0 = 1 && r1 = 1 []"
   in
-  let ast = parse src in
+  let ast = parse_litmus src in
     ()
 
 let test_parse_single_thread () =
   let src = "%% x := 1; r0 := x" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     Alcotest.(check int) "2 statements" 2 (List.length ast.program)
 
 let test_parse_with_comments () =
   let src = "// This is a comment\n%% x := 1 // another comment\n" in
-  let ast = parse src in
+  let ast = parse_litmus src in
     Alcotest.(check int) "1 statement" 1 (List.length ast.program)
 
 let test_parse_complex_litmus () =
@@ -683,7 +683,7 @@ let test_parse_complex_litmus () =
      {`thread2` r0 := y; fence(sc); r1 := x}\n\
      %% forbid r0 = 1 && r1 = 0 [sc]"
   in
-  let ast = parse src in
+  let ast = parse_litmus src in
     match ast.config with
     | Some config ->
         Alcotest.(check string) "name" "Complex" config.name;

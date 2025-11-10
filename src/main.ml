@@ -106,7 +106,7 @@ let verify_program program options =
   let context = make_context options () in
     context.litmus <- Some program;
     Lwt.return context
-    |> Parse.step_parse_program
+    |> Parse.step_parse_litmus
     |> Interpret.step_interpret
     |> Symmrd.step_calculate_dependencies
 
@@ -128,7 +128,7 @@ let parse_single name program options =
   let context = make_context options () in
     context.litmus_name <- Some name;
     context.litmus <- Some program;
-    Lwt.return context |> Parse.step_parse_program |> print_results
+    Lwt.return context |> Parse.step_parse_litmus |> print_results
 
 let parse_tests tests options =
   let* () =
@@ -141,7 +141,7 @@ let interpret_single name program options step_counter =
   let context = make_context options ~step_counter () in
     context.litmus <- Some program;
     Lwt.return context
-    |> Parse.step_parse_program
+    |> Parse.step_parse_litmus
     |> Interpret.step_interpret
     |> print_results
 
@@ -162,7 +162,7 @@ let futures_single (name, program) options output_mode output_file step_counter
     context.litmus_name <- Some name;
     context.litmus <- Some program;
     Lwt.return context
-    |> Parse.step_parse_program
+    |> Parse.step_parse_litmus
     |> Interpret.step_interpret
     |> Symmrd.step_calculate_dependencies
     |> Futures.step_futures
@@ -177,7 +177,7 @@ let visualize_es_single (name, program) options output_mode output_file
     context.litmus_name <- Some name;
     context.litmus <- Some program;
     Lwt.return context
-    |> Parse.step_parse_program
+    |> Parse.step_parse_litmus
     |> Interpret.step_interpret
     |> Eventstructureviz.step_visualize_event_structure
     |> print_results
