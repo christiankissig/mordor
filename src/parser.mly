@@ -1,22 +1,13 @@
 %{
-(** Parser for sMRD litmus tests *)
+(** Parser for MoRDor litmus tests *)
 
-[@@@warning "-69"] (* Disable unused field warnings - fields are used externally *)
-
-(* Import AST types from Ast module *)
 open Ast
 
-(* Helper to create labeled statements *)
 let make_labeled labels stmt =
   if labels = [] then stmt
   else SLabeled { label = List.rev labels; stmt }
 
-(* type metadata ={ *)
-(*   thread_ctx: thread_ctx; *)
-(*   src_ctx: src_ctx;  *)
-(* } *)
-
-(* Mutable context stack *)
+(** Context stacks *)
 let thread_ctx_stack = ref [{tid = 0; path = []}]
 let src_ctx_stack = ref [{pc = 0}]
 let loop_ctx_stack = ref [{lid = 0; loops = []}]
@@ -25,10 +16,7 @@ let current_thread_ctx () = List.hd !thread_ctx_stack
 let current_src_ctx () = List.hd !src_ctx_stack
 let current_loop_ctx () = List.hd !loop_ctx_stack
 
-(* let make_metadata () = { *)
-(*   thread_ctx = current_ctx (); *)
-(* } *)
-
+(** Functions tying context objects to parser actions **)
 let push_thread () =
   let curr_thread_ctx = current_thread_ctx () in
   let new_thread_ctx = {

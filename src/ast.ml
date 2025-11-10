@@ -1,11 +1,53 @@
 open Types
 
-(* AST Annotations *)
+(* The thread context tracks the IDs of thread blocks in the AST. For example,
+   in the following code:
+
+   threads {
+     // Thread 0
+     ...
+     threads {
+       // Thread 0.0
+       ...
+     }
+     // Thread 0.1
+     ...
+   }
+
+   The thread context for statements in the outer thread block would be
+   { tid = 0; path = [0] }, while the thread context for statements in the
+   inner thread block would be { tid = 0; path = [0; 0] } for Thread 0.0 and
+   { tid = 1; path = [0; 1] } for Thread 0.1.
+*)
 type thread_ctx = { tid : int; path : int list }
+
+(* The source context tracks the program counter (PC) of statements in the AST.
+   *)
 type src_ctx = { pc : int }
+
+(* The loop context tracks the loop ID and the iteration counts of loops
+   surrounding a statement in the AST. For example, in the following code:
+
+   while (cond1) {
+     // Loop 0, iteration i1
+     ...
+     while (cond2) {
+       // Loop 1, iteration i2
+       ...
+     }
+   }
+
+   The loop context for statements in the outer loop would be
+   { lid = 0; loops = [i1] }, while the loop context for statements in the
+   inner loop would be { lid = 1; loops = [i1; i2] }.
 type loop_ctx = { lid : int; loops : int list }
+*)
+
+(* Information about memory assignments (loads/stores) : memory mode and volatile
+   flag *)
 type assign_info = { mode : mode; volatile : bool }
 
+(* AST for expressions and statements *)
 type ast_expr =
   | EInt of Z.t
   | ERegister of string
@@ -16,6 +58,7 @@ type ast_expr =
   | EUnOp of string * ast_expr
   | ETuple of ast_expr * ast_expr
 
+(* AST for statements and nodes *)
 type ast_stmt =
   | SThreads of { threads : ast_node list list }
   | SRegisterStore of { register : string; expr : ast_expr }
@@ -57,12 +100,17 @@ and ast_node = {
   loop_ctx : loop_ctx option;
 }
 
+(* Threads are lists of nodes wrapping statements *)
+type ast_thread = ast_node list
+
+(** Accessor functions for AST nodes *)
 let get_ast_stmt (node : ast_node) : ast_stmt = node.stmt
 
 let make_ast_node ?(thread_ctx = None) ?(src_ctx = None) ?(loop_ctx = None) stmt
     =
   { stmt; thread_ctx; src_ctx; loop_ctx }
 
+(* AST for litmust test config *)
 type ast_config = {
   name : string;
   values : Z.t list;
@@ -70,8 +118,7 @@ type ast_config = {
   constraint_ : ast_expr list;
 }
 
-type ast_thread = ast_node list
-
+(* AST for litmus test assertions and litmus tests *)
 type ast_assertion =
   | AOutcome of {
       outcome : string;
