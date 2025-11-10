@@ -6,6 +6,11 @@ open Lwt.Syntax
 open Types
 open Uset
 
+type ir_stmt = unit Ir.ir_stmt
+type ir_node = unit Ir.ir_node
+
+let make_ir_node stmt = { stmt; annotations = () }
+
 (** Helper to run Lwt tests *)
 let run_lwt f () = Lwt_main.run (f ())
 
@@ -168,7 +173,9 @@ let test_interpret_global_store =
       let stmt =
         GlobalStore { global = "x"; expr; assign = { mode; volatile = false } }
       in
-        let* result = interpret_statements [ stmt ] env [] events in
+        let* result =
+          interpret_statements [ make_ir_node stmt ] env [] events
+        in
           Alcotest.(check int) "one event created" 1 (USet.size result.e);
           Alcotest.(check int)
             "one event in table" 1
@@ -187,7 +194,9 @@ let test_interpret_global_load =
         GlobalLoad
           { register = "r"; global = "x"; load = { mode; volatile = false } }
       in
-        let* result = interpret_statements [ stmt ] env [] events in
+        let* result =
+          interpret_statements [ make_ir_node stmt ] env [] events
+        in
           Alcotest.(check int) "one event created" 1 (USet.size result.e);
           Alcotest.(check bool) "register in env" true (Hashtbl.mem env "r");
           Lwt.return_unit
@@ -201,7 +210,9 @@ let test_interpret_fence =
       let events = create_events () in
       let mode = Types.SC in
       let stmt = Ir.Fence { mode } in
-        let* result = interpret_statements [ stmt ] env [] events in
+        let* result =
+          interpret_statements [ make_ir_node stmt ] env [] events
+        in
           Alcotest.(check int) "one fence event" 1 (USet.size result.e);
           let evt = Hashtbl.find events.events 0 in
             Alcotest.(check bool) "is fence" true (evt.typ = Fence);
@@ -215,15 +226,16 @@ let test_interpret_multiple_statements =
       let env = Hashtbl.create 16 in
       let events = create_events () in
       let stmts =
-        [
-          Ir.Fence { mode = Types.SC };
-          GlobalStore
-            {
-              global = "x";
-              expr = ENum Z.zero;
-              assign = { mode = Types.Release; volatile = false };
-            };
-        ]
+        List.map make_ir_node
+          [
+            Ir.Fence { mode = Types.SC };
+            GlobalStore
+              {
+                global = "x";
+                expr = ENum Z.zero;
+                assign = { mode = Types.Release; volatile = false };
+              };
+          ]
       in
         let* result = interpret_statements stmts env [] events in
           Alcotest.(check int) "two events" 2 (USet.size result.e);
@@ -238,14 +250,15 @@ let test_interpret_main =
   run_lwt (fun () ->
       reset_counters ();
       let ast =
-        [
-          GlobalStore
-            {
-              global = "x";
-              expr = ENum Z.zero;
-              assign = { mode = Types.SC; volatile = false };
-            };
-        ]
+        List.map make_ir_node
+          [
+            GlobalStore
+              {
+                global = "x";
+                expr = ENum Z.zero;
+                assign = { mode = Types.SC; volatile = false };
+              };
+          ]
       in
         let* structure, events_tbl = interpret ast None [] [] in
           Alcotest.(check int)
@@ -260,20 +273,21 @@ let test_interpret_main_with_po =
   run_lwt (fun () ->
       reset_counters ();
       let ast =
-        [
-          GlobalStore
-            {
-              global = "x";
-              expr = ENum Z.zero;
-              assign = { mode = Types.SC; volatile = false };
-            };
-          GlobalStore
-            {
-              global = "y";
-              expr = ENum Z.one;
-              assign = { mode = Types.SC; volatile = false };
-            };
-        ]
+        List.map make_ir_node
+          [
+            GlobalStore
+              {
+                global = "x";
+                expr = ENum Z.zero;
+                assign = { mode = Types.SC; volatile = false };
+              };
+            GlobalStore
+              {
+                global = "y";
+                expr = ENum Z.one;
+                assign = { mode = Types.SC; volatile = false };
+              };
+          ]
       in
         let* structure, _ = interpret ast None [] [] in
           Alcotest.(check int) "has three events" 3 (USet.size structure.e);

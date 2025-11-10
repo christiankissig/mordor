@@ -2,6 +2,9 @@ open Ir
 open Types
 open Uset
 
+type ir_stmt = unit Ir.ir_stmt
+type ir_node = unit Ir.ir_node
+
 (** configuration options *)
 
 type output_mode = Json | Html | Dot | Isa
@@ -47,8 +50,8 @@ type mordor_ctx = {
   mutable litmus : string option;
   (* parser *)
   mutable litmus_constraints : expr list option;
-  mutable program_stmts : ir_stmt list option;
-  mutable assertions : ir_assertion list option;
+  mutable program_stmts : ir_node list option;
+  mutable assertions : unit ir_assertion list option;
   (* event structures *)
   step_counter : int;
   mutable events : (int, event) Hashtbl.t option;
@@ -93,16 +96,3 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     undefined_behaviour = None;
     is_episodic = None;
   }
-
-(** result type *)
-
-(* TODO deprecate this in favor of mordor_ctx *)
-
-type result = {
-  ast : expr list; (* Simplified AST *)
-  structure : symbolic_event_structure;
-  events : (int, event) Hashtbl.t;
-  executions : symbolic_execution list;
-  valid : bool;
-  ub : bool; (* undefined behavior *)
-}

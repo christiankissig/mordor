@@ -8,6 +8,11 @@ open Lwt.Syntax
 open Types
 open Uset
 
+type ir_stmt = unit Ir.ir_stmt
+type ir_node = unit Ir.ir_node
+
+let ir_node_to_string = Ir.to_string ~ann_to_string:(fun () -> "")
+
 (** Event counter *)
 let event_counter = ref 0
 
@@ -126,197 +131,222 @@ let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr
 (* TODO handle labels *)
 (* TODO check id makes sense here *)
 
-(** Interpret IR - create symbolic event structures *)
+(** Interpretation of programs as lists of statements.
 
-let interpret_statements_base ~recurse (stmts : ir_stmt list) env phi events =
+    Implemented in open recursion to allow for a flexible semantics of unbounded
+    loops. Loop semantics added below. *)
+
+let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
+    events =
   (* note that negative step counters are treated as infinite steps *)
-  match stmts with
+  match nodes with
   | [] -> Lwt.return (empty_structure ())
-  | stmt :: rest ->
-      Logs.debug (fun m -> m "Interpreting statement: %s" (Ir.to_string stmt));
-      let* structure =
-        match stmt with
-        | Threads { threads } ->
-            let interpret_threads ts =
-              List.fold_left
-                (fun acc t ->
-                  let* t_structure = recurse t env phi events in
-                    let* acc_structure = acc in
-                      Lwt.return (cross acc_structure t_structure)
-                )
-                (Lwt.return (empty_structure ()))
-                ts
-            in
-              interpret_threads threads
-        | RegisterStore { register; expr } ->
-            let env' = update_env env register expr in
-              let* cont = recurse rest env' phi events in
-                Lwt.return cont
-        | GlobalStore { global; expr; assign } ->
-            let base_evt : event = Event.create Write 0 () in
-            let evt =
-              {
-                base_evt with
-                id = Some (VVar global);
-                loc = Some (EVar global);
-                wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
-                wmod = assign.mode;
-                volatile = assign.volatile;
-              }
-            in
-            let event' = add_event events evt in
-              let* cont = recurse rest env phi events in
-                Lwt.return (dot event'.label cont phi)
-        | DerefStore { address; expr; assign } ->
-            let base_evt : event = Event.create Write 0 () in
-            let evt =
-              {
-                base_evt with
-                loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
-                wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
-                wmod = assign.mode;
-                volatile = assign.volatile;
-              }
-            in
-            let event' = add_event events evt in
-              let* cont = recurse rest env phi events in
-                Lwt.return (dot event'.label cont phi)
-        | DerefLoad { register; address; load } ->
-            let rval = VSymbol (next_greek ()) in
-            let base_evt : event = Event.create Read 0 () in
-            let evt =
-              {
-                base_evt with
-                loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
-                rval = Some rval;
-                rmod = load.mode;
-                volatile = load.volatile;
-              }
-            in
-            let event' = add_event events evt in
-            let env' = Hashtbl.copy env in
-              Hashtbl.replace env' register (Expr.of_value rval);
-              let* cont = recurse rest env' phi events in
-                Lwt.return (dot event'.label cont phi)
-        | GlobalLoad { register; global; load } ->
-            let rval = VSymbol (next_greek ()) in
-            let base_evt : event = Event.create Read 0 () in
-            let evt =
-              {
-                base_evt with
-                id = Some (VVar global);
-                loc = Some (EVar global);
-                rval = Some rval;
-                rmod = load.mode;
-                volatile = load.volatile;
-              }
-            in
-            let event' = add_event events evt in
-            let env' = Hashtbl.copy env in
-              Hashtbl.replace env' register (Expr.of_value rval);
-              let* cont = recurse rest env' phi events in
-                Lwt.return (dot event'.label cont phi)
-        | If { condition; then_body; else_body } -> (
-            let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
-              let* then_structure =
-                recurse then_body env (cond_val :: phi) events
+  | node :: rest ->
+      let stmt = Ir.get_stmt node in
+        Logs.debug (fun m ->
+            m "Interpreting statement: %s" (ir_node_to_string node)
+        );
+        let* structure =
+          match stmt with
+          | Threads { threads } ->
+              let interpret_threads ts =
+                List.fold_left
+                  (fun acc t ->
+                    let* t_structure = recurse t env phi events in
+                      let* acc_structure = acc in
+                        Lwt.return (cross acc_structure t_structure)
+                  )
+                  (Lwt.return (empty_structure ()))
+                  ts
               in
-                match else_body with
-                | Some eb ->
-                    let* else_structure =
-                      recurse eb env (Expr.unop "~" cond_val :: phi) events
-                    in
-                      Lwt.return (plus then_structure else_structure)
-                | None -> Lwt.return then_structure
-          )
-        | Fence { mode } ->
-            let base_evt : event = Event.create Fence 0 () in
-            let evt = { base_evt with fmod = mode } in
-            let event' = add_event events evt in
-              let* cont = recurse rest env phi events in
-                Lwt.return (dot event'.label cont phi)
-        | Lock { global } ->
-            let base_evt : event = Event.create Lock 0 () in
-            let evt =
-              match global with
-              | Some g -> { base_evt with id = Some (VVar g) }
-              | None -> base_evt
-            in
-            let event' = add_event events evt in
-              let* cont = recurse rest env phi events in
-                Lwt.return (dot event'.label cont phi)
-        | Unlock { global } ->
-            let base_evt : event = Event.create Unlock 0 () in
-            let evt =
-              match global with
-              | Some g -> { base_evt with id = Some (VVar g) }
-              | None -> base_evt
-            in
-            let event' = add_event events evt in
-              let* cont = recurse rest env phi events in
-                Lwt.return (dot event'.label cont phi)
-        | Malloc { register; size } ->
-            let rval = VSymbol (next_zh ()) in
-            let base_evt : event = Event.create Malloc 0 () in
-            let evt = { base_evt with rval = Some rval } in
-            let event' = add_event events evt in
-            let env' = Hashtbl.copy env in
-              Hashtbl.replace env' register (Expr.of_value rval);
-              let* cont = recurse rest env' phi events in
-                Lwt.return (dot event'.label cont phi)
-        | Free { register } ->
-            let base_evt : event = Event.create Free 0 () in
-            let evt = base_evt in
-            let event' = add_event events evt in
-              let* cont = recurse rest env phi events in
-                Lwt.return (dot event'.label cont phi)
-        | _ ->
-            (* Simplified - return empty structure for unhandled cases *)
-            Logs.err (fun m -> m "Statement not handled: %s" (Ir.to_string stmt));
-            Lwt.return (empty_structure ())
-      in
-        Lwt.return structure
+                interpret_threads threads
+          | RegisterStore { register; expr } ->
+              let env' = update_env env register expr in
+                let* cont = recurse rest env' phi events in
+                  Lwt.return cont
+          | GlobalStore { global; expr; assign } ->
+              let base_evt : event = Event.create Write 0 () in
+              let evt =
+                {
+                  base_evt with
+                  id = Some (VVar global);
+                  loc = Some (EVar global);
+                  wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
+                  wmod = assign.mode;
+                  volatile = assign.volatile;
+                }
+              in
+              let event' : event = add_event events evt in
+                let* cont = recurse rest env phi events in
+                  Lwt.return (dot event'.label cont phi)
+          | DerefStore { address; expr; assign } ->
+              let base_evt : event = Event.create Write 0 () in
+              let evt =
+                {
+                  base_evt with
+                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                  wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
+                  wmod = assign.mode;
+                  volatile = assign.volatile;
+                }
+              in
+              let event' : event = add_event events evt in
+                let* cont = recurse rest env phi events in
+                  Lwt.return (dot event'.label cont phi)
+          | DerefLoad { register; address; load } ->
+              let rval = VSymbol (next_greek ()) in
+              let base_evt : event = Event.create Read 0 () in
+              let evt =
+                {
+                  base_evt with
+                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                  rval = Some rval;
+                  rmod = load.mode;
+                  volatile = load.volatile;
+                }
+              in
+              let event' : event = add_event events evt in
+              let env' = Hashtbl.copy env in
+                Hashtbl.replace env' register (Expr.of_value rval);
+                let* cont = recurse rest env' phi events in
+                  Lwt.return (dot event'.label cont phi)
+          | GlobalLoad { register; global; load } ->
+              let rval = VSymbol (next_greek ()) in
+              let base_evt : event = Event.create Read 0 () in
+              let evt =
+                {
+                  base_evt with
+                  id = Some (VVar global);
+                  loc = Some (EVar global);
+                  rval = Some rval;
+                  rmod = load.mode;
+                  volatile = load.volatile;
+                }
+              in
+              let event' : event = add_event events evt in
+              let env' = Hashtbl.copy env in
+                Hashtbl.replace env' register (Expr.of_value rval);
+                let* cont = recurse rest env' phi events in
+                  Lwt.return (dot event'.label cont phi)
+          | If { condition; then_body; else_body } -> (
+              let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
+                let* then_structure =
+                  recurse then_body env (cond_val :: phi) events
+                in
+                  match else_body with
+                  | Some eb ->
+                      let* else_structure =
+                        recurse eb env (Expr.unop "~" cond_val :: phi) events
+                      in
+                        Lwt.return (plus then_structure else_structure)
+                  | None -> Lwt.return then_structure
+            )
+          | Fence { mode } ->
+              let base_evt : event = Event.create Fence 0 () in
+              let evt = { base_evt with fmod = mode } in
+              let event' : event = add_event events evt in
+                let* cont = recurse rest env phi events in
+                  Lwt.return (dot event'.label cont phi)
+          | Lock { global } ->
+              let base_evt : event = Event.create Lock 0 () in
+              let evt =
+                match global with
+                | Some g -> { base_evt with id = Some (VVar g) }
+                | None -> base_evt
+              in
+              let event' : event = add_event events evt in
+                let* cont = recurse rest env phi events in
+                  Lwt.return (dot event'.label cont phi)
+          | Unlock { global } ->
+              let base_evt : event = Event.create Unlock 0 () in
+              let evt =
+                match global with
+                | Some g -> { base_evt with id = Some (VVar g) }
+                | None -> base_evt
+              in
+              let event' : event = add_event events evt in
+                let* cont = recurse rest env phi events in
+                  Lwt.return (dot event'.label cont phi)
+          | Malloc { register; size } ->
+              let rval = VSymbol (next_zh ()) in
+              let base_evt : event = Event.create Malloc 0 () in
+              let evt = { base_evt with rval = Some rval } in
+              let event' : event = add_event events evt in
+              let env' = Hashtbl.copy env in
+                Hashtbl.replace env' register (Expr.of_value rval);
+                let* cont = recurse rest env' phi events in
+                  Lwt.return (dot event'.label cont phi)
+          | Free { register } ->
+              let base_evt : event = Event.create Free 0 () in
+              let evt = base_evt in
+              let event' : event = add_event events evt in
+                let* cont = recurse rest env phi events in
+                  Lwt.return (dot event'.label cont phi)
+          | _ ->
+              (* Simplified - return empty structure for unhandled cases *)
+              Logs.err (fun m ->
+                  m "Statement not handled: %s" (ir_node_to_string node)
+              );
+              Lwt.return (empty_structure ())
+        in
+          Lwt.return structure
 
 (** No interpretation of while statements *)
 
 let rec interpret_statements stmts env phi events =
-  interpret_statements_base ~recurse:interpret_statements stmts env phi events
+  interpret_statements_open ~recurse:interpret_statements ~add_event stmts env
+    phi events
 
 (** Step-counter semantics of unbounded loops *)
 
-let rec interpret_statements_step_counter step_counter stmts env phi events =
+let make_ir_node stmt : ir_node = Ir.{ annotations = (); stmt }
+
+let rec interpret_statements_step_counter step_counter nodes env phi events =
+  assert (step_counter >= 0);
   if step_counter = 0 then Lwt.return (empty_structure ())
   else
-    match stmts with
-    | Do { body; condition } :: rest ->
-        let unrolled =
-          body
-          @ If
-              {
-                condition;
-                then_body = [ Do { body; condition } ];
-                else_body = None;
-              }
-            :: rest
-        in
-          interpret_statements_step_counter (step_counter - 1) unrolled env phi
-            events
-    | While { condition; body } :: rest ->
-        let unrolled =
-          If
-            {
-              condition;
-              then_body = body @ [ While { condition; body } ];
-              else_body = None;
-            }
-          :: rest
-        in
-          interpret_statements_step_counter (step_counter - 1) unrolled env phi
-            events
+    match nodes with
+    | node :: rest -> (
+        match get_stmt node with
+        | Do { body; condition } ->
+            let unrolled =
+              body
+              @ make_ir_node
+                  (If
+                     {
+                       condition;
+                       then_body = [ make_ir_node (Do { body; condition }) ];
+                       else_body = None;
+                     }
+                  )
+                :: rest
+            in
+              interpret_statements_step_counter (step_counter - 1) unrolled env
+                phi events
+        | While { condition; body } ->
+            let unrolled =
+              make_ir_node
+                (If
+                   {
+                     condition;
+                     then_body =
+                       body @ [ make_ir_node (While { condition; body }) ];
+                     else_body = None;
+                   }
+                )
+              :: rest
+            in
+              interpret_statements_step_counter (step_counter - 1) unrolled env
+                phi events
+        | _ ->
+            interpret_statements_open
+              ~recurse:(interpret_statements_step_counter step_counter)
+              ~add_event nodes env phi events
+      )
     | _ ->
-        interpret_statements_base
+        interpret_statements_open
           ~recurse:(interpret_statements_step_counter step_counter)
-          stmts env phi events
+          ~add_event nodes env phi events
 
 (** Generic interpretation function **)
 

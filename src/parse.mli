@@ -3,7 +3,10 @@
 open Ast
 open Context
 open Types
-open Ir
+
+type ir_stmt = unit Ir.ir_stmt
+type ir_assertion = unit Ir.ir_assertion
+type ir_node = unit Ir.ir_node
 
 (** Parse a complete litmus test from a string *)
 val parse : string -> ast_litmus
@@ -12,7 +15,7 @@ val parse : string -> ast_litmus
 val parse_expr : string -> ast_expr
 
 (** Parse a program (list of statements) from a string *)
-val parse_program : string -> expr list * ir_stmt list * ir_assertion list
+val parse_program : string -> expr list * ir_node list * ir_assertion list
 
 (** Convert parser AST expression to Types.expr *)
 val ast_expr_to_expr : ast_expr -> Types.expr

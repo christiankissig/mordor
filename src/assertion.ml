@@ -6,6 +6,9 @@ open Uset
 open Events
 open Lwt.Syntax
 
+type ir_assertion = unit Ir.ir_assertion
+type ir_litmus = unit Ir.ir_litmus
+
 (** Assertion checking and refinement for symbolic memory model checking *)
 
 (** {1 Helper Modules} *)

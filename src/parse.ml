@@ -5,6 +5,10 @@ open Ir
 open Lwt.Syntax
 open Types
 
+type ir_stmt = unit Ir.ir_stmt
+type ir_node = unit Ir.ir_node
+type ir_assertion = unit Ir.ir_assertion
+
 (** Parse a litmus test from a string *)
 let parse src =
   let lexbuf = Lexing.from_string src in
@@ -61,9 +65,12 @@ let ast_mode_to_mode : mode -> Types.mode = function
 let convert_expr_list exprs = List.map ast_expr_to_expr exprs
 
 (** Convert parsed AST statements to IR format *)
-let rec convert_stmt = function
+
+let make_ir_node stmt = { stmt; annotations = () }
+
+let convert_stmt_open ~recurse = function
   | Ast.SThreads { threads } ->
-      let ir_threads = List.map (List.map convert_stmt) threads in
+      let ir_threads = List.map (List.map recurse) threads in
         Threads { threads = ir_threads }
   | Ast.SRegisterStore { register; expr } ->
       let ir_expr = ast_expr_to_expr expr in
@@ -82,8 +89,8 @@ let rec convert_stmt = function
         DerefLoad { register; address = ir_address; load }
   | Ast.SIf { condition; then_body; else_body } ->
       let ir_condition = ast_expr_to_expr condition in
-      let ir_then_body = List.map convert_stmt then_body in
-      let ir_else_body = Option.map (List.map convert_stmt) else_body in
+      let ir_then_body = List.map recurse then_body in
+      let ir_else_body = Option.map (List.map recurse) else_body in
         If
           {
             condition = ir_condition;
@@ -92,18 +99,18 @@ let rec convert_stmt = function
           }
   | Ast.SWhile { condition; body } ->
       let ir_condition = ast_expr_to_expr condition in
-      let ir_body = List.map convert_stmt body in
+      let ir_body = List.map recurse body in
         While { condition = ir_condition; body = ir_body }
   | Ast.SDo { body; condition } ->
       let ir_condition = ast_expr_to_expr condition in
-      let ir_body = List.map convert_stmt body in
+      let ir_body = List.map recurse body in
         Do { body = ir_body; condition = ir_condition }
   | Ast.SFence { mode } -> Fence { mode }
   | Ast.SLock { global } -> Lock { global }
   | Ast.SUnlock { global } -> Unlock { global }
   | Ast.SFree { register } -> Free { register }
   | Ast.SLabeled { label; stmt } ->
-      let ir_stmt = convert_stmt stmt in
+      let ir_stmt = recurse stmt in
         Labeled { label; stmt = ir_stmt }
   | Ast.SCAS { register; address; expected; desired; mode } ->
       let ir_address = ast_expr_to_expr address in
@@ -125,22 +132,14 @@ let rec convert_stmt = function
       let ir_size = ast_expr_to_expr size in
         Malloc { register; size = ir_size }
 
-and convert_litmus (ast_litmus : ast_litmus) : ir_litmus =
-  let name =
-    match ast_litmus.config with
-    | Some config -> config.name
-    | None -> "unnamed_litmus"
-  in
-  let assertions =
-    match ast_litmus.assertion with
-    | Some assertion -> [ convert_assertion assertion ]
-    | None -> []
-  in
-  let program = List.map convert_stmt ast_litmus.program in
-    { name; assertions; program }
+let rec convert_stmt (stmt : ast_stmt) : ir_node =
+  let ir_stmt = convert_stmt_open ~recurse:convert_stmt stmt in
+    make_ir_node ir_stmt
 
-and convert_assertion (assertion : ast_assertion) : ir_assertion =
-  match assertion with
+(** Convert parsed AST litmus test to IR format *)
+
+let rec convert_assertion ast_assertion =
+  match ast_assertion with
   | AOutcome { outcome; condition; model } ->
       let ir_condition = ast_expr_to_expr condition in
       let ir_outcome = outcome_of_string outcome in
@@ -153,6 +152,20 @@ and convert_assertion (assertion : ast_assertion) : ir_assertion =
           outcome = outcome_of_string outcome;
           rest = convert_litmus rest;
         }
+
+and convert_litmus ast_litmus =
+  let name =
+    match ast_litmus.config with
+    | Some config -> config.name
+    | None -> "unnamed_litmus"
+  in
+  let assertions =
+    match ast_litmus.assertion with
+    | Some assertion -> [ convert_assertion assertion ]
+    | None -> []
+  in
+  let program = List.map convert_stmt ast_litmus.program in
+    { name; assertions; program }
 
 (** Parse program *)
 let parse_program program =
