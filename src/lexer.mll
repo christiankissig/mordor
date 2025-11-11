@@ -28,6 +28,8 @@ rule token = parse
   | "rel"                 { Parser.RELEASE }
   | "acquire"             { Parser.ACQUIRE }
   | "acq"                 { Parser.ACQUIRE }
+  | "relacq"              { Parser.RELACQ }
+  | "ra"                  { Parser.RELACQ }
   | "strong"              { Parser.STRONG }
   | "normal"              { Parser.NORMAL }
   | "sequentially_consistent" { Parser.SC }

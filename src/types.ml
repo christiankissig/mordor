@@ -6,12 +6,21 @@ type 'a uset = 'a USet.t
 
 (** Memory ordering modes *)
 
-type mode = Relaxed | Acquire | Release | SC | Normal | Strong | Nonatomic
+type mode =
+  | Relaxed
+  | Acquire
+  | Release
+  | ReleaseAcquire
+  | SC
+  | Normal
+  | Strong
+  | Nonatomic
 
 let mode_to_string = function
   | Relaxed -> "rlx"
   | Acquire -> "acq"
   | Release -> "rel"
+  | ReleaseAcquire -> "ra"
   | SC -> "sc"
   | Normal -> ""
   | Strong -> "strong"

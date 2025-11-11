@@ -71,13 +71,15 @@ type ast_stmt =
       address : ast_expr;
       expected : ast_expr;
       desired : ast_expr;
-      mode : mode;
+      load_mode : mode;
+      assign_mode : mode;
     }
   | SFADD of {
       register : string;
       address : ast_expr;
       operand : ast_expr;
-      mode : mode;
+      load_mode : mode;
+      assign_mode : mode;
     }
   | SIf of {
       condition : ast_expr;
@@ -185,15 +187,17 @@ let rec stmt_to_string stmt =
         (expr_to_string address) (expr_to_string expr)
         (Types.mode_to_string assign.mode)
         assign.volatile
-  | SCAS { register; address; expected; desired; mode } ->
-      Printf.sprintf "SCAS %s, %s, %s, %s with mode %s" register
-        (expr_to_string address) (expr_to_string expected)
+  | SCAS { register; address; expected; desired; load_mode; assign_mode } ->
+      Printf.sprintf "SCAS %s, %s, %s, %s with load mode %s and assign mode %s"
+        register (expr_to_string address) (expr_to_string expected)
         (expr_to_string desired)
-        (Types.mode_to_string mode)
-  | SFADD { register; address; operand; mode } ->
-      Printf.sprintf "SFADD %s, %s, %s with mode %s" register
-        (expr_to_string address) (expr_to_string operand)
-        (Types.mode_to_string mode)
+        (Types.mode_to_string load_mode)
+        (Types.mode_to_string assign_mode)
+  | SFADD { register; address; operand; load_mode; assign_mode } ->
+      Printf.sprintf "SFADD %s, %s, %s with load mode %s and assign mode %s"
+        register (expr_to_string address) (expr_to_string operand)
+        (Types.mode_to_string load_mode)
+        (Types.mode_to_string assign_mode)
   | SIf { condition; then_body; else_body } -> (
       "SIf "
       ^ expr_to_string condition

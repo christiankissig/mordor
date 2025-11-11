@@ -47,6 +47,7 @@ let ast_mode_to_mode : mode -> Types.mode = function
   | Nonatomic -> Types.Nonatomic
   | Relaxed -> Types.Relaxed
   | Release -> Types.Release
+  | ReleaseAcquire -> Types.ReleaseAcquire
   | Acquire -> Types.Acquire
   | SC -> Types.SC
   | Normal -> Types.Normal
@@ -104,7 +105,7 @@ let rec convert_stmt_open ~recurse = function
   | Ast.SLabeled { label; stmt } ->
       let ir_stmt = convert_stmt_open ~recurse stmt in
         Labeled { label; stmt = make_ir_node ir_stmt }
-  | Ast.SCAS { register; address; expected; desired; mode } ->
+  | Ast.SCAS { register; address; expected; desired; load_mode; assign_mode } ->
       let ir_address = ast_expr_to_expr address in
       let ir_expected = ast_expr_to_expr expected in
       let ir_desired = ast_expr_to_expr desired in
@@ -114,12 +115,20 @@ let rec convert_stmt_open ~recurse = function
             address = ir_address;
             expected = ir_expected;
             desired = ir_desired;
-            mode;
+            load_mode;
+            assign_mode;
           }
-  | Ast.SFADD { register; address; operand; mode } ->
+  | Ast.SFADD { register; address; operand; load_mode; assign_mode } ->
       let ir_address = ast_expr_to_expr address in
       let ir_operand = ast_expr_to_expr operand in
-        Fadd { register; address = ir_address; operand = ir_operand; mode }
+        Fadd
+          {
+            register;
+            address = ir_address;
+            operand = ir_operand;
+            load_mode;
+            assign_mode;
+          }
   | Ast.SMalloc { register; size } ->
       let ir_size = ast_expr_to_expr size in
         Malloc { register; size = ir_size }

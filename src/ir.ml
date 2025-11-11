@@ -34,9 +34,16 @@ and 'a ir_stmt =
       address : expr;
       expected : expr;
       desired : expr;
-      mode : mode;
+      load_mode : mode;
+      assign_mode : mode;
     }
-  | Fadd of { register : string; address : expr; operand : expr; mode : mode }
+  | Fadd of {
+      register : string;
+      address : expr;
+      operand : expr;
+      load_mode : mode;
+      assign_mode : mode;
+    }
   | Malloc of { register : string; size : expr }
   | Labeled of { label : string list; stmt : 'a ir_node }
 
@@ -118,15 +125,18 @@ let rec to_string ~ann_to_string (node : 'a ir_node) : string =
         | None -> "Unlock"
       )
     | Free { register } -> Printf.sprintf "Free(%s)" register
-    | Cas { register; address; expected; desired; mode } ->
-        Printf.sprintf "%s := CAS(%s, %s, %s) with mode %s" register
-          (Expr.to_string address) (Expr.to_string expected)
+    | Cas { register; address; expected; desired; load_mode; assign_mode } ->
+        Printf.sprintf
+          "%s := CAS(%s, %s, %s) with load mode %s and assign mode\n        %s"
+          register (Expr.to_string address) (Expr.to_string expected)
           (Expr.to_string desired)
-          (Types.mode_to_string mode)
-    | Fadd { register; address; operand; mode } ->
-        Printf.sprintf "%s := FADD(%s, %s) with mode %s" register
-          (Expr.to_string address) (Expr.to_string operand)
-          (Types.mode_to_string mode)
+          (Types.mode_to_string load_mode)
+          (Types.mode_to_string assign_mode)
+    | Fadd { register; address; operand; load_mode; assign_mode } ->
+        Printf.sprintf "%s := FADD(%s, %s) with load mode %s and assign mode %s"
+          register (Expr.to_string address) (Expr.to_string operand)
+          (Types.mode_to_string load_mode)
+          (Types.mode_to_string assign_mode)
     | Malloc { register; size } ->
         Printf.sprintf "%s := MALLOC(%s)" register (Expr.to_string size)
     | Labeled { label; stmt } ->

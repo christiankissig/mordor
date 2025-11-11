@@ -63,7 +63,7 @@ let inc_loop_id () =
 %}
 
 (* Token declarations *)
-%token NONATOMIC RELAXED RELEASE ACQUIRE STRONG NORMAL SC
+%token NONATOMIC RELAXED RELEASE ACQUIRE STRONG NORMAL SC RELACQ
 %token FADD CAS IF ELSE WHILE DO FENCE
 %token MALLOC FREE LOCK UNLOCK
 %token ALLOW FORBID NAME VALUES
@@ -315,22 +315,37 @@ stmt_base:
     { SStore { address = e1; expr = e2; assign = mode } }
 
   (* CAS: reg := cas(mode, addr, expected, desired) *)
-  | reg=REGISTER ASSIGN CAS LPAREN mode=memory_order COMMA e1=expr COMMA e2=expr COMMA e3=expr RPAREN
+  | reg=REGISTER ASSIGN
+        CAS LPAREN
+          load_mode=memory_order COMMA
+          assign_mode=memory_order COMMA
+          e1=expr COMMA
+          e2=expr COMMA
+          e3=expr
+        RPAREN
     { SCAS {
         register = reg;
         address = e1;
         expected = e2;
         desired = e3;
-        mode
+        load_mode;
+        assign_mode
       } }
 
   (* FADD: reg := fadd(mode, addr, operand) *)
-  | reg=REGISTER ASSIGN FADD LPAREN mode=memory_order COMMA e1=expr COMMA e2=expr RPAREN
+  | reg=REGISTER ASSIGN
+      FADD LPAREN
+        load_mode=memory_order COMMA
+        assign_mode=memory_order COMMA
+        e1=expr COMMA
+        e2=expr
+      RPAREN
     { SFADD {
         register = reg;
         address = e1;
         operand = e2;
-        mode
+        load_mode;
+        assign_mode
       } }
 
   (* Control flow *)
@@ -414,6 +429,7 @@ memory_order:
   | SC { SC }
   | NORMAL { Normal }
   | STRONG { Strong }
+  | RELACQ { ReleaseAcquire }
   ;
 
 (* Expressions *)

@@ -23,7 +23,15 @@ val event_type_to_string : event_type -> string
 (** {1 Memory Ordering Modes} *)
 
 (** Memory ordering modes for atomic operations *)
-type mode = Relaxed | Acquire | Release | SC | Normal | Strong | Nonatomic
+type mode =
+  | Relaxed
+  | Acquire
+  | Release
+  | ReleaseAcquire
+  | SC
+  | Normal
+  | Strong
+  | Nonatomic
 
 (** Convert mode to string representation *)
 val mode_to_string : mode -> string

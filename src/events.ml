@@ -16,6 +16,7 @@ module ModeOps = struct
     | Acquire -> Acquire
     | SC -> Acquire
     | Release -> failwith "Read cannot be release"
+    | ReleaseAcquire -> Acquire
     | Normal | Strong -> failwith "Invalid mode for read"
     | Nonatomic -> failwith "Nonatomic unimplemented"
 
@@ -24,6 +25,7 @@ module ModeOps = struct
   let checked_write = function
     | Relaxed -> Relaxed
     | Release -> Release
+    | ReleaseAcquire -> Release
     | SC -> Release
     | Acquire -> failwith "Write cannot be acquire"
     | Normal | Strong -> failwith "Invalid mode for write"

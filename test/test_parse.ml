@@ -389,17 +389,19 @@ let test_parse_fence_acquire () =
     | _ -> Alcotest.fail "Expected fence(acquire)"
 
 let test_parse_cas () =
-  let src = "%% r0 := cas(sc, x, 0, 1)" in
+  let src = "%% r0 := cas(sc, sc, x, 0, 1)" in
   let ast = parse_litmus src in
     match List.map get_ast_stmt ast.program with
-    | [ SCAS { register = "r0"; mode = SC; _ } ] -> ()
+    | [ SCAS { register = "r0"; load_mode = SC; assign_mode = SC; _ } ] -> ()
     | _ -> Alcotest.fail "Expected CAS operation"
 
 let test_parse_fadd () =
-  let src = "%% r0 := fadd(relaxed, x, 1)" in
+  let src = "%% r0 := fadd(relaxed, relaxed, x, 1)" in
   let ast = parse_litmus src in
     match List.map get_ast_stmt ast.program with
-    | [ SFADD { register = "r0"; mode = Relaxed; _ } ] -> ()
+    | [
+     SFADD { register = "r0"; load_mode = Relaxed; assign_mode = Relaxed; _ };
+    ] -> ()
     | _ -> Alcotest.fail "Expected FADD operation"
 
 let test_parse_lock () =

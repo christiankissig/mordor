@@ -297,57 +297,6 @@ let rec interpret_statements stmts env phi events =
   interpret_statements_open ~recurse:interpret_statements ~add_event stmts env
     phi events
 
-(** Step-counter semantics of unbounded loops *)
-
-let make_ir_node stmt : ir_node = Ir.{ annotations = (); stmt }
-
-let rec interpret_statements_step_counter step_counter nodes env phi events =
-  assert (step_counter >= 0);
-  if step_counter = 0 then Lwt.return (empty_structure ())
-  else
-    match nodes with
-    | node :: rest -> (
-        match get_stmt node with
-        | Do { body; condition } ->
-            let unrolled =
-              body
-              @ make_ir_node
-                  (If
-                     {
-                       condition;
-                       then_body = [ make_ir_node (Do { body; condition }) ];
-                       else_body = None;
-                     }
-                  )
-                :: rest
-            in
-              interpret_statements_step_counter (step_counter - 1) unrolled env
-                phi events
-        | While { condition; body } ->
-            let unrolled =
-              make_ir_node
-                (If
-                   {
-                     condition;
-                     then_body =
-                       body @ [ make_ir_node (While { condition; body }) ];
-                     else_body = None;
-                   }
-                )
-              :: rest
-            in
-              interpret_statements_step_counter (step_counter - 1) unrolled env
-                phi events
-        | _ ->
-            interpret_statements_open
-              ~recurse:(interpret_statements_step_counter step_counter)
-              ~add_event nodes env phi events
-      )
-    | _ ->
-        interpret_statements_open
-          ~recurse:(interpret_statements_step_counter step_counter)
-          ~add_event nodes env phi events
-
 (** Generic interpretation function **)
 
 let interpret_generic ~stmt_semantics stmts defacto restrictions constraint_ =
@@ -372,13 +321,13 @@ let interpret stmts env restrictions constraint_ =
     constraint_
 
 (** Pipeline step for interpretation **)
-let step_interpret (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
+    mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
     match (ctx.program_stmts, ctx.litmus_constraints) with
     | Some stmts, Some constraints ->
         let* structure, events =
-          interpret_generic ~stmt_semantics:interpret_statements stmts []
-            (Hashtbl.create 16) []
+          interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
         in
           ctx.structure <- Some structure;
           ctx.events <- Some events;
@@ -388,3 +337,83 @@ let step_interpret (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
             m "No program statements or constraints for interpretation."
         );
         Lwt.return ctx
+
+let step_interpret lwt_ctx =
+  generic_step_interpret ~stmt_semantics:interpret_statements lwt_ctx
+
+(** Step-counter semantics of unbounded loops *)
+
+module StepCounterSemantics : sig
+  val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
+end = struct
+  let make_ir_node stmt : ir_node = Ir.{ annotations = (); stmt }
+
+  let rec interpret_statements_step_counter step_counter nodes env phi events =
+    assert (step_counter >= 0);
+    if step_counter = 0 then Lwt.return (empty_structure ())
+    else
+      match nodes with
+      | node :: rest -> (
+          match get_stmt node with
+          | Do { body; condition } ->
+              let unrolled =
+                body
+                @ make_ir_node
+                    (If
+                       {
+                         condition;
+                         then_body = [ make_ir_node (Do { body; condition }) ];
+                         else_body = None;
+                       }
+                    )
+                  :: rest
+              in
+                interpret_statements_step_counter (step_counter - 1) unrolled
+                  env phi events
+          | While { condition; body } ->
+              let unrolled =
+                make_ir_node
+                  (If
+                     {
+                       condition;
+                       then_body =
+                         body @ [ make_ir_node (While { condition; body }) ];
+                       else_body = None;
+                     }
+                  )
+                :: rest
+              in
+                interpret_statements_step_counter (step_counter - 1) unrolled
+                  env phi events
+          | _ ->
+              interpret_statements_open
+                ~recurse:(interpret_statements_step_counter step_counter)
+                ~add_event nodes env phi events
+        )
+      | _ ->
+          interpret_statements_open
+            ~recurse:(interpret_statements_step_counter step_counter)
+            ~add_event nodes env phi events
+
+  let step_interpret lwt_ctx =
+    let* ctx = lwt_ctx in
+    let step_counter = ctx.step_counter in
+      generic_step_interpret
+        ~stmt_semantics:(interpret_statements_step_counter step_counter)
+        lwt_ctx
+end
+
+module SymbolicLoopSemantics : sig
+  val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
+end = struct
+  let rec interpret_statements_symbolic_loop nodes env phi events =
+    match nodes with
+    | _ ->
+        interpret_statements_open ~recurse:interpret_statements_symbolic_loop
+          ~add_event nodes env phi events
+
+  let step_interpret lwt_ctx =
+    let* ctx = lwt_ctx in
+      generic_step_interpret ~stmt_semantics:interpret_statements_symbolic_loop
+        lwt_ctx
+end
