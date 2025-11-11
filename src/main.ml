@@ -18,6 +18,7 @@ let output_file = ref None
 let recursive = ref false
 let step_counter = ref None
 let use_finite_step_counter_semantics = ref false
+let use_step_counter_per_loop = ref true
 
 (* Example programs *)
 let example_programs =
@@ -231,11 +232,21 @@ let specs =
       " Output file for visual-es, parse, or futures command (default: stdout \
        or auto-generated)"
     );
-    (* interpreter options *)
+    (* loop semantics *)
     ( "--step-counter",
       Arg.Int
         (fun n ->
           use_finite_step_counter_semantics := true;
+          use_step_counter_per_loop := false;
+          step_counter := Some n
+        ),
+      " Number of steps for interpretation (default: 5)"
+    );
+    ( "--step-counter-per-loop",
+      Arg.Int
+        (fun n ->
+          use_finite_step_counter_semantics := true;
+          use_step_counter_per_loop := true;
           step_counter := Some n
         ),
       " Number of steps for interpretation (default: 5)"
@@ -307,6 +318,7 @@ let main () =
     {
       default_options with
       use_finite_step_counter_semantics = !use_finite_step_counter_semantics;
+      use_step_counter_per_loop = !use_step_counter_per_loop;
     }
   in
 

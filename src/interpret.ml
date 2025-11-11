@@ -435,14 +435,82 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
         );
         Lwt.return ctx
 
-(** Step-counter semantics of unbounded loops *)
+(** Step-counter semantics of unbounded loops
+
+    The semantics of do- and while-loops is defined in terms of a fixed number
+    of unrollings of the loop as nested if-statements. Per-loop step-counter
+    leads to fixed number of unrollings per loop, and a global step-counter
+    limiting unrollings across all sequential and nestested loops otherwise. The
+    per-loop unrolling is applied before interpreting, while the global
+    step-counter is applied during the interpretation. *)
 
 module StepCounterSemantics : sig
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
 end = struct
   let make_ir_node stmt : ir_node = Ir.{ annotations = (); stmt }
 
-  let rec interpret_statements_step_counter step_counter nodes env phi events =
+  (* one-step unrolling *)
+
+  let unrol_while_loop_once body condition =
+    [
+      make_ir_node
+        (If
+           {
+             condition;
+             then_body = body @ [ make_ir_node (While { condition; body }) ];
+             else_body = None;
+           }
+        );
+    ]
+
+  let unrol_do_loop_once body condition =
+    body
+    @ [
+        make_ir_node
+          (If
+             {
+               condition;
+               then_body = [ make_ir_node (Do { body; condition }) ];
+               else_body = None;
+             }
+          );
+      ]
+
+  (* per loop step counter *)
+
+  let rec unrol_while_loop body condition times =
+    assert (times >= 0);
+    if times = 0 then []
+    else
+      [
+        make_ir_node
+          (If
+             {
+               condition;
+               then_body = body @ unrol_while_loop body condition (times - 1);
+               else_body = None;
+             }
+          );
+      ]
+
+  let rec unrol_do_loop body condition times =
+    assert (times >= 1);
+    if times = 1 then body
+    else
+      body
+      @ [
+          make_ir_node
+            (If
+               {
+                 condition;
+                 then_body = unrol_do_loop body condition (times - 1);
+                 else_body = None;
+               }
+            );
+        ]
+
+  let rec interpret_statements_step_counter step_counter per_loop nodes env phi
+      events =
     assert (step_counter >= 0);
     if step_counter = 0 then Lwt.return (empty_structure ())
     else
@@ -450,50 +518,44 @@ end = struct
       | node :: rest -> (
           match get_stmt node with
           | Do { body; condition } ->
-              let unrolled =
-                body
-                @ make_ir_node
-                    (If
-                       {
-                         condition;
-                         then_body = [ make_ir_node (Do { body; condition }) ];
-                         else_body = None;
-                       }
-                    )
-                  :: rest
-              in
-                interpret_statements_step_counter (step_counter - 1) unrolled
-                  env phi events
+              if per_loop then
+                let unrolled =
+                  unrol_do_loop body condition step_counter @ rest
+                in
+                  interpret_statements_step_counter step_counter per_loop
+                    unrolled env phi events
+              else
+                let unrolled = unrol_do_loop_once body condition @ rest in
+                  interpret_statements_step_counter (step_counter - 1) per_loop
+                    unrolled env phi events
           | While { condition; body } ->
-              let unrolled =
-                make_ir_node
-                  (If
-                     {
-                       condition;
-                       then_body =
-                         body @ [ make_ir_node (While { condition; body }) ];
-                       else_body = None;
-                     }
-                  )
-                :: rest
-              in
-                interpret_statements_step_counter (step_counter - 1) unrolled
-                  env phi events
+              if per_loop then
+                let unrolled =
+                  unrol_while_loop body condition step_counter @ rest
+                in
+                  interpret_statements_step_counter step_counter per_loop
+                    unrolled env phi events
+              else
+                let unrolled = unrol_while_loop_once body condition @ rest in
+                  interpret_statements_step_counter (step_counter - 1) per_loop
+                    unrolled env phi events
           | _ ->
               interpret_statements_open
-                ~recurse:(interpret_statements_step_counter step_counter)
+                ~recurse:
+                  (interpret_statements_step_counter step_counter per_loop)
                 ~add_event nodes env phi events
         )
       | _ ->
           interpret_statements_open
-            ~recurse:(interpret_statements_step_counter step_counter)
+            ~recurse:(interpret_statements_step_counter step_counter per_loop)
             ~add_event nodes env phi events
 
   let step_interpret lwt_ctx =
     let* ctx = lwt_ctx in
     let step_counter = ctx.step_counter in
+    let per_loop = ctx.options.use_step_counter_per_loop in
       generic_step_interpret
-        ~stmt_semantics:(interpret_statements_step_counter step_counter)
+        ~stmt_semantics:(interpret_statements_step_counter step_counter per_loop)
         lwt_ctx
 end
 

@@ -27,7 +27,9 @@ type options = {
   forceimm : bool;
   forcenocoh : bool;
   coherent : string;
+  (* step counter semantics of loops *)
   use_finite_step_counter_semantics : bool;
+  use_step_counter_per_loop : bool;
 }
 
 let default_options =
@@ -39,6 +41,7 @@ let default_options =
     forcenocoh = false;
     coherent = "rc11";
     use_finite_step_counter_semantics = false;
+    use_step_counter_per_loop = true;
   }
 
 (** context for pipeline *)
