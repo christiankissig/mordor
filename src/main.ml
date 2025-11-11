@@ -17,6 +17,7 @@ let single_file = ref None
 let output_file = ref None
 let recursive = ref false
 let step_counter = ref None
+let use_finite_step_counter_semantics = ref false
 
 (* Example programs *)
 let example_programs =
@@ -232,7 +233,11 @@ let specs =
     );
     (* interpreter options *)
     ( "--step-counter",
-      Arg.Int (fun n -> step_counter := Some n),
+      Arg.Int
+        (fun n ->
+          use_finite_step_counter_semantics := true;
+          step_counter := Some n
+        ),
       " Number of steps for interpretation (default: 5)"
     );
   ]
@@ -298,7 +303,12 @@ let main () =
       )
   in
 
-  let options = default_options in
+  let options =
+    {
+      default_options with
+      use_finite_step_counter_semantics = !use_finite_step_counter_semantics;
+    }
+  in
 
   let assert_single_test =
     if List.length tests <> 1 then (

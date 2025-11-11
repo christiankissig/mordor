@@ -136,6 +136,12 @@ let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr
     Implemented in open recursion to allow for a flexible semantics of unbounded
     loops. Loop semantics added below. *)
 
+let add_rmw_edge (structure : symbolic_event_structure) (er : int) (ew : int) =
+  {
+    structure with
+    rmw = USet.add (structure : symbolic_event_structure).rmw (er, ew);
+  }
+
 let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
     events =
   (* note that negative step counters are treated as infinite steps *)
@@ -228,6 +234,97 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 Hashtbl.replace env' register (Expr.of_value rval);
                 let* cont = recurse rest env' phi events in
                   Lwt.return (dot event'.label cont phi)
+          | Fadd { register; address; operand; load_mode; assign_mode } ->
+              let rval = VSymbol (next_greek ()) in
+              let base_evt_load : event = Event.create Read 0 () in
+              let evt_load =
+                {
+                  base_evt_load with
+                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                  rval = Some rval;
+                  rmod = load_mode;
+                  volatile = false;
+                }
+              in
+              let event_load' : event = add_event events evt_load in
+              let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
+              let result_expr =
+                Expr.binop loaded_expr "+"
+                  (Expr.evaluate operand (Hashtbl.find_opt env))
+              in
+              let base_evt_store : event = Event.create Write 0 () in
+              let evt_store =
+                {
+                  base_evt_store with
+                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                  wval = Some result_expr;
+                  wmod = assign_mode;
+                  volatile = false;
+                }
+              in
+              let event_store' : event = add_event events evt_store in
+              let env' = Hashtbl.copy env in
+                Hashtbl.replace env' register result_expr;
+                let* cont = recurse rest env' phi events in
+                  Lwt.return
+                    (add_rmw_edge
+                       (dot event_load'.label
+                          (dot event_store'.label cont phi)
+                          phi
+                       )
+                       event_load'.label event_store'.label
+                    )
+          | Cas { register; address; expected; desired; load_mode; assign_mode }
+            ->
+              let rval = VSymbol (next_greek ()) in
+              let base_evt_load : event = Event.create Read 0 () in
+              let evt_load =
+                {
+                  base_evt_load with
+                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                  rval = Some rval;
+                  rmod = load_mode;
+                  volatile = false;
+                }
+              in
+              let event_load' : event = add_event events evt_load in
+              let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
+              let expected_expr =
+                Expr.evaluate expected (Hashtbl.find_opt env)
+              in
+              let cond_expr = Expr.binop loaded_expr "=" expected_expr in
+              let base_evt_store : event = Event.create Write 0 () in
+              let evt_store =
+                {
+                  base_evt_store with
+                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                  wval = Some (Expr.evaluate desired (Hashtbl.find_opt env));
+                  wmod = assign_mode;
+                  volatile = false;
+                  cond = Some cond_expr;
+                }
+              in
+              let event_store' : event = add_event events evt_store in
+
+              let phi_succ = cond_expr :: phi in
+              let phi_fail = Expr.unop "~" cond_expr :: phi in
+              let env_succ = Hashtbl.copy env in
+              let env_fail = Hashtbl.copy env in
+                Hashtbl.replace env_succ register (EBoolean true);
+                Hashtbl.replace env_fail register (EBoolean false);
+                let* cont_succ = recurse rest env_succ phi_succ events in
+                  let* cont_fail = recurse rest env_fail phi_fail events in
+                    Lwt.return
+                      (plus
+                         (add_rmw_edge
+                            (dot event_load'.label
+                               (dot event_store'.label cont_succ phi_succ)
+                               phi_succ
+                            )
+                            event_load'.label event_store'.label
+                         )
+                         (dot event_load'.label cont_fail phi_fail)
+                      )
           | If { condition; then_body; else_body } -> (
               let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
                 let* then_structure =
@@ -338,9 +435,6 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
         );
         Lwt.return ctx
 
-let step_interpret lwt_ctx =
-  generic_step_interpret ~stmt_semantics:interpret_statements lwt_ctx
-
 (** Step-counter semantics of unbounded loops *)
 
 module StepCounterSemantics : sig
@@ -417,3 +511,16 @@ end = struct
       generic_step_interpret ~stmt_semantics:interpret_statements_symbolic_loop
         lwt_ctx
 end
+
+let step_interpret lwt_ctx =
+  let* ctx = lwt_ctx in
+    Logs.debug (fun m ->
+        m "Interpreting program with %s loop semantics."
+          ( if ctx.options.use_finite_step_counter_semantics then
+              "finite step counter"
+            else "generic"
+          )
+    );
+    if ctx.options.use_finite_step_counter_semantics then
+      StepCounterSemantics.step_interpret lwt_ctx
+    else generic_step_interpret ~stmt_semantics:interpret_statements lwt_ctx
