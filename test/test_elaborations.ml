@@ -806,13 +806,15 @@ let test_strengthen_disjoint_predicates () =
 
 (* Tests for pre_justifications function *)
 let test_pre_justifications_empty () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let e_set = USet.create () in
-  let result = pre_justifications events e_set in
+  let result = pre_justifications structure events e_set in
     check int "pre_justifications empty" 0 (USet.size result);
     ()
 
 let test_pre_justifications_only_writes () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write1 =
     {
@@ -861,11 +863,12 @@ let test_pre_justifications_only_writes () =
     Hashtbl.add events 1 write1;
     Hashtbl.add events 2 write2;
     let e_set = USet.of_list [ 1; 2 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
       check int "pre_justifications only writes count" 2 (USet.size result);
       ()
 
 let test_pre_justifications_filters_reads () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write_event =
     {
@@ -914,12 +917,13 @@ let test_pre_justifications_filters_reads () =
     Hashtbl.add events 1 write_event;
     Hashtbl.add events 2 read_event;
     let e_set = USet.of_list [ 1; 2 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
       (* Only write event should be in result *)
       check int "pre_justifications filters reads" 1 (USet.size result);
       ()
 
 let test_pre_justifications_structure () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write_event =
     {
@@ -945,7 +949,7 @@ let test_pre_justifications_structure () =
   in
     Hashtbl.add events 1 write_event;
     let e_set = USet.of_list [ 1 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
     let justs = USet.values result in
       check int "pre_justifications structure count" 1 (List.length justs);
       let just = List.hd justs in
@@ -961,6 +965,7 @@ let test_pre_justifications_structure () =
           ()
 
 let test_pre_justifications_extracts_symbols_from_loc () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write_event =
     {
@@ -987,7 +992,7 @@ let test_pre_justifications_extracts_symbols_from_loc () =
   in
     Hashtbl.add events 1 write_event;
     let e_set = USet.of_list [ 1 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
     let justs = USet.values result in
     let just = List.hd justs in
       (* d field processes loc field *)
@@ -996,6 +1001,7 @@ let test_pre_justifications_extracts_symbols_from_loc () =
       ()
 
 let test_pre_justifications_extracts_symbols_from_wval () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write_event =
     {
@@ -1022,7 +1028,7 @@ let test_pre_justifications_extracts_symbols_from_wval () =
   in
     Hashtbl.add events 1 write_event;
     let e_set = USet.of_list [ 1 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
     let justs = USet.values result in
     let just = List.hd justs in
       (* d field processes wval field *)
@@ -1031,6 +1037,7 @@ let test_pre_justifications_extracts_symbols_from_wval () =
       ()
 
 let test_pre_justifications_extracts_symbols_from_rval () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write_event =
     {
@@ -1057,7 +1064,7 @@ let test_pre_justifications_extracts_symbols_from_rval () =
   in
     Hashtbl.add events 1 write_event;
     let e_set = USet.of_list [ 1 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
     let justs = USet.values result in
     let just = List.hd justs in
       (* d field should contain symbol from rval when it's a VSymbol *)
@@ -1065,6 +1072,7 @@ let test_pre_justifications_extracts_symbols_from_rval () =
       ()
 
 let test_pre_justifications_extracts_all_symbols () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write_event =
     {
@@ -1093,7 +1101,7 @@ let test_pre_justifications_extracts_all_symbols () =
   in
     Hashtbl.add events 1 write_event;
     let e_set = USet.of_list [ 1 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
     let justs = USet.values result in
     let just = List.hd justs in
       (* d field should contain symbol from rval (VSymbol extracts, EVar may not) *)
@@ -1102,6 +1110,7 @@ let test_pre_justifications_extracts_all_symbols () =
       ()
 
 let test_pre_justifications_handles_none_values () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write_event =
     {
@@ -1127,7 +1136,7 @@ let test_pre_justifications_handles_none_values () =
   in
     Hashtbl.add events 1 write_event;
     let e_set = USet.of_list [ 1 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
     let justs = USet.values result in
       check int "pre_justifications handles none values" 1 (List.length justs);
       let just = List.hd justs in
@@ -1136,17 +1145,19 @@ let test_pre_justifications_handles_none_values () =
         ()
 
 let test_pre_justifications_event_not_found () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   (* e_set contains label 1 but events table is empty *)
   (* Events.filter_events will filter out non-existent events before mapping *)
   let e_set = USet.of_list [ 1 ] in
-  let result = pre_justifications events e_set in
+  let result = pre_justifications structure events e_set in
     (* When events don't exist, they should be filtered out, resulting in empty set *)
     check int "pre_justifications missing events filtered out" 0
       (USet.size result);
     ()
 
 let test_pre_justifications_mixed_event_types () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write1 =
     {
@@ -1218,12 +1229,13 @@ let test_pre_justifications_mixed_event_types () =
     Hashtbl.add events 2 read;
     Hashtbl.add events 3 write2;
     let e_set = USet.of_list [ 1; 2; 3 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
       (* Should only contain the 2 write events *)
       check int "pre_justifications mixed event types" 2 (USet.size result);
       ()
 
 let test_pre_justifications_multiple_writes_distinct () =
+  let structure = (create_mock_context ()).structure in
   let events : (int, event) Hashtbl.t = Hashtbl.create 10 in
   let write1 =
     {
@@ -1272,7 +1284,7 @@ let test_pre_justifications_multiple_writes_distinct () =
     Hashtbl.add events 1 write1;
     Hashtbl.add events 2 write2;
     let e_set = USet.of_list [ 1; 2 ] in
-    let result = pre_justifications events e_set in
+    let result = pre_justifications structure events e_set in
     let justs = USet.values result in
       check int "pre_justifications multiple writes count" 2 (List.length justs);
       (* Verify each justification has distinct write event *)

@@ -104,14 +104,16 @@ let lifted_clear cache =
   USet.clear cache.to_ |> ignore
 
 (* calculate pre-justifications for write events *)
-let pre_justifications events e_set =
+let pre_justifications structure events e_set =
   let write_events = Events.filter_events events e_set Write in
     USet.map
       (fun w ->
         try
           let event = Hashtbl.find events w in
             {
-              p = [];
+              p =
+                Hashtbl.find_opt structure.restrict event.label
+                |> Option.value ~default:[];
               d =
                 USet.flatten
                   (USet.map

@@ -60,6 +60,11 @@ let add_event (events : events_t) event =
 
 (** Symbolic Event Structure builders *)
 let dot label structure phi : symbolic_event_structure =
+  if List.exists (fun p -> p = EBoolean false) phi then
+    Printf.printf
+      "Warning: Adding event %d under unsatisfiable path condition.\n" label;
+  flush stdout;
+  Hashtbl.add structure.restrict label phi;
   {
     e = USet.union structure.e (USet.singleton label);
     po = USet.union structure.po (USet.map (fun e -> (label, e)) structure.e);
@@ -75,35 +80,38 @@ let dot label structure phi : symbolic_event_structure =
   }
 
 let plus a b : symbolic_event_structure =
-  {
-    e = USet.union a.e b.e;
-    po = USet.union a.po b.po;
-    po_iter = USet.create ();
-    rmw = USet.union a.rmw b.rmw;
-    lo = USet.union a.lo b.lo;
-    restrict = a.restrict;
-    (* Simplified merge *)
-    cas_groups = a.cas_groups;
-    pwg = a.pwg @ b.pwg;
-    fj = USet.union a.fj b.fj;
-    p = USet.union a.p b.p;
-    constraint_ = a.constraint_ @ b.constraint_;
-  }
+  let restrict = Hashtbl.copy a.restrict in
+    Hashtbl.iter (fun k v -> Hashtbl.replace restrict k v) b.restrict;
+    {
+      e = USet.union a.e b.e;
+      po = USet.union a.po b.po;
+      po_iter = USet.create ();
+      rmw = USet.union a.rmw b.rmw;
+      lo = USet.union a.lo b.lo;
+      restrict;
+      cas_groups = a.cas_groups;
+      pwg = a.pwg @ b.pwg;
+      fj = USet.union a.fj b.fj;
+      p = USet.union a.p b.p;
+      constraint_ = a.constraint_ @ b.constraint_;
+    }
 
 let cross a b : symbolic_event_structure =
-  {
-    e = USet.union a.e b.e;
-    po = USet.union a.po b.po;
-    po_iter = USet.create ();
-    rmw = USet.union a.rmw b.rmw;
-    lo = USet.union a.lo b.lo;
-    restrict = a.restrict;
-    cas_groups = a.cas_groups;
-    pwg = a.pwg @ b.pwg;
-    fj = USet.union a.fj b.fj;
-    p = USet.union a.p b.p;
-    constraint_ = a.constraint_ @ b.constraint_;
-  }
+  let restrict = Hashtbl.copy a.restrict in
+    Hashtbl.iter (fun k v -> Hashtbl.replace restrict k v) b.restrict;
+    {
+      e = USet.union a.e b.e;
+      po = USet.union a.po b.po;
+      po_iter = USet.create ();
+      rmw = USet.union a.rmw b.rmw;
+      lo = USet.union a.lo b.lo;
+      restrict;
+      cas_groups = a.cas_groups;
+      pwg = a.pwg @ b.pwg;
+      fj = USet.union a.fj b.fj;
+      p = USet.union a.p b.p;
+      constraint_ = a.constraint_ @ b.constraint_;
+    }
 
 (** Create empty structure *)
 let empty_structure () : symbolic_event_structure =
@@ -167,7 +175,10 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               in
                 interpret_threads threads
           | RegisterStore { register; expr } ->
-              let env' = update_env env register expr in
+              let env' =
+                update_env env register
+                  (Expr.evaluate expr (Hashtbl.find_opt env))
+              in
                 let* cont = recurse rest env' phi events in
                   Lwt.return cont
           | GlobalStore { global; expr; assign } ->
@@ -249,8 +260,9 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               let event_load' : event = add_event events evt_load in
               let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
               let result_expr =
-                Expr.binop loaded_expr "+"
-                  (Expr.evaluate operand (Hashtbl.find_opt env))
+                Expr.evaluate
+                  (Expr.binop loaded_expr "+" operand)
+                  (Hashtbl.find_opt env)
               in
               let base_evt_store : event = Event.create Write 0 () in
               let evt_store =
@@ -307,7 +319,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               let event_store' : event = add_event events evt_store in
 
               let phi_succ = cond_expr :: phi in
-              let phi_fail = Expr.unop "~" cond_expr :: phi in
+              let phi_fail = Expr.unop "!" cond_expr :: phi in
               let env_succ = Hashtbl.copy env in
               let env_fail = Hashtbl.copy env in
                 Hashtbl.replace env_succ register (EBoolean true);
@@ -328,15 +340,22 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
           | If { condition; then_body; else_body } -> (
               (* TODO prune semantically impossible branches against phi *)
               let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
+              let new_then_phi =
+                if cond_val = EBoolean true then phi else cond_val :: phi
+              in
+              let new_else_phi =
+                if cond_val = EBoolean false then phi
+                else Expr.unop "!" cond_val :: phi
+              in
 
               let then_structure events =
-                recurse (then_body @ rest) env (cond_val :: phi) events
+                recurse (then_body @ rest) env new_then_phi events
               in
 
               match else_body with
               | Some eb -> (
                   let else_structure events =
-                    recurse (eb @ rest) env (cond_val :: phi) events
+                    recurse (eb @ rest) env new_else_phi events
                   in
 
                   match cond_val with
@@ -349,7 +368,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 )
               | None -> (
                   match cond_val with
-                  | EBoolean false -> recurse rest env (cond_val :: phi) events
+                  | EBoolean false -> recurse rest env phi events
                   | EBoolean true -> then_structure events
                   | _ ->
                       let* then_structure = then_structure events in

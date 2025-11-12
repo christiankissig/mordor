@@ -98,7 +98,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   in
 
   (* Initialize justifications for writes *)
-  let pre_justs = Elaborations.pre_justifications events e_set in
+  let pre_justs = Elaborations.pre_justifications structure events e_set in
 
   Logs.debug (fun m ->
       m "Pre-justifications for event\n\t%s"

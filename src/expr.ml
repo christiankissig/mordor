@@ -82,6 +82,8 @@ and Expr : sig
   val is_value : t -> bool
   val is_expression : t -> bool
   val is_number : t -> bool
+  val compare : t -> t -> int
+  val sort_expr : t -> t
   val evaluate : t -> (string -> t option) -> t
   val to_value : t -> value_type option
   val of_value : value_type -> t
@@ -163,6 +165,26 @@ end = struct
     | _, EBinOp _ -> 1
     | EUnOp _, _ -> -1
     | _, EUnOp _ -> 1
+
+  (** Sort expressions for canonical form *)
+  let rec sort_expr expr =
+    match expr with
+    | EUnOp (op, e) ->
+        let e_sorted = sort_expr e in
+          EUnOp (op, e_sorted)
+    | EBinOp (lhs, op, rhs) when List.mem op [ "="; "!="; "+"; "*"; "&&"; "||" ]
+      ->
+        let lhs_sorted = sort_expr lhs in
+        let rhs_sorted = sort_expr rhs in
+          (* Commutative operations - sort operands by swapping if needed *)
+          if compare lhs_sorted rhs_sorted > 0 then EBinOp (rhs, op, lhs)
+            (* Swap operands *)
+          else expr
+    | EBinOp (lhs, op, rhs) ->
+        let lhs_sorted = sort_expr lhs in
+        let rhs_sorted = sort_expr rhs in
+          EBinOp (lhs_sorted, op, rhs_sorted)
+    | _ -> expr
 
   let equal e1 e2 = compare e1 e2 = 0
 
@@ -326,34 +348,76 @@ end = struct
         let r_val = evaluate rhs env in
           match r_val with
           | EBoolean b -> EBoolean (not b)
+          | EUnOp ("!", r_val) -> r_val
+          | EBinOp (l, op, r) -> (
+              match op with
+              | "=" -> EBinOp (l, "!=", r)
+              | "!=" -> EBinOp (l, "=", r)
+              | "<" -> EBinOp (l, ">=", r)
+              | ">" -> EBinOp (l, "<=", r)
+              | "<=" -> EBinOp (l, ">", r)
+              | ">=" -> EBinOp (l, "<", r)
+              | _ -> EUnOp (op, r_val)
+            )
           | _ -> EUnOp (op, r_val)
       )
     | EUnOp (op, rhs) ->
         let r_val = evaluate rhs env in
           EUnOp (op, r_val)
+    | EBinOp (lhs, "+", rhs) -> (
+        let l_val = evaluate lhs env in
+        let r_val = evaluate rhs env in
+          match (l_val, r_val) with
+          | ENum n1, _ when Z.equal n1 Z.zero -> r_val
+          | _, ENum n2 when Z.equal n2 Z.zero -> l_val
+          | ENum n1, ENum n2 -> ENum (Z.add n1 n2)
+          | _ -> EBinOp (l_val, "+", r_val)
+      )
+    | EBinOp (lhs, "-", rhs) -> (
+        let l_val = evaluate lhs env in
+        let r_val = evaluate rhs env in
+          match (l_val, r_val) with
+          | _, ENum n2 when Z.equal n2 Z.zero -> l_val
+          | ENum n1, ENum n2 -> ENum (Z.sub n1 n2)
+          | _ -> EBinOp (l_val, "-", r_val)
+      )
+    | EBinOp (lhs, "*", rhs) -> (
+        let l_val = evaluate lhs env in
+        let r_val = evaluate rhs env in
+          match (l_val, r_val) with
+          | _, ENum n when n = Z.zero -> ENum Z.zero
+          | _, ENum n when n = Z.one -> l_val
+          | ENum n, _ when n = Z.zero -> ENum Z.zero
+          | ENum n, _ when n = Z.one -> r_val
+          | ENum n1, ENum n2 -> ENum (Z.mul n1 n2)
+          | _ -> EBinOp (l_val, "*", r_val)
+      )
+    | EBinOp (lhs, "&&", rhs) -> (
+        let l_val = evaluate lhs env in
+        let r_val = evaluate rhs env in
+          match (l_val, r_val) with
+          | _, EBoolean false -> EBoolean false
+          | EBoolean false, _ -> EBoolean false
+          | _, EBoolean true -> l_val
+          | EBoolean true, _ -> r_val
+          | _ -> EBinOp (l_val, "&&", r_val)
+      )
+    | EBinOp (lhs, "||", rhs) -> (
+        let l_val = evaluate lhs env in
+        let r_val = evaluate rhs env in
+          match (l_val, r_val) with
+          | _, EBoolean true -> EBoolean true
+          | EBoolean true, _ -> EBoolean true
+          | _, EBoolean false -> l_val
+          | EBoolean false, _ -> r_val
+          | _ -> EBinOp (l_val, "||", r_val)
+      )
     | EBinOp (lhs, op, rhs) -> (
         let l_val = evaluate lhs env in
         let r_val = evaluate rhs env in
           match (l_val, r_val) with
-          | EVar v, ENum n when op = "*" && n = Z.zero -> ENum Z.zero
-          | EVar v, ENum n when op = "*" && n = Z.one -> l_val
-          | ENum n, EVar v when op = "*" && n = Z.zero -> ENum Z.zero
-          | ENum n, EVar v when op = "*" && n = Z.one -> r_val
-          | EVar v, ENum n when op = "+" && n = Z.zero -> l_val
-          | ENum n, EVar v when op = "+" && n = Z.zero -> r_val
-          | EVar v, EBoolean false when op = "&&" -> EBoolean false
-          | EBoolean false, EVar v when op = "&&" -> EBoolean false
-          | EVar v, EBoolean true when op = "&&" -> l_val
-          | EBoolean true, EVar v when op = "&&" -> r_val
-          | EVar v, EBoolean true when op = "||" -> EBoolean true
-          | EBoolean true, EVar v when op = "||" -> EBoolean true
-          | EVar v, EBoolean false when op = "||" -> l_val
-          | EBoolean false, EVar v when op = "||" -> r_val
           | ENum n1, ENum n2 -> (
               match op with
-              | "+" -> ENum (Z.add n1 n2)
-              | "-" -> ENum (Z.sub n1 n2)
-              | "*" -> ENum (Z.mul n1 n2)
               | "/" ->
                   if Z.equal n2 Z.zero then failwith "Division by zero"
                   else ENum (Z.div n1 n2)
@@ -367,8 +431,6 @@ end = struct
             )
           | EBoolean b1, EBoolean b2 -> (
               match op with
-              | "&&" -> EBoolean (b1 && b2)
-              | "||" -> EBoolean (b1 || b2)
               | "=" -> EBoolean (b1 = b2)
               | "!=" -> EBoolean (b1 <> b2)
               | _ -> EBinOp (l_val, op, r_val)

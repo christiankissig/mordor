@@ -105,7 +105,6 @@ module EventStructureViz = struct
 
       USet.iter
         (fun event_id ->
-          Logs.debug (fun m -> m "Adding vertex for event ID: %d" event_id);
           let evt = Hashtbl.find events event_id in
           let constraints =
             try Hashtbl.find ses.restrict event_id with Not_found -> []
