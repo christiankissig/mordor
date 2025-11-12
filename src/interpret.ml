@@ -326,17 +326,38 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                          (dot event_load'.label cont_fail phi_fail)
                       )
           | If { condition; then_body; else_body } -> (
+              (* TODO prune semantically impossible branches against phi *)
               let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
-                let* then_structure =
-                  recurse then_body env (cond_val :: phi) events
-                in
-                  match else_body with
-                  | Some eb ->
-                      let* else_structure =
-                        recurse eb env (Expr.unop "~" cond_val :: phi) events
-                      in
-                        Lwt.return (plus then_structure else_structure)
-                  | None -> Lwt.return then_structure
+
+              let then_structure events =
+                recurse (then_body @ rest) env (cond_val :: phi) events
+              in
+
+              match else_body with
+              | Some eb -> (
+                  let else_structure events =
+                    recurse (eb @ rest) env (cond_val :: phi) events
+                  in
+
+                  match cond_val with
+                  | EBoolean true -> then_structure events
+                  | EBoolean false -> else_structure events
+                  | _ ->
+                      let* then_structure = then_structure events in
+                        let* else_structure = else_structure events in
+                          Lwt.return (plus then_structure else_structure)
+                )
+              | None -> (
+                  match cond_val with
+                  | EBoolean false -> recurse rest env (cond_val :: phi) events
+                  | EBoolean true -> then_structure events
+                  | _ ->
+                      let* then_structure = then_structure events in
+                        let* rest_structure =
+                          recurse rest env (cond_val :: phi) events
+                        in
+                          Lwt.return (plus then_structure rest_structure)
+                )
             )
           | Fence { mode } ->
               let base_evt : event = Event.create Fence 0 () in
@@ -519,26 +540,22 @@ end = struct
           match get_stmt node with
           | Do { body; condition } ->
               if per_loop then
-                let unrolled =
-                  unrol_do_loop body condition step_counter @ rest
-                in
+                let unrolled = unrol_do_loop body condition step_counter in
                   interpret_statements_step_counter step_counter per_loop
-                    unrolled env phi events
+                    (unrolled @ rest) env phi events
               else
-                let unrolled = unrol_do_loop_once body condition @ rest in
+                let unrolled = unrol_do_loop_once body condition in
                   interpret_statements_step_counter (step_counter - 1) per_loop
-                    unrolled env phi events
+                    (unrolled @ rest) env phi events
           | While { condition; body } ->
               if per_loop then
-                let unrolled =
-                  unrol_while_loop body condition step_counter @ rest
-                in
+                let unrolled = unrol_while_loop body condition step_counter in
                   interpret_statements_step_counter step_counter per_loop
-                    unrolled env phi events
+                    (unrolled @ rest) env phi events
               else
-                let unrolled = unrol_while_loop_once body condition @ rest in
+                let unrolled = unrol_while_loop_once body condition in
                   interpret_statements_step_counter (step_counter - 1) per_loop
-                    unrolled env phi events
+                    (unrolled @ rest) env phi events
           | _ ->
               interpret_statements_open
                 ~recurse:

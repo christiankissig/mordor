@@ -100,17 +100,12 @@ module EventStructureViz = struct
 
     (* Create vertices *)
     let vertex_map = Hashtbl.create 100 in
-      Printf.printf "Size of events table: %d\n" (Hashtbl.length events);
-      Printf.printf "Events table contains the following events IDS: ";
       Hashtbl.iter (fun k _v -> Printf.printf "%d " k) events;
-      Printf.printf "\nEvent structure has the following event IDs: ";
       USet.iter (fun eid -> Printf.printf "%d " eid) ses.e;
-      Printf.printf "\nStarting to add vertices...\n";
 
       USet.iter
         (fun event_id ->
-          Printf.printf "Adding vertex for event ID: %d\n" event_id;
-          flush stdout;
+          Logs.debug (fun m -> m "Adding vertex for event ID: %d" event_id);
           let evt = Hashtbl.find events event_id in
           let constraints =
             try Hashtbl.find ses.restrict event_id with Not_found -> []

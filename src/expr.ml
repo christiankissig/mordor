@@ -322,6 +322,12 @@ end = struct
         | Some v_expr -> v_expr
         | None -> expr
       )
+    | EUnOp (op, rhs) when op = "!" -> (
+        let r_val = evaluate rhs env in
+          match r_val with
+          | EBoolean b -> EBoolean (not b)
+          | _ -> EUnOp (op, r_val)
+      )
     | EUnOp (op, rhs) ->
         let r_val = evaluate rhs env in
           EUnOp (op, r_val)
@@ -329,6 +335,20 @@ end = struct
         let l_val = evaluate lhs env in
         let r_val = evaluate rhs env in
           match (l_val, r_val) with
+          | EVar v, ENum n when op = "*" && n = Z.zero -> ENum Z.zero
+          | EVar v, ENum n when op = "*" && n = Z.one -> l_val
+          | ENum n, EVar v when op = "*" && n = Z.zero -> ENum Z.zero
+          | ENum n, EVar v when op = "*" && n = Z.one -> r_val
+          | EVar v, ENum n when op = "+" && n = Z.zero -> l_val
+          | ENum n, EVar v when op = "+" && n = Z.zero -> r_val
+          | EVar v, EBoolean false when op = "&&" -> EBoolean false
+          | EBoolean false, EVar v when op = "&&" -> EBoolean false
+          | EVar v, EBoolean true when op = "&&" -> l_val
+          | EBoolean true, EVar v when op = "&&" -> r_val
+          | EVar v, EBoolean true when op = "||" -> EBoolean true
+          | EBoolean true, EVar v when op = "||" -> EBoolean true
+          | EVar v, EBoolean false when op = "||" -> l_val
+          | EBoolean false, EVar v when op = "||" -> r_val
           | ENum n1, ENum n2 -> (
               match op with
               | "+" -> ENum (Z.add n1 n2)

@@ -73,7 +73,7 @@ rdet := malloc rN;
 |||
 {
   // inc
-  rtid := 0;
+  rtid := 1;
   rn := malloc 1;
   *(rrcu+rtid) := 1;
   do {
@@ -132,7 +132,7 @@ rdet := malloc rN;
 |||
 {
   // inc
-  rtid := 0;
+  rtid := 2;
   rn := malloc 1;
   *(rrcu+rtid) := 1;
   do {
