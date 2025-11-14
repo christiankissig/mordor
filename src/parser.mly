@@ -260,7 +260,7 @@ stmt_base:
         load = { mode = Relaxed; volatile = false }
     } }
 
-  (* Volatile pointer load pattern 2: reg := :v= *expr *)
+  (* Volatile pointer load pattern 2: reg :v= *expr *)
   | mode=volatile_assign_mode reg=REGISTER ASSIGN STAR e=expr
     { let load, assign = mode in
       SLoad {
@@ -463,8 +463,6 @@ expr:
   | BANG e=expr { EUnOp ("!", e) }
   | TILDE e=expr { EUnOp ("~", e) }
   | MINUS e=expr %prec BANG { EUnOp ("-", e) }
-  | STAR e=expr %prec BANG { EUnOp ("*", e) }
-  | AMPERSAND e=expr %prec BANG { EUnOp ("&", e) }
 
   | FORALL e=expr { EUnOp ("forall", e) }
 

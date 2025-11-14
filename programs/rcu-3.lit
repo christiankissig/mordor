@@ -28,7 +28,7 @@ rdet := malloc rN;
   *(rcu + rtid) := 0;
 
   // reclaim
-  *(rdet + rtid) := *rs;
+  *(rdet + rtid) := rs;
 
   // sync
   rr := malloc (rN+1);
@@ -87,7 +87,7 @@ rdet := malloc rN;
   *(rcu + rtid) := 0;
 
   // reclaim
-  *(rdet + rtid) := *rs;
+  *(rdet + rtid) := rs;
 
   // sync
   rr := malloc (rN+1);
@@ -146,7 +146,7 @@ rdet := malloc rN;
   *(rcu + rtid) := 0;
 
   // reclaim
-  *(rdet + rtid) := *rs;
+  *(rdet + rtid) := rs;
 
   // sync
   rr := malloc (rN+1);

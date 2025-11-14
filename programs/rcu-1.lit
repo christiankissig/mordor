@@ -1,0 +1,70 @@
+name=rcu 3
+%%
+rN := 3;
+
+rrcu := malloc rN;
+*(rrcu + 0) := 0;
+*(rrcu + 1) := 0;
+*(rrcu + 2) := 0;
+
+rC := malloc 1;
+*rC := 0;
+
+rdet := malloc rN;
+
+  // inc
+  rtid := 0;
+  rn := malloc 1;
+  *(rrcu+rtid) := 1;
+  do {
+    *(rrcu+rtid) := 0;
+    *(rrcu+rtid) := 1;
+    rs := fadd(acquire,release,rC,0);
+    rv := *rs;
+    *rn := rv+1;
+    rsucc := cas(acquire,release,rC,rs,rn);
+  } while (!rsucc);
+  *(rcu + rtid) := 0;
+
+  // reclaim
+  *(rdet + rtid) := rs;
+
+  // sync
+  rr := malloc (rN+1);
+  rtemp := *(rrcu + 0);*(rr + 0) := rtemp;
+  rtemp := *(rrcu + 1);*(rr + 1) := rtemp;
+  rtemp := *(rrcu + 2);*(rr + 2) := rtemp;
+
+  rtemp := *(rr + 0);
+  if (rtemp == 1)
+  {
+    do
+    {
+      rtemp := *(rcu + 0);
+    }
+    while (rtemp == 1);
+  };
+
+  rtemp := *(rr + 1);
+  if (rtemp == 1)
+  {
+    do
+    {
+      rtemp := *(rcu + 1);
+    }
+    while (rtemp == 1);
+  };
+
+  rtemp := *(rr + 2);
+  if (rtemp == 1)
+  {
+    do
+    {
+      rtemp := *(rcu + 2);
+    }
+    while (rtemp == 1);
+  };
+
+  // reclaim
+  rtemp := *(rdet + rtid);
+  free(rtemp);

@@ -118,6 +118,16 @@ let is_good fwd we = USet.mem goodcon (fwd, we)
 (** Check if context is bad *)
 let is_bad fwd we = USet.mem badcon (fwd, we)
 
+(** Update with new program order *)
+let update_po po =
+  State.ppo_loc_base := USet.intersection !State.ppo_loc_baseA po;
+  State.ppo_sync := USet.intersection !State.ppo_syncA po;
+  State.ppo_base := USet.union !State.ppo_volA !State.ppo_syncA;
+  State.ppo_base := USet.inplace_union !State.ppo_base !State.ppo_rmwA;
+  State.ppo_base := USet.inplace_union !State.ppo_base !State.ppo_loc_eqA;
+  State.ppo_base := USet.intersection !State.ppo_base po;
+  FwdCache.clear ()
+
 (** Initialization parameters type *)
 type init_params = {
   init_e : int uset;
@@ -293,17 +303,8 @@ let init params =
       State.ppo_loc_baseA :=
         USet.set_minus !State.ppo_loc_baseA !State.ppo_loc_eqA;
 
+      update_po po;
       Lwt.return_unit
-
-(** Update with new program order *)
-let update_po po =
-  State.ppo_loc_base := USet.intersection !State.ppo_loc_baseA po;
-  State.ppo_sync := USet.intersection !State.ppo_syncA po;
-  State.ppo_base := USet.union !State.ppo_volA !State.ppo_syncA;
-  State.ppo_base := USet.inplace_union !State.ppo_base !State.ppo_rmwA;
-  State.ppo_base := USet.inplace_union !State.ppo_base !State.ppo_loc_eqA;
-  State.ppo_base := USet.intersection !State.ppo_base po;
-  FwdCache.clear ()
 
 (** Forwarding context type *)
 type t = {

@@ -282,114 +282,90 @@ let forward elab_ctx justs =
           (fun p ->
             let ctx = Forwardingcontext.create ~fwd:just.fwd ~we:just.we () in
               let* ppo = Forwardingcontext.ppo ctx p in
-                Logs.debug (fun m ->
-                    m "PPO %s"
-                      (USet.to_string
-                         (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
-                         ppo
-                      )
-                );
                 let* ppo_loc = Forwardingcontext.ppo_loc ctx p in
-                  Logs.debug (fun m ->
-                      m "PPO_LOC %s"
-                        (USet.to_string
-                           (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
-                           ppo_loc
-                        )
-                  );
                   let* _pred =
                     pred elab_ctx None None ~ppo:(Lwt.return ppo) ()
                   in
-                    Logs.debug (fun m ->
-                        m "PRED %s\n"
-                          (USet.to_string
-                             (fun x -> string_of_int x)
-                             (_pred just.w.label)
-                          )
-                    );
+                  (* Subtract fj from ppo_loc *)
+                  let _ppo_loc = USet.set_minus ppo_loc elab_ctx.fj in
 
-                    (* Subtract fj from ppo_loc *)
-                    let _ppo_loc = USet.set_minus ppo_loc elab_ctx.fj in
+                  (* Compute fwd and we edges *)
+                  let _fwd = fwd elab_ctx _pred ctx _ppo_loc in
+                  let _we = we elab_ctx _pred ctx _ppo_loc in
 
-                    (* Compute fwd and we edges *)
-                    let _fwd = fwd elab_ctx _pred ctx _ppo_loc in
-                    let _we = we elab_ctx _pred ctx _ppo_loc in
+                  (* Filter edges by label *)
+                  let _fwd =
+                    USet.filter (fun (_, e2) -> e2 <> just.w.label) _fwd
+                  in
+                  let _we =
+                    USet.filter (fun (_, e2) -> e2 <> just.w.label) _we
+                  in
 
-                    (* Filter edges by label *)
-                    let _fwd =
-                      USet.filter (fun (_, e2) -> e2 <> just.w.label) _fwd
-                    in
-                    let _we =
-                      USet.filter (fun (_, e2) -> e2 <> just.w.label) _we
-                    in
-
-                    (* Filter edge function *)
-                    let filtedge (edge, new_fwd, new_we) =
-                      if Forwardingcontext.is_bad new_fwd new_we then
-                        Lwt.return_false
-                      else if Forwardingcontext.is_good new_fwd new_we then
-                        Lwt.return_true
-                      else
-                        let con =
-                          Forwardingcontext.create ~fwd:new_fwd ~we:new_we ()
-                        in
-                          Forwardingcontext.check con
-                    in
-
-                    (* Create fwd edges with contexts *)
-                    let fwdedges =
-                      USet.values _fwd
-                      |> List.map (fun edge ->
-                             ( edge,
-                               USet.union just.fwd (USet.singleton edge),
-                               just.we
-                             )
-                         )
-                    in
-
-                    (* Create we edges with contexts *)
-                    let weedges =
-                      USet.values _we
-                      |> List.map (fun edge ->
-                             ( edge,
-                               just.fwd,
-                               USet.union just.we (USet.singleton edge)
-                             )
-                         )
-                    in
-
-                    (* Filter both edge types *)
-                    let* filtered_fwd = Lwt_list.filter_p filtedge fwdedges in
-                      let* filtered_we = Lwt_list.filter_p filtedge weedges in
-
-                      (* Remap justifications *)
-                      let fwd_justs =
-                        List.map
-                          (fun (edge, new_fwd, new_we) ->
-                            let con =
-                              Forwardingcontext.create ~fwd:new_fwd ~we:new_we
-                                ()
-                            in
-                              Forwardingcontext.remap_just con just
-                                (Some ("fwd", Some just, None))
-                          )
-                          filtered_fwd
+                  (* Filter edge function *)
+                  let filtedge (edge, new_fwd, new_we) =
+                    if Forwardingcontext.is_bad new_fwd new_we then
+                      Lwt.return_false
+                    else if Forwardingcontext.is_good new_fwd new_we then
+                      Lwt.return_true
+                    else
+                      let con =
+                        Forwardingcontext.create ~fwd:new_fwd ~we:new_we ()
                       in
+                        Forwardingcontext.check con
+                  in
 
-                      let we_justs =
-                        List.map
-                          (fun (edge, new_fwd, new_we) ->
-                            let con =
-                              Forwardingcontext.create ~fwd:new_fwd ~we:new_we
-                                ()
-                            in
-                              Forwardingcontext.remap_just con just
-                                (Some ("we", Some just, None))
-                          )
-                          filtered_we
-                      in
+                  (* Create fwd edges with contexts *)
+                  let fwdedges =
+                    USet.values _fwd
+                    |> List.map (fun edge ->
+                           ( edge,
+                             USet.union just.fwd (USet.singleton edge),
+                             just.we
+                           )
+                       )
+                  in
 
-                      Lwt.return (fwd_justs @ we_justs)
+                  (* Create we edges with contexts *)
+                  let weedges =
+                    USet.values _we
+                    |> List.map (fun edge ->
+                           ( edge,
+                             just.fwd,
+                             USet.union just.we (USet.singleton edge)
+                           )
+                       )
+                  in
+
+                  (* Filter both edge types *)
+                  let* filtered_fwd = Lwt_list.filter_p filtedge fwdedges in
+                    let* filtered_we = Lwt_list.filter_p filtedge weedges in
+
+                    (* Remap justifications *)
+                    let fwd_justs =
+                      List.map
+                        (fun (edge, new_fwd, new_we) ->
+                          let con =
+                            Forwardingcontext.create ~fwd:new_fwd ~we:new_we ()
+                          in
+                            Forwardingcontext.remap_just con just
+                              (Some ("fwd", Some just, None))
+                        )
+                        filtered_fwd
+                    in
+
+                    let we_justs =
+                      List.map
+                        (fun (edge, new_fwd, new_we) ->
+                          let con =
+                            Forwardingcontext.create ~fwd:new_fwd ~we:new_we ()
+                          in
+                            Forwardingcontext.remap_just con just
+                              (Some ("we", Some just, None))
+                        )
+                        filtered_we
+                    in
+
+                    Lwt.return (fwd_justs @ we_justs)
           )
           ps
       in
