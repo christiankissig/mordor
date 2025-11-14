@@ -30,7 +30,8 @@ let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
         | _ -> failwith "ctx and p must be provided when ppo is not given"
       )
   in
-  let inversed = URelation.inverse_relation ppo_result in
+  let immediate_ppo = URelation.transitive_reduction ppo_result in
+  let inversed = URelation.inverse_relation immediate_ppo in
   let tree = build_tree elab_ctx.e_set inversed in
     Lwt.return (fun e -> Hashtbl.find tree e)
 

@@ -216,8 +216,9 @@ module URelation : sig
   val cross : 'a USet.t -> 'a USet.t -> 'a t
   val identity_relation : 'a USet.t -> 'a t
   val inverse_relation : 'a t -> 'a t
-  val transitive_closure : 'a t -> 'a t
   val reflexive_closure : 'a USet.t -> 'a t -> 'a t
+  val transitive_closure : 'a t -> 'a t
+  val transitive_reduction : 'a t -> 'a t
   val acyclic : 'a t -> bool
   val is_irreflexive : 'a t -> bool
 end = struct
@@ -259,6 +260,19 @@ end = struct
             vals
       done;
       result
+
+  (* Compute transitive reduction: remove edges that can be derived through transitivity *)
+  let transitive_reduction rel =
+    USet.filter
+      (fun (e1, e2) ->
+        (* Keep (e1, e2) only if there's no intermediate e3 where (e1,e3) and (e3,e2) both in rel *)
+        not
+          (USet.exists
+             (fun (f, t) -> f = e1 && t <> e2 && USet.mem rel (t, e2))
+             rel
+          )
+      )
+      rel
 
   (** Reflexive closure *)
   let reflexive_closure domain s = USet.union (identity_relation domain) s
