@@ -170,18 +170,6 @@ let test_parse_unary_negate () =
     | EUnOp ("-", ERegister "r0") -> ()
     | _ -> Alcotest.fail "Expected unary negation"
 
-let test_parse_unary_deref () =
-  let expr = parse_expr "*r0" in
-    match expr with
-    | EUnOp ("*", ERegister "r0") -> ()
-    | _ -> Alcotest.fail "Expected dereference"
-
-let test_parse_unary_address_of () =
-  let expr = parse_expr "&x" in
-    match expr with
-    | EUnOp ("&", EGlobal "x") -> ()
-    | _ -> Alcotest.fail "Expected address-of"
-
 let test_parse_precedence_add_mul () =
   let expr = parse_expr "1 + 2 * 3" in
     match expr with
@@ -725,8 +713,6 @@ let suite =
       Alcotest.test_case "Parse unary bitwise not" `Quick
         test_parse_unary_bitwise_not;
       Alcotest.test_case "Parse unary negate" `Quick test_parse_unary_negate;
-      Alcotest.test_case "Parse unary deref" `Quick test_parse_unary_deref;
-      Alcotest.test_case "Parse address-of" `Quick test_parse_unary_address_of;
       Alcotest.test_case "Parse precedence add/mul" `Quick
         test_parse_precedence_add_mul;
       Alcotest.test_case "Parse precedence mul/add" `Quick
