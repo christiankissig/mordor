@@ -3,6 +3,7 @@
 open Types
 open Uset
 open Lwt.Syntax
+open Expr
 
 (** Global state - mutable references *)
 module State = struct
@@ -329,7 +330,14 @@ let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
   in
 
   let psi =
-    List.filter_map (fun (e1, e2) -> Some (EBinOp (e1, "=", e2))) valmap
+    List.filter_map
+      (fun (e1, e2) ->
+        let expr = Expr.evaluate (EBinOp (e1, "=", e2)) (fun _ -> None) in
+          match expr with
+          | EBoolean true -> None
+          | _ -> Some expr
+      )
+      valmap
   in
 
   (* Build remap map *)

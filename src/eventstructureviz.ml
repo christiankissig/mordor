@@ -207,9 +207,10 @@ module EventStructureViz = struct
 
       let label_lines =
         label_lines
-        @ List.map
-            (fun c -> Printf.sprintf "φ: %s" (Expr.to_string c))
-            v.V.constraints
+        @ [
+            Printf.sprintf "φ: %s"
+              (String.concat "∧" (List.map Expr.to_string v.V.constraints));
+          ]
       in
 
       let label = String.concat " " label_lines in

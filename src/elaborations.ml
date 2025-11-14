@@ -163,7 +163,14 @@ let filter elab_ctx (justs : justification uset) =
            not
              (List.exists
                 (fun (i', (j' : justification)) ->
-                  i' > i
+                  i' <> i
+                  && j.w.label = j'.w.label
+                  && j.w.typ = j'.w.typ
+                  && Option.equal Expr.equal j.w.loc j'.w.loc
+                  && Option.equal Value.equal j.w.rval j'.w.rval
+                  && Option.equal Expr.equal j.w.wval j'.w.wval
+                  && USet.equal j.fwd j'.fwd
+                  && USet.equal j.we j'.we
                   && List.length j'.p < List.length j.p
                   && List.for_all (fun e -> List.mem e j.p) j'.p
                 )
@@ -184,29 +191,26 @@ let value_assign elab_ctx justs =
       m "Performing value assignment on %d justifications..." (USet.size justs)
   );
 
-  let* results =
-    Lwt_list.map_p
-      (fun (just : justification) ->
-        let solver = Solver.create just.p in
-          let* model = Solver.solve solver in
-            match model with
-            | Some bindings ->
-                let new_wval =
-                  match just.w.wval with
-                  | Some (EVar v) -> (
-                      match Solver.concrete_value bindings v with
-                      | Some value -> Some (Expr.of_value value)
-                      | None -> just.w.wval
-                    )
-                  | _ -> just.w.wval
-                in
-                let new_w = { just.w with wval = new_wval } in
-                  Lwt.return
-                    { just with w = new_w; op = ("va", Some just, None) }
-            | None -> Lwt.return just
-      )
-      (USet.values justs)
+  let elab just =
+    let solver = Solver.create just.p in
+      let* model = Solver.solve solver in
+        match model with
+        | Some bindings ->
+            let new_wval =
+              match just.w.wval with
+              | Some (EVar v) -> (
+                  match Solver.concrete_value bindings v with
+                  | Some value -> Some (Expr.of_value value)
+                  | None -> just.w.wval
+                )
+              | _ -> just.w.wval
+            in
+            let new_w = { just.w with wval = new_wval } in
+              Lwt.return { just with w = new_w; op = ("va", Some just, None) }
+        | None -> Lwt.return just
   in
+
+  let* results = Lwt_list.map_p elab (USet.values justs) in
 
   Logs.debug (fun m ->
       m "Completed value assignment on %d justifications." (List.length results)
@@ -214,6 +218,8 @@ let value_assign elab_ctx justs =
   Lwt.return (USet.of_list results)
 
 let fprime elab_ctx pred_fn ppo_loc =
+  (* TODO rlx read and write events for load-forwarding and
+     store-store-forwarding *)
   let w_cross_r = URelation.cross elab_ctx.write_events elab_ctx.read_events in
   let r_cross_r = URelation.cross elab_ctx.read_events elab_ctx.read_events in
   let w_cross_w = URelation.cross elab_ctx.write_events elab_ctx.write_events in
@@ -260,120 +266,139 @@ let forward elab_ctx justs =
   Logs.debug (fun m ->
       m "Performing forwarding on %d justifications..." (USet.size justs)
   );
+
+  let elab just =
+    (* Determine paths to check *)
+    let ps =
+      if elab_ctx.structure.pwg <> [] then
+        [ just.p; just.p @ elab_ctx.structure.pwg ]
+      else [ just.p ]
+    in
+      Logs.debug (fun m -> m "JUST %s" (Justifications.to_string just));
+
+      (* Map over each path *)
+      let* path_results =
+        Lwt_list.map_p
+          (fun p ->
+            let ctx = Forwardingcontext.create ~fwd:just.fwd ~we:just.we () in
+              let* ppo = Forwardingcontext.ppo ctx p in
+                Logs.debug (fun m ->
+                    m "PPO %s"
+                      (USet.to_string
+                         (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                         ppo
+                      )
+                );
+                let* ppo_loc = Forwardingcontext.ppo_loc ctx p in
+                  Logs.debug (fun m ->
+                      m "PPO_LOC %s"
+                        (USet.to_string
+                           (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                           ppo_loc
+                        )
+                  );
+                  let* _pred =
+                    pred elab_ctx None None ~ppo:(Lwt.return ppo) ()
+                  in
+                    Logs.debug (fun m ->
+                        m "PRED %s\n"
+                          (USet.to_string
+                             (fun x -> string_of_int x)
+                             (_pred just.w.label)
+                          )
+                    );
+
+                    (* Subtract fj from ppo_loc *)
+                    let _ppo_loc = USet.set_minus ppo_loc elab_ctx.fj in
+
+                    (* Compute fwd and we edges *)
+                    let _fwd = fwd elab_ctx _pred ctx _ppo_loc in
+                    let _we = we elab_ctx _pred ctx _ppo_loc in
+
+                    (* Filter edges by label *)
+                    let _fwd =
+                      USet.filter (fun (_, e2) -> e2 <> just.w.label) _fwd
+                    in
+                    let _we =
+                      USet.filter (fun (_, e2) -> e2 <> just.w.label) _we
+                    in
+
+                    (* Filter edge function *)
+                    let filtedge (edge, new_fwd, new_we) =
+                      if Forwardingcontext.is_bad new_fwd new_we then
+                        Lwt.return_false
+                      else if Forwardingcontext.is_good new_fwd new_we then
+                        Lwt.return_true
+                      else
+                        let con =
+                          Forwardingcontext.create ~fwd:new_fwd ~we:new_we ()
+                        in
+                          Forwardingcontext.check con
+                    in
+
+                    (* Create fwd edges with contexts *)
+                    let fwdedges =
+                      USet.values _fwd
+                      |> List.map (fun edge ->
+                             ( edge,
+                               USet.union just.fwd (USet.singleton edge),
+                               just.we
+                             )
+                         )
+                    in
+
+                    (* Create we edges with contexts *)
+                    let weedges =
+                      USet.values _we
+                      |> List.map (fun edge ->
+                             ( edge,
+                               just.fwd,
+                               USet.union just.we (USet.singleton edge)
+                             )
+                         )
+                    in
+
+                    (* Filter both edge types *)
+                    let* filtered_fwd = Lwt_list.filter_p filtedge fwdedges in
+                      let* filtered_we = Lwt_list.filter_p filtedge weedges in
+
+                      (* Remap justifications *)
+                      let fwd_justs =
+                        List.map
+                          (fun (edge, new_fwd, new_we) ->
+                            let con =
+                              Forwardingcontext.create ~fwd:new_fwd ~we:new_we
+                                ()
+                            in
+                              Forwardingcontext.remap_just con just
+                                (Some ("fwd", Some just, None))
+                          )
+                          filtered_fwd
+                      in
+
+                      let we_justs =
+                        List.map
+                          (fun (edge, new_fwd, new_we) ->
+                            let con =
+                              Forwardingcontext.create ~fwd:new_fwd ~we:new_we
+                                ()
+                            in
+                              Forwardingcontext.remap_just con just
+                                (Some ("we", Some just, None))
+                          )
+                          filtered_we
+                      in
+
+                      Lwt.return (fwd_justs @ we_justs)
+          )
+          ps
+      in
+        Lwt.return (List.concat path_results)
+  in
+
   let* out =
     (* Map over justifications *)
-    let* results =
-      Lwt_list.map_p
-        (fun (just : justification) ->
-          (* Determine paths to check *)
-          let ps =
-            if elab_ctx.structure.pwg <> [] then
-              [ just.p; just.p @ elab_ctx.structure.pwg ]
-            else [ just.p ]
-          in
-
-          (* Map over each path *)
-          let* path_results =
-            Lwt_list.map_p
-              (fun p ->
-                let ctx =
-                  Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
-                in
-                  let* ppo = Forwardingcontext.ppo ctx p in
-                    let* ppo_loc = Forwardingcontext.ppo_loc ctx p in
-                      let* _pred =
-                        pred elab_ctx None None ~ppo:(Lwt.return ppo) ()
-                      in
-
-                      (* Subtract fj from ppo_loc *)
-                      let _ppo_loc = USet.set_minus ppo_loc elab_ctx.fj in
-
-                      (* Compute fwd and we edges *)
-                      let _fwd = fwd elab_ctx _pred ctx _ppo_loc in
-                      let _we = we elab_ctx _pred ctx _ppo_loc in
-
-                      (* Filter edges by label *)
-                      let _fwd =
-                        USet.filter (fun (_, e2) -> e2 <> just.w.label) _fwd
-                      in
-                      let _we =
-                        USet.filter (fun (_, e2) -> e2 <> just.w.label) _we
-                      in
-
-                      (* Filter edge function *)
-                      let filtedge (edge, new_fwd, new_we) =
-                        if Forwardingcontext.is_bad new_fwd new_we then
-                          Lwt.return_false
-                        else if Forwardingcontext.is_good new_fwd new_we then
-                          Lwt.return_true
-                        else
-                          let con =
-                            Forwardingcontext.create ~fwd:new_fwd ~we:new_we ()
-                          in
-                            Forwardingcontext.check con
-                      in
-
-                      (* Create fwd edges with contexts *)
-                      let fwdedges =
-                        USet.values _fwd
-                        |> List.map (fun edge ->
-                               ( edge,
-                                 USet.union just.fwd (USet.singleton edge),
-                                 just.we
-                               )
-                           )
-                      in
-
-                      (* Create we edges with contexts *)
-                      let weedges =
-                        USet.values _we
-                        |> List.map (fun edge ->
-                               ( edge,
-                                 just.fwd,
-                                 USet.union just.we (USet.singleton edge)
-                               )
-                           )
-                      in
-
-                      (* Filter both edge types *)
-                      let* filtered_fwd = Lwt_list.filter_p filtedge fwdedges in
-                        let* filtered_we = Lwt_list.filter_p filtedge weedges in
-
-                        (* Remap justifications *)
-                        let fwd_justs =
-                          List.map
-                            (fun (edge, new_fwd, new_we) ->
-                              let con =
-                                Forwardingcontext.create ~fwd:new_fwd ~we:new_we
-                                  ()
-                              in
-                                Forwardingcontext.remap_just con just
-                                  (Some ("fwd", Some just, None))
-                            )
-                            filtered_fwd
-                        in
-
-                        let we_justs =
-                          List.map
-                            (fun (edge, new_fwd, new_we) ->
-                              let con =
-                                Forwardingcontext.create ~fwd:new_fwd ~we:new_we
-                                  ()
-                              in
-                                Forwardingcontext.remap_just con just
-                                  (Some ("we", Some just, None))
-                            )
-                            filtered_we
-                        in
-
-                        Lwt.return (fwd_justs @ we_justs)
-              )
-              ps
-          in
-            Lwt.return (List.concat path_results)
-        )
-        (USet.values justs)
-    in
+    let* results = Lwt_list.map_p elab (USet.values justs) in
 
     (* Flatten results and convert to USet *)
     let flattened = List.concat results in
@@ -870,212 +895,199 @@ let lift elab_ctx justs =
     (* Create lifted cache *)
     let lifted = create_lifted_cache () in
 
+    let elab just_1 just_2 =
+      let ojust_1 = just_1 in
+      let ojust_2 = just_2 in
+
+      (* Check if contexts match and not both independent *)
+      if
+        (not (USet.equal just_1.fwd just_2.fwd))
+        || (not (USet.equal just_1.we just_2.we))
+        || (independent just_1 && independent just_2)
+      then Lwt.return []
+      else
+        (* Check lifted cache *)
+        match lifted_has lifted (just_1, just_2) with
+        | Some cached -> Lwt.return cached
+        | None ->
+            (* Add to cache to prevent recomputation *)
+            lifted_add lifted (just_1, just_2);
+            lifted_add lifted (just_2, just_1);
+
+            (* Create forwarding context *)
+            let con =
+              Forwardingcontext.create ~fwd:just_1.fwd ~we:just_1.we ()
+            in
+
+            (* Compute ppo for both justifications *)
+            let* ppo_1 = Forwardingcontext.ppo con just_1.p in
+              let* ppo_2 = Forwardingcontext.ppo con just_2.p in
+              let ppo = USet.union ppo_1 ppo_2 in
+
+              (* Get pred function *)
+              let* _pred = pred elab_ctx None None ~ppo:(Lwt.return ppo) () in
+
+              (* Clone and unify values if needed *)
+              let just_1, just_2 =
+                match (just_1.w.wval, just_2.w.wval) with
+                | Some (ENum n1), Some v2 when not (Expr.is_number v2) ->
+                    (* just_1 has number, just_2 has symbol - unify *)
+                    let eq_pred = EBinOp (v2, "=", ENum n1) in
+                    let new_w2 = { just_2.w with wval = Some (ENum n1) } in
+                      ( just_1,
+                        {
+                          just_2 with
+                          p = just_2.p @ [ eq_pred ];
+                          w = new_w2;
+                          d = USet.create ();
+                        }
+                      )
+                | Some v1, Some (ENum n2) when not (Expr.is_number v1) ->
+                    (* just_2 has number, just_1 has symbol - unify *)
+                    let eq_pred = EBinOp (v1, "=", ENum n2) in
+                    let new_w1 = { just_1.w with wval = Some (ENum n2) } in
+                      ( {
+                          just_1 with
+                          p = just_1.p @ [ eq_pred ];
+                          w = new_w1;
+                          d = USet.create ();
+                        },
+                        just_2
+                      )
+                | _ -> (just_1, just_2)
+              in
+
+              (* Strengthen the pair *)
+              let* str = strengthen elab_ctx just_1 just_2 ppo con in
+
+              (* Process each strengthening result *)
+              let* results =
+                Lwt_list.map_p
+                  (fun (str_1, str_2, relabelPairs) ->
+                    (* Update predicates *)
+                    let just_1 = { just_1 with p = str_1 } in
+                    let just_2 = { just_2 with p = str_2 } in
+
+                    (* Check uniqueness of relabel pairs *)
+                    let from_syms = USet.map (fun (f, _) -> f) relabelPairs in
+                    let to_syms = USet.map (fun (_, t) -> t) relabelPairs in
+                      if
+                        USet.size from_syms <> USet.size relabelPairs
+                        || USet.size to_syms <> USet.size relabelPairs
+                      then Lwt.return []
+                      else
+                        (* Apply relabeling to predicates *)
+                        let p_1 =
+                          List.map
+                            (fun x ->
+                              let remapped =
+                                Forwardingcontext.remap_expr con x
+                              in
+                                relabel remapped relabelPairs
+                            )
+                            just_1.p
+                        in
+                        let p_2 =
+                          List.map
+                            (fun x -> Forwardingcontext.remap_expr con x)
+                            just_2.p
+                        in
+
+                        (* Check if writes are equivalent *)
+                        let* writes_eq =
+                          relabel_equivalent elab_ctx con statex p_1 p_2
+                            relabelPairs _pred just_1.w.label just_2.w.label
+                        in
+                          if not writes_eq then Lwt.return []
+                          else
+                            (* Check if all dependencies have equivalent origins *)
+                            let* deps_eq =
+                              USet.async_for_all
+                                (fun s_1 ->
+                                  USet.async_exists
+                                    (fun s_2 ->
+                                      relabel_equivalent elab_ctx con statex p_1
+                                        p_2 relabelPairs _pred
+                                        (syntactic_origin s_1)
+                                        (syntactic_origin s_2)
+                                    )
+                                    just_2.d
+                                )
+                                just_1.d
+                            in
+                              if not deps_eq then Lwt.return []
+                              else
+                                (* Compute P_prime: simplify (p_1 OR p_2) *)
+                                let p_1_relabeled =
+                                  List.map (fun x -> relabel x relabelPairs) p_1
+                                in
+                                let disjunction =
+                                  [ p_1_relabeled; p_2 ]
+                                  (* CNF: list of clauses *)
+                                in
+                                  let* simplified =
+                                    Solver.simplify_disjunction disjunction
+                                  in
+                                    match simplified with
+                                    | None -> Lwt.return []
+                                    | Some clauses ->
+                                        (* Create output justifications for each clause *)
+                                        let outputs =
+                                          List.map
+                                            (fun clause ->
+                                              [
+                                                {
+                                                  p =
+                                                    List.map
+                                                      (fun x ->
+                                                        unlabel x relabelPairs
+                                                      )
+                                                      clause;
+                                                  fwd = just_1.fwd;
+                                                  we = just_1.we;
+                                                  d = just_1.d;
+                                                  w = just_1.w;
+                                                  op =
+                                                    ( "lift",
+                                                      Some just_1,
+                                                      Some (EVar "just_2")
+                                                    );
+                                                };
+                                                {
+                                                  p = clause;
+                                                  fwd = just_1.fwd;
+                                                  we = just_1.we;
+                                                  d = just_2.d;
+                                                  w = just_2.w;
+                                                  op =
+                                                    ( "lift",
+                                                      Some just_2,
+                                                      Some (EVar "just_1")
+                                                    );
+                                                };
+                                              ]
+                                            )
+                                            clauses
+                                          |> List.concat
+                                        in
+                                          Lwt.return outputs
+                  )
+                  str
+              in
+
+              let out = List.concat results in
+                (* Store in cache *)
+                lifted_to lifted (ojust_1, ojust_2) out;
+                Lwt.return out
+    in
+
     (* If no pairs to lift, return input unchanged *)
     if USet.size pairs = 0 then Lwt.return justs
     else
       (* Process each pair of justifications *)
       let* out =
         Lwt_list.map_p
-          (fun (just_1, just_2) ->
-            let ojust_1 = just_1 in
-            let ojust_2 = just_2 in
-
-            (* Check if contexts match and not both independent *)
-            if
-              (not (USet.equal just_1.fwd just_2.fwd))
-              || (not (USet.equal just_1.we just_2.we))
-              || (independent just_1 && independent just_2)
-            then Lwt.return []
-            else
-              (* Check lifted cache *)
-              match lifted_has lifted (just_1, just_2) with
-              | Some cached -> Lwt.return cached
-              | None ->
-                  (* Add to cache to prevent recomputation *)
-                  lifted_add lifted (just_1, just_2);
-                  lifted_add lifted (just_2, just_1);
-
-                  (* Create forwarding context *)
-                  let con =
-                    Forwardingcontext.create ~fwd:just_1.fwd ~we:just_1.we ()
-                  in
-
-                  (* Compute ppo for both justifications *)
-                  let* ppo_1 = Forwardingcontext.ppo con just_1.p in
-                    let* ppo_2 = Forwardingcontext.ppo con just_2.p in
-                    let ppo = USet.union ppo_1 ppo_2 in
-
-                    (* Get pred function *)
-                    let* _pred =
-                      pred elab_ctx None None ~ppo:(Lwt.return ppo) ()
-                    in
-
-                    (* Clone and unify values if needed *)
-                    let just_1, just_2 =
-                      match (just_1.w.wval, just_2.w.wval) with
-                      | Some (ENum n1), Some v2 when not (Expr.is_number v2) ->
-                          (* just_1 has number, just_2 has symbol - unify *)
-                          let eq_pred = EBinOp (v2, "=", ENum n1) in
-                          let new_w2 =
-                            { just_2.w with wval = Some (ENum n1) }
-                          in
-                            ( just_1,
-                              {
-                                just_2 with
-                                p = just_2.p @ [ eq_pred ];
-                                w = new_w2;
-                                d = USet.create ();
-                              }
-                            )
-                      | Some v1, Some (ENum n2) when not (Expr.is_number v1) ->
-                          (* just_2 has number, just_1 has symbol - unify *)
-                          let eq_pred = EBinOp (v1, "=", ENum n2) in
-                          let new_w1 =
-                            { just_1.w with wval = Some (ENum n2) }
-                          in
-                            ( {
-                                just_1 with
-                                p = just_1.p @ [ eq_pred ];
-                                w = new_w1;
-                                d = USet.create ();
-                              },
-                              just_2
-                            )
-                      | _ -> (just_1, just_2)
-                    in
-
-                    (* Strengthen the pair *)
-                    let* str = strengthen elab_ctx just_1 just_2 ppo con in
-
-                    (* Process each strengthening result *)
-                    let* results =
-                      Lwt_list.map_p
-                        (fun (str_1, str_2, relabelPairs) ->
-                          (* Update predicates *)
-                          let just_1 = { just_1 with p = str_1 } in
-                          let just_2 = { just_2 with p = str_2 } in
-
-                          (* Check uniqueness of relabel pairs *)
-                          let from_syms =
-                            USet.map (fun (f, _) -> f) relabelPairs
-                          in
-                          let to_syms =
-                            USet.map (fun (_, t) -> t) relabelPairs
-                          in
-                            if
-                              USet.size from_syms <> USet.size relabelPairs
-                              || USet.size to_syms <> USet.size relabelPairs
-                            then Lwt.return []
-                            else
-                              (* Apply relabeling to predicates *)
-                              let p_1 =
-                                List.map
-                                  (fun x ->
-                                    let remapped =
-                                      Forwardingcontext.remap_expr con x
-                                    in
-                                      relabel remapped relabelPairs
-                                  )
-                                  just_1.p
-                              in
-                              let p_2 =
-                                List.map
-                                  (fun x -> Forwardingcontext.remap_expr con x)
-                                  just_2.p
-                              in
-
-                              (* Check if writes are equivalent *)
-                              let* writes_eq =
-                                relabel_equivalent elab_ctx con statex p_1 p_2
-                                  relabelPairs _pred just_1.w.label
-                                  just_2.w.label
-                              in
-                                if not writes_eq then Lwt.return []
-                                else
-                                  (* Check if all dependencies have equivalent origins *)
-                                  let* deps_eq =
-                                    USet.async_for_all
-                                      (fun s_1 ->
-                                        USet.async_exists
-                                          (fun s_2 ->
-                                            relabel_equivalent elab_ctx con
-                                              statex p_1 p_2 relabelPairs _pred
-                                              (syntactic_origin s_1)
-                                              (syntactic_origin s_2)
-                                          )
-                                          just_2.d
-                                      )
-                                      just_1.d
-                                  in
-                                    if not deps_eq then Lwt.return []
-                                    else
-                                      (* Compute P_prime: simplify (p_1 OR p_2) *)
-                                      let p_1_relabeled =
-                                        List.map
-                                          (fun x -> relabel x relabelPairs)
-                                          p_1
-                                      in
-                                      let disjunction =
-                                        [ p_1_relabeled; p_2 ]
-                                        (* CNF: list of clauses *)
-                                      in
-                                        let* simplified =
-                                          Solver.simplify_disjunction
-                                            disjunction
-                                        in
-                                          match simplified with
-                                          | None -> Lwt.return []
-                                          | Some clauses ->
-                                              (* Create output justifications for each clause *)
-                                              let outputs =
-                                                List.map
-                                                  (fun clause ->
-                                                    [
-                                                      {
-                                                        p =
-                                                          List.map
-                                                            (fun x ->
-                                                              unlabel x
-                                                                relabelPairs
-                                                            )
-                                                            clause;
-                                                        fwd = just_1.fwd;
-                                                        we = just_1.we;
-                                                        d = just_1.d;
-                                                        w = just_1.w;
-                                                        op =
-                                                          ( "lift",
-                                                            Some just_1,
-                                                            Some (EVar "just_2")
-                                                          );
-                                                      };
-                                                      {
-                                                        p = clause;
-                                                        fwd = just_1.fwd;
-                                                        we = just_1.we;
-                                                        d = just_2.d;
-                                                        w = just_2.w;
-                                                        op =
-                                                          ( "lift",
-                                                            Some just_2,
-                                                            Some (EVar "just_1")
-                                                          );
-                                                      };
-                                                    ]
-                                                  )
-                                                  clauses
-                                                |> List.concat
-                                              in
-                                                Lwt.return outputs
-                        )
-                        str
-                    in
-
-                    let out = List.concat results in
-                      (* Store in cache *)
-                      lifted_to lifted (ojust_1, ojust_2) out;
-                      Lwt.return out
-          )
+          (fun (just_1, just_2) -> elab just_1 just_2)
           (USet.values pairs)
       in
 
@@ -1092,46 +1104,40 @@ let weaken elab_ctx (justs : justification uset) : justification uset Lwt.t =
     Lwt.return justs
   )
   else
-    let* out =
-      Lwt_list.map_p
-        (fun (just : justification) ->
-          let con = Forwardingcontext.create ~fwd:just.fwd ~we:just.we () in
+    let elab just =
+      let con = Forwardingcontext.create ~fwd:just.fwd ~we:just.we () in
 
-          (* Filter predicates that are not implied by PWG *)
-          let* filtered_p =
-            Lwt_list.filter_p
-              (fun x ->
-                (* Remap PWG predicates using the forwarding context *)
-                let remapped_pwg =
-                  List.map
-                    (Forwardingcontext.remap_expr con)
-                    elab_ctx.structure.pwg
-                in
+      (* Filter predicates that are not implied by PWG *)
+      let* filtered_p =
+        Lwt_list.filter_p
+          (fun x ->
+            (* Remap PWG predicates using the forwarding context *)
+            let remapped_pwg =
+              List.map (Forwardingcontext.remap_expr con) elab_ctx.structure.pwg
+            in
 
-                (* Create formula: And(remapped_pwg) ∧ Not(x) *)
-                (* If SAT, then x is not implied by pwg, so keep it *)
-                let not_x = Expr.inverse x in
-                let formula = remapped_pwg @ [ not_x ] in
+            (* Create formula: And(remapped_pwg) ∧ Not(x) *)
+            (* If SAT, then x is not implied by pwg, so keep it *)
+            let not_x = Expr.inverse x in
+            let formula = remapped_pwg @ [ not_x ] in
 
-                let solver = Solver.create formula in
-                  let* result = Solver.check solver in
-                    match result with
-                    | Some true ->
-                        Lwt.return_true (* SAT: x not implied by pwg, keep it *)
-                    | Some false ->
-                        Lwt.return_false
-                        (* UNSAT: x implied by pwg, remove it *)
-                    | None -> Lwt.return_true
-                (* Unknown: keep predicate to be safe *)
-              )
-              just.p
-          in
+            let solver = Solver.create formula in
+              let* result = Solver.check solver in
+                match result with
+                | Some true ->
+                    Lwt.return_true (* SAT: x not implied by pwg, keep it *)
+                | Some false ->
+                    Lwt.return_false (* UNSAT: x implied by pwg, remove it *)
+                | None -> Lwt.return_true
+            (* Unknown: keep predicate to be safe *)
+          )
+          just.p
+      in
 
-          Lwt.return
-            { just with p = filtered_p; op = ("weak", Some just, None) }
-        )
-        (USet.values justs)
+      Lwt.return { just with p = filtered_p; op = ("weak", Some just, None) }
     in
+
+    let* out = Lwt_list.map_p elab (USet.values justs) in
 
     Logs.debug (fun m -> m "Filtered predicates based on PWG.");
     flush stdout;
