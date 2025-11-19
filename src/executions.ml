@@ -748,6 +748,19 @@ let generate_executions (events : (int, event) Hashtbl.t)
   (* Generate all paths through the control flow *)
   let paths = gen_paths events structure structure.restrict in
 
+  Logs.debug (fun m ->
+      m "Generated %d paths through the control flow\n%s" (List.length paths)
+        (String.concat "\n"
+           (List.map
+              (fun p ->
+                Printf.sprintf "Path: [%s]"
+                  (String.concat ", " (List.map string_of_int p.path))
+              )
+              paths
+           )
+        )
+  );
+
   (* Check if write w is downward-closed same-location write before read r *)
   let dslwb w _r =
     let rec f r =

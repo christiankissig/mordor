@@ -281,8 +281,6 @@ let forward elab_ctx justs =
         [ just.p; just.p @ elab_ctx.structure.pwg ]
       else [ just.p ]
     in
-      Logs.debug (fun m -> m "JUST %s" (Justifications.to_string just));
-
       (* Map over each path *)
       let* path_results =
         Lwt_list.map_p
@@ -299,8 +297,6 @@ let forward elab_ctx justs =
                      the initial event before any other event and the
                      fork-join edges from the symbolic event structure.
                      Critically, these edges should not be part of forwarding.
-                     TODO This seems to add fwd or we edges as it introduces
-                     pred pairs.
                   *)
                   let _ppo_loc = USet.set_minus ppo_loc elab_ctx.fj in
 
@@ -411,12 +407,17 @@ let forward elab_ctx justs =
   in
 
   let* out =
-    (* Map over justifications *)
-    let* results = Lwt_list.map_p elab (USet.values justs) in
-
-    (* Flatten results and convert to USet *)
-    let flattened = List.concat results in
-      Lwt.return (USet.of_list flattened)
+    let justs_list = USet.values justs in
+      let* results =
+        Lwt_list.map_p
+          (fun just ->
+            let* inner = Lwt_preemptive.detach (fun () -> elab just) () in
+              inner (* Flatten the nested Lwt.t *)
+          )
+          justs_list
+      in
+      let flattened = List.concat results in
+        Lwt.return (USet.of_list flattened)
   in
 
   Logs.debug (fun m ->
