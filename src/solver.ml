@@ -369,13 +369,12 @@ let solve_for_vars solver var_names =
 let exeq ?(state = []) a b =
   if Expr.equal a b then Lwt.return_true
   else
-    (* Check if a != b is unsatisfiable, meaning a = b is always true *)
+    (* If state && (a != b) is unsatisfiable, a = b is true given state *)
     let neq_expr = Expr.binop a "!=" b in
     let solver = create (neq_expr :: state) in
       let* result = check solver in
         match result with
-        | Some false ->
-            Lwt.return_true (* a != b is unsat, so a = b always holds *)
+        | Some false -> Lwt.return_true
         | _ -> Lwt.return_false
 
 (** Check if two expressions are potentially equal (equality is satisfiable) *)

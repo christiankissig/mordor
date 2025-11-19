@@ -39,8 +39,8 @@ let disjoint (loc1, val1) (loc2, val2) =
   EBinOp (loc1, "!=", loc2)
 
 let origin (events : (int, event) Hashtbl.t) (e_set : int uset) (s : string) =
-  let read_events = filter_events events e_set Read in
-  let malloc_events = filter_events events e_set Malloc in
+  let read_events = filter_events events e_set Read () in
+  let malloc_events = filter_events events e_set Malloc () in
 
   (* Try to find in reads *)
   let in_reads =
@@ -737,8 +737,8 @@ let generate_executions (events : (int, event) Hashtbl.t)
   );
 
   let e_set = structure.e in
-  let read_events = filter_events events e_set Read in
-  let write_events = filter_events events e_set Write in
+  let read_events = filter_events events e_set Read () in
+  let write_events = filter_events events e_set Write () in
   let po = structure.po in
 
   (* Build adjacency relations *)

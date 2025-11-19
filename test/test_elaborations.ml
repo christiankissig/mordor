@@ -40,7 +40,7 @@ let create_mock_context () =
     {
       label = 1;
       id = Some (VNumber Z.zero);
-      loc = Some (ENum Z.zero);
+      loc = Some (ENum Z.one);
       typ = Write;
       wval = Some (ENum Z.one);
       wmod = Relaxed;
@@ -148,6 +148,8 @@ let create_mock_context () =
     branch_events;
     read_events;
     write_events;
+    rlx_read_events = USet.create ();
+    rlx_write_events = USet.create ();
     malloc_events;
     po;
     rmw;
@@ -515,92 +517,110 @@ let test_value_assign_with_variable () =
       Lwt.return_unit
 
 (* Tests for fprime function *)
-let test_fprime_basic () =
-  let ctx = create_mock_context () in
-  let pred_fn _e = USet.create () in
-  let ppo_loc = USet.of_list [ (1, 2) ] in
-  let result = fprime ctx pred_fn ppo_loc in
-    (* fprime filters po edges that are in ppo_loc and satisfy predicate *)
-    check bool "fprime returns edges" true (USet.size result >= 0);
-    ()
+let test_fprime_basic =
+  lwt_test (fun () ->
+      let ctx = create_mock_context () in
+      let pred_fn _e = if _e == 2 then USet.of_list [ 1 ] else USet.create () in
+      let just = create_mock_justification 3 [] in
+      let ppo_loc = USet.of_list [ (1, 2) ] in
+        let* result = fprime ctx pred_fn ppo_loc just 1 2 in
+          (* fprime filters po edges that are in ppo_loc and satisfy predicate *)
+          check bool "fprime returns edges" true result;
+          Lwt.return_unit
+  )
 
-let test_fprime_empty_ppo () =
-  let ctx = create_mock_context () in
-  let pred_fn _e = USet.create () in
-  let ppo_loc = USet.create () in
-  let result = fprime ctx pred_fn ppo_loc in
-    check int "fprime empty ppo" 0 (USet.size result);
-    ()
+let test_fprime_empty_ppo =
+  lwt_test (fun () ->
+      let ctx = create_mock_context () in
+      let pred_fn _e = USet.create () in
+      let just = create_mock_justification 3 [] in
+      let ppo_loc = USet.create () in
+        let* result = fprime ctx pred_fn ppo_loc just 1 2 in
+          check bool "fprime empty ppo" false result;
+          Lwt.return ()
+  )
 
 (* Tests for fwd function *)
-let test_fwd_basic () =
-  let ctx = create_mock_context () in
-  let pred_fn _e = USet.create () in
-  let fwd_ctx = Forwardingcontext.create () in
-  let ppo_loc = USet.of_list [ (1, 2) ] in
-  let result = fwd ctx pred_fn fwd_ctx ppo_loc in
-    check bool "fwd returns filtered edges" true (USet.size result >= 0);
-    ()
+let test_fwd_basic =
+  lwt_test (fun () ->
+      let ctx = create_mock_context () in
+      let pred_fn _e = USet.create () in
+      let fwd_ctx = Forwardingcontext.create () in
+      let just = create_mock_justification 3 [] in
+      let ppo_loc = USet.of_list [ (1, 2) ] in
+        let* result = fwd ctx pred_fn fwd_ctx ppo_loc just in
+          check bool "fwd returns filtered edges" true (USet.size result >= 0);
+          Lwt.return ()
+  )
 
-let test_fwd_filters_volatile () =
-  let ctx = create_mock_context () in
-  (* Add volatile event *)
-  let volatile_event =
-    {
-      label = 4;
-      id = Some (VNumber (Z.of_int 2));
-      loc = Some (ENum (Z.of_int 2));
-      typ = Read;
-      wval = None;
-      wmod = Relaxed;
-      volatile = true;
-      cond = None;
-      van = 4;
-      rval = None;
-      rmod = Relaxed;
-      fmod = Relaxed;
-      strong = None;
-      lhs = None;
-      rhs = None;
-      pc = None;
-      hide = false;
-      quot = None;
-    }
-  in
-    Hashtbl.add ctx.events 4 volatile_event;
+let test_fwd_filters_volatile =
+  lwt_test (fun () ->
+      let ctx = create_mock_context () in
+      (* Add volatile event *)
+      let volatile_event =
+        {
+          label = 4;
+          id = Some (VNumber (Z.of_int 2));
+          loc = Some (ENum (Z.of_int 2));
+          typ = Read;
+          wval = None;
+          wmod = Relaxed;
+          volatile = true;
+          cond = None;
+          van = 4;
+          rval = None;
+          rmod = Relaxed;
+          fmod = Relaxed;
+          strong = None;
+          lhs = None;
+          rhs = None;
+          pc = None;
+          hide = false;
+          quot = None;
+        }
+      in
+        Hashtbl.add ctx.events 4 volatile_event;
 
-    let pred_fn _e = USet.singleton 1 in
-    let fwd_ctx = Forwardingcontext.create () in
-    let ppo_loc = USet.of_list [ (1, 4) ] in
-    let result = fwd ctx pred_fn fwd_ctx ppo_loc in
-      (* Volatile events should be filtered out *)
-      check bool "fwd filters volatile" true
-        (not (USet.exists (fun (_, e) -> e = 4) result));
-      ()
+        let pred_fn _e = USet.singleton 1 in
+        let fwd_ctx = Forwardingcontext.create () in
+        let ppo_loc = USet.of_list [ (1, 4) ] in
+        let just = create_mock_justification 5 [] in
+          let* result = fwd ctx pred_fn fwd_ctx ppo_loc just in
+            (* Volatile events should be filtered out *)
+            check bool "fwd filters volatile" true
+              (not (USet.exists (fun (_, e) -> e = 4) result));
+            Lwt.return ()
+  )
 
 (* Tests for we function *)
-let test_we_basic () =
-  let ctx = create_mock_context () in
-  let pred_fn _e = USet.create () in
-  let we_ctx = Forwardingcontext.create () in
-  let ppo_loc = USet.of_list [ (1, 3) ] in
-  let result = we ctx pred_fn we_ctx ppo_loc in
-    check bool "we returns edges" true (USet.size result >= 0);
-    ()
+let test_we_basic =
+  lwt_test (fun () ->
+      let ctx = create_mock_context () in
+      let pred_fn _e = USet.create () in
+      let we_ctx = Forwardingcontext.create () in
+      let just = create_mock_justification 4 [] in
+      let ppo_loc = USet.of_list [ (1, 3) ] in
+        let* result = we ctx pred_fn we_ctx ppo_loc just in
+          check bool "we returns edges" true (USet.size result >= 0);
+          Lwt.return ()
+  )
 
-let test_we_write_to_write () =
-  let ctx = create_mock_context () in
-  (* Add write-to-write edge in po *)
-  let po = USet.add ctx.po (1, 3) in
-  let ctx = { ctx with po } in
+let test_we_write_to_write =
+  lwt_test (fun () ->
+      let ctx = create_mock_context () in
+      (* Add write-to-write edge in po *)
+      let po = USet.add ctx.po (1, 3) in
+      let ctx = { ctx with po } in
 
-  let pred_fn _e = USet.singleton 1 in
-  let we_ctx = Forwardingcontext.create () in
-  let ppo_loc = USet.of_list [ (1, 3) ] in
-  let result = we ctx pred_fn we_ctx ppo_loc in
-    (* we should only include write-to-write edges *)
-    check bool "we write-to-write" true (USet.size result >= 0);
-    ()
+      let pred_fn _e = USet.singleton 1 in
+      let we_ctx = Forwardingcontext.create () in
+      let just = create_mock_justification 4 [] in
+      let ppo_loc = USet.of_list [ (1, 3) ] in
+        let* result = we ctx pred_fn we_ctx ppo_loc just in
+          (* we should only include write-to-write edges *)
+          check bool "we write-to-write" true (USet.size result >= 0);
+          Lwt.return ()
+  )
 
 (* Tests for forward function *)
 let test_forward_empty () =

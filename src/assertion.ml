@@ -168,10 +168,10 @@ let check_assertion (assertion : ir_assertion) executions structure events
 
         (* Helper to get pointers (events with locations that are not variables) *)
         let get_pointers () =
-          let read_events = filter_events events structure.e Read in
-          let write_events = filter_events events structure.e Write in
-          let free_events = filter_events events structure.e Free in
-          let malloc_events = filter_events events structure.e Malloc in
+          let read_events = filter_events events structure.e Read () in
+          let write_events = filter_events events structure.e Write () in
+          let free_events = filter_events events structure.e Free () in
+          let malloc_events = filter_events events structure.e Malloc () in
 
           let all_pointer_events =
             USet.union
@@ -264,9 +264,11 @@ let check_assertion (assertion : ir_assertion) executions structure events
                       pointers;
 
                     (* Get all malloc, free, read, write events *)
-                    let all_frees = filter_events events execution.ex_e Free in
+                    let all_frees =
+                      filter_events events execution.ex_e Free ()
+                    in
                     let all_alloc =
-                      filter_events events execution.ex_e Malloc
+                      filter_events events execution.ex_e Malloc ()
                     in
 
                     (* All events that use pointers (read, write, malloc) *)

@@ -508,12 +508,22 @@ let loce events e x =
         EVar (sprintf "l(%s)" loc_x)
 
 (* Event type filters *)
-let filter_events events e_set typ =
+let filter_events events e_set typ ?mode () =
   USet.filter
     (fun e ->
       try
         let event = Hashtbl.find events e in
           event.typ = typ
+          &&
+          match mode with
+          | None -> true
+          | Some m -> (
+              match event.typ with
+              | Read -> event.rmod = m
+              | Write -> event.wmod = m
+              | Fence -> event.fmod = m
+              | _ -> false
+            )
       with Not_found -> false
     )
     e_set

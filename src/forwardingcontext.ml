@@ -279,32 +279,38 @@ let init params =
     State.ppo_syncA := USet.intersection !State.ppo_syncA po_nf;
 
     (* RMW ppo *)
+    (* TODO fix RMW *)
     let rmw_inv = URelation.inverse_relation rmw in
       State.ppo_rmwA :=
         USet.union
           (semicolon !State.ppo_syncA rmw_inv)
           (semicolon rmw_inv !State.ppo_syncA);
 
-      (* Location-based ppo *)
-      State.ppo_loc_baseA :=
-        USet.filter
-          (fun (from, to_) ->
-            try
-              let from_ev = Hashtbl.find !State.events from in
-              let to_ev = Hashtbl.find !State.events to_ in
-                from_ev.id <> None && to_ev.id <> None
-            with Not_found -> false
+      (* Location-based ppo; TODO filter by if in events hash table? *)
+      State.ppo_loc_baseA := USet.clone po_nf;
+
+      (* Async filtering with semantic equality *)
+      let* eqA =
+        USet.async_filter
+          (fun (e1, e2) ->
+            let loc1 = Events.get_loc !State.events e1 in
+            let loc2 = Events.get_loc !State.events e2 in
+              match (loc1, loc2) with
+              | Some l1, Some l2 -> Solver.exeq ~state:[] l1 l2
+              | _ -> Lwt.return false
           )
-          po_nf;
+          !State.ppo_loc_baseA
+      in
+        State.ppo_loc_eqA := eqA;
+        State.ppo_loc_baseA :=
+          USet.set_minus !State.ppo_loc_baseA !State.ppo_loc_eqA;
 
-      (* Async filtering with semantic equality - simplified for now *)
-      (* In real implementation, would use Solver.semeq *)
-      State.ppo_loc_eqA := USet.clone !State.ppo_loc_baseA;
-      State.ppo_loc_baseA :=
-        USet.set_minus !State.ppo_loc_baseA !State.ppo_loc_eqA;
+        Logs.debug (fun m ->
+            m "ForwardingContext initialized with %d events" (USet.size !State.e)
+        );
 
-      update_po po;
-      Lwt.return_unit
+        update_po po;
+        Lwt.return_unit
 
 (** Forwarding context type *)
 type t = {

@@ -18,12 +18,14 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   let rmw = structure.rmw in
   let po = structure.po in
 
-  let branch_events = filter_events events e_set Branch in
-  let read_events = filter_events events e_set Read in
-  let write_events = filter_events events e_set Write in
-  let fence_events = filter_events events e_set Fence in
-  let malloc_events = filter_events events e_set Malloc in
-  let free_events = filter_events events e_set Free in
+  let branch_events = filter_events events e_set Branch () in
+  let read_events = filter_events events e_set Read () in
+  let write_events = filter_events events e_set Write () in
+  let rlx_read_events = filter_events events e_set Read ~mode:Relaxed () in
+  let rlx_write_events = filter_events events e_set Write ~mode:Relaxed () in
+  let fence_events = filter_events events e_set Fence () in
+  let malloc_events = filter_events events e_set Malloc () in
+  let free_events = filter_events events e_set Free () in
 
   (* Build tree for program order *)
   let build_tree rel =
@@ -129,6 +131,8 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
       branch_events;
       read_events;
       write_events;
+      rlx_read_events;
+      rlx_write_events;
       malloc_events;
       po;
       rmw;

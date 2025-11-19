@@ -157,9 +157,6 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
   | [] -> Lwt.return (empty_structure ())
   | node :: rest ->
       let stmt = Ir.get_stmt node in
-        Logs.debug (fun m ->
-            m "Interpreting statement: %s" (ir_node_to_string node)
-        );
         let* structure =
           match stmt with
           | Threads { threads } ->
