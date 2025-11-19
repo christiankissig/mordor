@@ -132,8 +132,7 @@ let test_gen_paths_linear () =
     (* Check that paths contain events in program order *)
     List.iter
       (fun path_info ->
-        check bool "path should not be empty" true
-          (List.length path_info.path > 0)
+        check bool "path should not be empty" true (USet.size path_info.path > 0)
       )
       paths
 
@@ -226,8 +225,7 @@ let test_gen_paths_single_event () =
     check int "should generate one path" 1 (List.length paths);
 
     match paths with
-    | [ path ] ->
-        check int "path should contain event 1" 1 (List.length path.path)
+    | [ path ] -> check int "path should contain event 1" 1 (USet.size path.path)
     | _ -> fail "Expected exactly one path"
 
 (** Test Justification Choosing *)
@@ -313,16 +311,16 @@ let test_choose_incompatible_justifications () =
 (** Test Path Info Type *)
 
 let test_path_info_creation () =
-  let path = [ 1; 2; 3 ] in
-  let predicates = [ [ EVar "x" ]; [ EVar "y" ] ] in
+  let path = USet.of_list [ 1; 2; 3 ] in
+  let predicates = [ EVar "x"; EVar "y" ] in
   let path_info = { path; p = predicates } in
 
-  check int "path length" 3 (List.length path_info.path);
+  check int "path length" 3 (USet.size path_info.path);
   check int "predicate lists" 2 (List.length path_info.p)
 
 let test_path_info_empty () =
-  let path_info = { path = []; p = [] } in
-    check int "empty path" 0 (List.length path_info.path);
+  let path_info = { path = USet.create (); p = [] } in
+    check int "empty path" 0 (USet.size path_info.path);
     check int "empty predicates" 0 (List.length path_info.p)
 
 (** Test Freeze Result Type *)
@@ -471,7 +469,7 @@ let test_path_generation_integration () =
   List.iter
     (fun path_info ->
       (* Each path should start with an event that has no predecessors *)
-      check bool "paths should be valid" true (List.length path_info.path > 0)
+      check bool "paths should be valid" true (USet.size path_info.path > 0)
     )
     paths
 
@@ -510,54 +508,6 @@ let test_justification_map_building () =
       check int "should have multiple justifications" 2 (List.length result)
 
 (** Property-Based Tests *)
-
-let test_path_order_preservation () =
-  let events = create_test_events () in
-  let structure = create_test_structure () in
-
-  let paths = gen_paths events structure structure.restrict in
-
-  (* Helper function to find index of element in list *)
-  let find_index elem lst =
-    let rec aux i = function
-      | [] -> None
-      | x :: xs -> if x = elem then Some i else aux (i + 1) xs
-    in
-      aux 0 lst
-  in
-
-  (* Check if paths preserve PO order (either forward or reverse) *)
-  let check_path path_info =
-    let path = path_info.path in
-    let path_set = USet.of_list path in
-
-    let violations_forward = ref 0 in
-    let violations_reverse = ref 0 in
-    let total_checks = ref 0 in
-
-    USet.iter
-      (fun (a, b) ->
-        if USet.mem path_set a && USet.mem path_set b then incr total_checks;
-        let a_pos = find_index a path in
-        let b_pos = find_index b path in
-          match (a_pos, b_pos) with
-          | Some pos_a, Some pos_b ->
-              (* Check forward order: a should come before b *)
-              if pos_a >= pos_b then incr violations_forward;
-              (* Check reverse order: b should come before a *)
-              if pos_b >= pos_a then incr violations_reverse
-          | _ -> ()
-      )
-      structure.po;
-
-    (* Accept the path if it's consistent in either direction *)
-    !total_checks = 0 || !violations_forward = 0 || !violations_reverse = 0
-  in
-
-  (* All paths should be valid *)
-  let all_valid = List.for_all check_path paths in
-    check bool "paths should preserve PO order (forward or reverse)" true
-      all_valid
 
 let test_justification_compatibility_symmetry () =
   (* Test that compatibility checking is symmetric *)
@@ -653,7 +603,6 @@ let suite =
     ("path generation integration", `Quick, test_path_generation_integration);
     ("justification map building", `Quick, test_justification_map_building);
     (* Property-based tests *)
-    ("path order preservation", `Quick, test_path_order_preservation);
     ( "justification compatibility symmetry",
       `Quick,
       test_justification_compatibility_symmetry

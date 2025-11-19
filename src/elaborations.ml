@@ -412,7 +412,7 @@ let forward elab_ctx justs =
         Lwt_list.map_p
           (fun just ->
             let* inner = Lwt_preemptive.detach (fun () -> elab just) () in
-              inner (* Flatten the nested Lwt.t *)
+              inner
           )
           justs_list
       in

@@ -80,129 +80,59 @@ let origin (events : (int, event) Hashtbl.t) (e_set : int uset) (s : string) =
 
 (** Path type *)
 type path_info = {
-  path : int list;
-  p : expr list list; (* List of predicate lists *)
+  path : int uset;
+  p : expr list; (* List of predicate lists, serves as conjunction *)
 }
 
 (** Generate all paths through the control flow structure *)
 let gen_paths events (structure : symbolic_event_structure) restrict =
-  let po_tree = build_tree structure.e structure.po in
+  let po_intransitive = URelation.transitive_reduction structure.po in
+  let po_tree = build_tree structure.e po_intransitive in
+  (* subsequently assuming that multiple successors are in conflict *)
+
+  (* DFS search for all paths. Each path is a uset event IDs. Search produces list
+   of such paths. *)
+  let rec dfs current =
+    let neighbours =
+      Hashtbl.find_opt po_tree current |> Option.value ~default:(USet.create ())
+    in
+      if USet.size neighbours == 0 then [ USet.singleton current ]
+      else
+        USet.values neighbours
+        |> List.map dfs
+        |> List.flatten
+        |> List.map (fun path -> USet.add path current)
+  in
 
   (* Find root events (events with no predecessors in po) *)
-  let find_roots () =
+  let roots =
     let all_events = structure.e in
     let has_predecessor = pi_2 structure.po in
-    let roots = USet.set_minus all_events has_predecessor in
-    let root_list = USet.values roots in
-      match root_list with
-      | [] -> (
-          if
-            (* If no roots found, try to find event 0 or use first event *)
-            Hashtbl.mem events 0
-          then [ 0 ]
-          else
-            let first_events = USet.values structure.e in
-              match first_events with
-              | [] -> failwith "No events in structure"
-              | hd :: _ -> [ hd ]
-        )
-      | roots -> roots
+      USet.set_minus all_events has_predecessor
   in
 
-  let rec gen_paths_rec e =
-    (* Check if event exists before accessing *)
-    if not (Hashtbl.mem events e) then [ { path = []; p = [] } ]
-    else
-      let next_uset =
-        try Hashtbl.find po_tree e with Not_found -> USet.create ()
-      in
-      let next = USet.values next_uset in
+  Logs.debug (fun m ->
+      m "Generating paths from roots: %s"
+        (String.concat ", " (USet.values (USet.map (Printf.sprintf "%d") roots)))
+  );
 
-      if List.length next = 0 then [ { path = [ e ]; p = [] } ]
-      else
-        (* Check if event is a branch *)
-        let event = Hashtbl.find events e in
-          if event.typ = Branch then (
-            (* Branch event - create two paths *)
-            if List.length next <> 2 then
-              failwith "Branch event must have exactly 2 successors";
-
-            let next0 = List.nth next 0 in
-            let next1 = List.nth next 1 in
-
-            let restrict_e =
-              try Hashtbl.find restrict e with Not_found -> []
-            in
-
-            let cond =
-              match event.cond with
-              | Some c -> c
-              | None -> failwith "Branch missing condition"
-            in
-
-            (* Left branch paths *)
-            let n0_paths =
-              if USet.mem structure.e next0 then
-                let restrict_next0 =
-                  try Hashtbl.find restrict next0 with Not_found -> []
-                in
-                  List.map
-                    (fun p ->
-                      { path = p.path @ [ e ]; p = p.p @ [ restrict_next0 ] }
-                    )
-                    (gen_paths_rec next0)
-              else [ { path = [ e ]; p = [ restrict_e @ [ cond ] ] } ]
-            in
-
-            (* Right branch paths *)
-            let n1_paths =
-              if USet.mem structure.e next1 then
-                let restrict_next1 =
-                  try Hashtbl.find restrict next1 with Not_found -> []
-                in
-                  List.map
-                    (fun p ->
-                      { path = p.path @ [ e ]; p = p.p @ [ restrict_next1 ] }
-                    )
-                    (gen_paths_rec next1)
-              else
-                [ { path = [ e ]; p = [ restrict_e @ [ Expr.inverse cond ] ] } ]
-            in
-
-            n0_paths @ n1_paths
-          )
-          else
-            (* Non-branch event - combine paths from successors *)
-            let successor_paths = List.map gen_paths_rec next in
-
-            (* Cartesian product and concatenation *)
-            let rec combine_paths paths =
-              match paths with
-              | [] -> [ { path = []; p = [] } ]
-              | p :: rest ->
-                  let rest_combined = combine_paths rest in
-                    List.concat_map
-                      (fun path1 ->
-                        List.map
-                          (fun path2 ->
-                            {
-                              path =
-                                List.filter (( <> ) e) path1.path @ path2.path;
-                              p = path1.p @ path2.p;
-                            }
-                          )
-                          rest_combined
-                      )
-                      p
-            in
-
-            let combined = combine_paths successor_paths in
-              List.map (fun p -> { path = p.path @ [ e ]; p = p.p }) combined
-  in
-
-  (* Generate paths from each root and combine *)
-  let roots = find_roots () in
-    List.concat_map gen_paths_rec roots
+  (* Generate p from value restrictions along path and compose path_info. TODO
+     need to filter paths by satisfiability? *)
+  let paths = USet.values roots |> List.map dfs |> List.flatten in
+    List.map
+      (fun path ->
+        let p =
+          USet.values path
+          |> List.map (fun e ->
+                 Hashtbl.find_opt restrict e |> Option.value ~default:[]
+             )
+          |> List.flatten
+          |> USet.of_list
+          |> USet.values
+        in
+          { path; p }
+      )
+      paths
 
 (** Freezing **)
 
@@ -262,13 +192,13 @@ type freeze_result = {
   ppo : (int * int) uset;
   rf : (int * int) uset;
   rmw : (int * int) uset;
-  pp : expr list list;
+  pp : expr list;
   conds : expr list;
 }
 
 let rec validate_rf events (structure : symbolic_event_structure) e elided
-    elided_rf ppo_loc ppo_loc_tree dp dp_ppo j_list pp p_combined rf
-    write_events read_events po =
+    elided_rf ppo_loc ppo_loc_tree dp dp_ppo j_list (pp : expr list) p_combined
+    rf write_events read_events po =
   let* _ = Lwt.return_unit in
 
   (* Filter po to only include events in e *)
@@ -534,7 +464,7 @@ and create_freeze events (structure : symbolic_event_structure) path j_list
     write_events read_events init_ppo statex =
   let* _ = Lwt.return_unit in
 
-  let e = USet.of_list path.path in
+  let e = path.path in
   let e_squared = URelation.cross e e in
   let pp = path.p in
 
@@ -583,7 +513,7 @@ and create_freeze events (structure : symbolic_event_structure) path j_list
   let p_combined =
     List.concat_map (fun (j : justification) -> j.p) j_list
     @ con.psi
-    @ List.concat pp
+    @ pp
     @ statex
   in
 
@@ -666,12 +596,11 @@ and build_justcombos events structure paths write_events read_events init_ppo
       (fun path ->
         (* Filter path to only write events *)
         let path_writes =
-          List.filter (fun e -> USet.mem write_events e) path.path
+          USet.filter (fun e -> USet.mem write_events e) path.path
         in
-        let path_writes_uset = USet.of_list path_writes in
 
         (* Get compatible justification combinations *)
-        let js_combinations = choose justmap path_writes_uset in
+        let js_combinations = choose justmap path_writes in
 
         (* For each combination, create remapped justifications *)
         let* freeze_fns =
@@ -710,7 +639,7 @@ and build_justcombos events structure paths write_events read_events init_ppo
         in
 
         let freeze_fns_filtered = List.filter_map Fun.id freeze_fns in
-          Lwt.return (USet.of_list path.path, freeze_fns_filtered)
+          Lwt.return (path.path, freeze_fns_filtered)
       )
       paths
   in
@@ -754,7 +683,9 @@ let generate_executions (events : (int, event) Hashtbl.t)
            (List.map
               (fun p ->
                 Printf.sprintf "Path: [%s]"
-                  (String.concat ", " (List.map string_of_int p.path))
+                  (String.concat ", "
+                     (List.map string_of_int (USet.values p.path))
+                  )
               )
               paths
            )
@@ -852,11 +783,9 @@ let generate_executions (events : (int, event) Hashtbl.t)
       (* For each path, try to build executions *)
       Lwt_list.map_p
         (fun path ->
-          let path_uset = USet.of_list path.path in
-
           (* Get freeze functions for this path *)
           let freeze_fns =
-            try Hashtbl.find justcombos path_uset with Not_found -> []
+            try Hashtbl.find justcombos path.path with Not_found -> []
           in
 
           (* Try each freeze function with the RF relation *)
@@ -941,7 +870,7 @@ let generate_executions (events : (int, event) Hashtbl.t)
               dp = freeze_res.dp;
               ppo = freeze_res.ppo;
               ex_rmw = freeze_res.rmw;
-              ex_p = List.concat freeze_res.pp;
+              ex_p = freeze_res.pp;
               conds = freeze_res.conds;
               fix_rf_map = final_map;
               justs = freeze_res.justs;

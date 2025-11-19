@@ -6,8 +6,8 @@ open Types
 
 (** Path information containing event sequence and predicates *)
 type path_info = {
-  path : int list;  (** Sequence of event labels in the path *)
-  p : expr list list;  (** List of predicate lists for path constraints *)
+  path : int uset;  (** Sequence of event labels in the path *)
+  p : expr list;  (** List of predicate lists for path constraints *)
 }
 
 (** Result of freezing a justification combination with an RF relation *)
@@ -18,7 +18,7 @@ type freeze_result = {
   ppo : (int * int) uset;  (** Preserved program order *)
   rf : (int * int) uset;  (** Reads-from relation *)
   rmw : (int * int) uset;  (** Read-modify-write pairs *)
-  pp : expr list list;  (** Path predicates *)
+  pp : expr list;  (** Path predicates *)
   conds : expr list;  (** Combined conditions *)
 }
 
@@ -95,7 +95,7 @@ val validate_rf :
   (int * int) uset ->
   (int * int) uset ->
   justification list ->
-  expr list list ->
+  expr list ->
   expr list ->
   (int * int) uset ->
   int uset ->
