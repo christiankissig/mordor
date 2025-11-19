@@ -324,15 +324,15 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 let* cont_succ = recurse rest env_succ phi_succ events in
                   let* cont_fail = recurse rest env_fail phi_fail events in
                     Lwt.return
-                      (plus
-                         (add_rmw_edge
-                            (dot event_load'.label
+                      (dot event_load'.label
+                         (plus
+                            (add_rmw_edge
                                (dot event_store'.label cont_succ phi_succ)
-                               phi_succ
+                               event_load'.label event_store'.label
                             )
-                            event_load'.label event_store'.label
+                            cont_fail
                          )
-                         (dot event_load'.label cont_fail phi_fail)
+                         phi
                       )
           | If { condition; then_body; else_body } -> (
               (* TODO prune semantically impossible branches against phi *)

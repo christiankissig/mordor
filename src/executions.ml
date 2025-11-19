@@ -682,10 +682,13 @@ let generate_executions (events : (int, event) Hashtbl.t)
         (String.concat "\n"
            (List.map
               (fun p ->
-                Printf.sprintf "Path: [%s]"
+                Printf.sprintf "Path: [%s] - P = [%s]"
                   (String.concat ", "
-                     (List.map string_of_int (USet.values p.path))
+                     (List.map string_of_int
+                        (List.sort compare (USet.values p.path))
+                     )
                   )
+                  (String.concat ", " (List.map Expr.to_string p.p))
               )
               paths
            )
