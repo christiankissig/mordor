@@ -115,7 +115,7 @@ type path_info = {
 let gen_paths events (structure : symbolic_event_structure) restrict =
   let po_intransitive = URelation.transitive_reduction structure.po in
   let po_tree = build_tree structure.e po_intransitive in
-  (* subsequently assuming that multiple successors are in conflict *)
+  (* TODO subsequently assuming that multiple successors are in conflict *)
 
   (* DFS search for all paths. Each path is a uset event IDs. Search produces list
    of such paths. *)
@@ -223,10 +223,14 @@ type freeze_result = {
   conds : expr list;
 }
 
-let rec validate_rf events (structure : symbolic_event_structure) e elided
-    elided_rf ppo_loc ppo_loc_tree dp dp_ppo j_list (pp : expr list) p_combined
-    rf write_events read_events po =
+let rec validate_rf (structure : symbolic_event_structure) e elided elided_rf
+    ppo_loc ppo_loc_tree dp dp_ppo j_list (pp : expr list) p_combined rf =
   let* _ = Lwt.return_unit in
+
+  let po = structure.po in
+  let read_events = structure.read_events in
+  let write_events = structure.write_events in
+  let events = structure.events in
 
   (* Filter po to only include events in e *)
   let po_filtered =
@@ -445,9 +449,13 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
 
 (** Create a freeze function that validates RF sets for a justification
     combination *)
-and create_freeze events (structure : symbolic_event_structure) path j_list
-    write_events read_events init_ppo statex =
+and create_freeze (structure : symbolic_event_structure) path j_list init_ppo
+    statex =
   let* _ = Lwt.return_unit in
+
+  let events = structure.events in
+  let read_events = structure.read_events in
+  let write_events = structure.write_events in
 
   let e = path.path in
   let e_squared = URelation.cross e e in
@@ -565,97 +573,99 @@ and create_freeze events (structure : symbolic_event_structure) path j_list
 
             (* Return the freeze validation function *)
             let freeze_fn rf =
-              validate_rf events
+              validate_rf
                 (structure : symbolic_event_structure)
                 e elided elided_rf ppo_loc ppo_loc_tree dp dp_ppo j_list pp
-                p_combined rf write_events read_events structure.po
+                p_combined rf
             in
 
             Lwt.return_some freeze_fn
 
 (** Build justification combinations for all paths *)
-and build_justcombos events structure paths write_events read_events init_ppo
-    statex justmap =
-  let* justcombos_list =
-    Lwt_list.map_p
-      (fun path ->
-        Logs.debug (fun m ->
-            m "Building justification combinations for path [%s]"
-              (String.concat ", "
-                 (List.map (Printf.sprintf "%d")
-                    (List.sort compare (USet.values path.path))
-                 )
+and build_justcombos structure paths init_ppo statex justmap =
+  let events = structure.events in
+  let read_events = structure.read_events in
+  let write_events = structure.write_events in
+    let* justcombos_list =
+      Lwt_list.map_p
+        (fun path ->
+          Logs.debug (fun m ->
+              m "Building justification combinations for path [%s]"
+                (String.concat ", "
+                   (List.map (Printf.sprintf "%d")
+                      (List.sort compare (USet.values path.path))
+                   )
+                )
+          );
+          (* Filter path to only write events *)
+          let path_writes = USet.intersection path.path write_events in
+
+          (* Get compatible justification combinations *)
+          let js_combinations = choose justmap path_writes in
+
+          (* For each combination, create remapped justifications *)
+          let* freeze_fns =
+            Lwt_list.map_p
+              (fun j_list ->
+                (* Compute combined fwd and we *)
+                let fwd =
+                  List.fold_left
+                    (fun acc j -> USet.union acc j.fwd)
+                    (USet.create ()) j_list
+                in
+                let we =
+                  List.fold_left
+                    (fun acc j -> USet.union acc j.we)
+                    (USet.create ()) j_list
+                in
+
+                (* Create forwarding context *)
+                let con = Forwardingcontext.create ~fwd ~we () in
+
+                (* Remap all justifications *)
+                let j_remapped =
+                  List.map
+                    (fun j -> Forwardingcontext.remap_just con j None)
+                    j_list
+                in
+
+                (* Create freeze function for this J *)
+                let* freeze_opt =
+                  create_freeze structure path j_remapped init_ppo statex
+                in
+                  Lwt.return freeze_opt
               )
-        );
-        (* Filter path to only write events *)
-        let path_writes =
-          USet.filter (fun e -> USet.mem write_events e) path.path
-        in
+              js_combinations
+          in
 
-        (* Get compatible justification combinations *)
-        let js_combinations = choose justmap path_writes in
+          let freeze_fns_filtered = List.filter_map Fun.id freeze_fns in
+            Lwt.return (path.path, freeze_fns_filtered)
+        )
+        paths
+    in
 
-        (* For each combination, create remapped justifications *)
-        let* freeze_fns =
-          Lwt_list.map_p
-            (fun j_list ->
-              (* Compute combined fwd and we *)
-              let fwd =
-                List.fold_left
-                  (fun acc j -> USet.union acc j.fwd)
-                  (USet.create ()) j_list
-              in
-              let we =
-                List.fold_left
-                  (fun acc j -> USet.union acc j.we)
-                  (USet.create ()) j_list
-              in
+    (* Convert to hashtable *)
+    let justcombos = Hashtbl.create 16 in
+      List.iter
+        (fun (path_uset, freezes) -> Hashtbl.add justcombos path_uset freezes)
+        justcombos_list;
 
-              (* Create forwarding context *)
-              let con = Forwardingcontext.create ~fwd ~we () in
-
-              (* Remap all justifications *)
-              let j_remapped =
-                List.map
-                  (fun j -> Forwardingcontext.remap_just con j None)
-                  j_list
-              in
-
-              (* Create freeze function for this J *)
-              let* freeze_opt =
-                create_freeze events structure path j_remapped write_events
-                  read_events init_ppo statex
-              in
-                Lwt.return freeze_opt
-            )
-            js_combinations
-        in
-
-        let freeze_fns_filtered = List.filter_map Fun.id freeze_fns in
-          Lwt.return (path.path, freeze_fns_filtered)
-      )
-      paths
-  in
-
-  (* Convert to hashtable *)
-  let justcombos = Hashtbl.create 16 in
-    List.iter
-      (fun (path_uset, freezes) -> Hashtbl.add justcombos path_uset freezes)
-      justcombos_list;
-
-    Lwt.return justcombos
+      Lwt.return justcombos
 
 (** Generate executions **)
 
 (** Main execution generation - replaces the stub in calculate_dependencies *)
-let generate_executions (events : (int, event) Hashtbl.t)
-    (structure : symbolic_event_structure) (justs : justification uset) statex
-    init_ppo ~include_dependencies ~restrictions =
+let generate_executions (structure : symbolic_event_structure)
+    (justs : justification uset) statex init_ppo ~include_dependencies
+    ~restrictions =
   let* _ = Lwt.return_unit in
+
+  let events = structure.events in
+  let restrict = structure.restrict in
 
   Logs.debug (fun m ->
       m "Generating executions for structure with %d events"
-        (Hashtbl.length events)
+        (USet.size structure.e)
   );
 
   let e_set = structure.e in
@@ -674,30 +684,14 @@ let generate_executions (events : (int, event) Hashtbl.t)
   let paths = gen_paths events structure structure.restrict in
 
   Logs.debug (fun m ->
-      m "Generated %d paths through the control flow\n%s" (List.length paths)
-        (String.concat "\n"
-           (List.map
-              (fun p ->
-                Printf.sprintf "Path: [%s] - P = [%s]"
-                  (String.concat ", "
-                     (List.map string_of_int
-                        (List.sort compare (USet.values p.path))
-                     )
-                  )
-                  (String.concat ", " (List.map Expr.to_string p.p))
-              )
-              paths
-           )
-        )
+      m "Generated %d paths through the control flow" (List.length paths)
   );
 
   (* Compute initial RF relation: writes × reads that are not in po^-1 and not dslwb *)
   let inv_po = URelation.inverse_relation po in
   let w_with_init = USet.union write_events (USet.singleton 0) in
   let w_cross_r = URelation.cross w_with_init read_events in
-  (* remove pairs where write po after read *)
-  (* TODO differs from JS which had w_cross_r_minus_inv_po *)
-  let w_cross_r_and_po = USet.intersection w_cross_r po in
+  let w_cross_r_minus_inv_po = USet.set_minus w_cross_r inv_po in
 
   let* _rf_pairs =
     USet.async_filter
@@ -705,14 +699,21 @@ let generate_executions (events : (int, event) Hashtbl.t)
         let r_restrict =
           Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
         in
-          match (get_loc events w, get_loc events r) with
-          | Some loc_w, Some loc_r ->
-              (* TODO use semantic equivalence relative to valres *)
-              let* loc_eq = Solver.expoteq ~state:r_restrict loc_w loc_r in
-                if loc_eq then dslwb structure events w r else Lwt.return false
-          | _ -> Lwt.return false
+        let w_restrict =
+          Hashtbl.find_opt structure.restrict w |> Option.value ~default:[]
+        in
+          let* w_r_comp = Solver.is_sat (r_restrict @ w_restrict) in
+            if w_r_comp then
+              match (get_loc events w, get_loc events r) with
+              | Some loc_w, Some loc_r ->
+                  (* TODO use semantic equivalence relative to valres *)
+                  let* loc_eq = Solver.expoteq ~state:r_restrict loc_w loc_r in
+                    if loc_eq then dslwb structure events w r
+                    else Lwt.return false
+              | _ -> Lwt.return false
+            else Lwt.return false
       )
-      w_cross_r_and_po
+      w_cross_r_minus_inv_po
   in
 
   let all_rf = _rf_pairs in
@@ -733,8 +734,7 @@ let generate_executions (events : (int, event) Hashtbl.t)
 
     (* Build justcombos for all paths *)
     let* justcombos =
-      build_justcombos events structure paths write_events read_events init_ppo
-        statex justmap
+      build_justcombos structure paths init_ppo statex justmap
     in
 
     Logs.debug (fun m -> m "Built justification combinations for all paths");

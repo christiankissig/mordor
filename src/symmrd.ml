@@ -176,8 +176,8 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions events structure final_justs structure.constraint_
-      init_ppo ~include_dependencies ~restrictions
+    generate_executions structure final_justs structure.constraint_ init_ppo
+      ~include_dependencies ~restrictions
   in
 
   Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));

@@ -85,7 +85,6 @@ val choose :
 
     @return [Lwt.t] of [Some freeze_result] if valid, [None] otherwise *)
 val validate_rf :
-  (int, event) Hashtbl.t ->
   symbolic_event_structure ->
   int uset ->
   int uset ->
@@ -97,9 +96,6 @@ val validate_rf :
   justification list ->
   expr list ->
   expr list ->
-  (int * int) uset ->
-  int uset ->
-  int uset ->
   (int * int) uset ->
   freeze_result option Lwt.t
 
@@ -126,12 +122,9 @@ val validate_rf :
     The returned freeze function has type:
     [(int * int) uset -> freeze_result option Lwt.t] *)
 val create_freeze :
-  (int, event) Hashtbl.t ->
   symbolic_event_structure ->
   path_info ->
   justification list ->
-  int uset ->
-  int uset ->
   (int * int) uset ->
   expr list ->
   ((int * int) uset -> freeze_result option Lwt.t) option Lwt.t
@@ -154,11 +147,8 @@ val create_freeze :
     @param justmap Map from write labels to justifications
     @return [Lwt.t] of hash table mapping path event sets to freeze functions *)
 val build_justcombos :
-  (int, event) Hashtbl.t ->
   symbolic_event_structure ->
   path_info list ->
-  int uset ->
-  int uset ->
   (int * int) uset ->
   expr list ->
   (int, justification list) Hashtbl.t ->
@@ -191,7 +181,6 @@ val build_justcombos :
     @param restrictions Coherence model restrictions
     @return [Lwt.t] of list of valid symbolic executions *)
 val generate_executions :
-  (int, event) Hashtbl.t ->
   symbolic_event_structure ->
   justification uset ->
   expr list ->
