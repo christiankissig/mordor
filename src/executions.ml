@@ -117,6 +117,42 @@ let rec cartesian = function
   | hd :: tl ->
       List.concat_map (fun x -> List.map (List.cons x) (cartesian tl)) hd
 
+(** Partition neighbours into groups where each group is mutually in conflict *)
+let partition_by_conflict neighbours conflict =
+  let neighbours_list = USet.values neighbours in
+
+  (* Helper: find all neighbours in the same conflict group as 'seed' *)
+  let rec find_conflict_group seed remaining acc =
+    match remaining with
+    | [] -> (acc, [])
+    | n :: rest ->
+        (* Check if n conflicts with all members of acc (including seed) *)
+        let conflicts_with_all =
+          List.for_all
+            (fun member ->
+              USet.mem conflict (member, n)
+              || USet.mem conflict (n, member)
+              || member = n
+            )
+            (seed :: acc)
+        in
+          if conflicts_with_all then find_conflict_group seed rest (n :: acc)
+          else
+            let group, remaining' = find_conflict_group seed rest acc in
+              (group, n :: remaining')
+  in
+
+  (* Partition all neighbours into conflict groups *)
+  let rec partition remaining groups =
+    match remaining with
+    | [] -> groups
+    | seed :: rest ->
+        let group, remaining' = find_conflict_group seed rest [ seed ] in
+          partition remaining' (group :: groups)
+  in
+
+  partition neighbours_list []
+
 let gen_paths events (structure : symbolic_event_structure) restrict =
   let po_intransitive = URelation.transitive_reduction structure.po in
   let po_tree = build_tree structure.e po_intransitive in
@@ -149,9 +185,29 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
         |> List.flatten
         |> List.map (fun path -> USet.add path current)
       else
-        (* neighbour branches are not in conflict; all combinations *)
-        USet.values neighbours
-        |> List.map (fun next -> dfs next)
+        (* Multiple neighbours: partition by conflict *)
+        let conflict_groups =
+          partition_by_conflict neighbours structure.conflict
+        in
+
+        Logs.debug (fun m ->
+            m "Event %d has %d conflict groups: [%s]" current
+              (List.length conflict_groups)
+              (String.concat "; "
+                 (List.map
+                    (fun g -> string_of_int (List.length g))
+                    conflict_groups
+                 )
+              )
+        );
+
+        (* For each conflict group, choose one alternative (disjoint union) *)
+        (* Across groups, take all combinations (cartesian product) *)
+        conflict_groups
+        |> List.map (fun group ->
+            (* Within this conflict group, just flatten (disjoint union) *)
+            List.map dfs group |> List.flatten
+        )
         |> cartesian
         |> List.map (fun paths ->
             List.fold_left

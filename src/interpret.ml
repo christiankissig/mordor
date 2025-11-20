@@ -445,7 +445,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   | _ ->
                       let* then_structure = then_structure events in
                         let* rest_structure =
-                          recurse rest env (cond_val :: phi) events
+                          recurse rest env new_else_phi events
                         in
                           Lwt.return (plus then_structure rest_structure)
                 )
