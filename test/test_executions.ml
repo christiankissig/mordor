@@ -57,6 +57,7 @@ module TestData = struct
       fj = USet.create ();
       p = USet.create ();
       constraint_ = [];
+      conflict = USet.create ();
       write_events = USet.create ();
       read_events = USet.create ();
       rlx_write_events = USet.create ();

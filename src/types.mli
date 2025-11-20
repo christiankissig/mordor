@@ -135,6 +135,7 @@ type symbolic_event_structure = {
   fj : (int * int) uset;
   p : (string * string) uset;
   constraint_ : expr list;
+  conflict : (int * int) uset;
   (* cached event filters *)
   write_events : int uset;
   read_events : int uset;

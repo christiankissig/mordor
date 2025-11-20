@@ -112,6 +112,11 @@ type path_info = {
 }
 
 (** Generate all paths through the control flow structure *)
+let rec cartesian = function
+  | [] -> [ [] ]
+  | hd :: tl ->
+      List.concat_map (fun x -> List.map (List.cons x) (cartesian tl)) hd
+
 let gen_paths events (structure : symbolic_event_structure) restrict =
   let po_intransitive = URelation.transitive_reduction structure.po in
   let po_tree = build_tree structure.e po_intransitive in
@@ -123,12 +128,36 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
     let neighbours =
       Hashtbl.find_opt po_tree current |> Option.value ~default:(USet.create ())
     in
-      if USet.size neighbours == 0 then [ USet.singleton current ]
-      else
+      if USet.size neighbours == 0 then
+        (* leaf node *)
+        [ USet.singleton current ]
+      else if USet.size neighbours == 1 then
+        (* one neighbour; continue down that path *)
+        let next = USet.values neighbours |> List.hd in
+          dfs next |> List.map (fun path -> USet.add path current)
+      else if
+        USet.subset
+          (USet.set_minus
+             (URelation.cross neighbours neighbours)
+             (URelation.identity_relation neighbours)
+          )
+          structure.conflict
+      then
+        (* neighbour branches are in conflict; disjoint union *)
         USet.values neighbours
         |> List.map dfs
         |> List.flatten
         |> List.map (fun path -> USet.add path current)
+      else
+        (* neighbour branches are not in conflict; all combinations *)
+        USet.values neighbours
+        |> List.map (fun next -> dfs next)
+        |> cartesian
+        |> List.map (fun paths ->
+            List.fold_left
+              (fun acc path -> USet.union acc path)
+              (USet.singleton current) paths
+        )
   in
 
   (* Find root events (events with no predecessors in po) *)
@@ -202,7 +231,7 @@ let choose justmap path_events =
         List.concat_map
           (fun just ->
             let new_fwdwe = USet.union fwdwe (USet.union just.fwd just.we) in
-              choose_rec list i (items @ [ just ]) new_fwdwe
+              choose_rec list i (just :: items) new_fwdwe
           )
           compatible
   in

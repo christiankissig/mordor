@@ -714,7 +714,7 @@ let relabel_equivalent_expressions elab_ctx con statex p_1 p_2 relabelPairs e_1
   else
     (* Check if e_1 = e_2 clashes with static constraints *)
     let e1_eq_e2 = EBinOp (e_1_relabeled, "=", e_2_remapped) in
-    let stat_clash = Solver.create (statex @ [ e1_eq_e2 ]) in
+    let stat_clash = Solver.create (e1_eq_e2 :: statex) in
       let* clash_result = Solver.check stat_clash in
         match clash_result with
         | Some false ->
@@ -760,7 +760,7 @@ let relabel_equivalent_expressions elab_ctx con statex p_1 p_2 relabelPairs e_1
             (* Add static constraints *)
             let statex_z3 = List.map (Solver.expr_to_z3 context) statex in
             let full_formula =
-              Z3.Boolean.mk_and context.ctx (statex_z3 @ [ body ])
+              Z3.Boolean.mk_and context.ctx (body :: statex_z3)
             in
 
             (* ∃v. formula *)
@@ -948,7 +948,7 @@ let lift elab_ctx justs =
                       ( just_1,
                         {
                           just_2 with
-                          p = just_2.p @ [ eq_pred ];
+                          p = eq_pred :: just_2.p;
                           w = new_w2;
                           d = USet.create ();
                         }
@@ -959,7 +959,7 @@ let lift elab_ctx justs =
                     let new_w1 = { just_1.w with wval = Some (ENum n2) } in
                       ( {
                           just_1 with
-                          p = just_1.p @ [ eq_pred ];
+                          p = eq_pred :: just_1.p;
                           w = new_w1;
                           d = USet.create ();
                         },
@@ -1130,7 +1130,7 @@ let weaken elab_ctx (justs : justification uset) : justification uset Lwt.t =
             (* Create formula: And(remapped_pwg) ∧ Not(x) *)
             (* If SAT, then x is not implied by pwg, so keep it *)
             let not_x = Expr.inverse x in
-            let formula = remapped_pwg @ [ not_x ] in
+            let formula = not_x :: remapped_pwg in
 
             let solver = Solver.create formula in
               let* result = Solver.check solver in

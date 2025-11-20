@@ -140,6 +140,7 @@ type symbolic_event_structure = {
   fj : (int * int) uset; (* Fork-join edges *)
   p : (string * string) uset; (* Register mappings *)
   constraint_ : expr list; (* Constraints *)
+  conflict : (int * int) uset; (* Conflict relation *)
   (* cached event filters *)
   write_events : int uset;
   read_events : int uset;
