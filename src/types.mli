@@ -135,6 +135,14 @@ type symbolic_event_structure = {
   fj : (int * int) uset;
   p : (string * string) uset;
   constraint_ : expr list;
+  (* cached event filters *)
+  write_events : int uset;
+  read_events : int uset;
+  rlx_write_events : int uset;
+  rlx_read_events : int uset;
+  branch_events : int uset;
+  malloc_events : int uset;
+  free_events : int uset;
 }
 
 (** {1 Function Maps} *)

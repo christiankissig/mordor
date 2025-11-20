@@ -412,6 +412,13 @@ let check_refinement _from_prog _to_prog =
       fj = USet.create ();
       p = USet.create ();
       constraint_ = [];
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
     }
   in
 
@@ -447,6 +454,13 @@ let do_check_refinement _ast =
       fj = USet.create ();
       p = USet.create ();
       constraint_ = [];
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
     }
   in
 

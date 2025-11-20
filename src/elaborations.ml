@@ -6,14 +6,6 @@ open Uset
 
 type context = {
   structure : symbolic_event_structure;
-  branch_events : int USet.t;
-  read_events : int USet.t;
-  write_events : int USet.t;
-  rlx_read_events : int USet.t;
-  rlx_write_events : int USet.t;
-  malloc_events : int USet.t;
-  po : (int * int) USet.t;
-  rmw : (int * int) USet.t;
   fj : (int * int) USet.t;
   val_fn : int -> expr option;
   conflicting_branch : int -> int -> int;
@@ -249,13 +241,13 @@ let fprime elab_ctx pred_fn ppo_loc just e1 e2 =
   else Lwt.return false
 
 let fwd elab_ctx pred_fn ctx ppo_loc just =
-  let w_cross_r =
-    URelation.cross elab_ctx.write_events elab_ctx.rlx_read_events
-  in
-  let r_cross_r = URelation.cross elab_ctx.read_events elab_ctx.read_events in
-  let w_cross_w =
-    URelation.cross elab_ctx.write_events elab_ctx.rlx_write_events
-  in
+  let write_events = elab_ctx.structure.write_events in
+  let read_events = elab_ctx.structure.read_events in
+  let rlx_write_events = elab_ctx.structure.rlx_write_events in
+  let rlx_read_events = elab_ctx.structure.rlx_read_events in
+  let w_cross_r = URelation.cross write_events rlx_read_events in
+  let r_cross_r = URelation.cross read_events read_events in
+  let w_cross_w = URelation.cross write_events rlx_write_events in
   let combined = USet.union w_cross_r r_cross_r in
   let combined = USet.union combined w_cross_w in
     USet.async_filter
@@ -263,7 +255,8 @@ let fwd elab_ctx pred_fn ctx ppo_loc just =
       combined
 
 let we elab_ctx pred_fn ctx ppo_loc just =
-  let w_cross_w = URelation.cross elab_ctx.write_events elab_ctx.write_events in
+  let write_events = elab_ctx.structure.write_events in
+  let w_cross_w = URelation.cross write_events write_events in
     USet.async_filter
       (fun (e1, e2) -> fprime elab_ctx pred_fn ppo_loc just e1 e2)
       w_cross_w
@@ -313,8 +306,8 @@ let forward elab_ctx justs =
                         freeze definition *)
                           (* e1 and e2 are po before w, pulled forward from freeze
                            *)
-                          && USet.mem elab_ctx.po (e1, just.w.label)
-                          && USet.mem elab_ctx.po (e2, just.w.label)
+                          && USet.mem elab_ctx.structure.po (e1, just.w.label)
+                          && USet.mem elab_ctx.structure.po (e2, just.w.label)
                         )
                         _fwd
                     in
@@ -327,8 +320,8 @@ let forward elab_ctx justs =
                         freeze definition *)
                           (* e1 and e2 are po before w, pulled forward from freeze
                            *)
-                          && USet.mem elab_ctx.po (e1, just.w.label)
-                          && USet.mem elab_ctx.po (e2, just.w.label)
+                          && USet.mem elab_ctx.structure.po (e1, just.w.label)
+                          && USet.mem elab_ctx.structure.po (e2, just.w.label)
                         )
                         _we
                     in
@@ -441,11 +434,13 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
   (* Get symbols for an event *)
   let gsyms e =
     let po_neighbors =
-      USet.filter (fun (f, t) -> f = e || t = e) elab_ctx.po
+      USet.filter (fun (f, t) -> f = e || t = e) elab_ctx.structure.po
       |> USet.map (fun (f, t) -> [ f; t ])
       |> fun s -> USet.fold (fun acc pairs -> pairs @ acc) s [] |> USet.of_list
     in
-    let r_union_a = USet.union elab_ctx.read_events elab_ctx.malloc_events in
+    let read_events = elab_ctx.structure.read_events in
+    let malloc_events = elab_ctx.structure.malloc_events in
+    let r_union_a = USet.union read_events malloc_events in
       USet.intersection po_neighbors r_union_a
       |> USet.filter (fun ep -> not (USet.mem ppo (e, ep)))
       |> USet.map (fun ep ->
@@ -641,7 +636,7 @@ let conflict (elab_ctx : context) =
       USet.add successors x
   in
 
-  (* Process each branch event *)
+  (* Process each branch event. TODO we don't have branch events *)
   let branch_results =
     USet.map
       (fun x ->
@@ -671,12 +666,12 @@ let conflict (elab_ctx : context) =
                   USet.union cross inverse
           | _ -> USet.create ()
       )
-      elab_ctx.branch_events
+      elab_ctx.structure.branch_events
   in
 
   Logs.debug (fun m ->
       m "Computed conflicts for %d branch events."
-        (USet.size elab_ctx.branch_events)
+        (USet.size elab_ctx.structure.branch_events)
   );
 
   (* Union all results *)
@@ -884,9 +879,8 @@ let lift elab_ctx justs =
       justs;
 
     (* Compute liftpairs: conflicting write pairs *)
-    let w_cross_w =
-      URelation.cross elab_ctx.write_events elab_ctx.write_events
-    in
+    let write_events = elab_ctx.structure.write_events in
+    let w_cross_w = URelation.cross write_events write_events in
     let conflict_set = conflict elab_ctx in
     let liftpairs = USet.intersection w_cross_w conflict_set in
 

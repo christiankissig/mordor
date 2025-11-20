@@ -124,20 +124,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
   (* Build context for elaborations *)
   let elab_ctx : Elaborations.context =
-    {
-      structure;
-      branch_events;
-      read_events;
-      write_events;
-      rlx_read_events;
-      rlx_write_events;
-      malloc_events;
-      po;
-      rmw;
-      fj;
-      val_fn;
-      conflicting_branch;
-    }
+    { structure; fj; val_fn; conflicting_branch }
   in
 
   Logs.debug (fun m -> m "Starting elaborations...");

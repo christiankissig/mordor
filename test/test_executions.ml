@@ -59,6 +59,13 @@ let create_test_structure () =
       fj = USet.create ();
       p = USet.create ();
       constraint_ = [];
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
     }
 
 (** Test Utils Functions *)
@@ -166,6 +173,13 @@ let test_gen_paths_with_branch () =
         fj = USet.create ();
         p = USet.create ();
         constraint_ = [];
+        write_events = USet.create ();
+        read_events = USet.create ();
+        rlx_write_events = USet.create ();
+        rlx_read_events = USet.create ();
+        branch_events = USet.create ();
+        malloc_events = USet.create ();
+        free_events = USet.create ();
       }
     in
 
@@ -195,6 +209,13 @@ let test_gen_paths_empty_structure () =
       fj = USet.create ();
       p = USet.create ();
       constraint_ = [];
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
     }
   in
 
@@ -224,6 +245,13 @@ let test_gen_paths_single_event () =
       fj = USet.create ();
       p = USet.create ();
       constraint_ = [];
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
     }
   in
 
@@ -374,6 +402,13 @@ let test_gen_paths_with_missing_event () =
         fj = USet.create ();
         p = USet.create ();
         constraint_ = [];
+        write_events = USet.create ();
+        read_events = USet.create ();
+        rlx_write_events = USet.create ();
+        rlx_read_events = USet.create ();
+        branch_events = USet.create ();
+        malloc_events = USet.create ();
+        free_events = USet.create ();
       }
     in
 
@@ -436,6 +471,13 @@ let test_gen_paths_with_cycle () =
       fj = USet.create ();
       p = USet.create ();
       constraint_ = [];
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
     }
   in
 
@@ -472,6 +514,13 @@ let test_path_generation_integration () =
       fj = USet.create ();
       p = USet.create ();
       constraint_ = [];
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
     }
   in
 

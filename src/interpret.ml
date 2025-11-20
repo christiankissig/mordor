@@ -79,6 +79,41 @@ let dot (event : event) structure phi : symbolic_event_structure =
     fj = structure.fj;
     p = structure.p;
     constraint_ = structure.constraint_;
+    write_events =
+      ( if event.typ = Write then
+          USet.union structure.write_events (USet.singleton event.label)
+        else structure.write_events
+      );
+    read_events =
+      ( if event.typ = Read then
+          USet.union structure.read_events (USet.singleton event.label)
+        else structure.read_events
+      );
+    rlx_write_events =
+      ( if event.typ = Write && event.wmod = Relaxed then
+          USet.union structure.rlx_write_events (USet.singleton event.label)
+        else structure.rlx_write_events
+      );
+    rlx_read_events =
+      ( if event.typ = Read && event.rmod = Relaxed then
+          USet.union structure.rlx_read_events (USet.singleton event.label)
+        else structure.rlx_read_events
+      );
+    branch_events =
+      ( if event.typ = Branch then
+          USet.union structure.branch_events (USet.singleton event.label)
+        else structure.branch_events
+      );
+    malloc_events =
+      ( if event.typ = Malloc then
+          USet.union structure.malloc_events (USet.singleton event.label)
+        else structure.malloc_events
+      );
+    free_events =
+      ( if event.typ = Free then
+          USet.union structure.free_events (USet.singleton event.label)
+        else structure.free_events
+      );
   }
 
 let plus a b : symbolic_event_structure =
@@ -98,6 +133,13 @@ let plus a b : symbolic_event_structure =
       fj = USet.union a.fj b.fj;
       p = USet.union a.p b.p;
       constraint_ = a.constraint_ @ b.constraint_;
+      write_events = USet.union a.write_events b.write_events;
+      read_events = USet.union a.read_events b.read_events;
+      rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
+      rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
+      branch_events = USet.union a.branch_events b.branch_events;
+      malloc_events = USet.union a.malloc_events b.malloc_events;
+      free_events = USet.union a.free_events b.free_events;
     }
 
 let cross a b : symbolic_event_structure =
@@ -117,6 +159,13 @@ let cross a b : symbolic_event_structure =
       fj = USet.union a.fj b.fj;
       p = USet.union a.p b.p;
       constraint_ = a.constraint_ @ b.constraint_;
+      write_events = USet.union a.write_events b.write_events;
+      read_events = USet.union a.read_events b.read_events;
+      rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
+      rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
+      branch_events = USet.union a.branch_events b.branch_events;
+      malloc_events = USet.union a.malloc_events b.malloc_events;
+      free_events = USet.union a.free_events b.free_events;
     }
 
 (** Create empty structure *)
@@ -134,6 +183,13 @@ let empty_structure () : symbolic_event_structure =
     fj = USet.create ();
     p = USet.create ();
     constraint_ = [];
+    write_events = USet.create ();
+    read_events = USet.create ();
+    rlx_write_events = USet.create ();
+    rlx_read_events = USet.create ();
+    branch_events = USet.create ();
+    malloc_events = USet.create ();
+    free_events = USet.create ();
   }
 
 let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr)

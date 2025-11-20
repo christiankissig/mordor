@@ -722,6 +722,13 @@ module TestSymbolicEventStructure = struct
         fj = USet.create ();
         p = USet.create ();
         constraint_ = [];
+        write_events = USet.create ();
+        read_events = USet.create ();
+        rlx_write_events = USet.create ();
+        rlx_read_events = USet.create ();
+        branch_events = USet.create ();
+        malloc_events = USet.create ();
+        free_events = USet.create ();
       }
     in
 
@@ -744,6 +751,13 @@ module TestSymbolicEventStructure = struct
         fj = USet.create ();
         p = USet.create ();
         constraint_ = [];
+        write_events = USet.create ();
+        read_events = USet.create ();
+        rlx_write_events = USet.create ();
+        rlx_read_events = USet.create ();
+        branch_events = USet.create ();
+        malloc_events = USet.create ();
+        free_events = USet.create ();
       }
     in
 
@@ -768,6 +782,13 @@ module TestSymbolicEventStructure = struct
         fj = USet.create ();
         p = USet.create ();
         constraint_ = [];
+        write_events = USet.create ();
+        read_events = USet.create ();
+        rlx_write_events = USet.create ();
+        rlx_read_events = USet.create ();
+        branch_events = USet.create ();
+        malloc_events = USet.create ();
+        free_events = USet.create ();
       }
     in
 
@@ -789,6 +810,13 @@ module TestSymbolicEventStructure = struct
         fj = USet.create ();
         p = USet.create ();
         constraint_ = [];
+        write_events = USet.create ();
+        read_events = USet.create ();
+        rlx_write_events = USet.create ();
+        rlx_read_events = USet.create ();
+        branch_events = USet.create ();
+        malloc_events = USet.create ();
+        free_events = USet.create ();
       }
     in
 

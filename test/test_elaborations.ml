@@ -123,6 +123,13 @@ let create_mock_context () =
       fj = USet.create ();
       p = USet.create ();
       constraint_ = [];
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
     }
   in
 
@@ -142,20 +149,19 @@ let create_mock_context () =
 
   let conflicting_branch _e1 _e2 = 0 in
 
-  {
-    structure;
-    branch_events;
-    read_events;
-    write_events;
-    rlx_read_events = USet.create ();
-    rlx_write_events = USet.create ();
-    malloc_events;
-    po;
-    rmw;
-    fj;
-    val_fn;
-    conflicting_branch;
-  }
+  let structure =
+    {
+      structure with
+      write_events;
+      read_events;
+      branch_events;
+      malloc_events;
+      po;
+      rmw;
+    }
+  in
+
+  { structure; fj; val_fn; conflicting_branch }
 
 (* Mock justification builder *)
 let create_mock_justification label predicates =
@@ -608,8 +614,9 @@ let test_we_write_to_write =
   lwt_test (fun () ->
       let ctx = create_mock_context () in
       (* Add write-to-write edge in po *)
-      let po = USet.add ctx.po (1, 3) in
-      let ctx = { ctx with po } in
+      let po = USet.add ctx.structure.po (1, 3) in
+      let structure = { ctx.structure with po } in
+      let ctx = { ctx with structure } in
 
       let pred_fn _e = USet.singleton 1 in
       let we_ctx = Forwardingcontext.create () in
@@ -739,8 +746,8 @@ let test_conflict_with_branches () =
   let e_set = USet.add e_set 12 in
   let po = USet.add ctx.structure.po (10, 11) in
   let po = USet.add po (10, 12) in
-  let structure = { ctx.structure with e = e_set; po } in
-  let ctx = { ctx with structure; branch_events } in
+  let structure = { ctx.structure with e = e_set; po; branch_events } in
+  let ctx = { ctx with structure } in
 
   let events = USet.of_list [ 10; 11; 12 ] in
   let result = conflict ctx in
