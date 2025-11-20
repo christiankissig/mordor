@@ -141,7 +141,7 @@ let test_gen_paths_with_branch () =
 
   (* Add branch event *)
   let branch_event =
-    create_test_event 5 Branch ~cond:(EBinOp (EVar "x", "==", ENum Z.one)) ()
+    create_test_event 5 Branch ~cond:(EBinOp (EVar "x", "=", ENum Z.one)) ()
   in
     Hashtbl.add events 5 branch_event;
 

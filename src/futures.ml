@@ -144,13 +144,13 @@ let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
           | Some execs ->
               USet.values execs
               |> List.mapi (fun i _exec ->
-                     Printf.sprintf
-                       "    {\n\
-                       \      \"execution\": %d,\n\
-                       \      \"futures\": {}\n\
-                       \    }"
-                       i
-                 )
+                  Printf.sprintf
+                    "    {\n\
+                    \      \"execution\": %d,\n\
+                    \      \"futures\": {}\n\
+                    \    }"
+                    i
+              )
               |> String.concat ",\n"
         in
           Printf.sprintf

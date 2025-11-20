@@ -330,10 +330,10 @@ let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
   let valmap =
     USet.values fwd
     |> List.filter_map (fun (e1, e2) ->
-           match (!State.val_fn e1, !State.val_fn e2) with
-           | Some v1, Some v2 -> Some (v1, v2)
-           | _ -> None
-       )
+        match (!State.val_fn e1, !State.val_fn e2) with
+        | Some v1, Some v2 -> Some (v1, v2)
+        | _ -> None
+    )
   in
 
   let psi =

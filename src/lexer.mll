@@ -67,7 +67,7 @@ rule token = parse
   | "!="                  { Parser.NEQ }
   | ">="                  { Parser.GEQ }
   | "<="                  { Parser.LEQ }
-  | "=="                  { Parser.EQ }
+  | "="                   { Parser.EQ }
   | "[["                  { Parser.LDBRACKET }
   | "]]"                  { Parser.RDBRACKET }
   | "|||"                 { Parser.PARALLEL }

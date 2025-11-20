@@ -448,7 +448,7 @@ expr:
   | e1=expr PIPE e2=expr { EBinOp (e1, "|", e2) }
   | e1=expr AMPERSAND e2=expr { EBinOp (e1, "&", e2) }
   | e1=expr CARET e2=expr { EBinOp (e1, "^", e2) }
-  | e1=expr EQ e2=expr { EBinOp (e1, "==", e2) }
+  | e1=expr EQ e2=expr { EBinOp (e1, "=", e2) }
   | e1=expr NEQ e2=expr { EBinOp (e1, "!=", e2) }
   | e1=expr LT e2=expr { EBinOp (e1, "<", e2) }
   | e1=expr GT e2=expr { EBinOp (e1, ">", e2) }

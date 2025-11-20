@@ -87,10 +87,10 @@ let test_parse_modulo () =
     | _ -> Alcotest.fail "Expected x % 3"
 
 let test_parse_comparison () =
-  let expr = parse_expr "r0 == 1" in
+  let expr = parse_expr "r0 = 1" in
     match expr with
-    | EBinOp (ERegister "r0", "==", EInt n) when Z.equal n Z.one -> ()
-    | _ -> Alcotest.fail "Expected r0 == 1"
+    | EBinOp (ERegister "r0", "=", EInt n) when Z.equal n Z.one -> ()
+    | _ -> Alcotest.fail "Expected r0 = 1"
 
 let test_parse_inequality () =
   let expr = parse_expr "r0 != 0" in
@@ -123,13 +123,13 @@ let test_parse_greater_equal () =
     | _ -> Alcotest.fail "Expected x >= 5"
 
 let test_parse_logical_and () =
-  let expr = parse_expr "r0 == 1 && r1 == 1" in
+  let expr = parse_expr "r0 = 1 && r1 = 1" in
     match expr with
     | EBinOp (EBinOp _, "&&", EBinOp _) -> ()
     | _ -> Alcotest.fail "Expected logical AND"
 
 let test_parse_logical_or () =
-  let expr = parse_expr "r0 == 1 || r1 == 1" in
+  let expr = parse_expr "r0 = 1 || r1 = 1" in
     match expr with
     | EBinOp (EBinOp _, "||", EBinOp _) -> ()
     | _ -> Alcotest.fail "Expected logical OR"
@@ -324,21 +324,21 @@ let test_parse_store_explicit () =
     | _ -> Alcotest.fail "Expected store(release, x, 1)"
 
 let test_parse_if_simple () =
-  let src = "%% if (r0 == 1) r1 := 2" in
+  let src = "%% if (r0 = 1) r1 := 2" in
   let ast = parse_litmus src in
     match List.map get_ast_stmt ast.program with
     | [ SIf { condition = EBinOp _; then_body = _; else_body = None } ] -> ()
     | _ -> Alcotest.fail "Expected if statement"
 
 let test_parse_if_else () =
-  let src = "%% if (r0 == 1) r1 := 2 else r1 := 3" in
+  let src = "%% if (r0 = 1) r1 := 2 else r1 := 3" in
   let ast = parse_litmus src in
     match List.map get_ast_stmt ast.program with
     | [ SIf { condition = EBinOp _; then_body = _; else_body = Some _ } ] -> ()
     | _ -> Alcotest.fail "Expected if-else statement"
 
 let test_parse_if_block () =
-  let src = "%% if (r0 == 1) { r1 := 2; r2 := 3 }" in
+  let src = "%% if (r0 = 1) { r1 := 2; r2 := 3 }" in
   let ast = parse_litmus src in
     match List.map get_ast_stmt ast.program with
     | [ SIf { then_body = [ _; _ ]; _ } ] -> ()

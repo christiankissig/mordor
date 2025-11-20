@@ -587,18 +587,17 @@ let check_for_coherence (structure : symbolic_event_structure)
             writes;
           List.filter (fun g -> List.length !g > 1) !groups
           |> List.map (fun g ->
-                 let perms = permutations !g in
-                   List.map
-                     (fun perm ->
-                       let rec to_pairs acc = function
-                         | [] | [ _ ] -> List.rev acc
-                         | x :: (y :: _ as rest) ->
-                             to_pairs ((x, y) :: acc) rest
-                       in
-                         to_pairs [] perm
-                     )
-                     perms
-             )
+              let perms = permutations !g in
+                List.map
+                  (fun perm ->
+                    let rec to_pairs acc = function
+                      | [] | [ _ ] -> List.rev acc
+                      | x :: (y :: _ as rest) -> to_pairs ((x, y) :: acc) rest
+                    in
+                      to_pairs [] perm
+                  )
+                  perms
+          )
       in
 
       (* Build cache based on memory model *)

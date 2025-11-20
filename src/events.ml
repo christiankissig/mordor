@@ -330,20 +330,20 @@ end = struct
     e1.label = e2.label
     && e1.typ = e2.typ
     && ( match (e1.id, e2.id) with
-       | None, None -> true
-       | Some v1, Some v2 -> Value.equal v1 v2
-       | _ -> false
-       )
+      | None, None -> true
+      | Some v1, Some v2 -> Value.equal v1 v2
+      | _ -> false
+      )
     && ( match (e1.loc, e2.loc) with
-       | None, None -> true
-       | Some v1, Some v2 -> Expr.equal v1 v2
-       | _ -> false
-       )
+      | None, None -> true
+      | Some v1, Some v2 -> Expr.equal v1 v2
+      | _ -> false
+      )
     && ( match (e1.rval, e2.rval) with
-       | None, None -> true
-       | Some v1, Some v2 -> Value.equal v1 v2
-       | _ -> false
-       )
+      | None, None -> true
+      | Some v1, Some v2 -> Value.equal v1 v2
+      | _ -> false
+      )
     &&
     match (e1.wval, e2.wval) with
     | None, None -> true

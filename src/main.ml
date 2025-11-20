@@ -81,12 +81,12 @@ let read_litmus_files dir =
         List.concat
           (Array.to_list files
           |> List.map (fun f ->
-                 let full_path = Filename.concat path f in
-                   if Sys.is_directory full_path && !recursive then
-                     read_dir_recursive full_path
-                   else if Filename.check_suffix f ".lit" then [ full_path ]
-                   else []
-             )
+              let full_path = Filename.concat path f in
+                if Sys.is_directory full_path && !recursive then
+                  read_dir_recursive full_path
+                else if Filename.check_suffix f ".lit" then [ full_path ]
+                else []
+          )
           )
     with Sys_error msg ->
       Printf.eprintf "Error reading directory %s: %s\n" path msg;

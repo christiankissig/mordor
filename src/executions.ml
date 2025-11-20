@@ -76,6 +76,32 @@ let origin (events : (int, event) Hashtbl.t) (e_set : int uset) (s : string) =
           | [] -> None
       )
 
+(* Check if write w is downward-closed same-location write before read r. This
+   prevents r reading from shadowed writes w.*)
+(* TODO optimize *)
+let dslwb structure events w r =
+  let write_events = filter_events events structure.e Write () in
+  let r_restrict =
+    Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
+  in
+    USet.async_exists
+      (fun (w2, r2) ->
+        if
+          r2 = r (* w2 po bfore r *)
+          && w2 <> w (* w2 is not w *)
+          && USet.mem write_events w2 (* w2 is a write *)
+          && USet.mem structure.po (w, w2)
+          (* w2 po after w, thus in between w and r *)
+        then
+          (* w2 potentially shadows w *)
+          (* TODO use semantic equivalence relative to valres *)
+          match (get_loc events w, get_loc events w2) with
+          | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
+          | _ -> Lwt.return false
+        else Lwt.return false
+      )
+      structure.po
+
 (** Generate Paths **)
 
 (** Path type *)
@@ -124,8 +150,8 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
         let p =
           USet.values path
           |> List.map (fun e ->
-                 Hashtbl.find_opt restrict e |> Option.value ~default:[]
-             )
+              Hashtbl.find_opt restrict e |> Option.value ~default:[]
+          )
           |> List.flatten
           |> USet.of_list
           |> USet.values
@@ -244,37 +270,37 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
       let env_rf =
         USet.values rf
         |> List.map (fun (w, r) ->
-               let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
-               let w_val =
-                 match just_w with
-                 | Some j -> vale events j.w.label r
-                 | None -> vale events w r
-               in
-               let r_val =
-                 match get_val events r with
-                 | Some v -> v
-                 | None -> EVar "?"
-               in
-                 Expr.binop w_val "=" r_val
-           )
+            let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
+            let w_val =
+              match just_w with
+              | Some j -> vale events j.w.label r
+              | None -> vale events w r
+            in
+            let r_val =
+              match get_val events r with
+              | Some v -> v
+              | None -> EVar "?"
+            in
+              Expr.binop w_val "=" r_val
+        )
       in
 
       let check_rf =
         USet.values rf
         |> List.map (fun (w, r) ->
-               let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
-               let w_loc =
-                 match just_w with
-                 | Some j -> loce events j.w.label r
-                 | None -> loce events w r
-               in
-               let r_loc =
-                 match get_loc events r with
-                 | Some l -> l
-                 | None -> EVar "?"
-               in
-                 Expr.binop w_loc "=" r_loc
-           )
+            let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
+            let w_loc =
+              match just_w with
+              | Some j -> loce events j.w.label r
+              | None -> loce events w r
+            in
+            let r_loc =
+              match get_loc events r with
+              | Some l -> l
+              | None -> EVar "?"
+            in
+              Expr.binop w_loc "=" r_loc
+        )
       in
 
       (* Check 1.1: Various consistency checks *)
@@ -354,28 +380,28 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                   let disj =
                     USet.values af
                     |> List.map (fun (a, b) ->
-                           let loc_a =
-                             match get_loc events a with
-                             | Some l -> l
-                             | None -> EVar "?"
-                           in
-                           let val_a =
-                             match get_val events a with
-                             | Some v -> v
-                             | None -> EVar "?"
-                           in
-                           let loc_b =
-                             match get_loc events b with
-                             | Some l -> l
-                             | None -> EVar "?"
-                           in
-                           let val_b =
-                             match get_val events b with
-                             | Some v -> v
-                             | None -> EVar "?"
-                           in
-                             disjoint (loc_a, val_a) (loc_b, val_b)
-                       )
+                        let loc_a =
+                          match get_loc events a with
+                          | Some l -> l
+                          | None -> EVar "?"
+                        in
+                        let val_a =
+                          match get_val events a with
+                          | Some v -> v
+                          | None -> EVar "?"
+                        in
+                        let loc_b =
+                          match get_loc events b with
+                          | Some l -> l
+                          | None -> EVar "?"
+                        in
+                        let val_b =
+                          match get_val events b with
+                          | Some v -> v
+                          | None -> EVar "?"
+                        in
+                          disjoint (loc_a, val_a) (loc_b, val_b)
+                    )
                   in
 
                   let* bigger_p_opt = Rewrite.rewrite_pred (big_p @ disj) in
@@ -394,52 +420,10 @@ let rec validate_rf events (structure : symbolic_event_structure) e elided
                         build_tree e (URelation.inverse_relation po_filtered)
                       in
 
-                      let check_dslwb w _r =
-                        let rec f r =
-                          if w = r then Lwt.return_false
-                          else
-                            let event_r =
-                              try Some (Hashtbl.find events r)
-                              with Not_found -> None
-                            in
-                              match event_r with
-                              | Some ev when ev.typ = Write ->
-                                  let loc_r =
-                                    match get_loc events r with
-                                    | Some l -> l
-                                    | None -> EVar "?"
-                                  in
-                                  let loc__r = loce events _r _r in
-
-                                  (* Convert to expressions for exeq *)
-                                  let expr_r = loc_r in
-                                  let expr__r = loc__r in
-
-                                  let* same_loc =
-                                    Solver.exeq ~state:bigger_p expr_r expr__r
-                                  in
-                                    if same_loc then Lwt.return_true
-                                    else
-                                      let preds =
-                                        try Hashtbl.find inv_po_tree r
-                                        with Not_found -> USet.create ()
-                                      in
-                                        USet.async_for_all f preds
-                              | _ ->
-                                  let preds =
-                                    try Hashtbl.find inv_po_tree r
-                                    with Not_found -> USet.create ()
-                                  in
-                                    USet.async_for_all f preds
-                        in
-                          let* in_po =
-                            Lwt.return (USet.mem po_filtered (w, _r))
-                          in
-                            if not in_po then Lwt.return_false else f _r
-                      in
-
                       let* has_dslwb =
-                        USet.async_exists (fun (w, r) -> check_dslwb w r) rf
+                        USet.async_exists
+                          (fun (w, r) -> dslwb structure events w r)
+                          rf
                       in
 
                       if has_dslwb then Lwt.return_none
@@ -671,8 +655,11 @@ let generate_executions (events : (int, event) Hashtbl.t)
   let po = structure.po in
 
   (* Build adjacency relations *)
-  let po_tree = build_tree structure.e structure.po in
-  let inv_po_tree = build_tree structure.e (URelation.inverse_relation po) in
+  let po_intransitive = URelation.transitive_reduction po in
+  let po_tree = build_tree structure.e po_intransitive in
+  let inv_po_tree =
+    build_tree structure.e (URelation.inverse_relation po_intransitive)
+  in
 
   (* Generate all paths through the control flow *)
   let paths = gen_paths events structure structure.restrict in
@@ -695,68 +682,33 @@ let generate_executions (events : (int, event) Hashtbl.t)
         )
   );
 
-  (* Check if write w is downward-closed same-location write before read r *)
-  let dslwb w _r =
-    let rec f r =
-      if w = r then false
-      else
-        let event_r = Hashtbl.find_opt events r in
-          match event_r with
-          | Some ev when ev.typ = Write -> (
-              let loc_r =
-                match get_loc events r with
-                | Some l -> l
-                | None -> EVar "?"
-              in
-              let loc__r = loce events _r _r in
-                (* Simple string comparison - in full version would use expoteq *)
-                Expr.to_string loc_r = Expr.to_string loc__r
-                ||
-                try
-                  let preds = Hashtbl.find inv_po_tree r in
-                    USet.for_all f preds
-                with Not_found -> true
-            )
-          | _ -> (
-              try
-                let preds = Hashtbl.find inv_po_tree r in
-                  USet.for_all f preds
-              with Not_found -> true
-            )
-    in
-      USet.mem po (w, _r) && f _r
-  in
-
   (* Compute initial RF relation: writes × reads that are not in po^-1 and not dslwb *)
   let inv_po = URelation.inverse_relation po in
   let w_with_init = USet.union write_events (USet.singleton 0) in
   let w_cross_r = URelation.cross w_with_init read_events in
-  let w_cross_r_minus_inv_po = USet.set_minus w_cross_r inv_po in
+  (* remove pairs where write po after read *)
+  (* TODO differs from JS which had w_cross_r_minus_inv_po *)
+  let w_cross_r_and_po = USet.intersection w_cross_r po in
 
   let* _rf_pairs =
     USet.async_filter
       (fun (w, r) ->
-        if dslwb w r then Lwt.return_false
-        else if w = 0 then Lwt.return_true
-        else
-          (* Check location equality *)
-          let loc_w =
-            match get_loc events w with
-            | Some l -> l
-            | None -> EVar "?"
-          in
-          let loc_r =
-            match get_loc events r with
-            | Some l -> l
-            | None -> EVar "?"
-          in
-            (* Simple comparison - full version would use expoteq *)
-            Lwt.return (Expr.to_string loc_w = Expr.to_string loc_r)
+        let r_restrict =
+          Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
+        in
+          match (get_loc events w, get_loc events r) with
+          | Some loc_w, Some loc_r ->
+              (* TODO use semantic equivalence relative to valres *)
+              let* loc_eq = Solver.expoteq ~state:r_restrict loc_w loc_r in
+                if loc_eq then dslwb structure events w r else Lwt.return false
+          | _ -> Lwt.return false
       )
-      w_cross_r_minus_inv_po
+      w_cross_r_and_po
   in
 
   let all_rf = _rf_pairs in
+
+  Logs.debug (fun m -> m "Initial RF pairs (%d)" (USet.size all_rf));
 
   (* Build justification map: write label -> list of justifications *)
   let justmap = Hashtbl.create 16 in
@@ -768,14 +720,18 @@ let generate_executions (events : (int, event) Hashtbl.t)
       )
       justs;
 
+    Logs.debug (fun m -> m "Built justification map");
+
     (* Build justcombos for all paths *)
     let* justcombos =
       build_justcombos events structure paths write_events read_events init_ppo
         statex justmap
     in
 
+    Logs.debug (fun m -> m "Built justification combinations for all paths");
+
     (* Enumerate over all RF sets and generate executions *)
-    let paths_with_uset = List.map (fun p -> { p with path = p.path }) paths in
+    let paths_with_uset = paths in
 
     (* Filter function for RF enumeration *)
     let rf_filter = USet.intersection (URelation.cross e_set e_set) po in
@@ -805,6 +761,8 @@ let generate_executions (events : (int, event) Hashtbl.t)
         )
         paths
     in
+
+    Logs.debug (fun m -> m "Generated all executions from paths");
 
     let flat_execs = List.concat all_executions in
 
@@ -886,9 +844,11 @@ let generate_executions (events : (int, event) Hashtbl.t)
         flat_execs
     in
 
-    Printf.printf "Generated %d executions before coherence filtering\n\n%s"
-      (List.length final_executions)
-      (String.concat "\n\n" (List.map to_string final_executions));
+    Logs.debug (fun m ->
+        m "Generated %d executions before coherence filtering\n\n%s"
+          (List.length final_executions)
+          (String.concat "\n\n" (List.map to_string final_executions))
+    );
 
     (* Filter through coherence checking *)
     let* coherent_execs =

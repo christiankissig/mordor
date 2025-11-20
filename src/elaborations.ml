@@ -350,22 +350,22 @@ let forward elab_ctx justs =
                     let fwdedges =
                       USet.values _fwd
                       |> List.map (fun edge ->
-                             ( edge,
-                               USet.union just.fwd (USet.singleton edge),
-                               just.we
-                             )
-                         )
+                          ( edge,
+                            USet.union just.fwd (USet.singleton edge),
+                            just.we
+                          )
+                      )
                     in
 
                     (* Create we edges with contexts *)
                     let weedges =
                       USet.values _we
                       |> List.map (fun edge ->
-                             ( edge,
-                               just.fwd,
-                               USet.union just.we (USet.singleton edge)
-                             )
-                         )
+                          ( edge,
+                            just.fwd,
+                            USet.union just.we (USet.singleton edge)
+                          )
+                      )
                     in
 
                     (* Filter both edge types *)
@@ -449,17 +449,17 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
       USet.intersection po_neighbors r_union_a
       |> USet.filter (fun ep -> not (USet.mem ppo (e, ep)))
       |> USet.map (fun ep ->
-             let remapped = Forwardingcontext.remap con ep in
-               match elab_ctx.val_fn remapped with
-               | Some (ESymbol s) when is_symbol s -> Some s
-               | _ -> None
-         )
+          let remapped = Forwardingcontext.remap con ep in
+            match elab_ctx.val_fn remapped with
+            | Some (ESymbol s) when is_symbol s -> Some s
+            | _ -> None
+      )
       |> USet.filter (fun x -> x <> None)
       |> USet.map (fun x ->
-             match x with
-             | Some s -> s
-             | None -> ""
-         )
+          match x with
+          | Some s -> s
+          | None -> ""
+      )
   in
 
   let syms_1 = gsyms e_1 in
@@ -599,10 +599,10 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
     List.filter (fun x -> x <> []) results
     |> List.concat
     |> List.filter (fun (_, _, r) ->
-           USet.for_all
-             (fun x -> USet.exists (fun (y0, y1) -> x = y0 || x = y1) r)
-             ness
-       )
+        USet.for_all
+          (fun x -> USet.exists (fun (y0, y1) -> x = y0 || x = y1) r)
+          ness
+    )
   in
 
   Logs.debug (fun m ->
