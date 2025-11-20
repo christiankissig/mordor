@@ -99,6 +99,11 @@ let dot (event : event) structure phi : symbolic_event_structure =
           USet.union structure.rlx_read_events (USet.singleton event.label)
         else structure.rlx_read_events
       );
+    fence_events =
+      ( if event.typ = Fence then
+          USet.union structure.fence_events (USet.singleton event.label)
+        else structure.fence_events
+      );
     branch_events =
       ( if event.typ = Branch then
           USet.union structure.branch_events (USet.singleton event.label)
@@ -137,6 +142,7 @@ let plus a b : symbolic_event_structure =
       read_events = USet.union a.read_events b.read_events;
       rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
       rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
+      fence_events = USet.union a.fence_events b.fence_events;
       branch_events = USet.union a.branch_events b.branch_events;
       malloc_events = USet.union a.malloc_events b.malloc_events;
       free_events = USet.union a.free_events b.free_events;
@@ -163,6 +169,7 @@ let cross a b : symbolic_event_structure =
       read_events = USet.union a.read_events b.read_events;
       rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
       rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
+      fence_events = USet.union a.fence_events b.fence_events;
       branch_events = USet.union a.branch_events b.branch_events;
       malloc_events = USet.union a.malloc_events b.malloc_events;
       free_events = USet.union a.free_events b.free_events;
@@ -187,6 +194,7 @@ let empty_structure () : symbolic_event_structure =
     read_events = USet.create ();
     rlx_write_events = USet.create ();
     rlx_read_events = USet.create ();
+    fence_events = USet.create ();
     branch_events = USet.create ();
     malloc_events = USet.create ();
     free_events = USet.create ();

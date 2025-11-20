@@ -63,6 +63,7 @@ let create_test_structure () =
       read_events = USet.create ();
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
+      fence_events = USet.create ();
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
@@ -101,7 +102,9 @@ let test_origin_from_reads () =
     let malloc_events = USet.create () in
     let all_events = USet.union read_events malloc_events in
 
-    let result = origin events all_events "s1" in
+    let structure = create_test_structure () in
+    let structure = { structure with read_events; malloc_events; events } in
+    let result = origin structure "s1" in
       match result with
       | Some e -> check int "should find event 2" 2 e
       | None -> fail "Expected to find origin event"
@@ -112,10 +115,12 @@ let test_origin_from_mallocs () =
     Hashtbl.add events 5 malloc_event;
 
     let read_events = USet.create () in
-    let malloc_events = USet.of_list [ 5 ] in
-    let all_events = USet.union read_events malloc_events in
+    let malloc_events = USet.singleton 5 in
+    let e = USet.union read_events malloc_events in
+    let structure = create_test_structure () in
+    let structure = { structure with e; read_events; malloc_events; events } in
 
-    let result = origin events all_events "s2" in
+    let result = origin structure "s2" in
       match result with
       | Some e -> check int "should find event 5" 5 e
       | None -> fail "Expected to find origin event"
@@ -125,8 +130,10 @@ let test_origin_not_found () =
   let read_events = USet.of_list [ 2; 4 ] in
   let malloc_events = USet.create () in
   let all_events = USet.union read_events malloc_events in
+  let structure = create_test_structure () in
+  let structure = { structure with read_events; malloc_events; events } in
 
-  let result = origin events all_events "nonexistent" in
+  let result = origin structure "nonexistent" in
     check (option int) "should not find origin" None result
 
 (** Test Path Generation *)
@@ -177,6 +184,7 @@ let test_gen_paths_with_branch () =
         read_events = USet.create ();
         rlx_write_events = USet.create ();
         rlx_read_events = USet.create ();
+        fence_events = USet.create ();
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
@@ -213,6 +221,7 @@ let test_gen_paths_empty_structure () =
       read_events = USet.create ();
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
+      fence_events = USet.create ();
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
@@ -249,6 +258,7 @@ let test_gen_paths_single_event () =
       read_events = USet.create ();
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
+      fence_events = USet.create ();
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
@@ -406,6 +416,7 @@ let test_gen_paths_with_missing_event () =
         read_events = USet.create ();
         rlx_write_events = USet.create ();
         rlx_read_events = USet.create ();
+        fence_events = USet.create ();
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
@@ -441,8 +452,10 @@ let test_origin_with_multiple_matches () =
       let read_events = USet.of_list [ 2; 4 ] in
       let malloc_events = USet.create () in
       let all_events = USet.union read_events malloc_events in
+      let structure = create_test_structure () in
+      let structure = { structure with read_events; malloc_events; events } in
 
-      let result = origin events all_events "s1" in
+      let result = origin structure "s1" in
         (* Should return one of the matching events *)
         match result with
         | Some e -> check bool "should find an event" true (e = 2 || e = 4)
@@ -475,6 +488,7 @@ let test_gen_paths_with_cycle () =
       read_events = USet.create ();
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
+      fence_events = USet.create ();
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
@@ -518,6 +532,7 @@ let test_path_generation_integration () =
       read_events = USet.create ();
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
+      fence_events = USet.create ();
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();

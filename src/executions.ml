@@ -38,9 +38,10 @@ let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
   EBinOp (loc1, "!=", loc2)
 
-let origin (events : (int, event) Hashtbl.t) (e_set : int uset) (s : string) =
-  let read_events = filter_events events e_set Read () in
-  let malloc_events = filter_events events e_set Malloc () in
+let origin structure (s : string) =
+  let events = structure.events in
+  let read_events = structure.read_events in
+  let malloc_events = structure.malloc_events in
 
   (* Try to find in reads *)
   let in_reads =
@@ -80,7 +81,7 @@ let origin (events : (int, event) Hashtbl.t) (e_set : int uset) (s : string) =
    prevents r reading from shadowed writes w.*)
 (* TODO optimize *)
 let dslwb structure events w r =
-  let write_events = filter_events events structure.e Write () in
+  let write_events = structure.write_events in
   let r_restrict =
     Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
   in
@@ -461,7 +462,7 @@ and create_freeze events (structure : symbolic_event_structure) path j_list
             (fun sym ->
               let malloc_events = USet.create () in
                 (* TODO *)
-                match origin events structure.e sym with
+                match origin structure sym with
                 | Some orig -> [ (orig, just.w.label) ]
                 | None -> []
             )
@@ -658,8 +659,8 @@ let generate_executions (events : (int, event) Hashtbl.t)
   );
 
   let e_set = structure.e in
-  let read_events = filter_events events e_set Read () in
-  let write_events = filter_events events e_set Write () in
+  let read_events = structure.read_events in
+  let write_events = structure.write_events in
   let po = structure.po in
 
   (* Build adjacency relations *)

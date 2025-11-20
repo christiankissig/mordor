@@ -36,7 +36,7 @@ val disjoint : expr * expr -> expr * expr -> expr
     @param malloc_events Set of malloc event labels
     @param symbol Symbol name to find
     @return [Some event_label] if found, [None] otherwise *)
-val origin : (int, event) Hashtbl.t -> int uset -> string -> int option
+val origin : symbolic_event_structure -> string -> int option
 
 (** {1 Path Generation} *)
 

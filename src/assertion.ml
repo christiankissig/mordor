@@ -168,10 +168,10 @@ let check_assertion (assertion : ir_assertion) executions structure events
 
         (* Helper to get pointers (events with locations that are not variables) *)
         let get_pointers () =
-          let read_events = filter_events events structure.e Read () in
-          let write_events = filter_events events structure.e Write () in
-          let free_events = filter_events events structure.e Free () in
-          let malloc_events = filter_events events structure.e Malloc () in
+          let read_events = structure.read_events in
+          let write_events = structure.write_events in
+          let free_events = structure.free_events in
+          let malloc_events = structure.malloc_events in
 
           let all_pointer_events =
             USet.union
@@ -416,6 +416,7 @@ let check_refinement _from_prog _to_prog =
       read_events = USet.create ();
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
+      fence_events = USet.create ();
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
@@ -458,6 +459,7 @@ let do_check_refinement _ast =
       read_events = USet.create ();
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
+      fence_events = USet.create ();
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();

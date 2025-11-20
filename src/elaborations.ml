@@ -100,7 +100,7 @@ let lifted_clear cache =
 let pre_justifications structure =
   let events = structure.events in
   let e_set = structure.e in
-  let write_events = Events.filter_events events e_set Write () in
+  let write_events = structure.write_events in
     USet.map
       (fun w ->
         try

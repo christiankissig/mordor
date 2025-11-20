@@ -1,7 +1,6 @@
 (** Mordor - Main dependency calculation algorithm *)
 
 open Context
-open Events
 open Executions
 open Expr
 open Lwt.Syntax
@@ -18,14 +17,14 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   let rmw = structure.rmw in
   let po = structure.po in
 
-  let branch_events = filter_events events e_set Branch () in
-  let read_events = filter_events events e_set Read () in
-  let write_events = filter_events events e_set Write () in
-  let rlx_read_events = filter_events events e_set Read ~mode:Relaxed () in
-  let rlx_write_events = filter_events events e_set Write ~mode:Relaxed () in
-  let fence_events = filter_events events e_set Fence () in
-  let malloc_events = filter_events events e_set Malloc () in
-  let free_events = filter_events events e_set Free () in
+  let branch_events = structure.branch_events in
+  let read_events = structure.read_events in
+  let write_events = structure.write_events in
+  let rlx_read_events = structure.rlx_read_events in
+  let rlx_write_events = structure.rlx_write_events in
+  let fence_events = structure.fence_events in
+  let malloc_events = structure.malloc_events in
+  let free_events = structure.free_events in
 
   (* Build tree for program order *)
   let build_tree rel =

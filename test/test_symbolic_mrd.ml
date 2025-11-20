@@ -726,6 +726,7 @@ module TestSymbolicEventStructure = struct
         read_events = USet.create ();
         rlx_write_events = USet.create ();
         rlx_read_events = USet.create ();
+        fence_events = USet.create ();
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
@@ -755,6 +756,7 @@ module TestSymbolicEventStructure = struct
         read_events = USet.create ();
         rlx_write_events = USet.create ();
         rlx_read_events = USet.create ();
+        fence_events = USet.create ();
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
@@ -786,6 +788,7 @@ module TestSymbolicEventStructure = struct
         read_events = USet.create ();
         rlx_write_events = USet.create ();
         rlx_read_events = USet.create ();
+        fence_events = USet.create ();
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
@@ -814,6 +817,7 @@ module TestSymbolicEventStructure = struct
         read_events = USet.create ();
         rlx_write_events = USet.create ();
         rlx_read_events = USet.create ();
+        fence_events = USet.create ();
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
@@ -886,7 +890,10 @@ module TestOrigin = struct
       let malloc_events = USet.create () in
       let all_events = USet.union read_events malloc_events in
 
-      let orig = origin events all_events "α" in
+      let structure = Interpret.empty_structure () in
+      let structure = { structure with read_events; malloc_events; events } in
+
+      let orig = origin structure "α" in
 
       ( match orig with
       | Some label -> check int "origin_read_label" 1 label
@@ -902,8 +909,10 @@ module TestOrigin = struct
       let read_events = USet.create () in
       let malloc_events = USet.singleton 1 in
       let all_events = USet.union read_events malloc_events in
+      let structure = Interpret.empty_structure () in
+      let structure = { structure with read_events; malloc_events; events } in
 
-      let orig = origin events all_events "π" in
+      let orig = origin structure "π" in
 
       ( match orig with
       | Some label -> check int "origin_alloc_label" 1 label
@@ -916,8 +925,10 @@ module TestOrigin = struct
     let read_events = USet.create () in
     let malloc_events = USet.create () in
     let all_events = USet.union read_events malloc_events in
+    let structure = Interpret.empty_structure () in
+    let structure = { structure with read_events; malloc_events; events } in
 
-    let orig = origin events all_events "ξ" in
+    let orig = origin structure "ξ" in
 
     check bool "origin_not_found" true (orig = None);
     Printf.printf "PASS: Origin function returns None for unknown symbol\n"
