@@ -10,7 +10,7 @@ open Uset
 (** Utils **)
 
 let to_string (exec : symbolic_execution) : string =
-  Printf.sprintf "{\nex_e=%s,\nrf=%s\ndp=%s\nppo=%s\n}"
+  Printf.sprintf "{\n\tex_e=%s,\n\trf=%s\n\tdp=%s\n\tppo=%s\n}"
     (String.concat ", " (List.map (Printf.sprintf "%d") (USet.values exec.ex_e)))
     (String.concat ", "
        (List.map
