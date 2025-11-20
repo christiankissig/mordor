@@ -102,7 +102,8 @@ let test_empty_structure () =
 let test_dot () =
   let s = empty_structure () in
   let s' = { s with e = USet.of_list [ 2; 3 ] } in
-  let result = dot 1 s' [] in
+  let evt = Event.create Read 1 () in
+  let result = dot evt s' [] in
     Alcotest.(check bool) "event 1 in result" true (USet.mem result.e 1);
     Alcotest.(check bool) "event 2 in result" true (USet.mem result.e 2);
     Alcotest.(check bool) "event 3 in result" true (USet.mem result.e 3);

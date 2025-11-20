@@ -578,6 +578,14 @@ and build_justcombos events structure paths write_events read_events init_ppo
   let* justcombos_list =
     Lwt_list.map_p
       (fun path ->
+        Logs.debug (fun m ->
+            m "Building justification combinations for path [%s]"
+              (String.concat ", "
+                 (List.map (Printf.sprintf "%d")
+                    (List.sort compare (USet.values path.path))
+                 )
+              )
+        );
         (* Filter path to only write events *)
         let path_writes =
           USet.filter (fun e -> USet.mem write_events e) path.path

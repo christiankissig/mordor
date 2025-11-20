@@ -401,6 +401,7 @@ let check_refinement _from_prog _to_prog =
   let dummy_structure =
     {
       e = USet.create ();
+      events = Hashtbl.create 256;
       po = USet.create ();
       po_iter = USet.create ();
       rmw = USet.create ();
@@ -435,6 +436,7 @@ let do_check_refinement _ast =
   let dummy_structure =
     {
       e = USet.create ();
+      events = Hashtbl.create 256;
       po = USet.create ();
       po_iter = USet.create ();
       rmw = USet.create ();

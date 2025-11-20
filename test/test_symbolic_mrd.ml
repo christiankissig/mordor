@@ -711,6 +711,7 @@ module TestSymbolicEventStructure = struct
     let ses =
       {
         e = USet.create ();
+        events = Hashtbl.create 10;
         po = USet.create ();
         po_iter = USet.create ();
         rmw = USet.create ();
@@ -732,6 +733,7 @@ module TestSymbolicEventStructure = struct
     let ses =
       {
         e = USet.of_list [ 1; 2; 3 ];
+        events = Hashtbl.create 10;
         po = USet.of_list [ (1, 2); (2, 3) ];
         po_iter = USet.create ();
         rmw = USet.create ();
@@ -754,6 +756,7 @@ module TestSymbolicEventStructure = struct
     let ses =
       {
         e = USet.of_list [ 1; 2; 3; 4 ];
+        events = Hashtbl.create 10;
         po = USet.create ();
         po_iter = USet.create ();
         rmw = USet.of_list [ (1, 2); (3, 4) ];
@@ -775,6 +778,7 @@ module TestSymbolicEventStructure = struct
     let ses =
       {
         e = USet.create ();
+        events = Hashtbl.create 10;
         po = USet.create ();
         po_iter = USet.create ();
         rmw = USet.create ();

@@ -129,6 +129,7 @@ type event = {
 (** Symbolic Event Structures *)
 type symbolic_event_structure = {
   e : int uset; (* Set of event IDs *)
+  events : (int, event) Hashtbl.t; (* Mapping from event IDs to events *)
   po : (int * int) uset; (* Program order relation *)
   po_iter : (int * int) uset; (* Program order across loop iterations *)
   rmw : (int * int) uset; (* Read-modify-write pairs *)

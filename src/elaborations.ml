@@ -6,8 +6,6 @@ open Uset
 
 type context = {
   structure : symbolic_event_structure;
-  events : (int, event) Hashtbl.t;
-  e_set : int USet.t;
   branch_events : int USet.t;
   read_events : int USet.t;
   write_events : int USet.t;
@@ -34,7 +32,7 @@ let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
   in
   let immediate_ppo = URelation.transitive_reduction ppo_result in
   let inversed = URelation.inverse_relation immediate_ppo in
-  let tree = build_tree elab_ctx.e_set inversed in
+  let tree = build_tree elab_ctx.structure.e inversed in
     Lwt.return (fun e -> Hashtbl.find tree e)
 
 (** Lifted cache for relations with forwarding context *)
@@ -107,7 +105,9 @@ let lifted_clear cache =
   USet.clear cache.to_ |> ignore
 
 (* calculate pre-justifications for write events *)
-let pre_justifications structure events e_set =
+let pre_justifications structure =
+  let events = structure.events in
+  let e_set = structure.e in
   let write_events = Events.filter_events events e_set Write () in
     USet.map
       (fun w ->
@@ -241,8 +241,8 @@ let value_assign elab_ctx justs =
 
 let fprime elab_ctx pred_fn ppo_loc just e1 e2 =
   if USet.mem ppo_loc (e1, e2) && USet.mem (pred_fn e2) e1 then
-    let loc1 = Events.get_loc elab_ctx.events e1 in
-    let loc2 = Events.get_loc elab_ctx.events e2 in
+    let loc1 = Events.get_loc elab_ctx.structure.events e1 in
+    let loc2 = Events.get_loc elab_ctx.structure.events e2 in
       match (loc1, loc2) with
       | Some l1, Some l2 -> Solver.exeq ~state:just.p l1 l2
       | _ -> Lwt.return false
@@ -499,7 +499,7 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
 
   (* Get branch predicate *)
   let bp_event =
-    Hashtbl.find elab_ctx.events (elab_ctx.conflicting_branch e_1 e_2)
+    Hashtbl.find elab_ctx.structure.events (elab_ctx.conflicting_branch e_1 e_2)
   in
   let bp =
     match bp_event.cond with
@@ -610,13 +610,15 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
   );
   Lwt.return out
 
-let conflict (elab_ctx : context) events =
+let conflict (elab_ctx : context) =
+  let events = elab_ctx.structure.e in
+
   Logs.debug (fun m ->
       m "Computing conflicts among %d events..." (USet.size events)
   );
 
   (* Build po tree *)
-  let po_tree = build_tree elab_ctx.e_set elab_ctx.po in
+  let po_tree = build_tree elab_ctx.structure.e elab_ctx.structure.po in
 
   (* Semicolon composition *)
   let semicolon r1 r2 =
@@ -634,7 +636,7 @@ let conflict (elab_ctx : context) events =
   (* Compute all successors of x in po (including x) *)
   let it x =
     let singleton = USet.singleton (x, x) in
-    let composed = semicolon singleton elab_ctx.po in
+    let composed = semicolon singleton elab_ctx.structure.po in
     let successors = USet.map (fun (_, y) -> y) composed in
       USet.add successors x
   in
@@ -787,11 +789,11 @@ let rec relabel_equivalent elab_ctx con statex p_1 p_2 relabelPairs _pred
     label_1 label_2 =
   (* Get events from labels *)
   let e_1 =
-    try Hashtbl.find elab_ctx.events label_1
+    try Hashtbl.find elab_ctx.structure.events label_1
     with Not_found -> failwith ("Event not found: " ^ string_of_int label_1)
   in
   let e_2 =
-    try Hashtbl.find elab_ctx.events label_2
+    try Hashtbl.find elab_ctx.structure.events label_2
     with Not_found -> failwith ("Event not found: " ^ string_of_int label_2)
   in
 
@@ -885,7 +887,7 @@ let lift elab_ctx justs =
     let w_cross_w =
       URelation.cross elab_ctx.write_events elab_ctx.write_events
     in
-    let conflict_set = conflict elab_ctx elab_ctx.e_set in
+    let conflict_set = conflict elab_ctx in
     let liftpairs = USet.intersection w_cross_w conflict_set in
 
     (* Create pairs of justifications from liftpairs *)

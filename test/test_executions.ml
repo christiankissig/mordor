@@ -42,11 +42,13 @@ let create_test_events () =
 
 let create_test_structure () =
   let e = USet.of_list [ 1; 2; 3; 4 ] in
+  let events = create_test_events () in
   let po = USet.of_list [ (1, 2); (2, 3); (3, 4) ] in
   let restrict = Hashtbl.create 4 in
   let cas_groups = Hashtbl.create 4 in
     {
       e;
+      events;
       po;
       po_iter = USet.create ();
       rmw = USet.create ();
@@ -146,12 +148,14 @@ let test_gen_paths_with_branch () =
     Hashtbl.add events 5 branch_event;
 
     let e = USet.of_list [ 1; 2; 3; 4; 5 ] in
+    let events = create_test_events () in
     let po = USet.of_list [ (1, 2); (2, 5); (5, 3); (5, 4) ] in
     let restrict = Hashtbl.create 4 in
     let cas_groups = Hashtbl.create 4 in
     let structure =
       {
         e;
+        events;
         po;
         po_iter = USet.create ();
         rmw = USet.create ();
@@ -180,6 +184,7 @@ let test_gen_paths_empty_structure () =
   let structure =
     {
       e;
+      events;
       po;
       po_iter = USet.create ();
       rmw = USet.create ();
@@ -208,6 +213,7 @@ let test_gen_paths_single_event () =
   let structure =
     {
       e;
+      events;
       po;
       po_iter = USet.create ();
       rmw = USet.create ();
@@ -350,12 +356,14 @@ let test_gen_paths_with_missing_event () =
 
     (* Event 2 is referenced in PO but doesn't exist *)
     let e = USet.of_list [ 1; 2 ] in
+    let events = create_test_events () in
     let po = USet.of_list [ (1, 2) ] in
     let restrict = Hashtbl.create 4 in
     let cas_groups = Hashtbl.create 4 in
     let structure =
       {
         e;
+        events;
         po;
         po_iter = USet.create ();
         rmw = USet.create ();
@@ -410,12 +418,14 @@ let test_gen_paths_with_cycle () =
 
   (* Create a cycle in PO (which shouldn't normally happen, but test handling) *)
   let e = USet.of_list [ 1; 2; 3 ] in
+  let events = create_test_events () in
   let po = USet.of_list [ (1, 2); (2, 3); (3, 1) ] in
   let restrict = Hashtbl.create 4 in
   let cas_groups = Hashtbl.create 4 in
   let structure =
     {
       e;
+      events;
       po;
       po_iter = USet.create ();
       rmw = USet.create ();
@@ -444,12 +454,14 @@ let test_path_generation_integration () =
 
   (* Create a more complex structure with multiple paths *)
   let e = USet.of_list [ 1; 2; 3; 4 ] in
+  let events = create_test_events () in
   let po = USet.of_list [ (1, 2); (1, 3); (2, 4); (3, 4) ] in
   let restrict = Hashtbl.create 4 in
   let cas_groups = Hashtbl.create 4 in
   let structure =
     {
       e;
+      events;
       po;
       po_iter = USet.create ();
       rmw = USet.create ();

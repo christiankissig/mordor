@@ -100,7 +100,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   in
 
   (* Initialize justifications for writes *)
-  let pre_justs = Elaborations.pre_justifications structure events e_set in
+  let pre_justs = Elaborations.pre_justifications structure in
 
   Logs.debug (fun m ->
       m "Pre-justifications for event\n\t%s"
@@ -123,11 +123,9 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   let fj = USet.union structure.fj init_ppo in
 
   (* Build context for elaborations *)
-  let elab_ctx =
+  let elab_ctx : Elaborations.context =
     {
-      Elaborations.structure;
-      events;
-      e_set;
+      structure;
       branch_events;
       read_events;
       write_events;

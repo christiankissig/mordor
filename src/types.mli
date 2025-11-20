@@ -124,6 +124,7 @@ type event = {
 (** Symbolic event structure representing program execution *)
 type symbolic_event_structure = {
   e : int uset;
+  events : (int, event) Hashtbl.t;
   po : (int * int) uset;
   po_iter : (int * int) uset;
   rmw : (int * int) uset;

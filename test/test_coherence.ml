@@ -234,6 +234,7 @@ let test_imm_coherent_simple () =
   let (structure : symbolic_event_structure) =
     {
       e = ex_e;
+      events;
       po;
       po_iter = USet.create ();
       restrict;
@@ -283,6 +284,7 @@ let test_rc11_coherent_simple () =
   let structure =
     {
       e = ex_e;
+      events;
       po;
       po_iter = USet.create ();
       restrict;
@@ -338,6 +340,7 @@ let test_imm_coherent_rmw () =
   let structure =
     {
       e = ex_e;
+      events;
       po;
       po_iter = USet.create ();
       restrict;
@@ -383,6 +386,7 @@ let test_cache_types () =
   let structure =
     {
       e = ex_e;
+      events;
       po;
       po_iter = USet.create ();
       restrict;
