@@ -6,6 +6,9 @@ open Expr
 open Trees
 open Types
 open Utils
+open Lwt.Syntax
+
+let run_lwt f = Lwt_main.run (f ())
 
 (** Test data providers *)
 
@@ -207,38 +210,44 @@ let test_path_generation (name, e, po, validator) () =
 (** Justification tests *)
 
 let test_choose_justifications () =
-  let test_cases =
-    [
-      ( "empty path",
-        Hashtbl.create 4,
-        USet.create (),
-        fun result -> List.length result = 1 && result = [ [] ]
-      );
-      ( "no justifications",
-        Hashtbl.create 4,
-        USet.of_list [ 1 ],
-        fun result -> List.length result = 0
-      );
-      ( "with justification",
-        (let justmap = Hashtbl.create 4 in
-         let just =
-           TestData.make_justification (TestData.create_event 1 Write ())
-         in
-           Hashtbl.add justmap 1 [ just ];
-           justmap
-        ),
-        USet.of_list [ 1 ],
-        fun result -> List.length result > 0
-      );
-    ]
-  in
+  run_lwt (fun () ->
+      let test_cases =
+        [
+          ( "empty path",
+            Hashtbl.create 4,
+            USet.create (),
+            fun result -> List.length result = 1 && result = [ [] ]
+          );
+          ( "no justifications",
+            Hashtbl.create 4,
+            USet.of_list [ 1 ],
+            fun result -> List.length result = 0
+          );
+          ( "with justification",
+            (let justmap = Hashtbl.create 4 in
+             let just =
+               TestData.make_justification (TestData.create_event 1 Write ())
+             in
+               Hashtbl.add justmap 1 [ just ];
+               justmap
+            ),
+            USet.of_list [ 1 ],
+            fun result -> List.length result > 0
+          );
+        ]
+      in
 
-  List.iter
-    (fun (name, justmap, path_events, validator) ->
-      let result = choose justmap path_events in
-        check bool name true (validator result)
-    )
-    test_cases
+      Lwt_list.iter_s
+        (fun (name, justmap, path_events, validator) ->
+          let* result =
+            choose ~justmap ~path_events ~config:default_choose_config
+          in
+          let validate_result = validator result in
+            check bool name true validate_result;
+            Lwt.return_unit
+        )
+        test_cases
+  )
 
 (** Type construction tests *)
 

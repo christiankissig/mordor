@@ -248,52 +248,158 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
 
 (** Freezing **)
 
-(** Choose compatible justifications for a path *)
-let choose justmap path_events =
+(** Choose compatible justifications for a path with configurable pruning *)
+type choose_config = {
+  check_just_compatible :
+    justification -> justification list -> (int * int) uset -> bool Lwt.t;
+  check_partial_combo : justification list -> bool Lwt.t;
+  check_final_combo : justification list -> bool Lwt.t;
+}
+
+(** Default configuration with no additional checks *)
+let default_choose_config =
+  {
+    check_just_compatible = (fun _just _items _fwdwe -> Lwt.return_true);
+    check_partial_combo = (fun _items -> Lwt.return_true);
+    check_final_combo = (fun _items -> Lwt.return_true);
+  }
+
+(** Choose compatible justifications using bottom-up dynamic programming *)
+let choose ~(justmap : (int, justification list) Hashtbl.t)
+    ~(path_events : int uset) ~(config : choose_config) :
+    justification list list Lwt.t =
+  let* _ = Lwt.return_unit in
+
   let path_list = USet.values path_events in
 
-  let rec choose_rec list i items fwdwe =
-    if i = 0 then [ items ]
-    else
-      let i = i - 1 in
+  (* Statistics *)
+  let total_tested = ref 0 in
+  let total_pruned = ref 0 in
 
-      (* Skip if already covered by fwdwe *)
-      if List.length items > 0 && USet.mem (pi_2 fwdwe) list.(i) then
-        choose_rec list i items fwdwe
-      else
-        (* Get justifications for this event *)
-        let justs_for_event =
-          try Hashtbl.find justmap list.(i) with Not_found -> []
-        in
+  (* Core compatibility check: no fwd/we conflicts *)
+  let is_structurally_compatible just fwdwe =
+    let x = USet.union just.fwd just.we in
+    let pi1_x = pi_1 x in
+    let pi2_x = pi_2 x in
+    let pi1_fwdwe = pi_1 fwdwe in
+    let pi2_fwdwe = pi_2 fwdwe in
 
-        (* Filter compatible justifications *)
-        let compatible =
-          List.filter
-            (fun just ->
-              let x = USet.union just.fwd just.we in
-              (* Check no conflicts with existing fwdwe *)
-              let pi1_x = pi_1 x in
-              let pi2_x = pi_2 x in
-              let pi1_fwdwe = pi_1 fwdwe in
-              let pi2_fwdwe = pi_2 fwdwe in
-
-              USet.size (USet.intersection pi1_x pi2_fwdwe) = 0
-              && USet.size (USet.intersection pi2_x pi1_fwdwe) = 0
-            )
-            justs_for_event
-        in
-
-        (* Recursively choose for each compatible justification *)
-        List.concat_map
-          (fun just ->
-            let new_fwdwe = USet.union fwdwe (USet.union just.fwd just.we) in
-              choose_rec list i (just :: items) new_fwdwe
-          )
-          compatible
+    USet.size (USet.intersection pi1_x pi2_fwdwe) = 0
+    && USet.size (USet.intersection pi2_x pi1_fwdwe) = 0
   in
 
-  choose_rec (Array.of_list path_list) (List.length path_list) []
-    (USet.create ())
+  (* Compute fwdwe for a combination *)
+  let compute_fwdwe items =
+    List.fold_left
+      (fun acc j -> USet.union acc (USet.union j.fwd j.we))
+      (USet.create ()) items
+  in
+
+  (* Process events bottom-up, building valid combinations incrementally *)
+  let rec build_combinations events partial_combos =
+    match events with
+    | [] ->
+        (* Base case: validate all final combinations *)
+        Lwt_list.filter_p config.check_final_combo partial_combos
+    | event :: remaining_events ->
+        Logs.debug (fun m ->
+            m "Processing event %d with %d partial combinations" event
+              (List.length partial_combos)
+        );
+
+        (* Get justifications for this event *)
+        let justs_for_event =
+          try Hashtbl.find justmap event with Not_found -> []
+        in
+
+        Logs.debug (fun m ->
+            m "  Event %d has %d justifications" event
+              (List.length justs_for_event)
+        );
+
+        (* Skip if already covered by any partial combo *)
+        let partial_combos_filtered =
+          List.filter
+            (fun combo ->
+              let fwdwe = compute_fwdwe combo in
+                not (USet.mem (pi_2 fwdwe) event)
+            )
+            partial_combos
+        in
+
+        if List.length partial_combos_filtered < List.length partial_combos then
+          Logs.debug (fun m ->
+              m "  Skipped %d combinations (event already covered)"
+                (List.length partial_combos
+                - List.length partial_combos_filtered
+                )
+          );
+
+        (* For each partial combination, try to extend with each justification *)
+        let* new_combos_nested =
+          Lwt_list.map_p
+            (fun combo ->
+              let fwdwe = compute_fwdwe combo in
+
+              (* Filter justifications compatible with this partial combo *)
+              let* compatible_justs =
+                Lwt_list.filter_p
+                  (fun just ->
+                    incr total_tested;
+
+                    (* Check structural compatibility *)
+                    if not (is_structurally_compatible just fwdwe) then (
+                      incr total_pruned;
+                      Lwt.return_false
+                    )
+                    else
+                      (* Check custom compatibility *)
+                      let* custom_compat =
+                        config.check_just_compatible just combo fwdwe
+                      in
+                        if not custom_compat then (
+                          incr total_pruned;
+                          Lwt.return_false
+                        )
+                        else
+                          (* Check partial combo validity *)
+                          let new_combo = just :: combo in
+                            let* partial_valid =
+                              config.check_partial_combo new_combo
+                            in
+                              if not partial_valid then incr total_pruned;
+                              Lwt.return partial_valid
+                  )
+                  justs_for_event
+              in
+
+              (* Create new combinations *)
+              Lwt.return (List.map (fun just -> just :: combo) compatible_justs)
+            )
+            partial_combos_filtered
+        in
+
+        (* Flatten the nested list *)
+        let new_combos = List.concat new_combos_nested in
+
+        Logs.debug (fun m ->
+            m "  Generated %d new combinations (tested=%d, pruned=%d)"
+              (List.length new_combos) !total_tested !total_pruned
+        );
+
+        (* Continue with remaining events *)
+        build_combinations remaining_events new_combos
+  in
+
+  (* Start with empty combination *)
+  let* result = build_combinations path_list [ [] ] in
+
+  Logs.info (fun m ->
+      m "Choose completed: %d valid combinations (tested=%d, pruned=%d)"
+        (List.length result) !total_tested !total_pruned
+  );
+
+  Lwt.return result
 
 (** Type for a freeze function - validates an RF set for a justification
     combination *)
@@ -685,8 +791,39 @@ and build_justcombos structure paths init_ppo statex justmap =
           (* Filter path to only write events *)
           let path_writes = USet.intersection path.path write_events in
 
+          Logs.debug (fun m ->
+              m "Path has %d write events" (USet.size path_writes)
+          );
+
           (* Get compatible justification combinations *)
-          let js_combinations = choose justmap path_writes in
+          let* js_combinations =
+            choose ~justmap ~path_events:path_writes
+              ~config:
+                {
+                  check_just_compatible =
+                    (fun just items fwdwe ->
+                      (* E.g., check location constraints *)
+                      Lwt.return_true
+                    );
+                  check_partial_combo =
+                    (fun (items : justification list) ->
+                      (* Check satisfiability of predicates so far *)
+                      let preds =
+                        List.concat_map (fun (j : justification) -> j.p) items
+                      in
+                        Solver.is_sat preds
+                    );
+                  check_final_combo =
+                    (fun items ->
+                      (* Final checks before returning *)
+                      let all_preds =
+                        List.concat_map (fun (j : justification) -> j.p) items
+                      in
+                        let* sat = Solver.is_sat all_preds in
+                          if sat then Lwt.return_true else Lwt.return_false
+                    );
+                }
+          in
 
           (* For each combination, create remapped justifications *)
           let* freeze_fns =

@@ -68,8 +68,20 @@ val gen_paths :
     @param justmap Map from event labels to lists of justifications
     @param path_events Set of event labels in the path
     @return List of compatible justification combinations *)
+type choose_config = {
+  check_just_compatible :
+    justification -> justification list -> (int * int) uset -> bool Lwt.t;
+  check_partial_combo : justification list -> bool Lwt.t;
+  check_final_combo : justification list -> bool Lwt.t;
+}
+
+val default_choose_config : choose_config
+
 val choose :
-  (int, justification list) Hashtbl.t -> int uset -> justification list list
+  justmap:(int, Types.justification list) Hashtbl.t ->
+  path_events:int Uset.USet.t ->
+  config:choose_config ->
+  Types.justification list list Lwt.t
 
 (** {1 RF Validation} *)
 
