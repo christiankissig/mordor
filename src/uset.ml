@@ -221,8 +221,17 @@ module URelation : sig
   val transitive_reduction : 'a t -> 'a t
   val acyclic : 'a t -> bool
   val is_irreflexive : 'a t -> bool
+  val is_function : 'a t -> bool
+  val pi_1 : 'a t -> 'a USet.t
+  val pi_2 : 'a t -> 'a USet.t
 end = struct
   type 'a t = ('a * 'a) USet.t
+
+  (** Project first elements from relation *)
+  let pi_1 rel = USet.map (fun (x, _) -> x) rel
+
+  (** Project second elements from relation *)
+  let pi_2 rel = USet.map (fun (_, y) -> y) rel
 
   (** Cartesian product *)
   let cross s1 s2 =
@@ -284,4 +293,11 @@ end = struct
 
   (** Check if irreflexive *)
   let is_irreflexive s = USet.for_all (fun (a, b) -> not (a = b)) s
+
+  (** Check if relation is a function, i.e. uniquely maps each element in domain
+      to at most one element in codomain *)
+  let is_function s =
+    USet.for_all
+      (fun a -> USet.size (USet.filter (fun (x, _) -> x = a) s) <= 1)
+      (pi_1 s)
 end

@@ -59,30 +59,6 @@ val gen_paths :
 
 (** {1 Justification Selection} *)
 
-(** [choose justmap path_events] selects compatible justifications for events in
-    a path.
-
-    Chooses one justification per write event such that the forwarding (fwd) and
-    write-elision (we) relations are compatible (no conflicts).
-
-    @param justmap Map from event labels to lists of justifications
-    @param path_events Set of event labels in the path
-    @return List of compatible justification combinations *)
-type choose_config = {
-  check_just_compatible :
-    justification -> justification list -> (int * int) uset -> bool Lwt.t;
-  check_partial_combo : justification list -> bool Lwt.t;
-  check_final_combo : justification list -> bool Lwt.t;
-}
-
-val default_choose_config : choose_config
-
-val choose :
-  justmap:(int, Types.justification list) Hashtbl.t ->
-  path_events:int Uset.USet.t ->
-  config:choose_config ->
-  Types.justification list list Lwt.t
-
 (** {1 RF Validation} *)
 
 (** [validate_rf events structure e elided elided_rf ppo_loc ppo_loc_tree dp

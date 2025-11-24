@@ -7,6 +7,7 @@
   (:standard -g))
  ; Add debugging information
  (modules
+  test_algorithms
   test_mordor
   test_solver
   test_types

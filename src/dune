@@ -8,6 +8,7 @@
  (name mordor_lib)
  (wrapped false)
  (modules
+  algorithms
   assertion
   ast
   coherence
@@ -31,8 +32,7 @@
   symmrd
   trees
   types
-  uset
-  utils)
+  uset)
  (flags
   (:standard -g -w -26-27))
  (libraries core ocamlgraph logs logs.fmt lwt lwt.unix z3 zarith)
