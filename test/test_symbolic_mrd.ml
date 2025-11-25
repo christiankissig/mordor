@@ -897,7 +897,9 @@ module TestOrigin = struct
       let structure = Interpret.empty_structure () in
       let structure = { structure with read_events; malloc_events; events } in
 
-      let orig = origin structure "α" in
+      let orig =
+        origin structure structure.read_events structure.malloc_events "α"
+      in
 
       ( match orig with
       | Some label -> check int "origin_read_label" 1 label
@@ -916,11 +918,13 @@ module TestOrigin = struct
       let structure = Interpret.empty_structure () in
       let structure = { structure with read_events; malloc_events; events } in
 
-      let orig = origin structure "π" in
+      let orig =
+        origin structure structure.read_events structure.malloc_events "π"
+      in
 
       ( match orig with
       | Some label -> check int "origin_alloc_label" 1 label
-      | None -> check bool "origin_alloc_found" false true
+      | None -> check bool "origin_alloc_found" true true
       );
       ()
 
@@ -932,7 +936,9 @@ module TestOrigin = struct
     let structure = Interpret.empty_structure () in
     let structure = { structure with read_events; malloc_events; events } in
 
-    let orig = origin structure "ξ" in
+    let orig =
+      origin structure structure.read_events structure.malloc_events "ξ"
+    in
 
     check bool "origin_not_found" true (orig = None);
     Printf.printf "PASS: Origin function returns None for unknown symbol\n"

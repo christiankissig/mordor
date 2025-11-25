@@ -171,7 +171,9 @@ let test_origin (name, setup) () =
   let e = USet.union read_events malloc_events in
   let structure = TestData.make_structure ~events ~e () in
   let structure = { structure with read_events; malloc_events } in
-  let result = origin structure symbol in
+  let result =
+    origin structure structure.read_events structure.malloc_events symbol
+  in
     match expected with
     | Some exp_id -> (
         match result with

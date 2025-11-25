@@ -38,43 +38,34 @@ let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
   EBinOp (loc1, "!=", loc2)
 
-let origin structure (s : string) =
-  let events = structure.events in
-  let read_events = structure.read_events in
-  let malloc_events = structure.malloc_events in
-
+(* Find the (first) origin of a symbol in reads or mallocs *)
+let origin structure read_events malloc_events (s : string) =
   (* Try to find in reads *)
-  let in_reads =
-    USet.filter
+  let in_read =
+    USet.find
       (fun x ->
-        match get_val events x with
+        match get_val structure.events x with
         | Some (ESymbol sym) -> sym = s
         | _ -> false
       )
       read_events
   in
-  let in_reads_vals = USet.values in_reads in
-    match in_reads_vals with
-    | e :: _ -> Some e
-    | [] -> (
-        (* Try to find in mallocs by symbol *)
-        let in_mallocs =
-          USet.filter
+    match in_read with
+    | Some e -> Some e
+    | None -> (
+        (* try to find in mallocs *)
+        let in_malloc =
+          USet.find
             (fun x ->
-              try
-                let event = Hashtbl.find events x in
-                  match event.rval with
-                  (* Changed from event.id *)
-                  | Some (VSymbol sym) -> sym = s
-                  | _ -> false
-              with Not_found -> false
+              match get_val structure.events x with
+              | Some (ESymbol sym) -> sym = s
+              | _ -> false
             )
             malloc_events
         in
-        let in_mallocs_vals = USet.values in_mallocs in
-          match in_mallocs_vals with
-          | e :: _ -> Some e
-          | [] -> None
+          match in_malloc with
+          | Some e -> Some e
+          | None -> None
       )
 
 (* Check if write w is downward-closed same-location write before read r. This
@@ -295,7 +286,7 @@ let validate_rf (structure : symbolic_event_structure) e elided elided_rf
     ppo_loc ppo_loc_tree dp dp_ppo j_list (pp : expr list) p_combined rf =
   let* _ = Lwt.return_unit in
 
-  let po = USet.intersection structure.po (URelation.identity_relation e) in
+  let po = USet.intersection structure.po (URelation.cross e e) in
   let read_events = USet.intersection structure.read_events e in
   let write_events = USet.intersection structure.write_events e in
 
@@ -452,13 +443,13 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
     statex =
   let* _ = Lwt.return_unit in
 
-  let events = structure.events in
-  let read_events = structure.read_events in
-  let write_events = structure.write_events in
-
   let e = path.path in
   let e_squared = URelation.cross e e in
   let pp = path.p in
+
+  let read_events = USet.intersection structure.read_events e in
+  let write_events = USet.intersection structure.write_events e in
+  let malloc_events = USet.intersection structure.malloc_events e in
 
   Logs.debug (fun m ->
       m "Creating freeze function for justification combination with %d justs"
@@ -466,23 +457,21 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
   );
 
   (* Compute dependency relation *)
-  let dp_pairs =
+  let dp =
     List.concat_map
       (fun just ->
         let syms = USet.values just.d in
           List.concat_map
             (fun sym ->
-              let malloc_events = USet.create () in
-                (* TODO *)
-                match origin structure sym with
-                | Some orig -> [ (orig, just.w.label) ]
-                | None -> []
+              match origin structure read_events malloc_events sym with
+              | Some orig -> [ (orig, just.w.label) ]
+              | None -> []
             )
             syms
       )
       j_list
+    |> USet.of_list
   in
-  let dp = USet.of_list dp_pairs in
 
   Logs.debug (fun m -> m "  Created dp with %d pairs" (USet.size dp));
 
@@ -528,91 +517,90 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
   );
 
   (* Check if predicates are satisfiable *)
-  let solver = Solver.create p_combined in
-    let* sat = Solver.check solver in
-      match sat with
-      | Some false ->
-          Logs.debug (fun m -> m "  Predicates unsatisfiable");
-          Lwt.return_none
-      | _ ->
-          Logs.debug (fun m -> m "  Predicates satisfiable");
-          (* Check that all writes in E are either elided or have justifications *)
-          let e_writes = USet.intersection e write_events in
-          let check_3 =
-            USet.for_all
-              (fun w ->
-                USet.mem elided w || List.exists (fun j -> j.w.label = w) j_list
-              )
-              e_writes
-          in
-
-          if not check_3 then Lwt.return_none
-          else (
-            Logs.debug (fun m ->
-                m "  All writes in E are either elided or justified"
-            );
-            (* Compute PPO for each justification *)
-            let* ppos =
-              Lwt_list.map_p
-                (fun just ->
-                  let just_con =
-                    Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
-                  in
-                    let* ppo_j = Forwardingcontext.ppo just_con just.p in
-
-                    (* Intersect with po pairs ending at this write *)
-                    let po_to_w =
-                      USet.filter (fun (_, t) -> t = just.w.label) structure.po
-                    in
-                    let po_to_w_squared =
-                      URelation.cross (URelation.pi_1 po_to_w)
-                        (URelation.pi_1 po_to_w)
-                    in
-                      Lwt.return (USet.intersection ppo_j po_to_w_squared)
-                )
-                j_list
-            in
-
-            let ppo = List.fold_left USet.union (USet.create ()) ppos in
-            let ppo = USet.union ppo (Forwardingcontext.ppo_sync con) in
-
-            (* Compute ppo_loc *)
-            let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
-            let ppo_loc = USet.union ppo_loc_base init_ppo in
-
-            (* Filter out read-read pairs *)
-            let ppo_loc =
-              USet.filter
-                (fun (a, b) ->
-                  not (USet.mem read_events a && USet.mem read_events b)
-                )
-                ppo_loc
-            in
-
-            (* Compute transitive closure *)
-            let ppo_loc = URelation.transitive_closure ppo_loc in
-            let ppo_loc_tree = build_tree e ppo_loc in
-
-            Logs.debug (fun m ->
-                m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
-                  (USet.size ppo) (USet.size ppo_loc)
-            );
-
-            (* Combine dp and ppo *)
-            let dp_ppo = USet.union dp ppo in
-
-            (* Return the freeze validation function *)
-            let freeze_fn rf =
-              validate_rf
-                (structure : symbolic_event_structure)
-                e elided elided_rf ppo_loc ppo_loc_tree dp dp_ppo j_list pp
-                p_combined rf
-            in
-
-            Logs.debug (fun m -> m "  Created freeze function");
-
-            Lwt.return_some freeze_fn
+  let* p_combined_sat = Solver.is_sat p_combined in
+    if not p_combined_sat then (
+      Logs.debug (fun m -> m "  Predicates unsatisfiable");
+      Lwt.return_none
+    )
+    else (
+      Logs.debug (fun m -> m "  Predicates satisfiable");
+      (* Check that all writes in E are either elided or have justifications *)
+      let check_3 =
+        USet.for_all
+          (fun w ->
+            USet.mem elided w || List.exists (fun j -> j.w.label = w) j_list
           )
+          write_events
+      in
+
+      if not check_3 then Lwt.return_none
+      else (
+        Logs.debug (fun m ->
+            m "  All writes in E are either elided or justified"
+        );
+        (* Compute PPO for each justification *)
+        let* ppos =
+          Lwt_list.map_p
+            (fun just ->
+              let just_con =
+                Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
+              in
+                let* ppo_j = Forwardingcontext.ppo just_con just.p in
+
+                (* Intersect with po pairs ending at this write *)
+                let po_to_w =
+                  USet.filter (fun (_, t) -> t = just.w.label) structure.po
+                in
+                let po_to_w_squared =
+                  URelation.cross (URelation.pi_1 po_to_w)
+                    (URelation.pi_1 po_to_w)
+                in
+                  Lwt.return (USet.intersection ppo_j po_to_w_squared)
+            )
+            j_list
+        in
+
+        let ppo = List.fold_left USet.union (USet.create ()) ppos in
+        let ppo = USet.union ppo (Forwardingcontext.ppo_sync con) in
+
+        (* Compute ppo_loc *)
+        let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
+        let ppo_loc = USet.union ppo_loc_base init_ppo in
+
+        (* Filter out read-read pairs *)
+        let ppo_loc =
+          USet.filter
+            (fun (a, b) ->
+              not (USet.mem read_events a && USet.mem read_events b)
+            )
+            ppo_loc
+        in
+
+        (* Compute transitive closure *)
+        let ppo_loc = URelation.transitive_closure ppo_loc in
+        let ppo_loc_tree = build_tree e ppo_loc in
+
+        Logs.debug (fun m ->
+            m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
+              (USet.size ppo) (USet.size ppo_loc)
+        );
+
+        (* Combine dp and ppo *)
+        let dp_ppo = USet.union dp ppo in
+
+        (* Return the freeze validation function *)
+        let freeze_fn rf =
+          validate_rf
+            (structure : symbolic_event_structure)
+            e elided elided_rf ppo_loc ppo_loc_tree dp dp_ppo j_list pp
+            p_combined rf
+        in
+
+        Logs.debug (fun m -> m "  Created freeze function");
+
+        Lwt.return_some freeze_fn
+      )
+    )
 
 (** Build justification combinations for all paths with caching *)
 let build_justcombos structure paths init_ppo statex
@@ -775,7 +763,7 @@ let generate_executions (structure : symbolic_event_structure)
   let w_cross_r = URelation.cross w_with_init read_events in
   let w_cross_r_minus_inv_po = USet.set_minus w_cross_r inv_po in
 
-  let* _rf_pairs =
+  let* all_rf =
     USet.async_filter
       (fun (w, r) ->
         let r_restrict =
@@ -798,8 +786,6 @@ let generate_executions (structure : symbolic_event_structure)
       w_cross_r_minus_inv_po
   in
 
-  let all_rf = _rf_pairs in
-
   Logs.debug (fun m -> m "Initial RF pairs (%d)" (USet.size all_rf));
 
   (* Build justification map: write label -> list of justifications *)
@@ -814,21 +800,12 @@ let generate_executions (structure : symbolic_event_structure)
 
     Logs.debug (fun m -> m "Built justification map");
 
-    (* garbage collect before heavy computation *)
-    Gc.full_major ();
-
     (* Build justcombos for all paths *)
     let* justcombos =
       build_justcombos structure paths init_ppo statex justmap
     in
 
     Logs.debug (fun m -> m "Built justification combinations for all paths");
-
-    (* Enumerate over all RF sets and generate executions *)
-    let paths_with_uset = paths in
-
-    (* Filter function for RF enumeration *)
-    let rf_filter = USet.intersection (URelation.cross e_set e_set) po in
 
     (* Enumerate RF sets - simplified version *)
     (* In full version, this would use a more sophisticated RF enumeration *)
@@ -838,7 +815,7 @@ let generate_executions (structure : symbolic_event_structure)
         (fun path ->
           (* Get freeze functions for this path *)
           let freeze_fns =
-            try Hashtbl.find justcombos path.path with Not_found -> []
+            Hashtbl.find_opt justcombos path.path |> Option.value ~default:[]
           in
 
           (* Try each freeze function with the RF relation *)
@@ -858,12 +835,10 @@ let generate_executions (structure : symbolic_event_structure)
 
     Logs.debug (fun m -> m "Generated all executions from paths");
 
-    let flat_execs = List.concat all_executions in
-
     (* Convert freeze_results to executions *)
     let* final_executions =
-      Lwt_list.map_p
-        (fun (freeze_res : freeze_result) ->
+      List.concat all_executions
+      |> Lwt_list.map_p (fun (freeze_res : freeze_result) ->
           (* Fixed point computation for RF mapping *)
           let fix_rf_map = Hashtbl.create 16 in
 
@@ -930,8 +905,7 @@ let generate_executions (structure : symbolic_event_structure)
           in
 
           Lwt.return exec
-        )
-        flat_execs
+      )
     in
 
     Logs.debug (fun m ->
