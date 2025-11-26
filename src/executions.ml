@@ -457,6 +457,7 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
   );
 
   (* Compute dependency relation *)
+  (* TODO generate origin in interpret.ml *)
   let dp =
     List.concat_map
       (fun just ->
@@ -540,13 +541,14 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
         );
         (* Compute PPO for each justification *)
         let* ppos =
-          Lwt_list.map_p
+          Lwt_list.map_s
             (fun just ->
               let just_con =
                 Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
               in
                 let* ppo_j = Forwardingcontext.ppo just_con just.p in
 
+                (* TODO path should be po-downward closed *)
                 (* Intersect with po pairs ending at this write *)
                 let po_to_w =
                   USet.filter (fun (_, t) -> t = just.w.label) structure.po
@@ -562,6 +564,7 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
 
         let ppo = List.fold_left USet.union (USet.create ()) ppos in
         let ppo = USet.union ppo (Forwardingcontext.ppo_sync con) in
+        let ppo = USet.intersection ppo e_squared in
 
         (* Compute ppo_loc *)
         let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
@@ -578,6 +581,7 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
 
         (* Compute transitive closure *)
         let ppo_loc = URelation.transitive_closure ppo_loc in
+        let ppo_loc = USet.intersection ppo_loc e_squared in
         let ppo_loc_tree = build_tree e ppo_loc in
 
         Logs.debug (fun m ->
@@ -642,75 +646,95 @@ let build_justcombos structure paths init_ppo statex
   let check_final_combo _ _ = Lwt.return true in
 
   let* justcombos_list =
-    Lwt_list.map_p
+    Lwt_list.map_s
       (fun path ->
-        let* inner =
-          Lwt_preemptive.detach
-            (fun () ->
-              Logs.debug (fun m ->
-                  m "Building justification combinations for path [%s]"
-                    (String.concat ", "
-                       (List.map (Printf.sprintf "%d")
-                          (List.sort compare (USet.values path.path))
-                       )
-                    )
-              );
+        Logs.debug (fun m ->
+            m "Building justification combinations for path [%s]"
+              (String.concat ", "
+                 (List.map (Printf.sprintf "%d")
+                    (List.sort compare (USet.values path.path))
+                 )
+              )
+        );
 
-              let path_writes =
-                USet.intersection path.path write_events |> USet.values
-              in
-
-              let* js_combinations =
-                ListMapCombinationBuilder.build_combinations justmap path_writes
-                  (fun combo just -> check_partial_combo path.p combo just)
-                  (fun combo -> check_final_combo path.p combo)
-              in
-
-              Logs.debug (fun m ->
-                  m "  Found %d justification combinations"
-                    (List.length js_combinations)
-              );
-
-              (* For each combination, create freeze functions *)
-              let* freeze_fns =
-                Lwt_list.map_p
-                  (fun j_list ->
-                    let fwd =
-                      List.fold_left
-                        (fun acc j -> USet.union acc j.fwd)
-                        (USet.create ()) j_list
-                    in
-                    let we =
-                      List.fold_left
-                        (fun acc j -> USet.union acc j.we)
-                        (USet.create ()) j_list
-                    in
-
-                    let con = Forwardingcontext.create ~fwd ~we () in
-                    let j_remapped =
-                      List.map
-                        (fun j -> Forwardingcontext.remap_just con j None)
-                        j_list
-                    in
-
-                    let* freeze_opt =
-                      create_freeze structure path j_remapped init_ppo statex
-                    in
-                      Lwt.return freeze_opt
-                  )
-                  js_combinations
-              in
-
-              let freeze_fns_filtered = List.filter_map Fun.id freeze_fns in
-                Logs.debug (fun m ->
-                    m "  Created %d freeze functions for this path"
-                      (List.length freeze_fns_filtered)
-                );
-                Lwt.return (path.path, freeze_fns_filtered)
-            )
-            ()
+        let path_writes =
+          USet.intersection path.path write_events |> USet.values
         in
-          inner
+
+        let* js_combinations =
+          ListMapCombinationBuilder.build_combinations justmap path_writes
+            (fun combo just -> check_partial_combo path.p combo just)
+            (fun combo -> check_final_combo path.p combo)
+        in
+
+        Logs.debug (fun m ->
+            m "  Found %d justification combinations"
+              (List.length js_combinations)
+        );
+
+        (* For each combination, create freeze functions *)
+        let* freeze_fns =
+          Lwt_list.map_s
+            (fun j_list ->
+              let fwd =
+                List.fold_left
+                  (fun acc j -> USet.union acc j.fwd)
+                  (USet.create ()) j_list
+              in
+
+              (* TODO this shouldn't be possible, because fwd should be
+                 po-before w and thus on path *)
+              if
+                USet.union (URelation.pi_1 fwd) (URelation.pi_2 fwd)
+                |> USet.exists (fun e -> not (USet.mem path.path e))
+              then (
+                Logs.debug (fun m ->
+                    m
+                      "  Skipping justification combination with out-of-path \
+                       fwd"
+                );
+                Lwt.return_none
+              )
+              else
+                let we =
+                  List.fold_left
+                    (fun acc j -> USet.union acc j.we)
+                    (USet.create ()) j_list
+                in
+
+                if
+                  USet.union (URelation.pi_1 we) (URelation.pi_2 we)
+                  |> USet.exists (fun e -> not (USet.mem path.path e))
+                then (
+                  Logs.debug (fun m ->
+                      m
+                        "  Skipping justification combination with out-of-path \
+                         we"
+                  );
+                  Lwt.return_none
+                )
+                else
+                  let con = Forwardingcontext.create ~fwd ~we () in
+                  let j_remapped =
+                    List.map
+                      (fun j -> Forwardingcontext.remap_just con j None)
+                      j_list
+                  in
+
+                  let* freeze_opt =
+                    create_freeze structure path j_remapped init_ppo statex
+                  in
+                    Lwt.return freeze_opt
+            )
+            js_combinations
+        in
+
+        let freeze_fns_filtered = List.filter_map Fun.id freeze_fns in
+          Logs.debug (fun m ->
+              m "  Created %d freeze functions for this path"
+                (List.length freeze_fns_filtered)
+          );
+          Lwt.return (path.path, freeze_fns_filtered)
       )
       paths
   in
@@ -811,7 +835,7 @@ let generate_executions (structure : symbolic_event_structure)
     (* In full version, this would use a more sophisticated RF enumeration *)
     let* all_executions =
       (* For each path, try to build executions *)
-      Lwt_list.map_p
+      Lwt_list.map_s
         (fun path ->
           (* Get freeze functions for this path *)
           let freeze_fns =
@@ -820,7 +844,7 @@ let generate_executions (structure : symbolic_event_structure)
 
           (* Try each freeze function with the RF relation *)
           let* path_execs =
-            Lwt_list.filter_map_p
+            Lwt_list.filter_map_s
               (fun freeze_fn ->
                 (* Try to validate with all_rf *)
                 freeze_fn all_rf
@@ -838,7 +862,7 @@ let generate_executions (structure : symbolic_event_structure)
     (* Convert freeze_results to executions *)
     let* final_executions =
       List.concat all_executions
-      |> Lwt_list.map_p (fun (freeze_res : freeze_result) ->
+      |> Lwt_list.map_s (fun (freeze_res : freeze_result) ->
           (* Fixed point computation for RF mapping *)
           let fix_rf_map = Hashtbl.create 16 in
 
