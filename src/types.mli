@@ -136,6 +136,7 @@ type symbolic_event_structure = {
   p : (string * string) uset;
   constraint_ : expr list;
   conflict : (int * int) uset;
+  origin : (string, int) Hashtbl.t; (* Origin mapping for symbols *)
   (* cached event filters *)
   write_events : int uset;
   read_events : int uset;

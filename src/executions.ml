@@ -8,7 +8,6 @@ open Types
 open Uset
 
 (** Utils **)
-
 let to_string (exec : symbolic_execution) : string =
   Printf.sprintf "{\n\tex_e=%s,\n\trf=%s\n\tdp=%s\n\tppo=%s\n}"
     (String.concat ", " (List.map (Printf.sprintf "%d") (USet.values exec.ex_e)))
@@ -31,42 +30,13 @@ let to_string (exec : symbolic_execution) : string =
        )
     )
 
-(* TODO values are not tested *)
-
 (** Create disjoint predicate for two (location, value) pairs *)
 let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
   EBinOp (loc1, "!=", loc2)
 
-(* Find the (first) origin of a symbol in reads or mallocs *)
-let origin structure read_events malloc_events (s : string) =
-  (* Try to find in reads *)
-  let in_read =
-    USet.find
-      (fun x ->
-        match get_val structure.events x with
-        | Some (ESymbol sym) -> sym = s
-        | _ -> false
-      )
-      read_events
-  in
-    match in_read with
-    | Some e -> Some e
-    | None -> (
-        (* try to find in mallocs *)
-        let in_malloc =
-          USet.find
-            (fun x ->
-              match get_val structure.events x with
-              | Some (ESymbol sym) -> sym = s
-              | _ -> false
-            )
-            malloc_events
-        in
-          match in_malloc with
-          | Some e -> Some e
-          | None -> None
-      )
+(* Find the origin of a symbol in a symbolic event structure *)
+let origin structure (s : string) = Hashtbl.find_opt structure.origin s
 
 (* Check if write w is downward-closed same-location write before read r. This
    prevents r reading from shadowed writes w.*)
@@ -457,14 +427,13 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
   );
 
   (* Compute dependency relation *)
-  (* TODO generate origin in interpret.ml *)
   let dp =
     List.concat_map
       (fun just ->
         let syms = USet.values just.d in
           List.concat_map
             (fun sym ->
-              match origin structure read_events malloc_events sym with
+              match origin structure sym with
               | Some orig -> [ (orig, just.w.label) ]
               | None -> []
             )
@@ -615,33 +584,96 @@ let build_justcombos structure paths init_ppo statex
 
   (* TODO check that the following constraints make sense, and implement more
      extensive structural checks *)
-  let check_partial_combo (path_preds : expr list) (combo : justification list)
+  let check_partial_combo (path : path_info) (combo : justification list)
       (just : justification) =
-    let fwdwe =
-      List.fold_left
-        (fun acc j -> USet.union acc (USet.union j.fwd j.we))
-        (USet.create ()) combo
+    let path_preds = path.p in
+
+    (* origin of all symbols on path. fail if symbol not in origin map *)
+    let sym_origins =
+      USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
     in
+      if not (USet.subset sym_origins path.path) then (
+        Logs.debug (fun m ->
+            m "Origins %s of symbols %s not on path [%s]"
+              (String.concat ", "
+                 (List.map (Printf.sprintf "%d")
+                    (USet.values (USet.set_minus sym_origins path.path))
+                 )
+              )
+              (String.concat ", "
+                 (List.map (Printf.sprintf "%s") (USet.values just.d))
+              )
+              (String.concat ", "
+                 (List.map (Printf.sprintf "%d") (USet.values path.path))
+              )
+        );
+        Lwt.return false
+      )
+      else
+        (* delta events must be on path *)
+        let just_delta = USet.union just.fwd just.we in
+        let just_delta_events =
+          USet.union (URelation.pi_1 just_delta) (URelation.pi_2 just_delta)
+        in
+          if not (USet.subset just_delta_events path.path) then
+            ( Logs.debug (fun m ->
+                  m
+                    "Delta events %s of justification for write %d not on path \
+                     [%s]"
+                    (String.concat ", "
+                       (List.map (Printf.sprintf "%d")
+                          (USet.values
+                             (USet.set_minus just_delta_events path.path)
+                          )
+                       )
+                    )
+                    just.w.label
+                    (String.concat ", "
+                       (List.map (Printf.sprintf "%d") (USet.values path.path))
+                    )
+              );
+              Lwt.return
+            )
+              false
+          else
+            let fwdwe =
+              List.fold_left
+                (fun acc j -> USet.union acc (USet.union j.fwd j.we))
+                (USet.create ()) combo
+            in
 
-    let structurally_compatible =
-      let x = USet.union just.fwd just.we in
-      let pi1_x = URelation.pi_1 x in
-      let pi2_x = URelation.pi_2 x in
-      let pi1_fwdwe = URelation.pi_1 fwdwe in
-      let pi2_fwdwe = URelation.pi_2 fwdwe in
+            (* TODO This used to check that just_delta and fwdwe do no overlap
+             in domain and range. This seems incorrect. Instead we check that
+             adding just maintains delta as a function, i.e. jointly fwd and we
+             map events unambiguously. *)
+            let structurally_compatible =
+              USet.exists
+                (fun (f, t) ->
+                  USet.exists (fun (f', t') -> f = f' && t <> t') fwdwe
+                )
+                just_delta
+            in
 
-      USet.size (USet.intersection pi1_x pi1_fwdwe) = 0
-      && USet.size (USet.intersection pi2_x pi2_fwdwe) = 0
-    in
-
-    if not structurally_compatible then Lwt.return false
-    else
-      List.map (fun (just : justification) -> just.p) combo
-      |> List.flatten
-      |> List.append path_preds
-      |> USet.of_list
-      |> USet.values
-      |> Solver.is_sat
+            if not structurally_compatible then
+              ( Logs.debug (fun m ->
+                    m
+                      "Justification for write %d not structurally compatible \
+                       with current combination on path [%s]"
+                      just.w.label
+                      (String.concat ", "
+                         (List.map (Printf.sprintf "%d") (USet.values path.path))
+                      )
+                );
+                Lwt.return
+              )
+                false
+            else
+              List.map (fun (just : justification) -> just.p) combo
+              |> List.flatten
+              |> List.append path_preds
+              |> USet.of_list
+              |> USet.values
+              |> Solver.is_sat
   in
   let check_final_combo _ _ = Lwt.return true in
 
@@ -663,7 +695,7 @@ let build_justcombos structure paths init_ppo statex
 
         let* js_combinations =
           ListMapCombinationBuilder.build_combinations justmap path_writes
-            (fun combo just -> check_partial_combo path.p combo just)
+            (fun combo just -> check_partial_combo path combo just)
             (fun combo -> check_final_combo path.p combo)
         in
 

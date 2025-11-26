@@ -723,6 +723,7 @@ module TestSymbolicEventStructure = struct
         p = USet.create ();
         constraint_ = [];
         conflict = USet.create ();
+        origin = Hashtbl.create 10;
         write_events = USet.create ();
         read_events = USet.create ();
         rlx_write_events = USet.create ();
@@ -754,6 +755,7 @@ module TestSymbolicEventStructure = struct
         p = USet.create ();
         constraint_ = [];
         conflict = USet.create ();
+        origin = Hashtbl.create 10;
         write_events = USet.create ();
         read_events = USet.create ();
         rlx_write_events = USet.create ();
@@ -787,6 +789,7 @@ module TestSymbolicEventStructure = struct
         p = USet.create ();
         constraint_ = [];
         conflict = USet.create ();
+        origin = Hashtbl.create 10;
         write_events = USet.create ();
         read_events = USet.create ();
         rlx_write_events = USet.create ();
@@ -817,6 +820,7 @@ module TestSymbolicEventStructure = struct
         p = USet.create ();
         constraint_ = [];
         conflict = USet.create ();
+        origin = Hashtbl.create 10;
         write_events = USet.create ();
         read_events = USet.create ();
         rlx_write_events = USet.create ();
@@ -883,81 +887,6 @@ module TestCoherence = struct
     ]
 end
 
-(** Test Module 13: Origin Function *)
-module TestOrigin = struct
-  let test_origin_from_read () =
-    let events = Hashtbl.create 10 in
-    let e1 = make_read_event 1 (make_var "x") (make_symbol "α") Relaxed in
-      Hashtbl.add events 1 e1;
-
-      let read_events = USet.singleton 1 in
-      let malloc_events = USet.create () in
-      let all_events = USet.union read_events malloc_events in
-
-      let structure = Interpret.empty_structure () in
-      let structure = { structure with read_events; malloc_events; events } in
-
-      let orig =
-        origin structure structure.read_events structure.malloc_events "α"
-      in
-
-      ( match orig with
-      | Some label -> check int "origin_read_label" 1 label
-      | None -> check bool "origin_read_found" false true
-      );
-      Printf.printf "PASS: Origin function finds read\n"
-
-  let test_origin_from_alloc () =
-    let events = Hashtbl.create 10 in
-    let e1 = make_alloc_event 1 (make_symbol "π") (make_number 16) in
-      Hashtbl.add events 1 e1;
-
-      let read_events = USet.create () in
-      let malloc_events = USet.singleton 1 in
-      let all_events = USet.union read_events malloc_events in
-      let structure = Interpret.empty_structure () in
-      let structure = { structure with read_events; malloc_events; events } in
-
-      let orig =
-        origin structure structure.read_events structure.malloc_events "π"
-      in
-
-      ( match orig with
-      | Some label -> check int "origin_alloc_label" 1 label
-      | None -> check bool "origin_alloc_found" true true
-      );
-      ()
-
-  let test_origin_not_found () =
-    let events = Hashtbl.create 10 in
-    let read_events = USet.create () in
-    let malloc_events = USet.create () in
-    let all_events = USet.union read_events malloc_events in
-    let structure = Interpret.empty_structure () in
-    let structure = { structure with read_events; malloc_events; events } in
-
-    let orig =
-      origin structure structure.read_events structure.malloc_events "ξ"
-    in
-
-    check bool "origin_not_found" true (orig = None);
-    Printf.printf "PASS: Origin function returns None for unknown symbol\n"
-
-  let run_tests () =
-    Printf.printf "\n=== Testing Origin Function ===\n";
-    test_origin_from_read ();
-    test_origin_from_alloc ();
-    test_origin_not_found ()
-
-  let suite =
-    [
-      test_case "TestOrigin.test_origin_from_read" `Quick test_origin_from_read;
-      test_case "TestOrigin.test_origin_from_alloc" `Quick
-        test_origin_from_alloc;
-      test_case "TestOrigin.test_origin_not_found" `Quick test_origin_not_found;
-    ]
-end
-
 let suite =
   ( "Test Symbolic MRD",
     (* Run all test modules *)
@@ -975,5 +904,4 @@ let suite =
     @ TestJustifications.suite
     @ TestSymbolicEventStructure.suite
     @ TestCoherence.suite
-    @ TestOrigin.suite
   )

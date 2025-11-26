@@ -43,6 +43,10 @@ module TestData = struct
       Hashtbl.add events 4 (create_event 4 Read ~id_val:(VVar "y") ());
       events
 
+  let basic_origin () =
+    let origin = Hashtbl.create 4 in
+      origin
+
   let make_structure ?(events = basic_events ())
       ?(e = USet.of_list [ 1; 2; 3; 4 ])
       ?(po = USet.of_list [ (1, 2); (2, 3); (3, 4) ]) () =
@@ -60,6 +64,7 @@ module TestData = struct
       p = USet.create ();
       constraint_ = [];
       conflict = USet.create ();
+      origin = Hashtbl.create 4;
       write_events = USet.create ();
       read_events = USet.create ();
       rlx_write_events = USet.create ();
@@ -104,36 +109,30 @@ module TestData = struct
       ( "from_reads",
         fun () ->
           let events = basic_events () in
+          let origin = basic_origin () in
           let sym_event = create_event 2 Read ~rval:(VSymbol "s1") () in
             Hashtbl.replace events 2 sym_event;
-            (events, USet.of_list [ 2; 4 ], USet.create (), "s1", Some 2)
+            Hashtbl.replace origin "s1" 2;
+            (events, origin, USet.of_list [ 2; 4 ], USet.create (), "s1", Some 2)
       );
       ( "from_mallocs",
         fun () ->
           let events = basic_events () in
+          let origin = basic_origin () in
           let malloc_event = create_event 5 Malloc ~rval:(VSymbol "s2") () in
             Hashtbl.add events 5 malloc_event;
-            (events, USet.create (), USet.singleton 5, "s2", Some 5)
+            Hashtbl.replace origin "s2" 5;
+            (events, origin, USet.create (), USet.singleton 5, "s2", Some 5)
       );
       ( "not_found",
         fun () ->
           ( basic_events (),
+            basic_origin (),
             USet.of_list [ 2; 4 ],
             USet.create (),
             "nonexistent",
             None
           )
-      );
-      ( "multiple_matches",
-        fun () ->
-          let events = basic_events () in
-            List.iter
-              (fun id ->
-                Hashtbl.replace events id
-                  (create_event id Read ~rval:(VSymbol "s1") ())
-              )
-              [ 2; 4 ];
-            (events, USet.of_list [ 2; 4 ], USet.create (), "s1", None)
       );
     ]
 
@@ -167,13 +166,11 @@ let test_disjoint (name, loc1, val1, loc2, val2) () =
     | _ -> fail (name ^ ": Expected binary operation with !=")
 
 let test_origin (name, setup) () =
-  let events, read_events, malloc_events, symbol, expected = setup () in
+  let events, origin, read_events, malloc_events, symbol, expected = setup () in
   let e = USet.union read_events malloc_events in
   let structure = TestData.make_structure ~events ~e () in
-  let structure = { structure with read_events; malloc_events } in
-  let result =
-    origin structure structure.read_events structure.malloc_events symbol
-  in
+  let structure = { structure with origin; read_events; malloc_events } in
+  let result = Executions.origin structure symbol in
     match expected with
     | Some exp_id -> (
         match result with
