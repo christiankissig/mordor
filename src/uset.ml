@@ -219,6 +219,7 @@ module URelation : sig
   val reflexive_closure : 'a USet.t -> 'a t -> 'a t
   val transitive_closure : 'a t -> 'a t
   val transitive_reduction : 'a t -> 'a t
+  val exhaustive_closure : 'a t -> 'a t
   val acyclic : 'a t -> bool
   val is_irreflexive : 'a t -> bool
   val is_function : 'a t -> bool
@@ -282,6 +283,29 @@ end = struct
           )
       )
       rel
+
+  (* Applies relation exhaustively on itself. *)
+  let exhaustive_closure s =
+    let result = USet.clone s in
+    let changed = ref true in
+      while !changed do
+        changed := false;
+        let vals = USet.to_list result in
+          List.iter
+            (fun (a, b) ->
+              List.iter
+                (fun (c, d) ->
+                  if not (USet.mem result (a, d)) then
+                    if b = c then USet.add result (a, d) |> ignore;
+                  USet.remove result (a, b) |> ignore;
+                  changed := true;
+                  ()
+                )
+                vals
+            )
+            vals
+      done;
+      result
 
   (** Reflexive closure *)
   let reflexive_closure domain s = USet.union (identity_relation domain) s

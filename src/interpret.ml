@@ -24,21 +24,23 @@ let next_event_id () =
 let greek_counter = ref 0
 
 let next_greek () =
-  let idx = !greek_counter mod (String.length greek_alpha / 2) in
-  let suffix = !greek_counter / String.length greek_alpha in
-    (* divide by byte length *)
+  let num_greek_letters = String.length greek_alpha / 2 in
+  (* 24 letters *)
+  let idx = !greek_counter mod num_greek_letters in
+  let suffix = !greek_counter / num_greek_letters in
     incr greek_counter;
-    (* Greek characters are 2 bytes in UTF-8 *)
     let base = String.sub greek_alpha (idx * 2) 2 in
       if suffix = 0 then base else base ^ string_of_int suffix
 
 let zh_counter = ref 0
 
 let next_zh () =
-  let idx = !zh_counter mod (String.length zh_alpha / 3) in
+  let num_zh_chars = String.length zh_alpha / 3 in
+  let idx = !zh_counter mod num_zh_chars in
+  let suffix = !zh_counter / num_zh_chars in
     incr zh_counter;
-    (* Chinese characters are 3 bytes in UTF-8 *)
-    String.sub zh_alpha (idx * 3) 3
+    let base = String.sub zh_alpha (idx * 3) 3 in
+      if suffix = 0 then base else base ^ string_of_int suffix
 
 (** Events collection *)
 type events_t = {
@@ -64,7 +66,7 @@ let add_event (events : events_t) event =
     let v = events.van in
       events.van <- events.van + 1;
       let event' : event = { event with label = lbl; van = v } in
-        Hashtbl.add events.events lbl event';
+        Hashtbl.replace events.events lbl event';
         event'
 
 (** Symbolic Event Structure builders *)
@@ -73,7 +75,7 @@ let dot (event : event) structure phi : symbolic_event_structure =
     Logs.warn (fun m ->
         m "Adding event %d under unsatisfiable path condition.\n" event.label
     );
-  Hashtbl.add structure.restrict event.label phi;
+  Hashtbl.replace structure.restrict event.label phi;
   {
     e = USet.union structure.e (USet.singleton event.label);
     events = structure.events;
@@ -315,7 +317,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 }
               in
               let event' : event = add_event events evt in
-                Hashtbl.add events.origin symbol event'.label;
+                Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
                   let* cont = recurse rest env' phi events in
@@ -335,7 +337,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 }
               in
               let event' : event = add_event events evt in
-                Hashtbl.add events.origin symbol event'.label;
+                Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
                   let* cont = recurse rest env' phi events in
@@ -354,7 +356,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 }
               in
               let event_load' : event = add_event events evt_load in
-                Hashtbl.add events.origin symbol event_load'.label;
+                Hashtbl.replace events.origin symbol event_load'.label;
                 let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
                 let result_expr =
                   Expr.evaluate
@@ -395,7 +397,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 }
               in
               let event_load' : event = add_event events evt_load in
-                Hashtbl.add events.origin symbol event_load'.label;
+                Hashtbl.replace events.origin symbol event_load'.label;
                 let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
                 let expected_expr =
                   Expr.evaluate expected (Hashtbl.find_opt env)
@@ -506,7 +508,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               let base_evt : event = Event.create Malloc 0 () in
               let evt = { base_evt with rval = Some rval } in
               let event' : event = add_event events evt in
-                Hashtbl.add events.origin symbol event'.label;
+                Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
                   let* cont = recurse rest env' phi events in

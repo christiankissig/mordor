@@ -7,6 +7,44 @@ open Trees
 open Types
 open Uset
 
+(* tracer data *)
+let tracer_path =
+  USet.of_list
+    [
+      0;
+      1;
+      2;
+      3;
+      4;
+      5;
+      6;
+      7;
+      8;
+      9;
+      10;
+      11;
+      12;
+      13;
+      14;
+      15;
+      16;
+      17;
+      18;
+      19;
+      20;
+      21;
+      22;
+      23;
+      24;
+      25;
+      26;
+      27;
+      90;
+      111;
+      118;
+      119;
+    ]
+
 (** Utils **)
 let to_string (exec : symbolic_execution) : string =
   Printf.sprintf "{\n\tex_e=%s,\n\trf=%s\n\tdp=%s\n\tppo=%s\n}"
@@ -150,17 +188,6 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
         let conflict_groups =
           partition_by_conflict neighbours structure.conflict
         in
-
-        Logs.debug (fun m ->
-            m "Event %d has %d conflict groups: [%s]" current
-              (List.length conflict_groups)
-              (String.concat "; "
-                 (List.map
-                    (fun g -> string_of_int (List.length g))
-                    conflict_groups
-                 )
-              )
-        );
 
         (* For each conflict group, choose one alternative (disjoint union) *)
         (* Across groups, take all combinations (cartesian product) *)
@@ -421,10 +448,11 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
   let write_events = USet.intersection structure.write_events e in
   let malloc_events = USet.intersection structure.malloc_events e in
 
-  Logs.debug (fun m ->
-      m "Creating freeze function for justification combination with %d justs"
-        (List.length j_list)
-  );
+  if USet.equal path.path tracer_path then
+    Logs.debug (fun m ->
+        m "Creating freeze function for justification combination with %d justs"
+          (List.length j_list)
+    );
 
   (* Compute dependency relation *)
   let dp =
@@ -443,7 +471,8 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
     |> USet.of_list
   in
 
-  Logs.debug (fun m -> m "  Created dp with %d pairs" (USet.size dp));
+  if USet.equal path.path tracer_path then
+    Logs.debug (fun m -> m "  Created dp with %d pairs" (USet.size dp));
 
   (* Compute combined fwd and we *)
   let f =
@@ -553,10 +582,11 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
         let ppo_loc = USet.intersection ppo_loc e_squared in
         let ppo_loc_tree = build_tree e ppo_loc in
 
-        Logs.debug (fun m ->
-            m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
-              (USet.size ppo) (USet.size ppo_loc)
-        );
+        if USet.equal path.path tracer_path then
+          Logs.debug (fun m ->
+              m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
+                (USet.size ppo) (USet.size ppo_loc)
+          );
 
         (* Combine dp and ppo *)
         let dp_ppo = USet.union dp ppo in
@@ -569,7 +599,8 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
             p_combined rf
         in
 
-        Logs.debug (fun m -> m "  Created freeze function");
+        if USet.equal path.path tracer_path then
+          Logs.debug (fun m -> m "  Created freeze function");
 
         Lwt.return_some freeze_fn
       )
@@ -582,8 +613,6 @@ let build_justcombos structure paths init_ppo statex
   let read_events = structure.read_events in
   let write_events = structure.write_events in
 
-  (* TODO check that the following constraints make sense, and implement more
-     extensive structural checks *)
   let check_partial_combo (path : path_info) (combo : justification list)
       (just : justification) =
     let path_preds = path.p in
@@ -593,20 +622,12 @@ let build_justcombos structure paths init_ppo statex
       USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
     in
       if not (USet.subset sym_origins path.path) then (
-        Logs.debug (fun m ->
-            m "Origins %s of symbols %s not on path [%s]"
-              (String.concat ", "
-                 (List.map (Printf.sprintf "%d")
-                    (USet.values (USet.set_minus sym_origins path.path))
-                 )
-              )
-              (String.concat ", "
-                 (List.map (Printf.sprintf "%s") (USet.values just.d))
-              )
-              (String.concat ", "
-                 (List.map (Printf.sprintf "%d") (USet.values path.path))
-              )
-        );
+        if USet.equal path.path tracer_path then
+          Logs.debug (fun m ->
+              m
+                "  Rejected partial combo due to missing\n\
+                \            symbol origins"
+          );
         Lwt.return false
       )
       else
@@ -615,67 +636,41 @@ let build_justcombos structure paths init_ppo statex
         let just_delta_events =
           USet.union (URelation.pi_1 just_delta) (URelation.pi_2 just_delta)
         in
-          if not (USet.subset just_delta_events path.path) then
-            ( Logs.debug (fun m ->
-                  m
-                    "Delta events %s of justification for write %d not on path \
-                     [%s]"
-                    (String.concat ", "
-                       (List.map (Printf.sprintf "%d")
-                          (USet.values
-                             (USet.set_minus just_delta_events path.path)
-                          )
-                       )
-                    )
-                    just.w.label
-                    (String.concat ", "
-                       (List.map (Printf.sprintf "%d") (USet.values path.path))
-                    )
-              );
-              Lwt.return
-            )
-              false
+          if not (USet.subset just_delta_events path.path) then (
+            Logs.debug (fun m ->
+                m "  Rejected partial combo due to delta events not on path"
+            );
+            Lwt.return false
+          )
           else
-            let fwdwe =
-              List.fold_left
-                (fun acc j -> USet.union acc (USet.union j.fwd j.we))
-                (USet.create ()) combo
-            in
-
-            (* TODO This used to check that just_delta and fwdwe do no overlap
-             in domain and range. This seems incorrect. Instead we check that
-             adding just maintains delta as a function, i.e. jointly fwd and we
-             map events unambiguously. *)
-            let structurally_compatible =
-              USet.exists
-                (fun (f, t) ->
-                  USet.exists (fun (f', t') -> f = f' && t <> t') fwdwe
-                )
-                just_delta
-            in
-
-            if not structurally_compatible then
-              ( Logs.debug (fun m ->
-                    m
-                      "Justification for write %d not structurally compatible \
-                       with current combination on path [%s]"
-                      just.w.label
-                      (String.concat ", "
-                         (List.map (Printf.sprintf "%d") (USet.values path.path))
-                      )
-                );
-                Lwt.return
-              )
-                false
-            else
-              List.map (fun (just : justification) -> just.p) combo
-              |> List.flatten
-              |> List.append path_preds
-              |> USet.of_list
-              |> USet.values
-              |> Solver.is_sat
+            List.map (fun (just : justification) -> just.p) combo
+            |> List.flatten
+            |> List.append path_preds
+            |> USet.of_list
+            |> USet.values
+            |> Solver.is_sat
   in
-  let check_final_combo _ _ = Lwt.return true in
+  let check_final_combo (path : path_info) (combo : justification list) =
+    let delta =
+      USet.flatten
+        (USet.map (fun j -> USet.union j.fwd j.we) (USet.of_list combo))
+    in
+
+    if not (URelation.acyclic delta) then (
+      Logs.debug (fun m ->
+          m "  Rejected final combo due to cyclic delta relation"
+      );
+      Lwt.return false
+    )
+    else if not (URelation.is_function (URelation.exhaustive_closure delta))
+    then (
+      Logs.debug (fun m ->
+          m "  Rejected final combo due to non-functional delta relation"
+      );
+      Lwt.return false
+    )
+    else Lwt.return true
+  in
 
   let* justcombos_list =
     Lwt_list.map_s
@@ -696,13 +691,14 @@ let build_justcombos structure paths init_ppo statex
         let* js_combinations =
           ListMapCombinationBuilder.build_combinations justmap path_writes
             (fun combo just -> check_partial_combo path combo just)
-            (fun combo -> check_final_combo path.p combo)
+            (fun combo -> check_final_combo path combo)
         in
 
-        Logs.debug (fun m ->
-            m "  Found %d justification combinations"
-              (List.length js_combinations)
-        );
+        if USet.equal path.path tracer_path then
+          Logs.debug (fun m ->
+              m "  Found %d justification combinations"
+                (List.length js_combinations)
+          );
 
         (* For each combination, create freeze functions *)
         let* freeze_fns =
@@ -762,10 +758,11 @@ let build_justcombos structure paths init_ppo statex
         in
 
         let freeze_fns_filtered = List.filter_map Fun.id freeze_fns in
-          Logs.debug (fun m ->
-              m "  Created %d freeze functions for this path"
-                (List.length freeze_fns_filtered)
-          );
+          if USet.equal path.path tracer_path then
+            Logs.debug (fun m ->
+                m "  Created %d freeze functions for this path"
+                  (List.length freeze_fns_filtered)
+            );
           Lwt.return (path.path, freeze_fns_filtered)
       )
       paths
@@ -844,6 +841,26 @@ let generate_executions (structure : symbolic_event_structure)
 
   Logs.debug (fun m -> m "Initial RF pairs (%d)" (USet.size all_rf));
 
+  Logs.debug (fun m ->
+      m "RF pairs on the tracer path are %s"
+        (String.concat ", "
+           (List.map
+              (fun (w, r) -> Printf.sprintf "(%d,%d)" w r)
+              (USet.values
+                 (USet.filter
+                    (fun (w, r) ->
+                      USet.mem structure.e w
+                      && USet.mem structure.e r
+                      && USet.mem tracer_path w
+                      && USet.mem tracer_path r
+                    )
+                    all_rf
+                 )
+              )
+           )
+        )
+  );
+
   (* Build justification map: write label -> list of justifications *)
   let justmap = Hashtbl.create 16 in
     USet.iter
@@ -855,6 +872,42 @@ let generate_executions (structure : symbolic_event_structure)
       justs;
 
     Logs.debug (fun m -> m "Built justification map");
+
+    Logs.debug (fun m ->
+        m "Justifications for events on tracer path: %s"
+          (String.concat ",\n"
+             (List.map
+                (fun e ->
+                  let js = try Hashtbl.find justmap e with Not_found -> [] in
+                    Printf.sprintf "%d:[%s]" e
+                      (String.concat "; "
+                         (List.map
+                            (fun j ->
+                              Printf.sprintf
+                                "\t%s with origin of symbols\nin d [%s]\n"
+                                (Justifications.to_string j)
+                                (String.concat ", "
+                                   (List.map
+                                      (fun s ->
+                                        Printf.sprintf "%s->%d" s
+                                          (origin structure s
+                                          |> Option.value ~default:(-1)
+                                          )
+                                      )
+                                      (USet.values j.d)
+                                   )
+                                )
+                            )
+                            js
+                         )
+                      )
+                )
+                (USet.intersection tracer_path structure.write_events
+                |> USet.values
+                )
+             )
+          )
+    );
 
     (* Build justcombos for all paths *)
     let* justcombos =
