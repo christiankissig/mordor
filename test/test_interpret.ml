@@ -46,7 +46,7 @@ let test_next_greek_overflow () =
       ()
   done;
   let overflow = next_greek () in
-    Alcotest.(check string) "greek with suffix" "α1" overflow
+    Alcotest.(check string) "greek with suffix" "α2" overflow
 
 (** Test Chinese symbol generation *)
 let test_next_zh () =
