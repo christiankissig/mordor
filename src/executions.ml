@@ -607,10 +607,6 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
 (** Build justification combinations for all paths with caching *)
 let build_justcombos structure paths init_ppo statex
     (justmap : (int, justification list) Hashtbl.t) =
-  let events = structure.events in
-  let read_events = structure.read_events in
-  let write_events = structure.write_events in
-
   let check_partial_combo (path : path_info) (combo : justification list)
       (just : justification) =
     let ( let*? ) (condition, msg) f =
@@ -622,7 +618,6 @@ let build_justcombos structure paths init_ppo statex
       )
     in
 
-    let path_preds = path.p in
     let sym_origins =
       USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
     in
@@ -696,8 +691,33 @@ let build_justcombos structure paths init_ppo statex
       Lwt.return true
   in
 
-  let* justcombos_list =
-    Lwt_list.map_s
+  let stream_just_combo_to_freeze_fn input_stream =
+    Lwt_stream.map_s
+      (fun ((path : path_info), (just_combo : justification list)) ->
+        let fwd =
+          List.fold_left
+            (fun acc j -> USet.union acc j.fwd)
+            (USet.create ()) just_combo
+        in
+        let we =
+          List.fold_left
+            (fun acc j -> USet.union acc j.we)
+            (USet.create ()) just_combo
+        in
+        let con = Forwardingcontext.create ~fwd ~we () in
+        let j_remapped =
+          List.map (fun j -> Forwardingcontext.remap_just con j None) just_combo
+        in
+        let freeze_fn =
+          create_freeze structure path j_remapped init_ppo statex
+        in
+          Lwt.return (path, just_combo, freeze_fn)
+      )
+      input_stream
+  in
+
+  let stream_path_to_just_combos input_stream =
+    Lwt_stream.map_list_s
       (fun path ->
         Logs.debug (fun m ->
             m "Building justification combinations for path [%s]"
@@ -709,10 +729,10 @@ let build_justcombos structure paths init_ppo statex
         );
 
         let path_writes =
-          USet.intersection path.path write_events |> USet.values
+          USet.intersection path.path structure.write_events |> USet.values
         in
 
-        let* js_combinations =
+        let%lwt js_combinations =
           ListMapCombinationBuilder.build_combinations justmap path_writes
             (fun combo just -> check_partial_combo path combo just)
             (fun combo -> check_final_combo path combo)
@@ -723,47 +743,43 @@ let build_justcombos structure paths init_ppo statex
               (List.length js_combinations)
         );
 
-        (* For each combination, create freeze functions *)
-        let* freeze_fns =
-          Lwt_list.map_s
-            (fun just_combo ->
-              let fwd =
-                List.fold_left
-                  (fun acc j -> USet.union acc j.fwd)
-                  (USet.create ()) just_combo
-              in
-              let we =
-                List.fold_left
-                  (fun acc j -> USet.union acc j.we)
-                  (USet.create ()) just_combo
-              in
-              let con = Forwardingcontext.create ~fwd ~we () in
-              let j_remapped =
-                List.map
-                  (fun j -> Forwardingcontext.remap_just con j None)
-                  just_combo
-              in
-                create_freeze structure path j_remapped init_ppo statex
-            )
-            js_combinations
-        in
-
-        let freeze_fns_filtered = List.filter_map Fun.id freeze_fns in
-          if USet.equal path.path tracer_path then
-            Logs.debug (fun m ->
-                m "  Created %d freeze functions for this path"
-                  (List.length freeze_fns_filtered)
-            );
-          Lwt.return (path.path, freeze_fns_filtered)
+        Lwt.return (List.map (fun combo -> (path, combo)) js_combinations)
       )
-      paths
+      input_stream
+  in
+
+  let path_stream = Lwt_stream.of_list paths in
+
+  let* freeze_fns =
+    path_stream
+    |> stream_path_to_just_combos
+    |> stream_just_combo_to_freeze_fn
+    |> Lwt_stream.to_list
+  in
+
+  let%lwt resolved_freeze_fns =
+    Lwt.all
+      (List.map
+         (fun (path, x, fn_lwt) ->
+           let%lwt fn_opt = fn_lwt in
+             Lwt.return (path, x, fn_opt)
+         )
+         freeze_fns
+      )
   in
 
   let justcombos = Hashtbl.create 16 in
     List.iter
-      (fun (path_uset, freezes) -> Hashtbl.add justcombos path_uset freezes)
-      justcombos_list;
-
+      (fun (path, _, freeze_fn_opt) ->
+        match freeze_fn_opt with
+        | None -> ()
+        | Some freeze_fn ->
+            let existing =
+              Hashtbl.find_opt justcombos path.path |> Option.value ~default:[]
+            in
+              Hashtbl.replace justcombos path.path (freeze_fn :: existing)
+      )
+      resolved_freeze_fns;
     Lwt.return justcombos
 
 (** Generate executions **)
