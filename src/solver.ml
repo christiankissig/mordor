@@ -280,6 +280,18 @@ let quick_check exprs =
   let solver = create exprs in
     check solver
 
+let quick_check_cache = Hashtbl.create 256
+
+let quick_check_cached exprs =
+  let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
+  let key = String.concat ";" (List.map Expr.to_string exprs) in
+    match Hashtbl.find_opt quick_check_cache key with
+    | Some result -> Lwt.return result
+    | None ->
+        let* result = quick_check exprs in
+          Hashtbl.add quick_check_cache key result;
+          Lwt.return result
+
 (** Create a solver and get a model in one go *)
 let quick_solve exprs =
   let solver = create exprs in
@@ -339,9 +351,23 @@ let is_sat exprs =
     | Some true -> Lwt.return_true
     | _ -> Lwt.return_false
 
+(** Check if expression list is satisfiable (simplified API) *)
+let is_sat_cached exprs =
+  let* result = quick_check_cached exprs in
+    match result with
+    | Some true -> Lwt.return_true
+    | _ -> Lwt.return_false
+
 (** Check if expression list is unsatisfiable (simplified API) *)
 let is_unsat exprs =
   let* result = quick_check exprs in
+    match result with
+    | Some false -> Lwt.return_true
+    | _ -> Lwt.return_false
+
+(** Check if expression list is unsatisfiable (simplified API) *)
+let is_unsat_cached exprs =
+  let* result = quick_check_cached exprs in
     match result with
     | Some false -> Lwt.return_true
     | _ -> Lwt.return_false

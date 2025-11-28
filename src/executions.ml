@@ -516,7 +516,7 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
   );
 
   (* Check if predicates are satisfiable *)
-  let* p_combined_sat = Solver.is_sat p_combined in
+  let* p_combined_sat = Solver.is_sat_cached p_combined in
     if not p_combined_sat then (
       Logs.debug (fun m -> m "  Predicates unsatisfiable");
       Lwt.return_none
@@ -582,11 +582,10 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
         let ppo_loc = USet.intersection ppo_loc e_squared in
         let ppo_loc_tree = build_tree e ppo_loc in
 
-        if USet.equal path.path tracer_path then
-          Logs.debug (fun m ->
-              m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
-                (USet.size ppo) (USet.size ppo_loc)
-          );
+        Logs.debug (fun m ->
+            m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
+              (USet.size ppo) (USet.size ppo_loc)
+        );
 
         (* Combine dp and ppo *)
         let dp_ppo = USet.union dp ppo in
@@ -599,8 +598,7 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
             p_combined rf
         in
 
-        if USet.equal path.path tracer_path then
-          Logs.debug (fun m -> m "  Created freeze function");
+        Logs.debug (fun m -> m "  Created freeze function");
 
         Lwt.return_some freeze_fn
       )
@@ -615,61 +613,87 @@ let build_justcombos structure paths init_ppo statex
 
   let check_partial_combo (path : path_info) (combo : justification list)
       (just : justification) =
-    let path_preds = path.p in
+    let ( let*? ) (condition, msg) f =
+      if condition then f ()
+      else (
+        if USet.equal path.path tracer_path then
+          Logs.debug (fun m -> m "  Rejected: %s" msg);
+        Lwt.return false
+      )
+    in
 
-    (* origin of all symbols on path. fail if symbol not in origin map *)
+    let path_preds = path.p in
     let sym_origins =
       USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
     in
-      if not (USet.subset sym_origins path.path) then (
+      let*? () =
+        (USet.subset sym_origins path.path, "missing symbol origins")
+      in
+
+      let just_delta = USet.union just.fwd just.we in
+      let just_delta_events =
+        USet.union (URelation.pi_1 just_delta) (URelation.pi_2 just_delta)
+      in
+        let*? () =
+          (USet.subset just_delta_events path.path, "delta events not on path")
+        in
+
+        let fwd =
+          USet.flatten (USet.map (fun j -> j.fwd) (USet.of_list combo))
+        in
+        let fwd_elided =
+          USet.union (URelation.pi_1 fwd) (URelation.pi_1 just.fwd)
+        in
+        let d_origins =
+          USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
+        in
+        let p_origins =
+          List.map Expr.get_symbols just.p
+          |> List.flatten
+          |> USet.of_list
+          |> USet.map (fun symbol -> origin structure symbol |> Option.get)
+        in
+        let origins = USet.union d_origins p_origins in
+        let origin_elided = USet.intersection origins fwd_elided in
+          let*? () = (USet.size origin_elided = 0, "origins elided") in
+
+          Lwt.return true
+  in
+
+  let check_final_combo (path : path_info) (combo : justification list) =
+    let ( let*? ) (condition, msg) f =
+      if condition then f ()
+      else (
         if USet.equal path.path tracer_path then
-          Logs.debug (fun m ->
-              m
-                "  Rejected partial combo due to missing\n\
-                \            symbol origins"
-          );
+          Logs.debug (fun m -> m "  Rejected: %s" msg);
         Lwt.return false
       )
-      else
-        (* delta events must be on path *)
-        let just_delta = USet.union just.fwd just.we in
-        let just_delta_events =
-          USet.union (URelation.pi_1 just_delta) (URelation.pi_2 just_delta)
-        in
-          if not (USet.subset just_delta_events path.path) then (
-            Logs.debug (fun m ->
-                m "  Rejected partial combo due to delta events not on path"
-            );
-            Lwt.return false
-          )
-          else
-            List.map (fun (just : justification) -> just.p) combo
-            |> List.flatten
-            |> List.append path_preds
-            |> USet.of_list
-            |> USet.values
-            |> Solver.is_sat
-  in
-  let check_final_combo (path : path_info) (combo : justification list) =
+    in
+
     let delta =
       USet.flatten
         (USet.map (fun j -> USet.union j.fwd j.we) (USet.of_list combo))
     in
 
-    if not (URelation.acyclic delta) then (
-      Logs.debug (fun m ->
-          m "  Rejected final combo due to cyclic delta relation"
-      );
-      Lwt.return false
-    )
-    else if not (URelation.is_function (URelation.exhaustive_closure delta))
-    then (
-      Logs.debug (fun m ->
-          m "  Rejected final combo due to non-functional delta relation"
-      );
-      Lwt.return false
-    )
-    else Lwt.return true
+    let*? () = (URelation.acyclic delta, "cyclic delta relation") in
+
+    let*? () =
+      ( URelation.is_function (URelation.exhaustive_closure delta),
+        "non-functional delta relation"
+      )
+    in
+
+    let* satisfiable =
+      List.map (fun (just : justification) -> just.p) combo
+      |> List.flatten
+      |> List.append path.p
+      |> USet.of_list
+      |> USet.values
+      |> Solver.is_sat_cached
+    in
+      let*? () = (satisfiable, "unsatisfiable path predicates") in
+
+      Lwt.return true
   in
 
   let* justcombos_list =
@@ -694,65 +718,32 @@ let build_justcombos structure paths init_ppo statex
             (fun combo -> check_final_combo path combo)
         in
 
-        if USet.equal path.path tracer_path then
-          Logs.debug (fun m ->
-              m "  Found %d justification combinations"
-                (List.length js_combinations)
-          );
+        Logs.debug (fun m ->
+            m "  Found %d justification combinations"
+              (List.length js_combinations)
+        );
 
         (* For each combination, create freeze functions *)
         let* freeze_fns =
           Lwt_list.map_s
-            (fun j_list ->
+            (fun just_combo ->
               let fwd =
                 List.fold_left
                   (fun acc j -> USet.union acc j.fwd)
-                  (USet.create ()) j_list
+                  (USet.create ()) just_combo
               in
-
-              (* TODO this shouldn't be possible, because fwd should be
-                 po-before w and thus on path *)
-              if
-                USet.union (URelation.pi_1 fwd) (URelation.pi_2 fwd)
-                |> USet.exists (fun e -> not (USet.mem path.path e))
-              then (
-                Logs.debug (fun m ->
-                    m
-                      "  Skipping justification combination with out-of-path \
-                       fwd"
-                );
-                Lwt.return_none
-              )
-              else
-                let we =
-                  List.fold_left
-                    (fun acc j -> USet.union acc j.we)
-                    (USet.create ()) j_list
-                in
-
-                if
-                  USet.union (URelation.pi_1 we) (URelation.pi_2 we)
-                  |> USet.exists (fun e -> not (USet.mem path.path e))
-                then (
-                  Logs.debug (fun m ->
-                      m
-                        "  Skipping justification combination with out-of-path \
-                         we"
-                  );
-                  Lwt.return_none
-                )
-                else
-                  let con = Forwardingcontext.create ~fwd ~we () in
-                  let j_remapped =
-                    List.map
-                      (fun j -> Forwardingcontext.remap_just con j None)
-                      j_list
-                  in
-
-                  let* freeze_opt =
-                    create_freeze structure path j_remapped init_ppo statex
-                  in
-                    Lwt.return freeze_opt
+              let we =
+                List.fold_left
+                  (fun acc j -> USet.union acc j.we)
+                  (USet.create ()) just_combo
+              in
+              let con = Forwardingcontext.create ~fwd ~we () in
+              let j_remapped =
+                List.map
+                  (fun j -> Forwardingcontext.remap_just con j None)
+                  just_combo
+              in
+                create_freeze structure path j_remapped init_ppo statex
             )
             js_combinations
         in
@@ -825,7 +816,7 @@ let generate_executions (structure : symbolic_event_structure)
         let w_restrict =
           Hashtbl.find_opt structure.restrict w |> Option.value ~default:[]
         in
-          let* w_r_comp = Solver.is_sat (r_restrict @ w_restrict) in
+          let* w_r_comp = Solver.is_sat_cached (r_restrict @ w_restrict) in
             if w_r_comp then
               match (get_loc events w, get_loc events r) with
               | Some loc_w, Some loc_r ->
@@ -862,6 +853,7 @@ let generate_executions (structure : symbolic_event_structure)
   );
 
   (* Build justification map: write label -> list of justifications *)
+  (* TODO remove justifications with elided origins *)
   let justmap = Hashtbl.create 16 in
     USet.iter
       (fun (just : justification) ->
@@ -909,6 +901,16 @@ let generate_executions (structure : symbolic_event_structure)
           )
     );
 
+    let freeze_and_validate_rf path freeze_fn =
+      let rf =
+        List.filter
+          (fun (w, r) -> USet.mem path.path w && USet.mem path.path r)
+          (USet.values all_rf)
+        |> USet.of_list
+      in
+        freeze_fn rf
+    in
+
     (* Build justcombos for all paths *)
     let* justcombos =
       build_justcombos structure paths init_ppo statex justmap
@@ -930,10 +932,7 @@ let generate_executions (structure : symbolic_event_structure)
           (* Try each freeze function with the RF relation *)
           let* path_execs =
             Lwt_list.filter_map_s
-              (fun freeze_fn ->
-                (* Try to validate with all_rf *)
-                freeze_fn all_rf
-              )
+              (fun freeze_fn -> freeze_and_validate_rf path freeze_fn)
               freeze_fns
           in
 

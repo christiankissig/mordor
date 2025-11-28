@@ -57,11 +57,21 @@ val check : solver -> bool option Lwt.t
 (** Quick satisfiability check - creates solver and checks in one call *)
 val quick_check : expr list -> bool option Lwt.t
 
+(** Quick satisfiability check - creates solver and checks in one call. Cached
+*)
+val quick_check_cached : expr list -> bool option Lwt.t
+
 (** Check if expression list is satisfiable *)
 val is_sat : expr list -> bool Lwt.t
 
+(** Check if expression list is satisfiable. Cached *)
+val is_sat_cached : expr list -> bool Lwt.t
+
 (** Check if expression list is unsatisfiable *)
 val is_unsat : expr list -> bool Lwt.t
+
+(** Check if expression list is unsatisfiable. Cached *)
+val is_unsat_cached : expr list -> bool Lwt.t
 
 (** Advanced solve that checks multiple strategies *)
 val solve_advanced : solver -> bool option Lwt.t
