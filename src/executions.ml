@@ -608,7 +608,7 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
 let build_justcombos structure paths init_ppo statex
     (justmap : (int, justification list) Hashtbl.t) =
   let check_partial_combo (path : path_info) (combo : justification list)
-      (just : justification) =
+      ?(alternatives = []) (just : justification) =
     let ( let*? ) (condition, msg) f =
       if condition then f ()
       else (
@@ -618,6 +618,7 @@ let build_justcombos structure paths init_ppo statex
       )
     in
 
+    (* Prune if any origins of symbols in d of current justification are not on the path *)
     let sym_origins =
       USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
     in
@@ -625,6 +626,7 @@ let build_justcombos structure paths init_ppo statex
         (USet.subset sym_origins path.path, "missing symbol origins")
       in
 
+      (* Prune if delta of current justification is not on the path. *)
       let just_delta = USet.union just.fwd just.we in
       let just_delta_events =
         USet.union (URelation.pi_1 just_delta) (URelation.pi_2 just_delta)
@@ -633,9 +635,12 @@ let build_justcombos structure paths init_ppo statex
           (USet.subset just_delta_events path.path, "delta events not on path")
         in
 
+        (* Prune if any orgins of symbols are elided by fwd edges of the
+           combination and current justification *)
         let fwd =
           USet.flatten (USet.map (fun j -> j.fwd) (USet.of_list combo))
         in
+        (* only consider fwd edges for symbol origins *)
         let fwd_elided =
           USet.union (URelation.pi_1 fwd) (URelation.pi_1 just.fwd)
         in
@@ -652,7 +657,70 @@ let build_justcombos structure paths init_ppo statex
         let origin_elided = USet.intersection origins fwd_elided in
           let*? () = (USet.size origin_elided = 0, "origins elided") in
 
-          Lwt.return true
+          let we =
+            USet.flatten (USet.map (fun j -> j.we) (USet.of_list combo))
+          in
+          (* Prune if delta of current justification is contained in the
+             accumulated delta of the combination and there exists an
+             alternative justification other than the current one, whose delta
+             is also contained in the accumulated delta, and which in turn
+             contains the delta of the current justification. This avoids
+             exploring superseeded justifications. *)
+          let superseeded =
+            USet.subset just.fwd fwd
+            && USet.subset just.we we
+            && List.exists
+                 (fun alt ->
+                   alt != just
+                   && just.w = alt.w (*given*)
+                   && USet.subset alt.fwd fwd
+                   && USet.subset alt.we we
+                   && USet.equal just.d alt.d
+                   && USet.subset just.fwd alt.fwd
+                   && USet.subset just.we alt.we
+                   && List.equal Expr.equal just.p alt.p
+                 )
+                 alternatives
+          in
+            let*? () =
+              (not superseeded, "justification superseeded in delta")
+            in
+
+            (* Prune if delta of current justification is contained in the
+               accumulated delta of the combination and there exists an
+               alternative justification other than the current one, whose delta
+               is also contained in the accumulated delta, and which in turn
+               contains the delta of the current justification, and whose
+               predicates are a superset of the current justification's
+               predicates. This avoids exploring superseeded justifications in
+               terms of ordering constraints. *)
+            let superseeded =
+              USet.subset just.fwd fwd
+              && USet.subset just.we we
+              && List.exists
+                   (fun alt ->
+                     alt != just
+                     && just.w = alt.w (*given*)
+                     && USet.subset alt.fwd fwd
+                     && USet.subset alt.we we
+                     && USet.subset alt.d just.d
+                     && List.for_all
+                          (fun expr ->
+                            List.exists
+                              (fun expr2 -> Expr.equal expr expr2)
+                              just.p
+                          )
+                          alt.p
+                   )
+                   alternatives
+            in
+              let*? () =
+                ( not superseeded,
+                  "justification superseeded in ordering constraints"
+                )
+              in
+
+              Lwt.return true
   in
 
   let check_final_combo (path : path_info) (combo : justification list) =
@@ -734,7 +802,9 @@ let build_justcombos structure paths init_ppo statex
 
         let%lwt js_combinations =
           ListMapCombinationBuilder.build_combinations justmap path_writes
-            (fun combo just -> check_partial_combo path combo just)
+            (fun combo ?alternatives just ->
+              check_partial_combo path combo ?alternatives just
+            )
             (fun combo -> check_final_combo path combo)
         in
 

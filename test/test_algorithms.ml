@@ -14,7 +14,7 @@ let test_build_combinations =
 
         let sum combo = List.fold_left (fun a b -> a + b) 0 combo in
 
-        let check_partial_combo combo just =
+        let[@warning "-27"] check_partial_combo combo ?alternatives just =
           Lwt.return (sum combo + just < 15)
         in
         let check_final_combo combo = Lwt.return (sum combo < 15) in
