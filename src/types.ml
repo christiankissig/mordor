@@ -173,7 +173,6 @@ type symbolic_execution = {
   ex_p : expr list; (* Predicates *)
   conds : expr list; (* Conditions *)
   fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
-  justs : justification list; (* Justifications *)
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer mappings *)
 }
 

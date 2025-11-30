@@ -155,10 +155,9 @@ let partition_by_conflict neighbours conflict =
 let gen_paths events (structure : symbolic_event_structure) restrict =
   let po_intransitive = URelation.transitive_reduction structure.po in
   let po_tree = build_tree structure.e po_intransitive in
-  (* TODO subsequently assuming that multiple successors are in conflict *)
 
-  (* DFS search for all paths. Each path is a uset event IDs. Search produces list
-   of such paths. *)
+  (* DFS search for all paths. Each path is a uset event IDs. Search produces
+     list of such paths. *)
   let rec dfs current =
     let neighbours =
       Hashtbl.find_opt po_tree current |> Option.value ~default:(USet.create ())
@@ -493,10 +492,11 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
 
   let _e = USet.set_minus e elided in
 
-  Logs.debug (fun m ->
-      m "  Created elided set with %d events and elided_rf with %d pairs"
-        (USet.size elided) (USet.size elided_rf)
-  );
+  if USet.equal path.path tracer_path then
+    Logs.debug (fun m ->
+        m "  Created elided set with %d events and elided_rf with %d pairs"
+          (USet.size elided) (USet.size elided_rf)
+    );
 
   (* Create forwarding context *)
   let con = Forwardingcontext.create ~fwd:f ~we () in
@@ -511,18 +511,21 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
     |> USet.values
   in
 
-  Logs.debug (fun m ->
-      m "  Combined predicates count: %d" (List.length p_combined)
-  );
+  if USet.equal path.path tracer_path then
+    Logs.debug (fun m ->
+        m "  Combined predicates count: %d" (List.length p_combined)
+    );
 
   (* Check if predicates are satisfiable *)
   let* p_combined_sat = Solver.is_sat_cached p_combined in
     if not p_combined_sat then (
-      Logs.debug (fun m -> m "  Predicates unsatisfiable");
+      if USet.equal path.path tracer_path then
+        Logs.debug (fun m -> m "  Predicates unsatisfiable");
       Lwt.return_none
     )
     else (
-      Logs.debug (fun m -> m "  Predicates satisfiable");
+      if USet.equal path.path tracer_path then
+        Logs.debug (fun m -> m "  Predicates satisfiable");
       (* Check that all writes in E are either elided or have justifications *)
       let check_3 =
         USet.for_all
@@ -534,9 +537,10 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
 
       if not check_3 then Lwt.return_none
       else (
-        Logs.debug (fun m ->
-            m "  All writes in E are either elided or justified"
-        );
+        if USet.equal path.path tracer_path then
+          Logs.debug (fun m ->
+              m "  All writes in E are either elided or justified"
+          );
         (* Compute PPO for each justification *)
         let* ppos =
           Lwt_list.map_s
@@ -582,10 +586,11 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
         let ppo_loc = USet.intersection ppo_loc e_squared in
         let ppo_loc_tree = build_tree e ppo_loc in
 
-        Logs.debug (fun m ->
-            m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
-              (USet.size ppo) (USet.size ppo_loc)
-        );
+        if USet.equal path.path tracer_path then
+          Logs.debug (fun m ->
+              m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
+                (USet.size ppo) (USet.size ppo_loc)
+          );
 
         (* Combine dp and ppo *)
         let dp_ppo = USet.union dp ppo in
@@ -598,7 +603,8 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
             p_combined rf
         in
 
-        Logs.debug (fun m -> m "  Created freeze function");
+        if USet.equal path.path tracer_path then
+          Logs.debug (fun m -> m "  Created freeze function");
 
         Lwt.return_some freeze_fn
       )
@@ -760,7 +766,7 @@ let build_justcombos structure paths init_ppo statex
   in
 
   let stream_just_combo_to_freeze_fn input_stream =
-    Lwt_stream.map_s
+    Lwt_stream.filter_map_s
       (fun ((path : path_info), (just_combo : justification list)) ->
         let fwd =
           List.fold_left
@@ -776,10 +782,12 @@ let build_justcombos structure paths init_ppo statex
         let j_remapped =
           List.map (fun j -> Forwardingcontext.remap_just con j None) just_combo
         in
-        let freeze_fn =
-          create_freeze structure path j_remapped init_ppo statex
-        in
-          Lwt.return (path, just_combo, freeze_fn)
+          let* freeze_fn_opt =
+            create_freeze structure path j_remapped init_ppo statex
+          in
+            match freeze_fn_opt with
+            | Some freeze_fn -> Lwt.return_some (path, just_combo, freeze_fn)
+            | None -> Lwt.return_none
       )
       input_stream
   in
@@ -818,39 +826,9 @@ let build_justcombos structure paths init_ppo statex
       input_stream
   in
 
-  let path_stream = Lwt_stream.of_list paths in
-
-  let* freeze_fns =
-    path_stream
-    |> stream_path_to_just_combos
-    |> stream_just_combo_to_freeze_fn
-    |> Lwt_stream.to_list
-  in
-
-  let%lwt resolved_freeze_fns =
-    Lwt.all
-      (List.map
-         (fun (path, x, fn_lwt) ->
-           let%lwt fn_opt = fn_lwt in
-             Lwt.return (path, x, fn_opt)
-         )
-         freeze_fns
-      )
-  in
-
-  let justcombos = Hashtbl.create 16 in
-    List.iter
-      (fun (path, _, freeze_fn_opt) ->
-        match freeze_fn_opt with
-        | None -> ()
-        | Some freeze_fn ->
-            let existing =
-              Hashtbl.find_opt justcombos path.path |> Option.value ~default:[]
-            in
-              Hashtbl.replace justcombos path.path (freeze_fn :: existing)
-      )
-      resolved_freeze_fns;
-    Lwt.return justcombos
+  Lwt_stream.of_list paths
+  |> stream_path_to_just_combos
+  |> stream_just_combo_to_freeze_fn
 
 (** Generate executions **)
 
@@ -997,42 +975,20 @@ let generate_executions (structure : symbolic_event_structure)
         freeze_fn rf
     in
 
-    (* Build justcombos for all paths *)
-    let* justcombos =
-      build_justcombos structure paths init_ppo statex justmap
-    in
-
-    Logs.debug (fun m -> m "Built justification combinations for all paths");
-
-    (* Enumerate RF sets - simplified version *)
-    (* In full version, this would use a more sophisticated RF enumeration *)
-    let* all_executions =
-      (* For each path, try to build executions *)
-      Lwt_list.map_s
-        (fun path ->
-          (* Get freeze functions for this path *)
-          let freeze_fns =
-            Hashtbl.find_opt justcombos path.path |> Option.value ~default:[]
-          in
-
-          (* Try each freeze function with the RF relation *)
-          let* path_execs =
-            Lwt_list.filter_map_s
-              (fun freeze_fn -> freeze_and_validate_rf path freeze_fn)
-              freeze_fns
-          in
-
-          Lwt.return path_execs
+    let stream_freeze input_stream =
+      Lwt_stream.filter_map_s
+        (fun (path, just_combo, freeze_fn) ->
+          let* freeze_res_opt = freeze_and_validate_rf path freeze_fn in
+            match freeze_res_opt with
+            | Some freeze_res -> Lwt.return_some freeze_res
+            | None -> Lwt.return_none
         )
-        paths
+        input_stream
     in
 
-    Logs.debug (fun m -> m "Generated all executions from paths");
-
-    (* Convert freeze_results to executions *)
-    let* final_executions =
-      List.concat all_executions
-      |> Lwt_list.map_s (fun (freeze_res : freeze_result) ->
+    let stream_freeze_to_execution input_stream =
+      Lwt_stream.map_s
+        (fun (freeze_res : freeze_result) ->
           (* Fixed point computation for RF mapping *)
           let fix_rf_map = Hashtbl.create 16 in
 
@@ -1093,28 +1049,45 @@ let generate_executions (structure : symbolic_event_structure)
               ex_p = freeze_res.pp;
               conds = freeze_res.conds;
               fix_rf_map = final_map;
-              justs = freeze_res.justs;
               pointer_map = None;
             }
           in
 
+          Logs.debug (fun m -> m "Generated execution:\n%s" (to_string exec));
+
           Lwt.return exec
-      )
+        )
+        input_stream
+    in
+
+    let stream_filter_coherent_executions input_stream =
+      Lwt_stream.filter_map_s
+        (fun exec ->
+          let* coherent =
+            check_for_coherence structure exec restrictions include_dependencies
+          in
+            Logs.debug (fun m ->
+                if coherent then m "Execution is coherent"
+                else m "Execution is not coherent"
+            );
+            if coherent then Lwt.return_some exec else Lwt.return_none
+        )
+        input_stream
+    in
+
+    (* Build justcombos for all paths *)
+    let* executions =
+      build_justcombos structure paths init_ppo statex justmap
+      |> stream_freeze
+      |> stream_freeze_to_execution
+      |> stream_filter_coherent_executions
+      |> Lwt_stream.to_list
     in
 
     Logs.debug (fun m ->
-        m "Generated %d executions before coherence filtering\n\n%s"
-          (List.length final_executions)
-          (String.concat "\n\n" (List.map to_string final_executions))
+        m "Generated %d executions after coherence filtering\n\n%s"
+          (List.length executions)
+          (String.concat "\n\n" (List.map to_string executions))
     );
 
-    (* Filter through coherence checking *)
-    let* coherent_execs =
-      Lwt_list.filter_p
-        (fun exec ->
-          check_for_coherence structure events exec restrictions
-            include_dependencies
-        )
-        final_executions
-    in
-      Lwt.return coherent_execs
+    Lwt.return executions

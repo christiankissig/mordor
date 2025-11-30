@@ -511,204 +511,207 @@ let rec permutations = function
 
 (** Main coherence checking function *)
 let check_for_coherence (structure : symbolic_event_structure)
-    (events : (int, event) Hashtbl.t) (execution : symbolic_execution)
-    (restrictions : restrictions) (include_dependencies : bool) : bool Lwt.t =
-  if USet.size execution.ex_e = 0 then Lwt.return false
-  else
-    let ({ po; restrict; _ } : symbolic_event_structure) = structure in
-    let writes =
-      USet.filter
-        (fun ev_id ->
-          try
-            let event = Hashtbl.find events ev_id in
-              event.typ = Write
-          with Not_found -> false
-        )
-        execution.ex_e
-    in
-
-    if USet.size writes < 2 then Lwt.return true
+    (execution : symbolic_execution) (restrictions : restrictions)
+    (include_dependencies : bool) : bool Lwt.t =
+  let events = structure.events in
+    if USet.size execution.ex_e = 0 then Lwt.return false
     else
-      (* Create location equivalence relation using semantic equality *)
-      let%lwt eqlocs =
-        let all_events = execution.ex_e in
-          USet.async_filter
-            (fun (a, b) ->
-              if a = b then Lwt.return true
-              else
-                try
-                  let ev_a = Hashtbl.find events a in
-                  let ev_b = Hashtbl.find events b in
-                    match (ev_a.loc, ev_b.loc) with
-                    | Some loc_a, Some loc_b ->
-                        (* Use solver to check semantic equality *)
-                        Solver.Semeq.exeq
-                          (Solver.Semeq.create_state ())
-                          loc_a loc_b
-                    | _ -> Lwt.return false
-                with Not_found -> Lwt.return false
-            )
-            (URelation.cross all_events all_events
-            |> USet.filter (fun (a, b) -> a <= b)
-            )
-      in
-      let eqlocs =
-        USet.inplace_union eqlocs (URelation.inverse_relation eqlocs)
-      in
-
-      let loc_restrict x =
-        USet.filter (fun (a, b) -> USet.mem eqlocs (a, b)) x
-      in
-
-      (* Check if reads from init *)
-      let reads_from_init =
-        USet.exists (fun (_, to_id) -> to_id = 0) execution.rf
-      in
-
-      (* Group writes by location *)
-      let writes_per_location =
-        let groups = ref [] in
-          USet.iter
-            (fun w ->
-              let found = ref false in
-                List.iter
-                  (fun group ->
-                    if USet.mem eqlocs (List.hd !group, w) then (
-                      (* Add ! here *)
-                      group := w :: !group;
-                      found := true
-                    )
-                  )
-                  !groups;
-                if not !found then
-                  groups :=
-                    ref (if reads_from_init then [ w; 0 ] else [ w ]) :: !groups
-            )
-            writes;
-          List.filter (fun g -> List.length !g > 1) !groups
-          |> List.map (fun g ->
-              let perms = permutations !g in
-                List.map
-                  (fun perm ->
-                    let rec to_pairs acc = function
-                      | [] | [ _ ] -> List.rev acc
-                      | x :: (y :: _ as rest) -> to_pairs ((x, y) :: acc) rest
-                    in
-                      to_pairs [] perm
-                  )
-                  perms
+      let ({ po; restrict; _ } : symbolic_event_structure) = structure in
+      let writes =
+        USet.filter
+          (fun ev_id ->
+            try
+              let event = Hashtbl.find events ev_id in
+                event.typ = Write
+            with Not_found -> false
           )
+          execution.ex_e
       in
 
-      (* Build cache based on memory model *)
-      (* Build cache based on memory model *)
-      let cache_result, deps_fn, thin_fn, coherent_fn =
-        match restrictions.coherent with
-        | "imm" -> (
-            let cache =
-              imm_coherent_cache execution structure events loc_restrict
-            in
-              ( IMMCache cache,
-                imm_deps,
-                (fun _ _ -> true),
-                (* thin_fn *)
-                fun co c ->
-                  match c with
-                  | IMMCache cache -> imm_coherent co cache
-                  | _ -> false
-              )
-          )
-        | "rc11" | "rc11c" -> (
-            let cache =
-              rc11_coherent_cache execution structure events loc_restrict
-            in
-            let thin =
-              if restrictions.coherent = "rc11" then
-                fun (exec : symbolic_execution) (c : cache) ->
-                match c with
-                | RC11Cache cache ->
-                    URelation.acyclic (USet.union cache.sb exec.rf)
-                | _ -> true
-              else fun _ _ -> true
-            in
-              ( RC11Cache cache,
-                (fun _ _ _ _ _ -> USet.create ()),
-                thin,
-                (* Already has the right type: symbolic_execution -> cache -> bool *)
-                fun co c ->
-                  match c with
-                  | RC11Cache cache -> rc11_coherent co cache
-                  | _ -> false
-              )
-          )
-        | _ ->
-            let cache =
-              if USet.size execution.ex_rmw > 0 then
-                UndefinedCache
-                  {
-                    rfi = Some (URelation.inverse_relation execution.rf);
-                    rmw = Some execution.ex_rmw;
-                  }
-              else UndefinedCache { rfi = None; rmw = None }
-            in
-            let coherent co cache =
-              match cache with
-              | UndefinedCache { rfi = Some rfi; rmw = Some rmw } ->
-                  let fr = semicolon_rel [ rfi; co ] in
-                    USet.size (USet.intersection rmw (semicolon_rel [ fr; co ]))
-                    = 0
-              | _ -> true
-            in
-              ( cache,
-                (fun _ _ _ _ _ -> USet.create ()),
-                (fun _ _ -> true),
-                coherent (* This one already has the right type *)
-              )
-      in
-
-      (* Compute dependencies if needed *)
-      let execution =
-        if not include_dependencies then
-          match cache_result with
-          | IMMCache c ->
-              {
-                execution with
-                dp = deps_fn execution events po structure.e restrict;
-              }
-          | RC11Cache c ->
-              {
-                execution with
-                dp = deps_fn execution events po structure.e restrict;
-              }
-          | _ -> execution
-        else execution
-      in
-
-      (* Check thin-air *)
-      if (not include_dependencies) && not (thin_fn execution cache_result) then
-        Lwt.return false
+      if USet.size writes < 2 then Lwt.return true
       else
-        (* Try all coherence orders *)
-        let rec try_all_orders = function
-          | [] -> Lwt.return true
-          | co_list :: rest ->
-              let co = URelation.transitive_closure (USet.of_list co_list) in
-                if coherent_fn co cache_result then try_all_orders rest
-                else Lwt.return false
+        (* Create location equivalence relation using semantic equality *)
+        let%lwt eqlocs =
+          let all_events = execution.ex_e in
+            USet.async_filter
+              (fun (a, b) ->
+                if a = b then Lwt.return true
+                else
+                  try
+                    let ev_a = Hashtbl.find events a in
+                    let ev_b = Hashtbl.find events b in
+                      match (ev_a.loc, ev_b.loc) with
+                      | Some loc_a, Some loc_b ->
+                          (* Use solver to check semantic equality *)
+                          Solver.Semeq.exeq
+                            (Solver.Semeq.create_state ())
+                            loc_a loc_b
+                      | _ -> Lwt.return false
+                  with Not_found -> Lwt.return false
+              )
+              (URelation.cross all_events all_events
+              |> USet.filter (fun (a, b) -> a <= b)
+              )
+        in
+        let eqlocs =
+          USet.inplace_union eqlocs (URelation.inverse_relation eqlocs)
         in
 
-        let rec choose_one i vals =
-          if i < 0 then
-            let co = URelation.transitive_closure (USet.of_list vals) in
-              Lwt.return (coherent_fn co cache_result)
-          else
-            let rec try_perms = function
-              | [] -> Lwt.return false
-              | p :: ps ->
-                  let%lwt result = choose_one (i - 1) (vals @ p) in
-                    if result then Lwt.return true else try_perms ps
-            in
-              try_perms (List.nth writes_per_location i)
+        let loc_restrict x =
+          USet.filter (fun (a, b) -> USet.mem eqlocs (a, b)) x
         in
 
-        choose_one (List.length writes_per_location - 1) []
+        (* Check if reads from init *)
+        let reads_from_init =
+          USet.exists (fun (_, to_id) -> to_id = 0) execution.rf
+        in
+
+        (* Group writes by location *)
+        let writes_per_location =
+          let groups = ref [] in
+            USet.iter
+              (fun w ->
+                let found = ref false in
+                  List.iter
+                    (fun group ->
+                      if USet.mem eqlocs (List.hd !group, w) then (
+                        (* Add ! here *)
+                        group := w :: !group;
+                        found := true
+                      )
+                    )
+                    !groups;
+                  if not !found then
+                    groups :=
+                      ref (if reads_from_init then [ w; 0 ] else [ w ])
+                      :: !groups
+              )
+              writes;
+            List.filter (fun g -> List.length !g > 1) !groups
+            |> List.map (fun g ->
+                let perms = permutations !g in
+                  List.map
+                    (fun perm ->
+                      let rec to_pairs acc = function
+                        | [] | [ _ ] -> List.rev acc
+                        | x :: (y :: _ as rest) -> to_pairs ((x, y) :: acc) rest
+                      in
+                        to_pairs [] perm
+                    )
+                    perms
+            )
+        in
+
+        (* Build cache based on memory model *)
+        (* Build cache based on memory model *)
+        let cache_result, deps_fn, thin_fn, coherent_fn =
+          match restrictions.coherent with
+          | "imm" -> (
+              let cache =
+                imm_coherent_cache execution structure events loc_restrict
+              in
+                ( IMMCache cache,
+                  imm_deps,
+                  (fun _ _ -> true),
+                  (* thin_fn *)
+                  fun co c ->
+                    match c with
+                    | IMMCache cache -> imm_coherent co cache
+                    | _ -> false
+                )
+            )
+          | "rc11" | "rc11c" -> (
+              let cache =
+                rc11_coherent_cache execution structure events loc_restrict
+              in
+              let thin =
+                if restrictions.coherent = "rc11" then
+                  fun (exec : symbolic_execution) (c : cache) ->
+                  match c with
+                  | RC11Cache cache ->
+                      URelation.acyclic (USet.union cache.sb exec.rf)
+                  | _ -> true
+                else fun _ _ -> true
+              in
+                ( RC11Cache cache,
+                  (fun _ _ _ _ _ -> USet.create ()),
+                  thin,
+                  (* Already has the right type: symbolic_execution -> cache -> bool *)
+                  fun co c ->
+                    match c with
+                    | RC11Cache cache -> rc11_coherent co cache
+                    | _ -> false
+                )
+            )
+          | _ ->
+              let cache =
+                if USet.size execution.ex_rmw > 0 then
+                  UndefinedCache
+                    {
+                      rfi = Some (URelation.inverse_relation execution.rf);
+                      rmw = Some execution.ex_rmw;
+                    }
+                else UndefinedCache { rfi = None; rmw = None }
+              in
+              let coherent co cache =
+                match cache with
+                | UndefinedCache { rfi = Some rfi; rmw = Some rmw } ->
+                    let fr = semicolon_rel [ rfi; co ] in
+                      USet.size
+                        (USet.intersection rmw (semicolon_rel [ fr; co ]))
+                      = 0
+                | _ -> true
+              in
+                ( cache,
+                  (fun _ _ _ _ _ -> USet.create ()),
+                  (fun _ _ -> true),
+                  coherent (* This one already has the right type *)
+                )
+        in
+
+        (* Compute dependencies if needed *)
+        let execution =
+          if not include_dependencies then
+            match cache_result with
+            | IMMCache c ->
+                {
+                  execution with
+                  dp = deps_fn execution events po structure.e restrict;
+                }
+            | RC11Cache c ->
+                {
+                  execution with
+                  dp = deps_fn execution events po structure.e restrict;
+                }
+            | _ -> execution
+          else execution
+        in
+
+        (* Check thin-air *)
+        if (not include_dependencies) && not (thin_fn execution cache_result)
+        then Lwt.return false
+        else
+          (* Try all coherence orders *)
+          let rec try_all_orders = function
+            | [] -> Lwt.return true
+            | co_list :: rest ->
+                let co = URelation.transitive_closure (USet.of_list co_list) in
+                  if coherent_fn co cache_result then try_all_orders rest
+                  else Lwt.return false
+          in
+
+          let rec choose_one i vals =
+            if i < 0 then
+              let co = URelation.transitive_closure (USet.of_list vals) in
+                Lwt.return (coherent_fn co cache_result)
+            else
+              let rec try_perms = function
+                | [] -> Lwt.return false
+                | p :: ps ->
+                    let%lwt result = choose_one (i - 1) (vals @ p) in
+                      if result then Lwt.return true else try_perms ps
+              in
+                try_perms (List.nth writes_per_location i)
+          in
+
+          choose_one (List.length writes_per_location - 1) []

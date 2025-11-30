@@ -135,13 +135,16 @@ val create_freeze :
     @param justmap Map from write labels to justifications
     @return [Lwt.t] of hash table mapping path event sets to freeze functions *)
 val build_justcombos :
-  symbolic_event_structure ->
+  Types.symbolic_event_structure ->
   path_info list ->
-  (int * int) uset ->
-  expr list ->
-  (int, justification list) Hashtbl.t ->
-  (int uset, ((int * int) uset -> freeze_result option Lwt.t) list) Hashtbl.t
-  Lwt.t
+  (int * int) Uset.USet.t ->
+  Types.expr list ->
+  (int, Types.justification list) Hashtbl.t ->
+  ( path_info
+  * Types.justification list
+  * (int Uset.URelation.t -> freeze_result option Lwt.t)
+  )
+  Lwt_stream.t
 
 (** {1 Main Execution Generation} *)
 

@@ -93,7 +93,6 @@ val imm_deps :
 (** Main coherence checking function *)
 val check_for_coherence :
   symbolic_event_structure ->
-  (int, event) Hashtbl.t ->
   symbolic_execution ->
   restrictions ->
   bool ->
