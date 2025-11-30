@@ -153,6 +153,8 @@ let partition_by_conflict neighbours conflict =
 
   partition neighbours_list []
 
+(* Generate maximally conflict-free sets of events as paths through the
+     symbolic event structure *)
 let gen_paths (structure : symbolic_event_structure) =
   let po_intransitive = URelation.transitive_reduction structure.po in
   let po_tree = build_tree structure.e po_intransitive in
@@ -218,9 +220,11 @@ let gen_paths (structure : symbolic_event_structure) =
 
   (* Generate p from value restrictions along path and compose path_info. TODO
      need to filter paths by satisfiability? *)
-  let paths = USet.values roots |> List.map dfs |> List.flatten in
-    List.map
-      (fun path ->
+  let paths =
+    USet.values roots
+    |> List.map dfs
+    |> List.flatten
+    |> List.map (fun path ->
         let p =
           USet.values path
           |> List.map (fun e ->
@@ -231,8 +235,12 @@ let gen_paths (structure : symbolic_event_structure) =
           |> USet.values
         in
           { path; p }
-      )
-      paths
+    )
+  in
+    Logs.debug (fun m ->
+        m "Generated %d paths through the control flow" (List.length paths)
+    );
+    paths
 
 (** Freezing **)
 
@@ -768,33 +776,6 @@ let build_justcombos structure paths init_ppo statex
       Lwt.return true
   in
 
-  let stream_just_combo_to_freeze_fn input_stream =
-    Lwt_stream.filter_map_s
-      (fun ((path : path_info), (just_combo : justification list)) ->
-        let fwd =
-          List.fold_left
-            (fun acc j -> USet.union acc j.fwd)
-            (USet.create ()) just_combo
-        in
-        let we =
-          List.fold_left
-            (fun acc j -> USet.union acc j.we)
-            (USet.create ()) just_combo
-        in
-        let con = Forwardingcontext.create ~fwd ~we () in
-        let j_remapped =
-          List.map (fun j -> Forwardingcontext.remap_just con j None) just_combo
-        in
-          let* freeze_fn_opt =
-            create_freeze structure path j_remapped init_ppo statex
-          in
-            match freeze_fn_opt with
-            | Some freeze_fn -> Lwt.return_some (path, just_combo, freeze_fn)
-            | None -> Lwt.return_none
-      )
-      input_stream
-  in
-
   let stream_path_to_just_combos input_stream =
     Lwt_stream.map_list_s
       (fun path ->
@@ -829,31 +810,13 @@ let build_justcombos structure paths init_ppo statex
       input_stream
   in
 
-  Lwt_stream.of_list paths
-  |> stream_path_to_just_combos
-  |> stream_just_combo_to_freeze_fn
+  Lwt_stream.of_list paths |> stream_path_to_just_combos
 
 (** Generate executions **)
 
-(** Main execution generation - replaces the stub in calculate_dependencies *)
-let generate_executions (structure : symbolic_event_structure)
-    (justs : justification uset) statex init_ppo ~include_dependencies
-    ~restrictions =
-  let* _ = Lwt.return_unit in
-
-  Logs.debug (fun m ->
-      m "Generating executions for structure with %d events"
-        (USet.size structure.e)
-  );
-
-  (* Generate all paths through the control flow *)
-  let paths = gen_paths structure in
-
-  Logs.debug (fun m ->
-      m "Generated %d paths through the control flow" (List.length paths)
-  );
-
-  (* Compute initial RF relation: writes × reads that are not in po^-1 and not dslwb *)
+(* Compute initial RF relation: writes × reads that are not in po^-1 and not
+     dslwb *)
+let compute_candidate_rf structure =
   let inv_po = URelation.inverse_relation structure.po in
   let w_with_init = USet.union structure.write_events (USet.singleton 0) in
   let w_cross_r = URelation.cross w_with_init structure.read_events in
@@ -882,28 +845,44 @@ let generate_executions (structure : symbolic_event_structure)
       )
       w_cross_r_minus_inv_po
   in
+    Logs.debug (fun m -> m "Candidate RF pairs (%d)" (USet.size all_rf));
 
-  Logs.debug (fun m -> m "Candidate RF pairs (%d)" (USet.size all_rf));
+    Logs.debug (fun m ->
+        m "RF pairs on the tracer path are %s"
+          (String.concat ", "
+             (List.map
+                (fun (w, r) -> Printf.sprintf "(%d,%d)" w r)
+                (USet.values
+                   (USet.filter
+                      (fun (w, r) ->
+                        USet.mem structure.e w
+                        && USet.mem structure.e r
+                        && USet.mem tracer_path w
+                        && USet.mem tracer_path r
+                      )
+                      all_rf
+                   )
+                )
+             )
+          )
+    );
+    Lwt.return all_rf
+
+(** Main execution generation - replaces the stub in calculate_dependencies *)
+let generate_executions (structure : symbolic_event_structure)
+    (justs : justification uset) statex init_ppo ~include_dependencies
+    ~restrictions =
+  let* _ = Lwt.return_unit in
 
   Logs.debug (fun m ->
-      m "RF pairs on the tracer path are %s"
-        (String.concat ", "
-           (List.map
-              (fun (w, r) -> Printf.sprintf "(%d,%d)" w r)
-              (USet.values
-                 (USet.filter
-                    (fun (w, r) ->
-                      USet.mem structure.e w
-                      && USet.mem structure.e r
-                      && USet.mem tracer_path w
-                      && USet.mem tracer_path r
-                    )
-                    all_rf
-                 )
-              )
-           )
-        )
+      m "Generating executions for structure with %d events"
+        (USet.size structure.e)
   );
+
+  (* Generate all paths through the control flow *)
+  let paths = gen_paths structure in
+
+  let* all_rf = compute_candidate_rf structure in
 
   (* Build justification map: write label -> list of justifications *)
   (* TODO remove justifications with elided origins *)
@@ -954,25 +933,49 @@ let generate_executions (structure : symbolic_event_structure)
           )
     );
 
-    let freeze_and_validate_rf path freeze_fn =
-      let rf =
-        List.filter
-          (fun (w, r) -> USet.mem path.path w && USet.mem path.path r)
-          (USet.values all_rf)
-        |> USet.of_list
-      in
-        freeze_fn rf
-    in
-
     let stream_freeze input_stream =
-      Lwt_stream.filter_map_s
-        (fun (path, just_combo, freeze_fn) ->
-          let* freeze_res_opt = freeze_and_validate_rf path freeze_fn in
-            match freeze_res_opt with
-            | Some freeze_res -> Lwt.return_some freeze_res
-            | None -> Lwt.return_none
-        )
-        input_stream
+      let freeze_and_validate_rf path freeze_fn =
+        let rf =
+          List.filter
+            (fun (w, r) -> USet.mem path.path w && USet.mem path.path r)
+            (USet.values all_rf)
+          |> USet.of_list
+        in
+          freeze_fn rf
+      in
+        Lwt_stream.filter_map_s
+          (fun (path, just_combo) ->
+            let fwd =
+              List.fold_left
+                (fun acc j -> USet.union acc j.fwd)
+                (USet.create ()) just_combo
+            in
+            let we =
+              List.fold_left
+                (fun acc j -> USet.union acc j.we)
+                (USet.create ()) just_combo
+            in
+            let con = Forwardingcontext.create ~fwd ~we () in
+            let j_remapped =
+              List.map
+                (fun j -> Forwardingcontext.remap_just con j None)
+                just_combo
+            in
+              let* freeze_fn_opt =
+                create_freeze structure path j_remapped init_ppo statex
+              in
+                match freeze_fn_opt with
+                | None -> Lwt.return_none
+                | Some freeze_fn -> (
+                    let* freeze_res_opt =
+                      freeze_and_validate_rf path freeze_fn
+                    in
+                      match freeze_res_opt with
+                      | Some freeze_res -> Lwt.return_some freeze_res
+                      | None -> Lwt.return_none
+                  )
+          )
+          input_stream
     in
 
     let stream_freeze_to_execution input_stream =

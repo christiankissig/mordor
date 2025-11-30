@@ -136,11 +136,7 @@ val build_justcombos :
   (int * int) Uset.USet.t ->
   Types.expr list ->
   (int, Types.justification list) Hashtbl.t ->
-  ( path_info
-  * Types.justification list
-  * (int Uset.URelation.t -> freeze_result option Lwt.t)
-  )
-  Lwt_stream.t
+  (path_info * Types.justification list) Lwt_stream.t
 
 (** {1 Main Execution Generation} *)
 
