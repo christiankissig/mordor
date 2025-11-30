@@ -51,11 +51,7 @@ val origin : symbolic_event_structure -> string -> int option
     @param restrict Restriction map for events
     @return List of path information records
     @raise Failure if no events in structure or branch has invalid successors *)
-val gen_paths :
-  (int, event) Hashtbl.t ->
-  symbolic_event_structure ->
-  (int, expr list) Hashtbl.t ->
-  path_info list
+val gen_paths : symbolic_event_structure -> path_info list
 
 (** {1 Justification Selection} *)
 

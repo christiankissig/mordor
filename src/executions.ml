@@ -79,7 +79,8 @@ let origin structure (s : string) = Hashtbl.find_opt structure.origin s
 (* Check if write w is downward-closed same-location write before read r. This
    prevents r reading from shadowed writes w.*)
 (* TODO optimize *)
-let dslwb structure events w r =
+let dslwb structure w r =
+  let events = structure.events in
   let write_events = structure.write_events in
   let r_restrict =
     Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
@@ -152,7 +153,7 @@ let partition_by_conflict neighbours conflict =
 
   partition neighbours_list []
 
-let gen_paths events (structure : symbolic_event_structure) restrict =
+let gen_paths (structure : symbolic_event_structure) =
   let po_intransitive = URelation.transitive_reduction structure.po in
   let po_tree = build_tree structure.e po_intransitive in
 
@@ -223,7 +224,7 @@ let gen_paths events (structure : symbolic_event_structure) restrict =
         let p =
           USet.values path
           |> List.map (fun e ->
-              Hashtbl.find_opt restrict e |> Option.value ~default:[]
+              Hashtbl.find_opt structure.restrict e |> Option.value ~default:[]
           )
           |> List.flatten
           |> USet.of_list
@@ -375,9 +376,7 @@ let validate_rf (structure : symbolic_event_structure) e elided elided_rf
           if not (URelation.acyclic rhb) then Lwt.return_none
           else
             let* has_dslwb =
-              USet.async_exists
-                (fun (w, r) -> dslwb structure structure.events w r)
-                rf
+              USet.async_exists (fun (w, r) -> dslwb structure w r) rf
             in
 
             if has_dslwb then Lwt.return_none
@@ -421,7 +420,7 @@ let validate_rf (structure : symbolic_event_structure) e elided elided_rf
                 in
 
                 (* Success! Return the freeze result *)
-                Lwt.return_some
+                let freeze_result =
                   {
                     justs = j_list;
                     e;
@@ -432,6 +431,10 @@ let validate_rf (structure : symbolic_event_structure) e elided elided_rf
                     pp;
                     conds = bigger_p;
                   }
+                in
+                  if USet.equal e tracer_path then
+                    Logs.debug (fun m -> m "  Freeze successful");
+                  Lwt.return_some freeze_result
 
 (** Create a freeze function that validates RF sets for a justification
     combination *)
@@ -838,37 +841,22 @@ let generate_executions (structure : symbolic_event_structure)
     ~restrictions =
   let* _ = Lwt.return_unit in
 
-  let events = structure.events in
-  let restrict = structure.restrict in
-
   Logs.debug (fun m ->
       m "Generating executions for structure with %d events"
         (USet.size structure.e)
   );
 
-  let e_set = structure.e in
-  let read_events = structure.read_events in
-  let write_events = structure.write_events in
-  let po = structure.po in
-
-  (* Build adjacency relations *)
-  let po_intransitive = URelation.transitive_reduction po in
-  let po_tree = build_tree structure.e po_intransitive in
-  let inv_po_tree =
-    build_tree structure.e (URelation.inverse_relation po_intransitive)
-  in
-
   (* Generate all paths through the control flow *)
-  let paths = gen_paths events structure structure.restrict in
+  let paths = gen_paths structure in
 
   Logs.debug (fun m ->
       m "Generated %d paths through the control flow" (List.length paths)
   );
 
   (* Compute initial RF relation: writes × reads that are not in po^-1 and not dslwb *)
-  let inv_po = URelation.inverse_relation po in
-  let w_with_init = USet.union write_events (USet.singleton 0) in
-  let w_cross_r = URelation.cross w_with_init read_events in
+  let inv_po = URelation.inverse_relation structure.po in
+  let w_with_init = USet.union structure.write_events (USet.singleton 0) in
+  let w_cross_r = URelation.cross w_with_init structure.read_events in
   let w_cross_r_minus_inv_po = USet.set_minus w_cross_r inv_po in
 
   let* all_rf =
@@ -882,19 +870,20 @@ let generate_executions (structure : symbolic_event_structure)
         in
           let* w_r_comp = Solver.is_sat_cached (r_restrict @ w_restrict) in
             if w_r_comp then
-              match (get_loc events w, get_loc events r) with
+              match
+                (get_loc structure.events w, get_loc structure.events r)
+              with
               | Some loc_w, Some loc_r ->
                   (* TODO use semantic equivalence relative to valres *)
                   let* loc_eq = Solver.expoteq ~state:r_restrict loc_w loc_r in
-                    if loc_eq then dslwb structure events w r
-                    else Lwt.return false
+                    if loc_eq then dslwb structure w r else Lwt.return false
               | _ -> Lwt.return false
             else Lwt.return false
       )
       w_cross_r_minus_inv_po
   in
 
-  Logs.debug (fun m -> m "Initial RF pairs (%d)" (USet.size all_rf));
+  Logs.debug (fun m -> m "Candidate RF pairs (%d)" (USet.size all_rf));
 
   Logs.debug (fun m ->
       m "RF pairs on the tracer path are %s"
@@ -1000,8 +989,8 @@ let generate_executions (structure : symbolic_event_structure)
               in
               let w_val =
                 match just_w with
-                | Some j -> vale events j.w.label r
-                | None -> vale events w r
+                | Some j -> vale structure.events j.w.label r
+                | None -> vale structure.events w r
               in
               let r_val = get_val structure.events r |> Option.get in
 

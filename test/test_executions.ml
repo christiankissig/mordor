@@ -192,7 +192,7 @@ let test_path_generation (name, e, po, validator) () =
   let events = TestData.basic_events () in
   let structure = TestData.make_structure ~events ~e ~po () in
     try
-      let paths = gen_paths events structure structure.restrict in
+      let paths = gen_paths structure in
         check bool (name ^ ": path validation") true (validator paths);
         List.iter
           (fun path_info ->
@@ -311,7 +311,7 @@ let test_integration () =
       ()
   in
 
-  let paths = gen_paths events structure structure.restrict in
+  let paths = gen_paths structure in
     List.iter
       (fun path_info ->
         check bool "valid paths" true (USet.size path_info.path > 0)

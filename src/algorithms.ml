@@ -33,11 +33,6 @@ module ListMapCombinationBuilder = struct
               [] justs
           in
 
-          Logs.debug (fun m ->
-              m "After processing key %d, have %d combinations" key
-                (List.length new_combinations)
-          );
-
           (* Note: Combinations are now in reverse order within each combo *)
           (* If order matters, reverse each combo at the end *)
           combine_and_check new_combinations rest_keys
