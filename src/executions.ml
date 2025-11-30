@@ -814,60 +814,7 @@ let build_justcombos structure paths init_ppo statex
 
 (** Generate executions **)
 
-(* Compute initial RF relation: writes × reads that are not in po^-1 and not
-     dslwb *)
-let compute_candidate_rf structure =
-  let inv_po = URelation.inverse_relation structure.po in
-  let w_with_init = USet.union structure.write_events (USet.singleton 0) in
-  let w_cross_r = URelation.cross w_with_init structure.read_events in
-  let w_cross_r_minus_inv_po = USet.set_minus w_cross_r inv_po in
-
-  let* all_rf =
-    USet.async_filter
-      (fun (w, r) ->
-        let r_restrict =
-          Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
-        in
-        let w_restrict =
-          Hashtbl.find_opt structure.restrict w |> Option.value ~default:[]
-        in
-          let* w_r_comp = Solver.is_sat_cached (r_restrict @ w_restrict) in
-            if w_r_comp then
-              match
-                (get_loc structure.events w, get_loc structure.events r)
-              with
-              | Some loc_w, Some loc_r ->
-                  (* TODO use semantic equivalence relative to valres *)
-                  let* loc_eq = Solver.expoteq ~state:r_restrict loc_w loc_r in
-                    if loc_eq then dslwb structure w r else Lwt.return false
-              | _ -> Lwt.return false
-            else Lwt.return false
-      )
-      w_cross_r_minus_inv_po
-  in
-    Logs.debug (fun m -> m "Candidate RF pairs (%d)" (USet.size all_rf));
-
-    Logs.debug (fun m ->
-        m "RF pairs on the tracer path are %s"
-          (String.concat ", "
-             (List.map
-                (fun (w, r) -> Printf.sprintf "(%d,%d)" w r)
-                (USet.values
-                   (USet.filter
-                      (fun (w, r) ->
-                        USet.mem structure.e w
-                        && USet.mem structure.e r
-                        && USet.mem tracer_path w
-                        && USet.mem tracer_path r
-                      )
-                      all_rf
-                   )
-                )
-             )
-          )
-    );
-    Lwt.return all_rf
-
+(* Compute initial RF relation: writes × reads that are not in po^-1 *)
 let compute_path_rf_combinations structure path =
   let write_events = USet.intersection structure.write_events path.path in
   let read_events = USet.intersection structure.read_events path.path in
@@ -938,8 +885,6 @@ let generate_executions (structure : symbolic_event_structure)
       (fun p1 p2 -> compare (USet.size p1.path) (USet.size p2.path))
       paths
   in
-
-  let* all_rf = compute_candidate_rf structure in
 
   (* Build justification map: write label -> list of justifications *)
   (* TODO remove justifications with elided origins *)
