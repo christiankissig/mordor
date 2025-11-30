@@ -3,7 +3,6 @@ open Alcotest
 open Executions
 open Events
 open Expr
-open Trees
 open Types
 open Lwt.Syntax
 

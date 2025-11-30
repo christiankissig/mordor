@@ -3,7 +3,6 @@ open Algorithms
 open Coherence
 open Events
 open Expr
-open Trees
 open Types
 open Uset
 
@@ -157,7 +156,7 @@ let partition_by_conflict neighbours conflict =
      symbolic event structure *)
 let gen_paths (structure : symbolic_event_structure) =
   let po_intransitive = URelation.transitive_reduction structure.po in
-  let po_tree = build_tree structure.e po_intransitive in
+  let po_tree = URelation.adjacency_map po_intransitive in
 
   (* DFS search for all paths. Each path is a uset event IDs. Search produces
      list of such paths. *)
@@ -424,7 +423,8 @@ let validate_rf (structure : symbolic_event_structure) e elided elided_rf
                   USet.filter (fun (f, t) -> USet.mem e f && USet.mem e t) po
                 in
                 let inv_po_tree =
-                  build_tree e (URelation.inverse_relation po_filtered)
+                  URelation.adjacency_map
+                    (URelation.inverse_relation po_filtered)
                 in
 
                 (* Success! Return the freeze result *)
@@ -595,7 +595,7 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
         (* Compute transitive closure *)
         let ppo_loc = URelation.transitive_closure ppo_loc in
         let ppo_loc = USet.intersection ppo_loc e_squared in
-        let ppo_loc_tree = build_tree e ppo_loc in
+        let ppo_loc_tree = URelation.adjacency_map ppo_loc in
 
         if USet.equal path.path tracer_path then
           Logs.debug (fun m ->
@@ -868,6 +868,56 @@ let compute_candidate_rf structure =
     );
     Lwt.return all_rf
 
+let compute_path_rf_combinations structure path =
+  let write_events = USet.intersection structure.write_events path.path in
+  let read_events = USet.intersection structure.read_events path.path in
+  let w_with_init = USet.union write_events (USet.singleton 0) in
+  let r_cross_w = URelation.cross read_events w_with_init in
+  (* w must not be po-after r *)
+  let r_cross_w_minus_po = USet.set_minus r_cross_w structure.po in
+    let* all_rf =
+      USet.async_filter
+        (fun (r, w) ->
+          let r_restrict =
+            Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
+          in
+          let w_restrict =
+            Hashtbl.find_opt structure.restrict w |> Option.value ~default:[]
+          in
+            let* w_r_comp = Solver.is_sat_cached (r_restrict @ w_restrict) in
+              if w_r_comp then
+                match
+                  (get_loc structure.events w, get_loc structure.events r)
+                with
+                | Some loc_w, Some loc_r ->
+                    (* TODO use semantic equivalence relative to valres *)
+                    (* TODO use path predicates in state *)
+                    (* TODO use justification predicates in state *)
+                    let* loc_eq =
+                      Solver.expoteq ~state:r_restrict loc_w loc_r
+                    in
+                      if loc_eq then dslwb structure w r else Lwt.return false
+                | _ -> Lwt.return false
+              else Lwt.return false
+        )
+        r_cross_w_minus_po
+    in
+    let rw_adj_map = URelation.adjacency_map all_rf in
+    let rw_adj_list_map = Hashtbl.create 16 in
+      Hashtbl.iter
+        (fun r writes ->
+          Hashtbl.add rw_adj_list_map r
+            (List.map (fun w -> (w, r)) (USet.values writes))
+        )
+        rw_adj_map;
+      let* rf_combinations =
+        ListMapCombinationBuilder.build_combinations rw_adj_list_map
+          (USet.values read_events)
+          (fun _ ?alternatives _ -> Lwt.return true)
+          (fun _ -> Lwt.return true)
+      in
+        Lwt.return (List.map USet.of_list rf_combinations)
+
 (** Main execution generation - replaces the stub in calculate_dependencies *)
 let generate_executions (structure : symbolic_event_structure)
     (justs : justification uset) statex init_ppo ~include_dependencies
@@ -881,6 +931,13 @@ let generate_executions (structure : symbolic_event_structure)
 
   (* Generate all paths through the control flow *)
   let paths = gen_paths structure in
+  (* Have short paths first to see results through the streaming pipeline
+     earlier *)
+  let paths =
+    List.sort
+      (fun p1 p2 -> compare (USet.size p1.path) (USet.size p2.path))
+      paths
+  in
 
   let* all_rf = compute_candidate_rf structure in
 
@@ -934,48 +991,53 @@ let generate_executions (structure : symbolic_event_structure)
     );
 
     let stream_freeze input_stream =
-      let freeze_and_validate_rf path freeze_fn =
-        let rf =
-          List.filter
-            (fun (w, r) -> USet.mem path.path w && USet.mem path.path r)
-            (USet.values all_rf)
-          |> USet.of_list
-        in
-          freeze_fn rf
-      in
-        Lwt_stream.filter_map_s
-          (fun (path, just_combo) ->
-            let fwd =
-              List.fold_left
-                (fun acc j -> USet.union acc j.fwd)
-                (USet.create ()) just_combo
-            in
-            let we =
-              List.fold_left
-                (fun acc j -> USet.union acc j.we)
-                (USet.create ()) just_combo
-            in
-            let con = Forwardingcontext.create ~fwd ~we () in
-            let j_remapped =
-              List.map
-                (fun j -> Forwardingcontext.remap_just con j None)
-                just_combo
-            in
-              let* freeze_fn_opt =
-                create_freeze structure path j_remapped init_ppo statex
-              in
-                match freeze_fn_opt with
-                | None -> Lwt.return_none
-                | Some freeze_fn -> (
-                    let* freeze_res_opt =
-                      freeze_and_validate_rf path freeze_fn
-                    in
+      Lwt_stream.map_list_s
+        (fun (path, just_combo) ->
+          let fwd =
+            List.fold_left
+              (fun acc j -> USet.union acc j.fwd)
+              (USet.create ()) just_combo
+          in
+          let we =
+            List.fold_left
+              (fun acc j -> USet.union acc j.we)
+              (USet.create ()) just_combo
+          in
+          let con = Forwardingcontext.create ~fwd ~we () in
+          let j_remapped =
+            List.map
+              (fun j -> Forwardingcontext.remap_just con j None)
+              just_combo
+          in
+
+          let* rf_combinations = compute_path_rf_combinations structure path in
+
+          Logs.debug (fun m ->
+              m "Freezing for path [%s] with %d RF combinations"
+                (String.concat ", "
+                   (List.map (Printf.sprintf "%d")
+                      (List.sort compare (USet.values path.path))
+                   )
+                )
+                (List.length rf_combinations)
+          );
+
+          let* freeze_fn_opt =
+            create_freeze structure path j_remapped init_ppo statex
+          in
+            match freeze_fn_opt with
+            | None -> Lwt.return []
+            | Some freeze_fn ->
+                Lwt_list.filter_map_s
+                  (fun rf ->
+                    let* freeze_res_opt = freeze_fn rf in
                       match freeze_res_opt with
                       | Some freeze_res -> Lwt.return_some freeze_res
                       | None -> Lwt.return_none
                   )
-          )
-          input_stream
+                  rf_combinations
+        )
+        input_stream
     in
 
     let stream_freeze_to_execution input_stream =

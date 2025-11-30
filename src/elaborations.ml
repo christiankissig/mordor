@@ -1,6 +1,5 @@
 open Expr
 open Lwt.Syntax
-open Trees
 open Types
 open Uset
 
@@ -24,7 +23,7 @@ let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
   in
   let immediate_ppo = URelation.transitive_reduction ppo_result in
   let inversed = URelation.inverse_relation immediate_ppo in
-  let tree = build_tree elab_ctx.structure.e inversed in
+  let tree = URelation.adjacency_map inversed in
     Lwt.return (fun e -> Hashtbl.find tree e)
 
 (** Lifted cache for relations with forwarding context *)
@@ -613,7 +612,7 @@ let conflict (elab_ctx : context) =
   );
 
   (* Build po tree *)
-  let po_tree = build_tree elab_ctx.structure.e elab_ctx.structure.po in
+  let po_tree = URelation.adjacency_map elab_ctx.structure.po in
 
   (* Semicolon composition *)
   let semicolon r1 r2 =
