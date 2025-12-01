@@ -256,8 +256,9 @@ type freeze_result = {
   conds : expr list;
 }
 
-let atomicity_pairs structure e_set rhb p =
+let atomicity_pairs structure path rhb p =
   (* Compute atomicity pairs AF *)
+  let e_set = path.path in
   let read_events = USet.intersection structure.read_events e_set in
   let malloc_events = USet.intersection structure.malloc_events e_set in
   let a = USet.union read_events malloc_events in
@@ -286,169 +287,164 @@ let atomicity_pairs structure e_set rhb p =
     )
     a_squared
 
-let validate_rf (structure : symbolic_event_structure) e elided elided_rf
-    ppo_loc ppo_loc_tree dp dp_ppo j_list (pp : expr list) p_combined rf =
+let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
+    dp dp_ppo j_list (pp : expr list) p_combined rf =
   let* _ = Lwt.return_unit in
 
+  let ( let*? ) (condition, msg) f =
+    if condition then f ()
+    else (
+      if USet.equal path.path tracer_path then
+        Logs.debug (fun m -> m "  Rejected: %s" msg);
+      Lwt.return_none
+    )
+  in
+
+  let e = path.path in
   let po = USet.intersection structure.po (URelation.cross e e) in
   let read_events = USet.intersection structure.read_events e in
   let write_events = USet.intersection structure.write_events e in
 
-  (* Remove elided RF edges *)
-  let rf_m = USet.set_minus rf elided_rf in
-  let rf_e = USet.union (URelation.pi_1 rf_m) (URelation.pi_2 rf_m) in
+  (* Check 3: All rf edges respect ppo_loc *)
+  let rf_respects_ppo =
+    USet.for_all
+      (fun (w, r) ->
+        if USet.mem ppo_loc (w, r) then
+          (* If (w,r) in ppo_loc, check that r is reachable from w *)
+          let reachable =
+            try
+              let successors = Hashtbl.find ppo_loc_tree w in
+                USet.mem successors r
+            with Not_found -> false
+          in
+            reachable
+        else true
+      )
+      rf
+  in
 
-  (* Check 1: elided_rf must be subset of rf *)
-  if not (USet.subset elided_rf rf) then Lwt.return_none
-    (* Check 2: rf_e should not overlap with elided *)
-  else if USet.exists (fun e -> USet.mem elided e) rf_e then Lwt.return_none
-  else
-    (* Check 3: All rf edges respect ppo_loc *)
-    let rf_respects_ppo =
-      USet.for_all
-        (fun (w, r) ->
-          if USet.mem ppo_loc (w, r) then
-            (* If (w,r) in ppo_loc, check that r is reachable from w *)
-            let reachable =
-              try
-                let successors = Hashtbl.find ppo_loc_tree w in
-                  USet.mem successors r
-              with Not_found -> false
-            in
-              reachable
-          else true
+  let*? () = (rf_respects_ppo, "RF edges do not respect PPO") in
+  (* Filter RMW pairs *)
+  let rmw_filtered =
+    USet.filter (fun (f, t) -> USet.mem e f || USet.mem e t) structure.rmw
+  in
+
+  (* Create environment from RF *)
+  let env_rf =
+    USet.values rf
+    |> List.map (fun (w, r) ->
+        let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
+        let w_val =
+          match just_w with
+          | Some j -> vale structure.events j.w.label r
+          | None -> vale structure.events w r
+        in
+        let r_val = get_val structure.events r |> Option.get in
+          Expr.binop w_val "=" r_val
+    )
+  in
+
+  let check_rf =
+    USet.values rf
+    |> List.map (fun (w, r) ->
+        let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
+        let w_loc =
+          match just_w with
+          | Some j -> loce structure.events j.w.label r
+          | None -> loce structure.events w r
+        in
+        let r_loc = get_loc structure.events r |> Option.get in
+          Expr.binop w_loc "=" r_loc
+    )
+  in
+
+  (* Check 1.1: Various consistency checks *)
+  let delta =
+    USet.union
+      (List.fold_left
+         (fun acc j -> USet.union acc j.fwd)
+         (USet.create ()) j_list
+      )
+      (List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list)
+  in
+  let check_1_1 =
+    USet.size (USet.intersection (URelation.pi_2 delta) (URelation.pi_1 rf)) = 0
+    && USet.equal read_events (URelation.pi_2 rf)
+  in
+
+  let*? () = (check_1_1, "RF fails basic consistency checks") in
+  (* Check acyclicity of rhb = dp_ppo ∪ rf *)
+  let rhb = USet.union dp_ppo rf in
+
+  let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
+
+  (* Check 1.2: No downward-closed same-location writes before reads *)
+
+  (* Rewrite predicates *)
+  let big_p_exprs = p_combined @ env_rf @ check_rf in
+  let big_p = List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs in
+    (* atomicity constraint *)
+    let* af = atomicity_pairs structure path rhb env_rf in
+
+    (* Create disjointness predicates *)
+    (* TODO why ? *)
+    let disj =
+      USet.map
+        (fun (a, b) ->
+          let loc_a = get_loc structure.events a |> Option.get in
+          let val_a = get_val structure.events a |> Option.get in
+          let loc_b = get_loc structure.events b |> Option.get in
+          let val_b = get_val structure.events b |> Option.get in
+            (* disjoint only uses location *)
+            disjoint (loc_a, val_a) (loc_b, val_b)
         )
-        rf_m
+        af
+      |> USet.values
     in
 
-    if not rf_respects_ppo then Lwt.return_none
-    else
-      (* Filter RMW pairs *)
-      let rmw_filtered =
-        USet.filter (fun (f, t) -> USet.mem e f || USet.mem e t) structure.rmw
-      in
+    let bigger_p =
+      List.map (fun expr -> Expr.evaluate expr (fun _ -> None)) (big_p @ disj)
+    in
 
-      (* Create environment from RF *)
-      let env_rf =
-        USet.values rf
-        |> List.map (fun (w, r) ->
-            let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
-            let w_val =
-              match just_w with
-              | Some j -> vale structure.events j.w.label r
-              | None -> vale structure.events w r
-            in
-            let r_val = get_val structure.events r |> Option.get in
-              Expr.binop w_val "=" r_val
-        )
-      in
+    (* Filter po to only include events in e *)
+    let po_filtered =
+      USet.filter (fun (f, t) -> USet.mem e f && USet.mem e t) po
+    in
+    let inv_po_tree =
+      URelation.adjacency_map (URelation.inverse_relation po_filtered)
+    in
 
-      let check_rf =
-        USet.values rf
-        |> List.map (fun (w, r) ->
-            let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
-            let w_loc =
-              match just_w with
-              | Some j -> loce structure.events j.w.label r
-              | None -> loce structure.events w r
-            in
-            let r_loc = get_loc structure.events r |> Option.get in
-              Expr.binop w_loc "=" r_loc
-        )
-      in
-
-      (* Check 1.1: Various consistency checks *)
-      let delta =
-        USet.union
-          (List.fold_left
-             (fun acc j -> USet.union acc j.fwd)
-             (USet.create ()) j_list
-          )
-          (List.fold_left
-             (fun acc j -> USet.union acc j.we)
-             (USet.create ()) j_list
-          )
-      in
-      let check_1_1 =
-        USet.size
-          (USet.intersection (URelation.pi_2 delta) (URelation.pi_1 rf_m))
-        = 0
-        && USet.equal read_events (URelation.pi_2 rf)
-      in
-
-      if not check_1_1 then Lwt.return_none
-      else
-        (* Check acyclicity of rhb = dp_ppo ∪ rf *)
-        let rhb = USet.union dp_ppo rf in
-          if not (URelation.acyclic rhb) then Lwt.return_none
-          else
-            let* has_dslwb =
-              USet.async_exists (fun (w, r) -> dslwb structure w r) rf
-            in
-
-            if has_dslwb then Lwt.return_none
-            else
-              (* Rewrite predicates *)
-              let big_p_exprs = p_combined @ env_rf @ check_rf in
-              let big_p =
-                List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs
-              in
-                (* atomicity constraint *)
-                let* af = atomicity_pairs structure e rhb env_rf in
-
-                (* Create disjointness predicates *)
-                (* TODO why ? *)
-                let disj =
-                  USet.map
-                    (fun (a, b) ->
-                      let loc_a = get_loc structure.events a |> Option.get in
-                      let val_a = get_val structure.events a |> Option.get in
-                      let loc_b = get_loc structure.events b |> Option.get in
-                      let val_b = get_val structure.events b |> Option.get in
-                        (* disjoint only uses location *)
-                        disjoint (loc_a, val_a) (loc_b, val_b)
-                    )
-                    af
-                  |> USet.values
-                in
-
-                let bigger_p =
-                  List.map
-                    (fun expr -> Expr.evaluate expr (fun _ -> None))
-                    (big_p @ disj)
-                in
-
-                (* Filter po to only include events in e *)
-                let po_filtered =
-                  USet.filter (fun (f, t) -> USet.mem e f && USet.mem e t) po
-                in
-                let inv_po_tree =
-                  URelation.adjacency_map
-                    (URelation.inverse_relation po_filtered)
-                in
-
-                (* Success! Return the freeze result *)
-                let freeze_result =
-                  {
-                    justs = j_list;
-                    e;
-                    dp;
-                    ppo = dp_ppo;
-                    rf;
-                    rmw = rmw_filtered;
-                    pp;
-                    conds = bigger_p;
-                  }
-                in
-                  if USet.equal e tracer_path then
-                    Logs.debug (fun m -> m "  Freeze successful");
-                  Lwt.return_some freeze_result
+    (* Success! Return the freeze result *)
+    let freeze_result =
+      {
+        justs = j_list;
+        e;
+        dp;
+        ppo = dp_ppo;
+        rf;
+        rmw = rmw_filtered;
+        pp;
+        conds = bigger_p;
+      }
+    in
+      if USet.equal e tracer_path then
+        Logs.debug (fun m -> m "  Freeze successful");
+      Lwt.return_some freeze_result
 
 (** Create a freeze function that validates RF sets for a justification
     combination *)
 let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
     statex =
   let* _ = Lwt.return_unit in
+
+  let ( let*? ) (condition, msg) f =
+    if condition then f ()
+    else (
+      if USet.equal path.path tracer_path then
+        Logs.debug (fun m -> m "  Rejected freeze: %s" msg);
+      Lwt.return_none
+    )
+  in
 
   let e = path.path in
   let e_squared = URelation.cross e e in
@@ -492,23 +488,6 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
     List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list
   in
 
-  let delta = USet.union f we in
-  let elided = URelation.pi_2 delta in
-
-  (* elided_rf: Delta ∩ (W × R) ∩ E² *)
-  let w_cross_r = URelation.cross write_events read_events in
-  let elided_rf =
-    USet.intersection delta w_cross_r |> fun s -> USet.intersection s e_squared
-  in
-
-  let _e = USet.set_minus e elided in
-
-  if USet.equal path.path tracer_path then
-    Logs.debug (fun m ->
-        m "  Created elided set with %d events and elided_rf with %d pairs"
-          (USet.size elided) (USet.size elided_rf)
-    );
-
   (* Create forwarding context *)
   let con = Forwardingcontext.create ~fwd:f ~we () in
 
@@ -528,98 +507,70 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
     );
 
   (* Check if predicates are satisfiable *)
-  let* p_combined_sat = Solver.is_sat_cached p_combined in
-    if not p_combined_sat then (
-      if USet.equal path.path tracer_path then
-        Logs.debug (fun m -> m "  Predicates unsatisfiable");
-      Lwt.return_none
-    )
-    else (
-      if USet.equal path.path tracer_path then
-        Logs.debug (fun m -> m "  Predicates satisfiable");
-      (* Check that all writes in E are either elided or have justifications *)
-      let check_3 =
-        USet.for_all
-          (fun w ->
-            USet.mem elided w || List.exists (fun j -> j.w.label = w) j_list
+  let* combined_p_sat = Solver.is_sat_cached p_combined in
+    let*? () = (combined_p_sat, "predicates unsatisfiable") in
+      (* Compute PPO for each justification *)
+      let* ppos =
+        Lwt_list.map_s
+          (fun just ->
+            let just_con =
+              Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
+            in
+              let* ppo_j = Forwardingcontext.ppo just_con just.p in
+
+              (* TODO path should be po-downward closed *)
+              (* Intersect with po pairs ending at this write *)
+              let po_to_w =
+                USet.filter (fun (_, t) -> t = just.w.label) structure.po
+              in
+              let po_to_w_squared =
+                URelation.cross (URelation.pi_1 po_to_w) (URelation.pi_1 po_to_w)
+              in
+                Lwt.return (USet.intersection ppo_j po_to_w_squared)
           )
-          write_events
+          j_list
       in
 
-      if not check_3 then Lwt.return_none
-      else (
-        if USet.equal path.path tracer_path then
-          Logs.debug (fun m ->
-              m "  All writes in E are either elided or justified"
-          );
-        (* Compute PPO for each justification *)
-        let* ppos =
-          Lwt_list.map_s
-            (fun just ->
-              let just_con =
-                Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
-              in
-                let* ppo_j = Forwardingcontext.ppo just_con just.p in
+      let ppo = List.fold_left USet.union (USet.create ()) ppos in
+      let ppo = USet.union ppo (Forwardingcontext.ppo_sync con) in
+      let ppo = USet.intersection ppo e_squared in
 
-                (* TODO path should be po-downward closed *)
-                (* Intersect with po pairs ending at this write *)
-                let po_to_w =
-                  USet.filter (fun (_, t) -> t = just.w.label) structure.po
-                in
-                let po_to_w_squared =
-                  URelation.cross (URelation.pi_1 po_to_w)
-                    (URelation.pi_1 po_to_w)
-                in
-                  Lwt.return (USet.intersection ppo_j po_to_w_squared)
-            )
-            j_list
-        in
+      (* Compute ppo_loc *)
+      let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
+      let ppo_loc = USet.union ppo_loc_base init_ppo in
 
-        let ppo = List.fold_left USet.union (USet.create ()) ppos in
-        let ppo = USet.union ppo (Forwardingcontext.ppo_sync con) in
-        let ppo = USet.intersection ppo e_squared in
+      (* Filter out read-read pairs *)
+      let ppo_loc =
+        USet.filter
+          (fun (a, b) -> not (USet.mem read_events a && USet.mem read_events b))
+          ppo_loc
+      in
 
-        (* Compute ppo_loc *)
-        let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
-        let ppo_loc = USet.union ppo_loc_base init_ppo in
+      (* Compute transitive closure *)
+      let ppo_loc = URelation.transitive_closure ppo_loc in
+      let ppo_loc = USet.intersection ppo_loc e_squared in
+      let ppo_loc_tree = URelation.adjacency_map ppo_loc in
 
-        (* Filter out read-read pairs *)
-        let ppo_loc =
-          USet.filter
-            (fun (a, b) ->
-              not (USet.mem read_events a && USet.mem read_events b)
-            )
-            ppo_loc
-        in
+      if USet.equal path.path tracer_path then
+        Logs.debug (fun m ->
+            m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
+              (USet.size ppo) (USet.size ppo_loc)
+        );
 
-        (* Compute transitive closure *)
-        let ppo_loc = URelation.transitive_closure ppo_loc in
-        let ppo_loc = USet.intersection ppo_loc e_squared in
-        let ppo_loc_tree = URelation.adjacency_map ppo_loc in
+      (* Combine dp and ppo *)
+      let dp_ppo = USet.union dp ppo in
 
-        if USet.equal path.path tracer_path then
-          Logs.debug (fun m ->
-              m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
-                (USet.size ppo) (USet.size ppo_loc)
-          );
+      (* Return the freeze validation function *)
+      let freeze_fn rf =
+        validate_rf
+          (structure : symbolic_event_structure)
+          path ppo_loc ppo_loc_tree dp dp_ppo j_list pp p_combined rf
+      in
 
-        (* Combine dp and ppo *)
-        let dp_ppo = USet.union dp ppo in
+      if USet.equal path.path tracer_path then
+        Logs.debug (fun m -> m "  Created freeze function");
 
-        (* Return the freeze validation function *)
-        let freeze_fn rf =
-          validate_rf
-            (structure : symbolic_event_structure)
-            e elided elided_rf ppo_loc ppo_loc_tree dp dp_ppo j_list pp
-            p_combined rf
-        in
-
-        if USet.equal path.path tracer_path then
-          Logs.debug (fun m -> m "  Created freeze function");
-
-        Lwt.return_some freeze_fn
-      )
-    )
+      Lwt.return_some freeze_fn
 
 (** Build justification combinations for all paths with caching *)
 let build_justcombos structure paths init_ppo statex
@@ -815,55 +766,53 @@ let build_justcombos structure paths init_ppo statex
 (** Generate executions **)
 
 (* Compute initial RF relation: writes × reads that are not in po^-1 *)
-let compute_path_rf_combinations structure path =
-  let write_events = USet.intersection structure.write_events path.path in
-  let read_events = USet.intersection structure.read_events path.path in
+let compute_path_rf structure path ~elided ~constraints =
+  let write_events =
+    USet.set_minus (USet.intersection structure.write_events path.path) elided
+  in
+  let read_events =
+    USet.set_minus (USet.intersection structure.read_events path.path) elided
+  in
   let w_with_init = USet.union write_events (USet.singleton 0) in
   let r_cross_w = URelation.cross read_events w_with_init in
+
+  let ( let*? ) (condition, msg) f =
+    if condition then f () else Lwt.return false
+  in
+
+  let preds = path.p @ constraints |> USet.of_list |> USet.values in
+
   (* w must not be po-after r *)
   let r_cross_w_minus_po = USet.set_minus r_cross_w structure.po in
     let* all_rf =
       USet.async_filter
-        (fun (r, w) ->
+        (fun rf_edge ->
+          let w, r = rf_edge in
           let r_restrict =
             Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
           in
-          let w_restrict =
-            Hashtbl.find_opt structure.restrict w |> Option.value ~default:[]
-          in
-            let* w_r_comp = Solver.is_sat_cached (r_restrict @ w_restrict) in
-              if w_r_comp then
-                match
-                  (get_loc structure.events w, get_loc structure.events r)
-                with
-                | Some loc_w, Some loc_r ->
-                    (* TODO use semantic equivalence relative to valres *)
-                    (* TODO use path predicates in state *)
-                    (* TODO use justification predicates in state *)
-                    let* loc_eq =
-                      Solver.expoteq ~state:r_restrict loc_w loc_r
-                    in
-                      if loc_eq then dslwb structure w r else Lwt.return false
-                | _ -> Lwt.return false
-              else Lwt.return false
+            (* Check that loc(w) = loc(r) is satisfiable *)
+            let* loc_eq =
+              match
+                (get_loc structure.events w, get_loc structure.events r)
+              with
+              | Some loc_w, Some loc_r ->
+                  Solver.expoteq ~state:preds loc_w loc_r
+              | _ -> Lwt.return false
+            in
+              let*? () = (loc_eq, "RF locs not equal") in
+                (* Check that writes are not shadowed for read-from *)
+                let* has_dslwb = dslwb structure w r in
+                  let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
+                    Lwt.return true
         )
         r_cross_w_minus_po
     in
-    let rw_adj_map = URelation.adjacency_map all_rf in
-    let rw_adj_list_map = Hashtbl.create 16 in
-      Hashtbl.iter
-        (fun r writes ->
-          Hashtbl.add rw_adj_list_map r
-            (List.map (fun w -> (w, r)) (USet.values writes))
-        )
-        rw_adj_map;
-      let* rf_combinations =
-        ListMapCombinationBuilder.build_combinations rw_adj_list_map
-          (USet.values read_events)
-          (fun _ ?alternatives _ -> Lwt.return true)
-          (fun _ -> Lwt.return true)
-      in
-        Lwt.return (List.map USet.of_list rf_combinations)
+
+    Logs.debug (fun m ->
+        m "  Found %d initial RF edges for path" (USet.size all_rf)
+    );
+    Lwt.return all_rf
 
 (** Main execution generation - replaces the stub in calculate_dependencies *)
 let generate_executions (structure : symbolic_event_structure)
@@ -936,7 +885,7 @@ let generate_executions (structure : symbolic_event_structure)
     );
 
     let stream_freeze input_stream =
-      Lwt_stream.map_list_s
+      Lwt_stream.filter_map_s
         (fun (path, just_combo) ->
           let fwd =
             List.fold_left
@@ -954,33 +903,24 @@ let generate_executions (structure : symbolic_event_structure)
               (fun j -> Forwardingcontext.remap_just con j None)
               just_combo
           in
+          let elided = URelation.pi_1 (USet.union fwd we) in
+          let constraints =
+            List.flatten (List.map (fun (j : justification) -> j.p) just_combo)
+          in
 
-          let* rf_combinations = compute_path_rf_combinations structure path in
-
-          Logs.debug (fun m ->
-              m "Freezing for path [%s] with %d RF combinations"
-                (String.concat ", "
-                   (List.map (Printf.sprintf "%d")
-                      (List.sort compare (USet.values path.path))
-                   )
-                )
-                (List.length rf_combinations)
-          );
+          let* all_rf = compute_path_rf structure path ~elided ~constraints in
 
           let* freeze_fn_opt =
             create_freeze structure path j_remapped init_ppo statex
           in
             match freeze_fn_opt with
-            | None -> Lwt.return []
-            | Some freeze_fn ->
-                Lwt_list.filter_map_s
-                  (fun rf ->
-                    let* freeze_res_opt = freeze_fn rf in
-                      match freeze_res_opt with
-                      | Some freeze_res -> Lwt.return_some freeze_res
-                      | None -> Lwt.return_none
-                  )
-                  rf_combinations
+            | None -> Lwt.return_none
+            | Some freeze_fn -> (
+                let* freeze_res_opt = freeze_fn all_rf in
+                  match freeze_res_opt with
+                  | Some freeze_res -> Lwt.return_some freeze_res
+                  | None -> Lwt.return_none
+              )
         )
         input_stream
     in

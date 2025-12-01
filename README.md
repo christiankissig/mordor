@@ -2,12 +2,17 @@
 
 # MoRDor - Symbolic Modular Relaxed Dependencies (in OCaml)
 
-Library and command-line tool for symbolic analysis of weak memory models and
-generation of weak memory semantics of C-like programs in symbolic modular
-relaxed dependencies (MRD). 
+MoRDor is a static code analysis tool implementing weak memory semantics of
+C-like programs based on a symbolic variant of Modular Relaxed Dependencies
+(MRD).
 
 MoRDor is a reimplementation and extension of the Symbolic Mrder tool described
 in the paper ["Symbolic MRD: Dynamic Memory, Undefined Behaviour, and Extrinsic Choice" by Jay Richards, Daniel Wright, Simon Cooksey, Mark Batty](https://2025.splashcon.org/details/OOPSLA/104/Symbolic-MRD-Dynamic-Memory-Undefined-Behaviour-and-Extrinsic-Choice).
+
+MoRDor aims to be correct and efficient enough to calculate the semantics of
+real-world concurrent algorithms, in addition to litmus tests.
+
+**Caveat** Do not use until version 1.
 
 ## Overview
 

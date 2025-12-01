@@ -69,18 +69,16 @@ val gen_paths : symbolic_event_structure -> path_info list
 
     @return [Lwt.t] of [Some freeze_result] if valid, [None] otherwise *)
 val validate_rf :
-  symbolic_event_structure ->
-  int uset ->
-  int uset ->
-  (int * int) uset ->
-  (int * int) uset ->
-  (int, int uset) Hashtbl.t ->
-  (int * int) uset ->
-  (int * int) uset ->
-  justification list ->
-  expr list ->
-  expr list ->
-  (int * int) uset ->
+  Types.symbolic_event_structure ->
+  path_info ->
+  (int * int) Uset.USet.t ->
+  (int, int Uset.USet.t) Hashtbl.t ->
+  (int * int) Uset.USet.t ->
+  (int * int) Uset.USet.t ->
+  Types.justification list ->
+  Types.expr list ->
+  Types.expr list ->
+  int Uset.URelation.t ->
   freeze_result option Lwt.t
 
 (** {1 Freeze Function Creation} *)

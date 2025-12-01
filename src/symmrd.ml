@@ -26,25 +26,6 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   let malloc_events = structure.malloc_events in
   let free_events = structure.free_events in
 
-  (* Build tree for program order *)
-  let build_tree rel =
-    let tree = Hashtbl.create 256 in
-      USet.iter (fun e -> Hashtbl.add tree e (USet.create ())) e_set;
-      USet.iter
-        (fun (from, to_) ->
-          let set = Hashtbl.find tree from in
-            USet.add set to_ |> ignore
-        )
-        rel;
-      tree
-  in
-
-  Logs.debug (fun m -> m "Building PO tree...");
-
-  let po_tree = build_tree po in
-
-  Logs.debug (fun m -> m "PO tree built");
-
   (* Build ebranch mapping *)
   let ebranch =
     let tbl = Hashtbl.create 16 in
