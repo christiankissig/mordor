@@ -12,7 +12,7 @@
  (synopsis "Symbolic Memory Relaxation Dependency analyzer")
  (description "OCaml implementation of sMRD memory model verifier")
  (depends
-  (ocaml (>= 4.14))
+  (ocaml (>= 5.2.0))
   core
   (dune (>= 3.7))
   (ocamlgraph (>= 2.2.0))

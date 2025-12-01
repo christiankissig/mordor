@@ -256,6 +256,48 @@ type freeze_result = {
   conds : expr list;
 }
 
+let freeze_result_equal fr1 fr2 =
+  USet.equal fr1.e fr2.e
+  && USet.equal fr1.dp fr2.dp
+  && USet.equal fr1.ppo fr2.ppo
+  && USet.equal fr1.rf fr2.rf
+  && USet.equal fr1.rmw fr2.rmw
+  && List.equal Expr.equal fr1.pp fr2.pp
+  && List.equal Expr.equal fr1.conds fr2.conds
+  && List.equal
+       (fun j1 j2 ->
+         j1.w = j2.w
+         && USet.equal j1.fwd j2.fwd
+         && USet.equal j1.we j2.we
+         && USet.equal j1.d j2.d
+         && List.equal Expr.equal j1.p j2.p
+       )
+       fr1.justs fr2.justs
+
+let freeze_result_hash fr =
+  let hash_list lst =
+    List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
+  in
+  let hash_uset uset = USet.values uset |> List.sort compare |> hash_list in
+    Hashtbl.hash
+      ( hash_uset fr.e,
+        hash_uset fr.dp,
+        hash_uset fr.ppo,
+        hash_uset fr.rf,
+        hash_uset fr.rmw
+      )
+
+module FreezeResultCacheKey = struct
+  type t = freeze_result
+
+  let equal = freeze_result_equal
+  let hash = freeze_result_hash
+end
+
+module FreezeResultCache = Hashtbl.Make (FreezeResultCacheKey)
+
+(** Compute atomicity pairs for a path given rhb and env_rf *)
+
 let atomicity_pairs structure path rhb p =
   (* Compute atomicity pairs AF *)
   let e_set = path.path in
@@ -289,8 +331,7 @@ let atomicity_pairs structure path rhb p =
 
 let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
     dp dp_ppo j_list (pp : expr list) p_combined rf =
-  let* _ = Lwt.return_unit in
-
+  (* let* _ = Lwt.return_unit in *)
   let ( let*? ) (condition, msg) f =
     if condition then f ()
     else (
@@ -435,8 +476,7 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
     combination *)
 let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
     statex =
-  let* _ = Lwt.return_unit in
-
+  (* let* _ = Lwt.return_unit in *)
   let ( let*? ) (condition, msg) f =
     if condition then f ()
     else (
@@ -756,6 +796,18 @@ let build_justcombos structure paths init_ppo statex
               (List.length js_combinations)
         );
 
+        (* TODO crop top 100 justification combinations for testing *)
+        let js_combinations =
+          List.filteri (fun i _ -> i < 100) js_combinations
+        in
+
+        Logs.debug (fun m ->
+            m
+              "  After cropping to top 100, %d justification combinations \
+               remain"
+              (List.length js_combinations)
+        );
+
         Lwt.return (List.map (fun combo -> (path, combo)) js_combinations)
       )
       input_stream
@@ -818,8 +870,7 @@ let compute_path_rf structure path ~elided ~constraints =
 let generate_executions (structure : symbolic_event_structure)
     (justs : justification uset) statex init_ppo ~include_dependencies
     ~restrictions =
-  let* _ = Lwt.return_unit in
-
+  (* let* _ = Lwt.return_unit in *)
   Logs.debug (fun m ->
       m "Generating executions for structure with %d events"
         (USet.size structure.e)
@@ -1014,10 +1065,25 @@ let generate_executions (structure : symbolic_event_structure)
         input_stream
     in
 
+    let dedup_freeze_results stream =
+      let seen = FreezeResultCache.create 1024 in
+
+      Lwt_stream.filter_map
+        (fun fr ->
+          if FreezeResultCache.mem seen fr then None
+          else begin
+            FreezeResultCache.add seen fr ();
+            Some fr
+          end
+        )
+        stream
+    in
+
     (* Build justcombos for all paths *)
     let* executions =
       build_justcombos structure paths init_ppo statex justmap
       |> stream_freeze
+      |> dedup_freeze_results
       |> stream_freeze_to_execution
       |> stream_filter_coherent_executions
       |> Lwt_stream.to_list
