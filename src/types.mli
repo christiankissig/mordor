@@ -182,7 +182,6 @@ type symbolic_execution = {
   ppo : (int * int) uset; (* Preserved program order *)
   ex_rmw : (int * int) uset; (* RMW pairs *)
   ex_p : expr list; (* Predicates *)
-  conds : expr list; (* Conditions *)
   fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer mappings *)
 }

@@ -61,7 +61,6 @@ let make_empty_execution () =
     dp = USet.create ();
     ppo = USet.create ();
     ex_p = [];
-    conds = [];
     fix_rf_map = Hashtbl.create 10;
     pointer_map = Hashtbl.create 10 |> Option.some;
   }
@@ -264,7 +263,6 @@ let test_imm_coherent_simple () =
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];
-      conds = [];
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
     }
@@ -323,7 +321,6 @@ let test_rc11_coherent_simple () =
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];
-      conds = [];
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
     }
@@ -388,7 +385,6 @@ let test_imm_coherent_rmw () =
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];
-      conds = [];
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
     }
@@ -443,7 +439,6 @@ let test_cache_types () =
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];
-      conds = [];
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
     }

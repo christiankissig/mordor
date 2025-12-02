@@ -318,10 +318,11 @@ let atomicity_pairs structure path rhb p =
                 Lwt.return_false
               else
                 (* Check if loc(e_1) = loc(ep) under env_rf using semeq *)
-                let loc_e1 = get_loc structure.events e_1 |> Option.get in
-                let loc_ep = get_loc structure.events ep |> Option.get in
-
-                Solver.exeq ~state:p loc_e1 loc_ep
+                match
+                  (get_loc structure.events e_1, get_loc structure.events ep)
+                with
+                | None, _ | _, None -> Lwt.return_false
+                | Some loc_e1, Some loc_ep -> Solver.exeq ~state:p loc_e1 loc_ep
             )
             e_set
         in
@@ -331,12 +332,18 @@ let atomicity_pairs structure path rhb p =
 
 let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
     dp dp_ppo j_list (pp : expr list) p_combined rf =
+  Logs.debug (fun m ->
+      m
+        "Validating RF with %d edges for justification combination with %d \
+         justs"
+        (USet.size rf) (List.length j_list)
+  );
+
   (* let* _ = Lwt.return_unit in *)
   let ( let*? ) (condition, msg) f =
     if condition then f ()
     else (
-      if USet.equal path.path tracer_path then
-        Logs.debug (fun m -> m "  Rejected: %s" msg);
+      Logs.debug (fun m -> m "  Rejected: %s" msg);
       Lwt.return_none
     )
   in
@@ -380,8 +387,9 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
           | Some j -> vale structure.events j.w.label r
           | None -> vale structure.events w r
         in
-        let r_val = get_val structure.events r |> Option.get in
-          Expr.binop w_val "=" r_val
+          match get_val structure.events r with
+          | Some r_val -> Expr.binop w_val "=" r_val
+          | None -> failwith ("Read event " ^ string_of_int r ^ " has no value!")
     )
   in
 
@@ -394,8 +402,14 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
           | Some j -> loce structure.events j.w.label r
           | None -> loce structure.events w r
         in
-        let r_loc = get_loc structure.events r |> Option.get in
-          Expr.binop w_loc "=" r_loc
+          match get_loc structure.events r with
+          | Some r_loc -> Expr.binop w_loc "=" r_loc
+          | None ->
+              failwith
+                ("Read event "
+                ^ string_of_int r
+                ^ " has no\n          location!"
+                )
     )
   in
 
@@ -408,69 +422,83 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
       )
       (List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list)
   in
-  let check_1_1 =
+  let check_rf_elided =
     USet.size (USet.intersection (URelation.pi_2 delta) (URelation.pi_1 rf)) = 0
-    && USet.equal read_events (URelation.pi_2 rf)
+  in
+  let check_rf_total =
+    USet.subset
+      (USet.set_minus read_events (URelation.pi_2 delta))
+      (URelation.pi_2 rf)
   in
 
-  let*? () = (check_1_1, "RF fails basic consistency checks") in
-  (* Check acyclicity of rhb = dp_ppo ∪ rf *)
-  let rhb = USet.union dp_ppo rf in
+  if not check_rf_total then
+    Logs.debug (fun m ->
+        m "  RF total check failed: reads %s, delta pi_2 %s, RF pi_2 %s"
+          (String.concat ", "
+             (List.map (Printf.sprintf "%d") (USet.values read_events))
+          )
+          (String.concat ", "
+             (List.map (Printf.sprintf "%d")
+                (USet.values (URelation.pi_2 delta))
+             )
+          )
+          (String.concat ", "
+             (List.map (Printf.sprintf "%d") (USet.values (URelation.pi_2 rf)))
+          )
+    );
 
-  let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
+  let*? () = (check_rf_elided, "RF fails RF elided check") in
+    let*? () = (check_rf_total, "RF fails RF total check") in
+    (* Check acyclicity of rhb = dp_ppo ∪ rf *)
+    let rhb = USet.union dp_ppo rf in
 
-  (* Check 1.2: No downward-closed same-location writes before reads *)
+    let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
 
-  (* Rewrite predicates *)
-  let big_p_exprs = p_combined @ env_rf @ check_rf in
-  let big_p = List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs in
-    (* atomicity constraint *)
-    let* af = atomicity_pairs structure path rhb env_rf in
+    (* Check 1.2: No downward-closed same-location writes before reads *)
 
-    (* Create disjointness predicates *)
-    (* TODO why ? *)
-    let disj =
-      USet.map
-        (fun (a, b) ->
-          let loc_a = get_loc structure.events a |> Option.get in
-          let val_a = get_val structure.events a |> Option.get in
-          let loc_b = get_loc structure.events b |> Option.get in
-          let val_b = get_val structure.events b |> Option.get in
-            (* disjoint only uses location *)
-            disjoint (loc_a, val_a) (loc_b, val_b)
-        )
-        af
-      |> USet.values
+    (* Rewrite predicates *)
+    let big_p_exprs = p_combined @ env_rf @ check_rf in
+    let big_p =
+      List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs
     in
+      (* atomicity constraint *)
+      let* af = atomicity_pairs structure path rhb env_rf in
 
-    let bigger_p =
-      List.map (fun expr -> Expr.evaluate expr (fun _ -> None)) (big_p @ disj)
-    in
+      (* Create disjointness predicates *)
+      (* TODO why ?
+      let disj =
+        USet.map
+          (fun (a, b) ->
+            let loc_a = get_loc structure.events a |> Option.get in
+            let val_a = get_val structure.events a |> Option.get in
+            let loc_b = get_loc structure.events b |> Option.get in
+            let val_b = get_val structure.events b |> Option.get in
+              (* disjoint only uses location *)
+              disjoint (loc_a, val_a) (loc_b, val_b)
+          )
+          af
+        |> USet.values
+      in
 
-    (* Filter po to only include events in e *)
-    let po_filtered =
-      USet.filter (fun (f, t) -> USet.mem e f && USet.mem e t) po
-    in
-    let inv_po_tree =
-      URelation.adjacency_map (URelation.inverse_relation po_filtered)
-    in
+      let bigger_p =
+        List.map (fun expr -> Expr.evaluate expr (fun _ -> None)) (big_p @ disj)
+      in *)
 
-    (* Success! Return the freeze result *)
-    let freeze_result =
-      {
-        justs = j_list;
-        e;
-        dp;
-        ppo = dp_ppo;
-        rf;
-        rmw = rmw_filtered;
-        pp;
-        conds = bigger_p;
-      }
-    in
-      if USet.equal e tracer_path then
+      (* Success! Return the freeze result *)
+      let freeze_result =
+        {
+          justs = j_list;
+          e;
+          dp;
+          ppo = dp_ppo;
+          rf;
+          rmw = rmw_filtered;
+          pp;
+          conds = [ EBoolean true ];
+        }
+      in
         Logs.debug (fun m -> m "  Freeze successful");
-      Lwt.return_some freeze_result
+        Lwt.return_some freeze_result
 
 (** Create a freeze function that validates RF sets for a justification
     combination *)
@@ -650,7 +678,7 @@ let build_justcombos structure paths init_ppo statex
         in
         (* only consider fwd edges for symbol origins *)
         let fwd_elided =
-          USet.union (URelation.pi_1 fwd) (URelation.pi_1 just.fwd)
+          USet.union (URelation.pi_2 fwd) (URelation.pi_2 just.fwd)
         in
         let d_origins =
           USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
@@ -826,7 +854,7 @@ let compute_path_rf structure path ~elided ~constraints =
     USet.set_minus (USet.intersection structure.read_events path.path) elided
   in
   let w_with_init = USet.union write_events (USet.singleton 0) in
-  let r_cross_w = URelation.cross read_events w_with_init in
+  let w_cross_r = URelation.cross w_with_init read_events in
 
   let ( let*? ) (condition, msg) f =
     if condition then f () else Lwt.return false
@@ -835,7 +863,11 @@ let compute_path_rf structure path ~elided ~constraints =
   let preds = path.p @ constraints |> USet.of_list |> USet.values in
 
   (* w must not be po-after r *)
-  let r_cross_w_minus_po = USet.set_minus r_cross_w structure.po in
+  let po =
+    USet.intersection structure.po (URelation.cross path.path path.path)
+  in
+  let po_inv = URelation.inverse_relation po in
+  let w_cross_r_minus_po = USet.set_minus w_cross_r po_inv in
     let* all_rf =
       USet.async_filter
         (fun rf_edge ->
@@ -858,7 +890,7 @@ let compute_path_rf structure path ~elided ~constraints =
                   let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
                     Lwt.return true
         )
-        r_cross_w_minus_po
+        w_cross_r_minus_po
     in
 
     Logs.debug (fun m ->
@@ -878,6 +910,8 @@ let generate_executions (structure : symbolic_event_structure)
 
   (* Generate all paths through the control flow *)
   let paths = gen_paths structure in
+  (* TODO bounding for testing *)
+  let paths = List.filteri (fun i _ -> i < 10) paths in
   (* Have short paths first to see results through the streaming pipeline
      earlier *)
   let paths =
@@ -954,7 +988,7 @@ let generate_executions (structure : symbolic_event_structure)
               (fun j -> Forwardingcontext.remap_just con j None)
               just_combo
           in
-          let elided = URelation.pi_1 (USet.union fwd we) in
+          let elided = URelation.pi_2 (USet.union fwd we) in
           let constraints =
             List.flatten (List.map (fun (j : justification) -> j.p) just_combo)
           in
@@ -964,6 +998,12 @@ let generate_executions (structure : symbolic_event_structure)
           let* freeze_fn_opt =
             create_freeze structure path j_remapped init_ppo statex
           in
+            Logs.debug (fun m ->
+                m
+                  "Freezing justification combination with %d justifications \
+                   over path with %d events"
+                  (List.length just_combo) (USet.size path.path)
+            );
             match freeze_fn_opt with
             | None -> Lwt.return_none
             | Some freeze_fn -> (
@@ -993,10 +1033,12 @@ let generate_executions (structure : symbolic_event_structure)
                 | Some j -> vale structure.events j.w.label r
                 | None -> vale structure.events w r
               in
-              let r_val = get_val structure.events r |> Option.get in
-
-              (* Store mapping *)
-              Hashtbl.replace fix_rf_map (Expr.to_string r_val) w_val
+                match get_val structure.events r with
+                | None ->
+                    failwith ("Read event " ^ string_of_int r ^ " has no value!")
+                | Some r_val ->
+                    (* Store mapping *)
+                    Hashtbl.replace fix_rf_map (Expr.to_string r_val) w_val
             )
             freeze_res.rf;
 
@@ -1037,7 +1079,6 @@ let generate_executions (structure : symbolic_event_structure)
               ppo = freeze_res.ppo;
               ex_rmw = freeze_res.rmw;
               ex_p = freeze_res.pp;
-              conds = freeze_res.conds;
               fix_rf_map = final_map;
               pointer_map = None;
             }
@@ -1053,6 +1094,9 @@ let generate_executions (structure : symbolic_event_structure)
     let stream_filter_coherent_executions input_stream =
       Lwt_stream.filter_map_s
         (fun exec ->
+          Logs.debug (fun m ->
+              m "Checking coherence of execution:\n%s" (to_string exec)
+          );
           let* coherent =
             check_for_coherence structure exec restrictions include_dependencies
           in
