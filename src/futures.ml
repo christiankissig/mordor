@@ -147,9 +147,25 @@ let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
                   Printf.sprintf
                     "    {\n\
                     \      \"execution\": %d,\n\
-                    \      \"futures\": {}\n\
+                    \      \"futures\": %s\n\
                     \    }"
                     i
+                    ( match ctx.futures with
+                    | None -> "[]"
+                    | Some future_set ->
+                        USet.values future_set
+                        |> List.mapi (fun j _future ->
+                            Printf.sprintf
+                              "        {\n          \"future\": %s\n        }"
+                              (USet.values _future
+                              |> List.map (fun (e1, e2) ->
+                                  Printf.sprintf "(%d, %d)" e1 e2
+                              )
+                              |> String.concat ", "
+                              )
+                        )
+                        |> String.concat ",\n"
+                    )
               )
               |> String.concat ",\n"
         in
