@@ -44,6 +44,29 @@ let tracer_path =
       119;
     ]
 
+let execution_equal ex1 ex2 =
+  USet.equal ex1.ex_e ex2.ex_e
+  && USet.equal ex1.dp ex2.dp
+  && USet.equal ex1.ppo ex2.ppo
+  && USet.equal ex1.rf ex2.rf
+
+let execution_hash ex =
+  let hash_list lst =
+    List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
+  in
+  let hash_uset uset = USet.values uset |> List.sort compare |> hash_list in
+    Hashtbl.hash
+      (hash_uset ex.ex_e, hash_uset ex.dp, hash_uset ex.ppo, hash_uset ex.rf)
+
+module ExecutionCacheKey = struct
+  type t = symbolic_execution
+
+  let equal = execution_equal
+  let hash = execution_hash
+end
+
+module ExecutionCache = Hashtbl.Make (ExecutionCacheKey)
+
 (** Utils **)
 let to_string (exec : symbolic_execution) : string =
   Printf.sprintf "{\n\tex_e=%s,\n\trf=%s\n\tdp=%s\n\tppo=%s\n}"
@@ -1123,12 +1146,27 @@ let generate_executions (structure : symbolic_event_structure)
         stream
     in
 
+    let dedup_executions stream =
+      let seen = ExecutionCache.create 1024 in
+
+      Lwt_stream.filter_map
+        (fun ex ->
+          if ExecutionCache.mem seen ex then None
+          else begin
+            ExecutionCache.add seen ex ();
+            Some ex
+          end
+        )
+        stream
+    in
+
     (* Build justcombos for all paths *)
     let* executions =
       build_justcombos structure paths init_ppo statex justmap
       |> stream_freeze
       |> dedup_freeze_results
       |> stream_freeze_to_execution
+      |> dedup_executions
       |> stream_filter_coherent_executions
       |> Lwt_stream.to_list
     in

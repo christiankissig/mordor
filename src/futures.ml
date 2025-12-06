@@ -139,35 +139,22 @@ let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
       let futures_json =
         (* Create JSON representation of futures *)
         let executions_json =
-          match ctx.executions with
-          | None -> "[]"
-          | Some execs ->
-              USet.values execs
-              |> List.mapi (fun i _exec ->
-                  Printf.sprintf
-                    "    {\n\
-                    \      \"execution\": %d,\n\
-                    \      \"futures\": %s\n\
-                    \    }"
-                    i
-                    ( match ctx.futures with
-                    | None -> "[]"
-                    | Some future_set ->
-                        USet.values future_set
-                        |> List.mapi (fun j _future ->
-                            Printf.sprintf
-                              "        {\n          \"future\": %s\n        }"
-                              (USet.values _future
-                              |> List.map (fun (e1, e2) ->
-                                  Printf.sprintf "(%d, %d)" e1 e2
-                              )
-                              |> String.concat ", "
-                              )
-                        )
-                        |> String.concat ",\n"
-                    )
-              )
-              |> String.concat ",\n"
+          Printf.sprintf "    {\n      \"futures\": [\n%s]\n    }"
+            ( match ctx.futures with
+            | None -> ""
+            | Some future_set ->
+                USet.values future_set
+                |> List.mapi (fun j _future ->
+                    Printf.sprintf "          [%s]"
+                      (USet.values _future
+                      |> List.map (fun (e1, e2) ->
+                          Printf.sprintf "(%d, %d)" e1 e2
+                      )
+                      |> String.concat ", "
+                      )
+                )
+                |> String.concat ",\n"
+            )
         in
           Printf.sprintf
             "{\n  \"program\": \"%s\",\n  \"executions\": [\n%s\n  ]\n}\n" name
