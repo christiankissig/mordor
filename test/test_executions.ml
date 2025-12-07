@@ -191,7 +191,7 @@ let test_path_generation (name, e, po, validator) () =
   let events = TestData.basic_events () in
   let structure = TestData.make_structure ~events ~e ~po () in
     try
-      let paths = gen_paths structure in
+      let paths = generate_max_conflictfree_sets structure in
         check bool (name ^ ": path validation") true (validator paths);
         List.iter
           (fun path_info ->
@@ -310,7 +310,7 @@ let test_integration () =
       ()
   in
 
-  let paths = gen_paths structure in
+  let paths = generate_max_conflictfree_sets structure in
     List.iter
       (fun path_info ->
         check bool "valid paths" true (USet.size path_info.path > 0)
@@ -346,7 +346,10 @@ let suite =
     (* Parameterized path generation tests *)
     List.map
       (fun ((name, _, _, _) as case) ->
-        ("gen_paths " ^ name, `Quick, test_path_generation case)
+        ( "generate_max_conflictfree_sets " ^ name,
+          `Quick,
+          test_path_generation case
+        )
       )
       TestData.path_gen_cases;
     (* Other tests *)

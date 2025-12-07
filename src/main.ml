@@ -187,10 +187,11 @@ let visualize_es_single (name, program) options output_mode output_file
 let usage_msg =
   "Usage: main COMMAND [OPTIONS]\n\n\
    Commands:\n\
+  \  run           Run verification on input programs\n\
   \  parse         Parse the input program\n\
   \  interpret     Run verification\n\
   \  visual-es     Visualize event structure (single file only)\n\
-  \  futures       Compute futures (single file only)\n\n\
+  \  futures       Compute futures (single file only)\n\
    Options:"
 
 let specs =
@@ -266,7 +267,7 @@ let anon_fun arg =
       | _ ->
           Printf.eprintf "Error: Unknown command '%s'\n" arg;
           Printf.eprintf
-            "Valid commands: parse, interpret, visual-es, futures\n";
+            "Valid commands: run, parse, interpret, visual-es, futures\n";
           exit 1
     )
   | Some _ ->

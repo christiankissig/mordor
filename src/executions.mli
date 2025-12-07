@@ -51,7 +51,7 @@ val origin : symbolic_event_structure -> string -> int option
     @param restrict Restriction map for events
     @return List of path information records
     @raise Failure if no events in structure or branch has invalid successors *)
-val gen_paths : symbolic_event_structure -> path_info list
+val generate_max_conflictfree_sets : symbolic_event_structure -> path_info list
 
 (** {1 Justification Selection} *)
 

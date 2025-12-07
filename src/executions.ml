@@ -139,50 +139,51 @@ let rec cartesian = function
   | hd :: tl ->
       List.concat_map (fun x -> List.map (List.cons x) (cartesian tl)) hd
 
-(** Partition neighbours into groups where each group is mutually in conflict *)
-let partition_by_conflict neighbours conflict =
-  let neighbours_list = USet.values neighbours in
-
-  (* Helper: find all neighbours in the same conflict group as 'seed' *)
-  let rec find_conflict_group seed remaining acc =
-    match remaining with
-    | [] -> (acc, [])
-    | n :: rest ->
-        (* Check if n conflicts with all members of acc (including seed) *)
-        let conflicts_with_all =
-          List.for_all
-            (fun member ->
-              USet.mem conflict (member, n)
-              || USet.mem conflict (n, member)
-              || member = n
-            )
-            (seed :: acc)
-        in
-          if conflicts_with_all then find_conflict_group seed rest (n :: acc)
-          else
-            let group, remaining' = find_conflict_group seed rest acc in
-              (group, n :: remaining')
-  in
-
-  (* Partition all neighbours into conflict groups *)
-  let rec partition remaining groups =
-    match remaining with
-    | [] -> groups
-    | seed :: rest ->
-        let group, remaining' = find_conflict_group seed rest [ seed ] in
-          partition remaining' (group :: groups)
-  in
-
-  partition neighbours_list []
-
-(* Generate maximally conflict-free sets of events as paths through the
-     symbolic event structure *)
-let gen_paths (structure : symbolic_event_structure) =
+(** Generate maximal conflict-free sets of events as paths through the symbolic
+    event structure. *)
+let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
   let po_intransitive = URelation.transitive_reduction structure.po in
   let po_tree = URelation.adjacency_map po_intransitive in
 
+  (*Partition neighbours into groups where each group is mutually in conflict *)
+  let partition_by_conflict neighbours conflict =
+    let neighbours_list = USet.values neighbours in
+
+    (* Helper: find all neighbours in the same conflict group as 'seed' *)
+    let rec find_conflict_group seed remaining acc =
+      match remaining with
+      | [] -> (acc, [])
+      | n :: rest ->
+          (* Check if n conflicts with all members of acc (including seed) *)
+          let conflicts_with_all =
+            List.for_all
+              (fun member ->
+                USet.mem conflict (member, n)
+                || USet.mem conflict (n, member)
+                || member = n
+              )
+              (seed :: acc)
+          in
+            if conflicts_with_all then find_conflict_group seed rest (n :: acc)
+            else
+              let group, remaining' = find_conflict_group seed rest acc in
+                (group, n :: remaining')
+    in
+
+    (* Partition all neighbours into conflict groups *)
+    let rec partition remaining groups =
+      match remaining with
+      | [] -> groups
+      | seed :: rest ->
+          let group, remaining' = find_conflict_group seed rest [ seed ] in
+            partition remaining' (group :: groups)
+    in
+
+    partition neighbours_list []
+  in
+
   (* DFS search for all paths. Each path is a uset event IDs. Search produces
-     list of such paths. *)
+     list of paths such paths. *)
   let rec dfs current =
     let neighbours =
       Hashtbl.find_opt po_tree current |> Option.value ~default:(USet.create ())
@@ -932,7 +933,7 @@ let generate_executions (structure : symbolic_event_structure)
   );
 
   (* Generate all paths through the control flow *)
-  let paths = gen_paths structure in
+  let paths = generate_max_conflictfree_sets structure in
   (* TODO bounding for testing *)
   let paths = List.filteri (fun i _ -> i < 10) paths in
   (* Have short paths first to see results through the streaming pipeline
