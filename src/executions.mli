@@ -24,8 +24,7 @@ val disjoint : expr * expr -> expr * expr -> expr
 
 (** {1 RF Validation} *)
 
-(** [validate_rf events structure e elided elided_rf ppo_loc ppo_loc_tree dp
-     dp_ppo j_list pp p_combined rf write_events read_events po] validates a
+(** [validate_rf structure path ppo dp j_list pp p_combined rf] validates a
     reads-from relation for a justification combination.
 
     Performs multiple checks:
@@ -34,6 +33,14 @@ val disjoint : expr * expr -> expr * expr -> expr
     - Predicates are satisfiable
     - All constraints are met
 
+    @param structure Symbolic event structure
+    @param path Path information
+    @param ppo Preserved program order relation
+    @param dp Dependency relation (as hashtable)
+    @param j_list List of justifications
+    @param pp Path predicates
+    @param p_combined Combined predicates
+    @param rf Reads-from relation to validate
     @return [Lwt.t] of [Some freeze_result] if valid, [None] otherwise *)
 val validate_rf :
   Types.symbolic_event_structure ->
@@ -50,20 +57,16 @@ val validate_rf :
 
 (** {1 Freeze Function Creation} *)
 
-(** [create_freeze events structure path j_list write_events read_events
-     init_ppo statex] creates a freeze function that validates RF sets for a
-    justification combination.
+(** [create_freeze structure path j_list init_ppo statex] creates a freeze
+    function that validates RF sets for a justification combination.
 
     The freeze function encapsulates all the constraints from the justifications
     and path predicates, and can be called with different RF relations to check
     validity.
 
-    @param events Hash table of all events
     @param structure Symbolic event structure
     @param path Path information
     @param j_list List of justifications for writes in path
-    @param write_events Set of write event labels
-    @param read_events Set of read event labels
     @param init_ppo Initial preserved program order
     @param statex State predicates
     @return [Lwt.t] of [Some freeze_fn] if valid combination, [None] otherwise
@@ -80,21 +83,18 @@ val create_freeze :
 
 (** {1 Justification Combinations} *)
 
-(** [build_justcombos events structure paths write_events read_events init_ppo
-     statex justmap] builds all valid justification combinations for all paths.
+(** [build_justcombos structure paths init_ppo statex justmap] builds all valid
+    justification combinations for all paths.
 
     For each path: 1. Filters to write events in the path 2. Finds compatible
     justification combinations 3. Creates freeze functions for each combination
 
-    @param events Hash table of all events
     @param structure Symbolic event structure
     @param paths List of all paths
-    @param write_events Set of write event labels
-    @param read_events Set of read event labels
     @param init_ppo Initial preserved program order
     @param statex State predicates
     @param justmap Map from write labels to justifications
-    @return [Lwt.t] of hash table mapping path event sets to freeze functions *)
+    @return [Lwt.t] of stream of (path, justification list) pairs *)
 val build_justcombos :
   Types.symbolic_event_structure ->
   path_info list ->
@@ -105,9 +105,9 @@ val build_justcombos :
 
 (** {1 Main Execution Generation} *)
 
-(** [generate_executions events structure final_justs statex e_set po rmw
-     write_events read_events init_ppo ~include_dependencies ~restrictions]
-    generates all valid executions for the given symbolic event structure.
+(** [generate_executions structure final_justs statex init_ppo
+     ~include_dependencies ~restrictions] generates all valid executions for the
+    given symbolic event structure.
 
     This is the main entry point for execution generation. It: 1. Generates all
     paths through the control flow 2. Computes initial RF candidates 3. Builds
@@ -115,15 +115,9 @@ val build_justcombos :
     Converts valid freeze results to executions 6. Filters through coherence
     checking
 
-    @param events Hash table of all events
     @param structure Symbolic event structure with PO, RMW, etc.
     @param final_justs Set of final justifications for writes
     @param statex State predicates
-    @param e_set Set of all event labels
-    @param po Program order relation
-    @param rmw Read-modify-write relation
-    @param write_events Set of write event labels
-    @param read_events Set of read event labels
     @param init_ppo Initial preserved program order
     @param include_dependencies Whether to include dependency calculations
     @param restrictions Coherence model restrictions
