@@ -1,14 +1,9 @@
 open Types
+open Eventstructures
 
 (** Execution generation for symbolic memory model checking *)
 
 (** {1 Types} *)
-
-(** Path information containing event sequence and predicates *)
-type path_info = {
-  path : int uset;  (** Sequence of event labels in the path *)
-  p : expr list;  (** List of predicate lists for path constraints *)
-}
 
 (** Result of freezing a justification combination with an RF relation *)
 type freeze_result = {
@@ -22,38 +17,10 @@ type freeze_result = {
   conds : expr list;  (** Combined conditions *)
 }
 
-(** {1 Utility Functions} *)
-
 (** [disjoint (loc1, val1) (loc2, val2)] creates a disjoint predicate for two
     (location, value) pairs. Returns an expression asserting that [loc1 ≠ loc2].
 *)
 val disjoint : expr * expr -> expr * expr -> expr
-
-(** [origin events read_events malloc_events symbol] finds the origin event of a
-    symbol. First searches in read events, then in malloc events.
-    @param events Hash table of all events
-    @param read_events Set of read event labels
-    @param malloc_events Set of malloc event labels
-    @param symbol Symbol name to find
-    @return [Some event_label] if found, [None] otherwise *)
-val origin : symbolic_event_structure -> string -> int option
-
-(** {1 Path Generation} *)
-
-(** [gen_paths events structure restrict] generates all execution paths through
-    the control flow structure.
-
-    For each branch event, generates separate paths for both branch outcomes.
-    Paths are built recursively from root events (those with no predecessors).
-
-    @param events Hash table of all events
-    @param structure Symbolic event structure with PO and constraints
-    @param restrict Restriction map for events
-    @return List of path information records
-    @raise Failure if no events in structure or branch has invalid successors *)
-val generate_max_conflictfree_sets : symbolic_event_structure -> path_info list
-
-(** {1 Justification Selection} *)
 
 (** {1 RF Validation} *)
 

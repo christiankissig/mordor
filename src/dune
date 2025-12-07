@@ -16,9 +16,10 @@
   elaborations
   episodicity
   events
+  eventstructures
+  eventstructureviz
   executions
   expr
-  eventstructureviz
   forwardingcontext
   futures
   interpret

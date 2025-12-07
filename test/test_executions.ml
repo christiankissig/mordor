@@ -2,6 +2,7 @@ open Uset
 open Alcotest
 open Executions
 open Events
+open Eventstructures
 open Expr
 open Types
 open Lwt.Syntax
@@ -169,7 +170,7 @@ let test_origin (name, setup) () =
   let e = USet.union read_events malloc_events in
   let structure = TestData.make_structure ~events ~e () in
   let structure = { structure with origin; read_events; malloc_events } in
-  let result = Executions.origin structure symbol in
+  let result = Eventstructures.origin structure symbol in
     match expected with
     | Some exp_id -> (
         match result with
