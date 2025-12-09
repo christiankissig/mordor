@@ -1,5 +1,4 @@
 open Uset
-(* Main test runner *)
 
 let () =
   Alcotest.run "Mordor Test Suite"

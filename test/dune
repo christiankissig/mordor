@@ -7,22 +7,39 @@
   (:standard -g))
  ; Add debugging information
  (modules
-  test_algorithms
   test_mordor
-  test_solver
-  test_types
-  test_executions
-  test_interpret
-  test_elaborations
-  test_coherence
-  test_events
-  test_forwardingcontext
-  test_expr
-  test_parse
-  test_symbolic_mrd
-  test_properties_mrd
+  ; other test modules
   test_advanced_mrd
-  test_histories_futures)
+  test_algorithms
+  test_coherence
+  test_elaborations
+  test_events
+  test_executions
+  test_expr
+  test_forwardingcontext
+  test_histories_futures
+  test_interpret
+  test_parse
+  test_properties_mrd
+  test_solver
+  test_symbolic_mrd
+  test_types)
  (libraries mordor_lib lwt lwt.unix z3 zarith core str alcotest)
  (preprocess
   (pps lwt_ppx)))
+
+(test
+ (name test_integration)
+ (modes byte exe)
+ (flags
+  (:standard -g -w -33-26))
+ (ocamlc_flags
+  (:standard -g))
+ (modules
+  test_integration
+  ; other integration test modules
+  test_integration_litmus_tests)
+ (libraries mordor_lib lwt lwt.unix z3 zarith core str alcotest unix)
+ (preprocess
+  (pps lwt_ppx))
+ (deps ../src/main.exe))
