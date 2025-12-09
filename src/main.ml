@@ -111,6 +111,7 @@ let verify_program program options =
     |> Parse.step_parse_litmus
     |> Interpret.step_interpret
     |> Symmrd.step_calculate_dependencies
+    |> Assertion.step_check_assertions
 
 let run_single name program =
   Printf.printf "Running program %s.\n" name;

@@ -376,7 +376,17 @@ let check_assertion (assertion : ir_assertion) executions structure events
         let valid = !curr = expected in
 
         Lwt.return { valid; ub; ub_reasons = List.rev !ub_reasons }
-  | _ -> Lwt.fail_with "Unsupported assertion type"
+  | _ ->
+      (* Handle unsupported assertion types gracefully *)
+      Logs.err (fun m ->
+          m "Unsupported assertion type encountered: %s"
+            ( match assertion with
+            | Outcome _ -> "Outcome"
+            | Model _ -> "Model"
+            | Chained _ -> "Chained"
+            )
+      );
+      failwith "Unsupported assertion type"
 
 (** {1 Refinement Checking} *)
 
