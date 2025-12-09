@@ -28,7 +28,7 @@ let read_litmus_files dir =
 
 (* Execute CLI command and capture result *)
 let run_cli_on_file filepath =
-  let cmd = Printf.sprintf "%s run --single %s" cli_executable filepath in
+  let cmd = Printf.sprintf "%s run --single \"%s\"" cli_executable filepath in
   let ic = Unix.open_process_in cmd in
   let output = ref [] in
     try
