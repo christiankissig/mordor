@@ -122,6 +122,20 @@ with stacktraces
 OCAMLRUNPARAM=b dune exec mordor
 ```
 
+## Testing
+
+Run unit tests with
+
+```bash
+dune test
+```
+
+Run integration tests with
+
+```bash
+dune exec test/test_integration.exe
+```
+
 ## Command Line Interface
 
 MoRDor supports several commands for analyzing litmus tests and generating outputs.

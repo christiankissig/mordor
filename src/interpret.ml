@@ -548,8 +548,9 @@ let interpret_generic ~stmt_semantics stmts defacto restrictions constraint_ =
   let* structure = stmt_semantics stmts env [] events in
   (* prefix with init event *)
   let structure' = dot init_event' structure [] in
+  let structure'' = { structure' with events = events.events } in
 
-  Lwt.return (structure', events.events)
+  Lwt.return (structure'', events.events)
 
 (** Default interpretation function **)
 
