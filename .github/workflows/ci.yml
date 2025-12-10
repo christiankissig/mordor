@@ -1,5 +1,4 @@
 name: CI
-
 on:
   push:
     branches:
@@ -12,6 +11,7 @@ on:
 
 jobs:
   build-and-test:
+    name: Build and Unit Tests
     strategy:
       fail-fast: false
       matrix:
@@ -19,13 +19,11 @@ jobs:
           - ubuntu-22.04
         ocaml-compiler:
           - 5.2.x
-
     runs-on: ${{ matrix.os }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Set up OCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v2
         with:
@@ -33,32 +31,79 @@ jobs:
           dune-cache: true
           opam-depext: true
           opam-depext-flags: --with-test
-
+      
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgmp-dev pkg-config
-
+      
       - name: Install Z3
         run: |
           sudo apt-get install -y z3 libz3-dev
-
+      
       - name: Pin package
         run: opam pin add . --no-action
-
+      
       - name: Install dependencies
         run: |
           opam depext -y mordor
           opam install . --deps-only --with-test
           opam install ocamlformat
           opam install logs fmt
-
+      
       - name: Build project
         run: opam exec -- dune build
-
+      
       - name: Run tests
         run: opam exec -- dune runtest
-
+      
       - name: Check formatting (optional)
         run: opam exec -- dune build @fmt
         continue-on-error: true
+
+  integration-tests:
+    name: Integration Tests
+    needs: build-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22.04
+        ocaml-compiler:
+          - 5.2.x
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          dune-cache: true
+          opam-depext: true
+          opam-depext-flags: --with-test
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgmp-dev pkg-config
+      
+      - name: Install Z3
+        run: |
+          sudo apt-get install -y z3 libz3-dev
+      
+      - name: Pin package
+        run: opam pin add . --no-action
+      
+      - name: Install dependencies
+        run: |
+          opam depext -y mordor
+          opam install . --deps-only --with-test
+          opam install logs fmt
+      
+      - name: Build project
+        run: opam exec -- dune build
+      
+      - name: Run integration tests
+        run: opam exec -- dune exec test/test_integration.exe

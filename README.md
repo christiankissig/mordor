@@ -1,4 +1,6 @@
 [![CI](https://github.com/christiankissig/mordor/actions/workflows/ci.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/ci.yml)
+[![Litmus Tests](https://github.com/christiankissig/mordor/actions/workflows/ci.yml/badge.svg?job=integration-tests)](https://github.com/christiankissig/mordor/actions/workflows/ci.yml)
+
 
 # MoRDor - Symbolic Modular Relaxed Dependencies (in OCaml)
 
@@ -37,6 +39,7 @@ mordor/
 ├── README.md
 ├── smrd.opam
 ├── src
+│   ├── assertion.ml
 │   ├── ast.ml
 │   ├── coherence.ml
 │   ├── coherence.mli
@@ -61,7 +64,6 @@ mordor/
 │   ├── solver.ml
 │   ├── solver.mli
 │   ├── symmrd.ml
-│   ├── trees.ml
 │   ├── types.ml
 │   ├── types.mli
 │   ├── uset.ml
