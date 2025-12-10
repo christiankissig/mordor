@@ -11,6 +11,64 @@ type ir_litmus = unit Ir.ir_litmus
 
 (** Assertion checking and refinement for symbolic memory model checking *)
 
+(** {1 Set Membership Evaluation} *)
+
+(** Check if expression contains set membership operations *)
+let rec has_set_operation expr =
+  match expr with
+  | EBinOp (_, "in", _) -> true
+  | EBinOp (_, "notin", _) -> true
+  | EBinOp (e1, _, e2) -> has_set_operation e1 || has_set_operation e2
+  | EUnOp (_, e) -> has_set_operation e
+  | EOr lst -> List.exists (List.exists has_set_operation) lst
+  | _ -> false
+
+(** Evaluate tuple to pair of integers *)
+let eval_tuple expr =
+  match expr with
+  | EBinOp (ENum a, ",", ENum b) -> (Z.to_int a, Z.to_int b)
+  | _ -> failwith "Invalid tuple in set membership: expected (int, int)"
+
+(** Get relation by name from structure/execution *)
+let get_relation name (structure : symbolic_event_structure)
+    (execution : symbolic_execution) =
+  match name with
+  | ".ppo" -> execution.ppo
+  | ".po" -> structure.po
+  | ".rf" -> execution.rf
+  | ".dp" -> execution.dp
+  | ".rmw" -> execution.ex_rmw
+  | _ ->
+      Logs.warn (fun m ->
+          m "Unknown or unsupported relation: %s, returning empty" name
+      );
+      USet.create ()
+
+(** Evaluate set membership expression directly *)
+let rec eval_set_expr expr (structure : symbolic_event_structure)
+    (execution : symbolic_execution) =
+  match expr with
+  | EBinOp (tuple_expr, "in", EVar set_name) ->
+      let pair = eval_tuple tuple_expr in
+      let rel = get_relation set_name structure execution in
+        USet.mem rel pair
+  | EBinOp (tuple_expr, "notin", EVar set_name) ->
+      let pair = eval_tuple tuple_expr in
+      let rel = get_relation set_name structure execution in
+        not (USet.mem rel pair)
+  | EBinOp (e1, "&&", e2) ->
+      eval_set_expr e1 structure execution
+      && eval_set_expr e2 structure execution
+  | EBinOp (e1, "||", e2) ->
+      eval_set_expr e1 structure execution
+      || eval_set_expr e2 structure execution
+  | EUnOp ("!", e) -> not (eval_set_expr e structure execution)
+  | _ ->
+      failwith
+        ("Cannot evaluate expression as set membership: "
+        ^ "expected 'in' or 'notin' operator"
+        )
+
 (** {1 Helper Modules} *)
 
 (** Expression utilities *)
@@ -144,6 +202,11 @@ let lwt_pall f lst =
 let check_assertion (assertion : ir_assertion) executions structure events
     ~exhaustive =
   match assertion with
+  | Model { model } ->
+      (* Model assertions just specify which memory model to use *)
+      (* They don't validate anything, so always return valid *)
+      Logs.info (fun m -> m "Using memory model: %s" model);
+      Lwt.return { valid = true; ub = false; ub_reasons = [] }
   | Outcome { outcome; condition; model } ->
       (* Check for no executions in exhaustive mode *)
       let%lwt () =
@@ -357,7 +420,27 @@ let check_assertion (assertion : ir_assertion) executions structure events
                       (* Check conditions if not already satisfied *)
                       if not !curr then (
                         let%lwt conds_satisfied =
-                          Solver.is_sat (condition :: rf_conditions)
+                          (* Check if condition contains set operations *)
+                          if has_set_operation condition then (
+                            (* Evaluate set operations directly, don't use solver *)
+                            try
+                              let set_result =
+                                eval_set_expr condition structure execution
+                              in
+                                (* Still check rf_conditions with solver if needed *)
+                                if List.length rf_conditions > 0 then
+                                  let%lwt rf_ok = Solver.is_sat rf_conditions in
+                                    Lwt.return (set_result && rf_ok)
+                                else Lwt.return set_result
+                            with Failure msg ->
+                              Logs.err (fun m ->
+                                  m "Error evaluating set expression: %s" msg
+                              );
+                              Lwt.return false
+                          )
+                          else
+                            (* No set operations, use solver as normal *)
+                            Solver.is_sat (condition :: rf_conditions)
                         in
 
                         (* Check extended assertions *)
@@ -376,11 +459,9 @@ let check_assertion (assertion : ir_assertion) executions structure events
         let valid = !curr = expected in
 
         Lwt.return { valid; ub; ub_reasons = List.rev !ub_reasons }
-  | Model { model } ->
-      (* Configuration only, always valid *)
-      Lwt.return { valid = true; ub = false; ub_reasons = [] }
   | Chained _ ->
-      (* Not yet implemented *)
+      (* Chained assertions are not yet implemented *)
+      Logs.err (fun m -> m "Unsupported assertion type encountered: Chained");
       failwith "Unsupported assertion type: Chained"
 
 (** {1 Refinement Checking} *)
@@ -491,19 +572,12 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
           let* assertion_result : assertion_result =
             match ctx.assertions with
             | None -> Lwt.return { valid = true; ub = false; ub_reasons = [] }
-            | Some assertion ->
+            | Some assertions ->
                 let* (res : assertion_result) =
-                  check_assertion assertion execution_list structure events
+                  check_assertion assertions execution_list structure events
                     ~exhaustive:ctx.options.exhaustive
                 in
-                  if not res.valid then Lwt.return res
-                  else
-                    Lwt.return
-                      {
-                        valid = res.valid;
-                        ub = res.ub;
-                        ub_reasons = res.ub_reasons;
-                      }
+                  Lwt.return res
           in
             ctx.valid <- Some assertion_result.valid;
             ctx.undefined_behaviour <- Some assertion_result.ub;
