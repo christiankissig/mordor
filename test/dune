@@ -19,6 +19,7 @@
   test_forwardingcontext
   test_histories_futures
   test_interpret
+  test_model_and_tuple_features
   test_parse
   test_properties_mrd
   test_solver
