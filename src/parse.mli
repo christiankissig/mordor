@@ -18,7 +18,7 @@ val parse_expr : string -> ast_expr
 val parse_and_convert_litmus :
   validate_ast:(ast_litmus -> unit) ->
   string ->
-  expr list * ir_node list * ir_assertion list
+  expr list * ir_node list * ir_assertion option
 
 (** Convert parser AST expression to Types.expr *)
 val ast_expr_to_expr : ast_expr -> Types.expr

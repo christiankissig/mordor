@@ -183,19 +183,15 @@ let parse_and_convert_litmus ~validate_ast src =
           )
       in
       let program_stmts = List.map convert_stmt litmus_ast.program in
-      let assertions =
-        match litmus_ast.assertion with
-        | Some assertion -> [ convert_assertion assertion ]
-        | None -> []
-      in
+      let assertions = Option.map convert_assertion litmus_ast.assertion in
         (constraints, program_stmts, assertions)
   with
   | Failure msg ->
       Logs.err (fun m -> m "Parse error: %s" msg);
-      ([], [], [])
+      ([], [], None)
   | e ->
       Logs.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
-      ([], [], [])
+      ([], [], None)
 
 (** Post-parse validation on ASTs *)
 
@@ -243,14 +239,23 @@ let step_parse_litmus (ctx_lwt : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   in
     let* ctx = ctx_lwt in
       match ctx.litmus with
-      | Some program ->
+      | Some program -> (
           let constraints, statements, assertions =
             parse_and_convert_litmus ~validate_ast program
           in
             ctx.litmus_constraints <- Some constraints;
             ctx.program_stmts <- Some statements;
-            ctx.assertions <- Some assertions;
-            Lwt.return ctx
+            ctx.assertions <- assertions;
+            match assertions with
+            | Some (Ir.Outcome { model = Some model_name; _ })
+            | Some (Ir.Model { model = model_name }) ->
+                apply_model_options ctx model_name;
+                Logs.info (fun m -> m "Applied model options for %s" model_name);
+                Lwt.return ctx
+            | _ ->
+                ();
+                Lwt.return ctx
+        )
       | None ->
           Logs.err (fun m -> m "No program provided for parsing.");
           Lwt.return ctx

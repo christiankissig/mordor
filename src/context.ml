@@ -21,19 +21,22 @@ let parse_output_mode s =
       exit 1
 
 type options = {
-  dependencies : bool;
-  exhaustive : bool;
-  forcerc11 : bool;
-  forceimm : bool;
-  forcenocoh : bool;
-  coherent : string;
+  mutable model_name : string option;
+  mutable dependencies : bool;
+  mutable exhaustive : bool;
+  mutable forcerc11 : bool;
+  mutable forceimm : bool;
+  mutable forcenocoh : bool;
+  mutable coherent : string;
+  mutable ubopt : bool;
   (* step counter semantics of loops *)
-  use_finite_step_counter_semantics : bool;
-  use_step_counter_per_loop : bool;
+  mutable use_finite_step_counter_semantics : bool;
+  mutable use_step_counter_per_loop : bool;
 }
 
 let default_options =
   {
+    model_name = None;
     dependencies = true;
     exhaustive = false;
     forcerc11 = false;
@@ -42,6 +45,7 @@ let default_options =
     coherent = "rc11";
     use_finite_step_counter_semantics = false;
     use_step_counter_per_loop = true;
+    ubopt = false;
   }
 
 (** context for pipeline *)
@@ -56,7 +60,7 @@ type mordor_ctx = {
   (* parser *)
   mutable litmus_constraints : expr list option;
   mutable program_stmts : ir_node list option;
-  mutable assertions : unit ir_assertion list option;
+  mutable assertions : unit ir_assertion option;
   (* event structures *)
   step_counter : int;
   mutable events : (int, event) Hashtbl.t option;
@@ -101,3 +105,21 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     undefined_behaviour = None;
     is_episodic = None;
   }
+
+let apply_model_options (ctx : mordor_ctx) (model_name : string) : unit =
+  ctx.options.model_name <- Some model_name;
+  match model_name with
+  | "Power" -> ctx.options.coherent <- "imm"
+  | "RC11" -> ctx.options.coherent <- "rc11"
+  | "RC11c" -> ctx.options.coherent <- "rc11c"
+  | "Bridging" | "Grounding" | "Promising" | "IMM" ->
+      ctx.options.coherent <- "imm"
+  | "RC11UB" ->
+      ctx.options.coherent <- "rc11";
+      ctx.options.ubopt <- true
+  | "IMMUB" ->
+      ctx.options.coherent <- "imm";
+      ctx.options.ubopt <- true
+  | "UB11" -> ctx.options.ubopt <- true
+  | "Sevcik" | "Problem" | "JR" | "Bubbly" | "Soham" | "_" -> ()
+  | _ -> Logs.warn (fun m -> m "Unknown model: %s" model_name)

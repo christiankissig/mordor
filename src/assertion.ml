@@ -376,17 +376,12 @@ let check_assertion (assertion : ir_assertion) executions structure events
         let valid = !curr = expected in
 
         Lwt.return { valid; ub; ub_reasons = List.rev !ub_reasons }
-  | _ ->
-      (* Handle unsupported assertion types gracefully *)
-      Logs.err (fun m ->
-          m "Unsupported assertion type encountered: %s"
-            ( match assertion with
-            | Outcome _ -> "Outcome"
-            | Model _ -> "Model"
-            | Chained _ -> "Chained"
-            )
-      );
-      failwith "Unsupported assertion type"
+  | Model { model } ->
+      (* Configuration only, always valid *)
+      Lwt.return { valid = true; ub = false; ub_reasons = [] }
+  | Chained _ ->
+      (* Not yet implemented *)
+      failwith "Unsupported assertion type: Chained"
 
 (** {1 Refinement Checking} *)
 
@@ -495,26 +490,20 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
         let execution_list = USet.to_list executions in
           let* assertion_result : assertion_result =
             match ctx.assertions with
-            | None | Some [] ->
-                Lwt.return { valid = true; ub = false; ub_reasons = [] }
-            | Some assertions ->
-                Lwt_list.fold_left_s
-                  (fun (acc : assertion_result) (assertion : ir_assertion) ->
-                    let* (res : assertion_result) =
-                      check_assertion assertion execution_list structure events
-                        ~exhaustive:ctx.options.exhaustive
-                    in
-                      if not res.valid then Lwt.return res
-                      else
-                        Lwt.return
-                          {
-                            valid = acc.valid && res.valid;
-                            ub = acc.ub || res.ub;
-                            ub_reasons = acc.ub_reasons @ res.ub_reasons;
-                          }
-                  )
-                  { valid = true; ub = false; ub_reasons = [] }
-                  assertions
+            | None -> Lwt.return { valid = true; ub = false; ub_reasons = [] }
+            | Some assertion ->
+                let* (res : assertion_result) =
+                  check_assertion assertion execution_list structure events
+                    ~exhaustive:ctx.options.exhaustive
+                in
+                  if not res.valid then Lwt.return res
+                  else
+                    Lwt.return
+                      {
+                        valid = res.valid;
+                        ub = res.ub;
+                        ub_reasons = res.ub_reasons;
+                      }
           in
             ctx.valid <- Some assertion_result.valid;
             ctx.undefined_behaviour <- Some assertion_result.ub;
