@@ -1,14 +1,3 @@
-(** Comprehensive test module for Model Assertions and Tuple/Set Membership Operations
-
-    To use: Add to test_coherence.ml or test_symbolic_mrd.ml
-
-    Integration:
-      (* At end of file, before final suite *)
-      include Test_model_and_tuple_features
-
-      let suite = ("...", existing_tests @ Test_model_and_tuple_features.suite)
-*)
-
 open Alcotest
 open Assertion
 open Context
