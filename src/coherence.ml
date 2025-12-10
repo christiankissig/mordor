@@ -643,6 +643,35 @@ let check_for_coherence (structure : symbolic_event_structure)
                     | _ -> false
                 )
             )
+          | "undefined" | "" ->
+              Logs.info (fun m -> m "Using undefined/minimal coherence model");
+              let cache =
+                if USet.size execution.ex_rmw > 0 then
+                  UndefinedCache
+                    {
+                      rfi = Some (URelation.inverse_relation execution.rf);
+                      rmw = Some execution.ex_rmw;
+                    }
+                else UndefinedCache { rfi = None; rmw = None }
+              in
+              let coherent co cache =
+                match cache with
+                | UndefinedCache { rfi = Some rfi; rmw = Some rmw } ->
+                    let fr = semicolon_rel [ rfi; co ] in
+                      USet.size
+                        (USet.intersection rmw (semicolon_rel [ fr; co ]))
+                      = 0
+                | _ -> true
+              in
+                ( cache,
+                  (fun _ _ _ _ _ -> USet.create ()),
+                  (* No dependencies *)
+                  (fun _ _ -> true
+                  ),
+                  (* No thin-air check *)
+                  coherent
+                  (* Only atomicity *)
+                )
           | _ ->
               let cache =
                 if USet.size execution.ex_rmw > 0 then
