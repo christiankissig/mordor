@@ -36,21 +36,22 @@ let disjoint (loc1, val1) (loc2, val2) =
   EBinOp (loc1, "!=", loc2)
 
 module RFValidation = struct
-  let rf_respects_ppo rf ppo_loc ppo_loc_tree =
-    USet.for_all
-      (fun (w, r) ->
-        if USet.mem ppo_loc (w, r) then
-          (* If (w,r) in ppo_loc, check that r is reachable from w *)
-          let reachable =
-            try
-              let successors = Hashtbl.find ppo_loc_tree w in
-                USet.mem successors r
-            with Not_found -> false
-          in
-            reachable
-        else true
-      )
-      rf
+  let rf_respects_ppo rf ppo_loc =
+    let ppo_loc_tree = URelation.adjacency_map ppo_loc in
+      USet.for_all
+        (fun (w, r) ->
+          if USet.mem ppo_loc (w, r) then
+            (* If (w,r) in ppo_loc, check that r is reachable from w *)
+            let reachable =
+              try
+                let successors = Hashtbl.find ppo_loc_tree w in
+                  USet.mem successors r
+              with Not_found -> false
+            in
+              reachable
+          else true
+        )
+        rf
 
   let check_rf_elided rf delta =
     USet.size (USet.intersection (URelation.pi_2 delta) (URelation.pi_1 rf)) = 0
@@ -296,14 +297,17 @@ let atomicity_pairs structure path rhb p =
     )
     a_squared
 
-let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
-    dp dp_ppo j_list (pp : expr list) p_combined rf =
+let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
+    j_list (pp : expr list) p_combined rf =
   Logs.debug (fun m ->
       m
         "Validating RF with %d edges for justification combination with %d \
          justs"
         (USet.size rf) (List.length j_list)
   );
+
+  (* Combine dp and ppo *)
+  let dp_ppo = USet.union dp ppo in
 
   (* let* _ = Lwt.return_unit in *)
   let ( let*? ) (condition, msg) f =
@@ -321,9 +325,7 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
 
   (* Check 3: All rf edges respect ppo_loc *)
   let*? () =
-    ( RFValidation.rf_respects_ppo rf ppo_loc ppo_loc_tree,
-      "RF edges do not respect PPO"
-    )
+    (RFValidation.rf_respects_ppo rf ppo_loc, "RF edges do not respect PPO")
   in
   (* Filter RMW pairs *)
   let rmw_filtered =
@@ -530,21 +532,13 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
       in
 
       (* Compute transitive closure *)
-      let ppo_loc = URelation.transitive_closure ppo_loc in
       let ppo_loc = USet.intersection ppo_loc e_squared in
-      let ppo_loc_tree = URelation.adjacency_map ppo_loc in
-
-      (* Combine dp and ppo *)
-      let dp_ppo = USet.union dp ppo in
+      let ppo_loc = URelation.transitive_closure ppo_loc in
 
       (* Return the freeze validation function *)
-      let freeze_fn rf =
-        validate_rf
-          (structure : symbolic_event_structure)
-          path ppo_loc ppo_loc_tree dp dp_ppo j_list pp p_combined rf
-      in
-
-      Lwt.return_some freeze_fn
+      Lwt.return_some (fun rf ->
+          validate_rf structure path ppo_loc dp ppo j_list pp p_combined rf
+      )
 
 (** Build justification combinations for all paths with caching *)
 let build_justcombos structure paths init_ppo statex

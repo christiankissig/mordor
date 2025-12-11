@@ -46,7 +46,6 @@ val validate_rf :
   Types.symbolic_event_structure ->
   path_info ->
   (int * int) Uset.USet.t ->
-  (int, int Uset.USet.t) Hashtbl.t ->
   (int * int) Uset.USet.t ->
   (int * int) Uset.USet.t ->
   Types.justification list ->
