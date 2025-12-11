@@ -1,4 +1,4 @@
-name: CI
+name: Litmus Tests
 on:
   push:
     branches:
@@ -10,8 +10,9 @@ on:
       - master
 
 jobs:
-  build-and-test:
-    name: Build and Unit Tests
+  integration-tests:
+    name: Integration Tests
+    needs: build-and-test
     strategy:
       fail-fast: false
       matrix:
@@ -49,15 +50,10 @@ jobs:
           opam update
           opam depext -y mordor
           opam install . --deps-only --with-test
-          opam install ocamlformat0.28.1
           opam install logs fmt
       
       - name: Build project
         run: opam exec -- dune build
       
-      - name: Run tests
-        run: opam exec -- dune runtest
-      
-      - name: Check formatting (optional)
-        run: opam exec -- dune build @fmt
-        continue-on-error: true
+      - name: Run integration tests
+        run: opam exec -- dune exec test/test_integration.exe
