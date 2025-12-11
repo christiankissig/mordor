@@ -28,6 +28,7 @@
   lexer
   parse
   parser
+  pretty
   rewrite
   solver
   solver_threadsafe
@@ -50,4 +51,4 @@
   (:standard -g))
  (libraries mordor_lib lwt lwt.unix)
  (preprocess
-  (pps lwt_ppx landmarks-ppx --auto)))
+  (pps lwt_ppx ppx_deriving.show landmarks-ppx --auto)))

@@ -68,29 +68,6 @@ end
 
 module ExecutionCache = Hashtbl.Make (ExecutionCacheKey)
 
-(** Utils **)
-let to_string (exec : symbolic_execution) : string =
-  Printf.sprintf "{\n\tex_e=%s,\n\trf=%s\n\tdp=%s\n\tppo=%s\n}"
-    (String.concat ", " (List.map (Printf.sprintf "%d") (USet.values exec.ex_e)))
-    (String.concat ", "
-       (List.map
-          (fun (e1, e2) -> Printf.sprintf "(%d,%d)" e1 e2)
-          (USet.values exec.rf)
-       )
-    )
-    (String.concat ", "
-       (List.map
-          (fun (e1, e2) -> Printf.sprintf "(%d,%d)" e1 e2)
-          (USet.values exec.dp)
-       )
-    )
-    (String.concat ", "
-       (List.map
-          (fun (e1, e2) -> Printf.sprintf "(%d,%d)" e1 e2)
-          (USet.values exec.ppo)
-       )
-    )
-
 (** Create disjoint predicate for two (location, value) pairs *)
 let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
@@ -525,6 +502,7 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
 (** Build justification combinations for all paths with caching *)
 let build_justcombos structure paths init_ppo statex
     (justmap : (int, justification list) Hashtbl.t) =
+  (* Check partial combination of justifications for early pruning. *)
   let check_partial_combo (path : path_info) (combo : justification list)
       ?(alternatives = []) (just : justification) =
     let ( let*? ) (condition, msg) f =
@@ -641,6 +619,7 @@ let build_justcombos structure paths init_ppo statex
               Lwt.return true
   in
 
+  (* Check final combination of justifications for validity. *)
   let check_final_combo (path : path_info) (combo : justification list) =
     let ( let*? ) (condition, msg) f =
       if condition then f ()
@@ -677,53 +656,38 @@ let build_justcombos structure paths init_ppo statex
       Lwt.return true
   in
 
-  let stream_path_to_just_combos input_stream =
-    Lwt_stream.map_list_s
-      (fun path ->
-        Logs.debug (fun m ->
-            m "Building justification combinations for path [%s]"
-              (String.concat ", "
-                 (List.map (Printf.sprintf "%d")
-                    (List.sort compare (USet.values path.path))
-                 )
-              )
-        );
+  (* Given a path, combine justifications for each write on the path. *)
+  let combine_justifications_for_path path =
+    Logs.debug (fun m ->
+        m "Building justification combinations for path [%s]"
+          (String.concat ", "
+             (List.map (Printf.sprintf "%d")
+                (List.sort compare (USet.values path.path))
+             )
+          )
+    );
 
-        let path_writes =
-          USet.intersection path.path structure.write_events |> USet.values
-        in
+    let path_writes =
+      USet.intersection path.path structure.write_events |> USet.values
+    in
 
-        let%lwt js_combinations =
-          ListMapCombinationBuilder.build_combinations justmap path_writes
-            (fun combo ?alternatives just ->
-              check_partial_combo path combo ?alternatives just
-            )
-            (fun combo -> check_final_combo path combo)
-        in
+    let%lwt js_combinations =
+      ListMapCombinationBuilder.build_combinations justmap path_writes
+        (fun combo ?alternatives just ->
+          check_partial_combo path combo ?alternatives just
+        )
+        (fun combo -> check_final_combo path combo)
+    in
 
-        Logs.debug (fun m ->
-            m "  Found %d justification combinations"
-              (List.length js_combinations)
-        );
+    Logs.debug (fun m ->
+        m "  Found %d justification combinations" (List.length js_combinations)
+    );
 
-        (* TODO crop top 100 justification combinations for testing *)
-        let js_combinations =
-          List.filteri (fun i _ -> i < 100) js_combinations
-        in
-
-        Logs.debug (fun m ->
-            m
-              "  After cropping to top 100, %d justification combinations \
-               remain"
-              (List.length js_combinations)
-        );
-
-        Lwt.return (List.map (fun combo -> (path, combo)) js_combinations)
-      )
-      input_stream
+    Lwt.return (List.map (fun combo -> (path, combo)) js_combinations)
   in
 
-  Lwt_stream.of_list paths |> stream_path_to_just_combos
+  Lwt_stream.of_list paths
+  |> Lwt_stream.map_list_s combine_justifications_for_path
 
 (** Generate executions **)
 
@@ -792,8 +756,6 @@ let generate_executions (structure : symbolic_event_structure)
 
   (* Generate all paths through the control flow *)
   let paths = generate_max_conflictfree_sets structure in
-  (* TODO bounding for testing *)
-  let paths = List.filteri (fun i _ -> i < 10) paths in
   (* Have short paths first to see results through the streaming pipeline
      earlier *)
   let paths =
@@ -802,7 +764,7 @@ let generate_executions (structure : symbolic_event_structure)
       paths
   in
 
-  (* Build justification map: write label -> list of justifications *)
+  (* Build justification map: write event label -> list of justifications *)
   (* TODO remove justifications with elided origins *)
   let justmap = Hashtbl.create 16 in
     USet.iter
@@ -852,132 +814,133 @@ let generate_executions (structure : symbolic_event_structure)
     );
 
     let stream_freeze input_stream =
-      Lwt_stream.filter_map_s
-        (fun (path, just_combo) ->
-          let fwd =
-            List.fold_left
-              (fun acc j -> USet.union acc j.fwd)
-              (USet.create ()) just_combo
-          in
-          let we =
-            List.fold_left
-              (fun acc j -> USet.union acc j.we)
-              (USet.create ()) just_combo
-          in
-          let con = Forwardingcontext.create ~fwd ~we () in
-          let j_remapped =
-            List.map
-              (fun j -> Forwardingcontext.remap_just con j None)
-              just_combo
-          in
-          let elided = URelation.pi_2 (USet.union fwd we) in
-          let constraints =
-            List.flatten (List.map (fun (j : justification) -> j.p) just_combo)
-          in
+      let freeze_just_combo (path, just_combo) =
+        let fwd =
+          List.fold_left
+            (fun acc j -> USet.union acc j.fwd)
+            (USet.create ()) just_combo
+        in
+        let we =
+          List.fold_left
+            (fun acc j -> USet.union acc j.we)
+            (USet.create ()) just_combo
+        in
+        let con = Forwardingcontext.create ~fwd ~we () in
+        let j_remapped =
+          List.map (fun j -> Forwardingcontext.remap_just con j None) just_combo
+        in
+        let elided = URelation.pi_2 (USet.union fwd we) in
+        let constraints =
+          List.flatten (List.map (fun (j : justification) -> j.p) just_combo)
+        in
 
-          let* all_rf = compute_path_rf structure path ~elided ~constraints in
+        let* all_rf = compute_path_rf structure path ~elided ~constraints in
 
-          let* freeze_fn_opt =
-            create_freeze structure path j_remapped init_ppo statex
-          in
-            Logs.debug (fun m ->
-                m
-                  "Freezing justification combination with %d justifications \
-                   over path with %d events"
-                  (List.length just_combo) (USet.size path.path)
-            );
-            match freeze_fn_opt with
-            | None -> Lwt.return_none
-            | Some freeze_fn -> (
-                let* freeze_res_opt = freeze_fn all_rf in
-                  match freeze_res_opt with
-                  | Some freeze_res -> Lwt.return_some freeze_res
-                  | None -> Lwt.return_none
-              )
-        )
-        input_stream
+        let* freeze_fn_opt =
+          create_freeze structure path j_remapped init_ppo statex
+        in
+          Logs.debug (fun m ->
+              m
+                "Freezing justification combination with %d justifications \
+                 over path with %d events"
+                (List.length just_combo) (USet.size path.path)
+          );
+          match freeze_fn_opt with
+          | None -> Lwt.return_none
+          | Some freeze_fn -> (
+              let* freeze_res_opt = freeze_fn all_rf in
+                match freeze_res_opt with
+                | Some freeze_res -> Lwt.return_some freeze_res
+                | None -> Lwt.return_none
+            )
+      in
+
+      Lwt_stream.filter_map_s freeze_just_combo input_stream
     in
 
     let stream_freeze_to_execution input_stream =
-      Lwt_stream.map_s
-        (fun (freeze_res : freeze_result) ->
-          (* Fixed point computation for RF mapping *)
-          let fix_rf_map = Hashtbl.create 16 in
+      let freeze_to_execution freeze_res =
+        (* Fixed point computation for RF mapping *)
+        let fix_rf_map = Hashtbl.create 16 in
 
-          (* Build initial mapping from RF *)
-          USet.iter
-            (fun (w, r) ->
-              let just_w =
-                List.find_opt (fun j -> j.w.label = w) freeze_res.justs
+        (* Build initial mapping from RF *)
+        USet.iter
+          (fun (w, r) ->
+            let just_w =
+              List.find_opt (fun j -> j.w.label = w) freeze_res.justs
+            in
+            let w_val =
+              match just_w with
+              | Some j -> vale structure.events j.w.label r
+              | None -> vale structure.events w r
+            in
+              match get_val structure.events r with
+              | None ->
+                  failwith ("Read event " ^ string_of_int r ^ " has no value!")
+              | Some r_val ->
+                  (* Store mapping *)
+                  Hashtbl.replace fix_rf_map (Expr.to_string r_val) w_val
+          )
+          freeze_res.rf;
+
+        (* Compute fixed point *)
+        let rec compute_fixed_point map =
+          let changed = ref false in
+          let new_map = Hashtbl.create (Hashtbl.length map) in
+
+          Hashtbl.iter
+            (fun key value ->
+              (* Evaluate value with current map *)
+              let new_value =
+                match value with
+                | EVar v -> (
+                    try
+                      let replacement = Hashtbl.find map v in
+                        changed := true;
+                        replacement
+                    with Not_found -> value
+                  )
+                | _ -> value
               in
-              let w_val =
-                match just_w with
-                | Some j -> vale structure.events j.w.label r
-                | None -> vale structure.events w r
-              in
-                match get_val structure.events r with
-                | None ->
-                    failwith ("Read event " ^ string_of_int r ^ " has no value!")
-                | Some r_val ->
-                    (* Store mapping *)
-                    Hashtbl.replace fix_rf_map (Expr.to_string r_val) w_val
+                Hashtbl.replace new_map key new_value
             )
-            freeze_res.rf;
+            map;
 
-          (* Compute fixed point *)
-          let rec compute_fixed_point map =
-            let changed = ref false in
-            let new_map = Hashtbl.create (Hashtbl.length map) in
+          if !changed then compute_fixed_point new_map else new_map
+        in
 
-            Hashtbl.iter
-              (fun key value ->
-                (* Evaluate value with current map *)
-                let new_value =
-                  match value with
-                  | EVar v -> (
-                      try
-                        let replacement = Hashtbl.find map v in
-                          changed := true;
-                          replacement
-                      with Not_found -> value
-                    )
-                  | _ -> value
-                in
-                  Hashtbl.replace new_map key new_value
-              )
-              map;
+        let final_map = compute_fixed_point fix_rf_map in
 
-            if !changed then compute_fixed_point new_map else new_map
-          in
+        (* Create execution *)
+        let exec =
+          {
+            ex_e = freeze_res.e;
+            rf = freeze_res.rf;
+            dp = freeze_res.dp;
+            ppo = freeze_res.ppo;
+            ex_rmw = freeze_res.rmw;
+            ex_p = freeze_res.pp;
+            fix_rf_map = final_map;
+            pointer_map = None;
+          }
+        in
 
-          let final_map = compute_fixed_point fix_rf_map in
+        Logs.debug (fun m ->
+            m "Generated execution:\n%s" (Pretty.exec_to_string exec)
+        );
 
-          (* Create execution *)
-          let exec =
-            {
-              ex_e = freeze_res.e;
-              rf = freeze_res.rf;
-              dp = freeze_res.dp;
-              ppo = freeze_res.ppo;
-              ex_rmw = freeze_res.rmw;
-              ex_p = freeze_res.pp;
-              fix_rf_map = final_map;
-              pointer_map = None;
-            }
-          in
+        Lwt.return exec
+      in
 
-          Logs.debug (fun m -> m "Generated execution:\n%s" (to_string exec));
-
-          Lwt.return exec
-        )
-        input_stream
+      Lwt_stream.map_s freeze_to_execution input_stream
     in
 
     let stream_filter_coherent_executions input_stream =
       Lwt_stream.filter_map_s
         (fun exec ->
           Logs.debug (fun m ->
-              m "Checking coherence of execution:\n%s" (to_string exec)
+              m "Checking coherence of execution:\n%s"
+                (Pretty.exec_to_string exec)
           );
           let* coherent =
             check_for_coherence structure exec restrictions include_dependencies
@@ -1033,7 +996,7 @@ let generate_executions (structure : symbolic_event_structure)
     Logs.debug (fun m ->
         m "Generated %d executions after coherence filtering\n\n%s"
           (List.length executions)
-          (String.concat "\n\n" (List.map to_string executions))
+          (String.concat "\n\n" (List.map Pretty.exec_to_string executions))
     );
 
     Lwt.return executions

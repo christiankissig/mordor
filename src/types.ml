@@ -4,8 +4,6 @@ open Uset
 
 type 'a uset = 'a USet.t
 
-(** Memory ordering modes *)
-
 type mode =
   | Relaxed
   | Acquire
@@ -60,20 +58,22 @@ let zh_alpha = "一二三四五六七八九十"
 
 (** Value representation *)
 type value_type =
-  | VNumber of Z.t
+  | VNumber of Z.t [@opaque]
   | VSymbol of string
   | VVar of string
   | VBoolean of bool
+[@@deriving show]
 
 (** Expression representation *)
-and expr =
+type expr =
   | EBinOp of expr * string * expr
   | EUnOp of string * expr
   | EOr of expr list list
   | EVar of string
   | ESymbol of string
   | EBoolean of bool
-  | ENum of Z.t
+  | ENum of Z.t [@opaque]
+[@@deriving show]
 
 (** Event types *)
 type event_type =
@@ -163,17 +163,18 @@ type justification = {
   op : string * justification option * expr option; (* Operation tag *)
 }
 
-(** Symbolic Executions *)
+(* The main type with custom printers *)
 type symbolic_execution = {
-  ex_e : int uset; (* Event set *)
-  rf : (int * int) uset; (* Reads-from relation *)
-  dp : (int * int) uset; (* Dependencies *)
-  ppo : (int * int) uset; (* Preserved program order *)
-  ex_rmw : (int * int) uset; (* RMW pairs *)
-  ex_p : expr list; (* Predicates *)
-  fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
-  pointer_map : (int, value_type) Hashtbl.t option; (* Pointer mappings *)
+  ex_e : int uset; [@printer pp_int_uset]
+  rf : (int * int) uset; [@printer pp_pair_uset]
+  dp : (int * int) uset; [@printer pp_pair_uset]
+  ppo : (int * int) uset; [@printer pp_pair_uset]
+  ex_rmw : (int * int) uset; [@printer pp_pair_uset]
+  ex_p : expr list; [@opaque]
+  fix_rf_map : (string, expr) Hashtbl.t; [@opaque]
+  pointer_map : (int, value_type) Hashtbl.t option; [@opaque]
 }
+[@@deriving show]
 
 (** Futures *)
 type future = (int * int) uset

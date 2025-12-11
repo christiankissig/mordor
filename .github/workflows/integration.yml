@@ -49,6 +49,7 @@ jobs:
           opam update
           opam depext -y mordor
           opam install . --deps-only --with-test
+          opam install menhir
           opam install logs fmt
       
       - name: Build project

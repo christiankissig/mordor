@@ -130,5 +130,3 @@ val generate_executions :
   include_dependencies:bool ->
   restrictions:Coherence.restrictions ->
   symbolic_execution list Lwt.t
-
-val to_string : symbolic_execution -> string
