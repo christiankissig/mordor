@@ -7,44 +7,6 @@ open Eventstructures
 open Types
 open Uset
 
-(* tracer data *)
-let tracer_path =
-  USet.of_list
-    [
-      0;
-      1;
-      2;
-      3;
-      4;
-      5;
-      6;
-      7;
-      8;
-      9;
-      10;
-      11;
-      12;
-      13;
-      14;
-      15;
-      16;
-      17;
-      18;
-      19;
-      20;
-      21;
-      22;
-      23;
-      24;
-      25;
-      26;
-      27;
-      90;
-      111;
-      118;
-      119;
-    ]
-
 let execution_equal ex1 ex2 =
   USet.equal ex1.ex_e ex2.ex_e
   && USet.equal ex1.dp ex2.dp
@@ -73,32 +35,177 @@ let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
   EBinOp (loc1, "!=", loc2)
 
-(* Check if write w is downward-closed same-location write before read r. This
-   prevents r reading from shadowed writes w.*)
-(* TODO optimize *)
-let dslwb structure w r =
-  let events = structure.events in
-  let write_events = structure.write_events in
-  let r_restrict =
-    Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
-  in
-    USet.async_exists
-      (fun (w2, r2) ->
-        if
-          r2 = r (* w2 po bfore r *)
-          && w2 <> w (* w2 is not w *)
-          && USet.mem write_events w2 (* w2 is a write *)
-          && USet.mem structure.po (w, w2)
-          (* w2 po after w, thus in between w and r *)
-        then
-          (* w2 potentially shadows w *)
-          (* TODO use semantic equivalence relative to valres *)
-          match (get_loc events w, get_loc events w2) with
-          | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
-          | _ -> Lwt.return false
-        else Lwt.return false
+module RFValidation = struct
+  let rf_respects_ppo rf ppo_loc ppo_loc_tree =
+    USet.for_all
+      (fun (w, r) ->
+        if USet.mem ppo_loc (w, r) then
+          (* If (w,r) in ppo_loc, check that r is reachable from w *)
+          let reachable =
+            try
+              let successors = Hashtbl.find ppo_loc_tree w in
+                USet.mem successors r
+            with Not_found -> false
+          in
+            reachable
+        else true
       )
-      structure.po
+      rf
+
+  let check_rf_elided rf delta =
+    USet.size (USet.intersection (URelation.pi_2 delta) (URelation.pi_1 rf)) = 0
+
+  let check_rf_total rf read_events delta =
+    USet.subset
+      (USet.set_minus read_events (URelation.pi_2 delta))
+      (URelation.pi_2 rf)
+end
+
+module JustValidation = struct
+  let check_origins_elided structure just fwd_elided =
+    let d_origins =
+      USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
+    in
+    let p_origins =
+      List.map Expr.get_symbols just.p
+      |> List.flatten
+      |> USet.of_list
+      |> USet.map (fun symbol -> origin structure symbol |> Option.get)
+    in
+    let origins = USet.union d_origins p_origins in
+    let origin_elided = USet.intersection origins fwd_elided in
+      USet.size origin_elided = 0
+
+  let check_delta_not_on_path just path =
+    let just_delta = USet.union just.fwd just.we in
+    let just_delta_events =
+      USet.union (URelation.pi_1 just_delta) (URelation.pi_2 just_delta)
+    in
+      USet.subset just_delta_events path.path
+
+  (* Check partial combination of justifications for early pruning. *)
+  let check_partial_combo structure (path : path_info)
+      (combo : justification list) ?(alternatives = []) (just : justification) =
+    let ( let*? ) (condition, msg) f =
+      if condition then f () else Lwt.return false
+    in
+
+    (* Prune if any origins of symbols in d of current justification are not on the path *)
+    let sym_origins =
+      USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
+    in
+      let*? () =
+        (USet.subset sym_origins path.path, "missing symbol origins")
+      in
+
+      (* Prune if delta of current justification is not on the path. *)
+      let*? () =
+        (check_delta_not_on_path just path, "delta events not on path")
+      in
+
+      (* Prune if any orgins of symbols are elided by fwd edges of the
+           combination and current justification *)
+      let fwd = USet.flatten (USet.map (fun j -> j.fwd) (USet.of_list combo)) in
+      (* only consider fwd edges for symbol origins *)
+      let fwd_elided =
+        USet.union (URelation.pi_2 fwd) (URelation.pi_2 just.fwd)
+      in
+
+      let*? () =
+        (check_origins_elided structure just fwd_elided, "origins elided")
+      in
+
+      let we = USet.flatten (USet.map (fun j -> j.we) (USet.of_list combo)) in
+      (* Prune if delta of current justification is contained in the
+             accumulated delta of the combination and there exists an
+             alternative justification other than the current one, whose delta
+             is also contained in the accumulated delta, and which in turn
+             contains the delta of the current justification. This avoids
+             exploring superseeded justifications. *)
+      let superseeded =
+        USet.subset just.fwd fwd
+        && USet.subset just.we we
+        && List.exists
+             (fun alt ->
+               alt != just
+               && just.w = alt.w (*given*)
+               && USet.subset alt.fwd fwd
+               && USet.subset alt.we we
+               && USet.equal just.d alt.d
+               && USet.subset just.fwd alt.fwd
+               && USet.subset just.we alt.we
+               && List.equal Expr.equal just.p alt.p
+             )
+             alternatives
+      in
+        let*? () = (not superseeded, "justification superseeded in delta") in
+
+        (* Prune if delta of current justification is contained in the
+               accumulated delta of the combination and there exists an
+               alternative justification other than the current one, whose delta
+               is also contained in the accumulated delta, and which in turn
+               contains the delta of the current justification, and whose
+               predicates are a superset of the current justification's
+               predicates. This avoids exploring superseeded justifications in
+               terms of ordering constraints. *)
+        let superseeded =
+          USet.subset just.fwd fwd
+          && USet.subset just.we we
+          && List.exists
+               (fun alt ->
+                 alt != just
+                 && just.w = alt.w (*given*)
+                 && USet.subset alt.fwd fwd
+                 && USet.subset alt.we we
+                 && USet.subset alt.d just.d
+                 && List.for_all
+                      (fun expr ->
+                        List.exists (fun expr2 -> Expr.equal expr expr2) just.p
+                      )
+                      alt.p
+               )
+               alternatives
+        in
+          let*? () =
+            ( not superseeded,
+              "justification superseeded in ordering constraints"
+            )
+          in
+
+          Lwt.return true
+
+  (* Check final combination of justifications for validity. *)
+  let check_final_combo structure (path : path_info) (combo : justification list)
+      =
+    let ( let*? ) (condition, msg) f =
+      if condition then f () else Lwt.return false
+    in
+
+    let delta =
+      USet.flatten
+        (USet.map (fun j -> USet.union j.fwd j.we) (USet.of_list combo))
+    in
+
+    let*? () = (URelation.acyclic delta, "cyclic delta relation") in
+
+    let*? () =
+      ( URelation.is_function (URelation.exhaustive_closure delta),
+        "non-functional delta relation"
+      )
+    in
+
+    let* satisfiable =
+      List.map (fun (just : justification) -> just.p) combo
+      |> List.flatten
+      |> List.append path.p
+      |> USet.of_list
+      |> USet.values
+      |> Solver.is_sat_cached
+    in
+      let*? () = (satisfiable, "unsatisfiable path predicates") in
+
+      Lwt.return true
+end
 
 (** Freezing **)
 
@@ -213,24 +320,11 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
   let write_events = USet.intersection structure.write_events e in
 
   (* Check 3: All rf edges respect ppo_loc *)
-  let rf_respects_ppo =
-    USet.for_all
-      (fun (w, r) ->
-        if USet.mem ppo_loc (w, r) then
-          (* If (w,r) in ppo_loc, check that r is reachable from w *)
-          let reachable =
-            try
-              let successors = Hashtbl.find ppo_loc_tree w in
-                USet.mem successors r
-            with Not_found -> false
-          in
-            reachable
-        else true
-      )
-      rf
+  let*? () =
+    ( RFValidation.rf_respects_ppo rf ppo_loc ppo_loc_tree,
+      "RF edges do not respect PPO"
+    )
   in
-
-  let*? () = (rf_respects_ppo, "RF edges do not respect PPO") in
   (* Filter RMW pairs *)
   let rmw_filtered =
     USet.filter (fun (f, t) -> USet.mem e f || USet.mem e t) structure.rmw
@@ -252,26 +346,6 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
     )
   in
 
-  let check_rf =
-    USet.values rf
-    |> List.map (fun (w, r) ->
-        let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
-        let w_loc =
-          match just_w with
-          | Some j -> loce structure.events j.w.label r
-          | None -> loce structure.events w r
-        in
-          match get_loc structure.events r with
-          | Some r_loc -> Expr.binop w_loc "=" r_loc
-          | None ->
-              failwith
-                ("Read event "
-                ^ string_of_int r
-                ^ " has no\n          location!"
-                )
-    )
-  in
-
   (* Check 1.1: Various consistency checks *)
   let delta =
     USet.union
@@ -281,33 +355,15 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
       )
       (List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list)
   in
-  let check_rf_elided =
-    USet.size (USet.intersection (URelation.pi_2 delta) (URelation.pi_1 rf)) = 0
-  in
-  let check_rf_total =
-    USet.subset
-      (USet.set_minus read_events (URelation.pi_2 delta))
-      (URelation.pi_2 rf)
-  in
 
-  if not check_rf_total then
-    Logs.debug (fun m ->
-        m "  RF total check failed: reads %s, delta pi_2 %s, RF pi_2 %s"
-          (String.concat ", "
-             (List.map (Printf.sprintf "%d") (USet.values read_events))
-          )
-          (String.concat ", "
-             (List.map (Printf.sprintf "%d")
-                (USet.values (URelation.pi_2 delta))
-             )
-          )
-          (String.concat ", "
-             (List.map (Printf.sprintf "%d") (USet.values (URelation.pi_2 rf)))
-          )
-    );
-
-  let*? () = (check_rf_elided, "RF fails RF elided check") in
-    let*? () = (check_rf_total, "RF fails RF total check") in
+  let*? () =
+    (RFValidation.check_rf_elided rf delta, "RF fails RF elided check")
+  in
+    let*? () =
+      ( RFValidation.check_rf_total rf read_events delta,
+        "RF fails RF total check"
+      )
+    in
     (* Check acyclicity of rhb = dp_ppo ∪ rf *)
     let rhb = USet.union dp_ppo rf in
 
@@ -316,6 +372,25 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc ppo_loc_tree
     (* Check 1.2: No downward-closed same-location writes before reads *)
 
     (* Rewrite predicates *)
+    let check_rf =
+      USet.values rf
+      |> List.map (fun (w, r) ->
+          let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
+          let w_loc =
+            match just_w with
+            | Some j -> loce structure.events j.w.label r
+            | None -> loce structure.events w r
+          in
+            match get_loc structure.events r with
+            | Some r_loc -> Expr.binop w_loc "=" r_loc
+            | None ->
+                failwith
+                  ("Read event "
+                  ^ string_of_int r
+                  ^ " has no\n          location!"
+                  )
+      )
+    in
     let big_p_exprs = p_combined @ env_rf @ check_rf in
     let big_p =
       List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs
@@ -365,12 +440,7 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
     statex =
   (* let* _ = Lwt.return_unit in *)
   let ( let*? ) (condition, msg) f =
-    if condition then f ()
-    else (
-      if USet.equal path.path tracer_path then
-        Logs.debug (fun m -> m "  Rejected freeze: %s" msg);
-      Lwt.return_none
-    )
+    if condition then f () else Lwt.return_none
   in
 
   let e = path.path in
@@ -380,12 +450,6 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
   let read_events = USet.intersection structure.read_events e in
   let write_events = USet.intersection structure.write_events e in
   let malloc_events = USet.intersection structure.malloc_events e in
-
-  if USet.equal path.path tracer_path then
-    Logs.debug (fun m ->
-        m "Creating freeze function for justification combination with %d justs"
-          (List.length j_list)
-    );
 
   (* Compute dependency relation *)
   let dp =
@@ -403,9 +467,6 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
       j_list
     |> USet.of_list
   in
-
-  if USet.equal path.path tracer_path then
-    Logs.debug (fun m -> m "  Created dp with %d pairs" (USet.size dp));
 
   (* Compute combined fwd and we *)
   let f =
@@ -427,11 +488,6 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
     |> USet.of_list
     |> USet.values
   in
-
-  if USet.equal path.path tracer_path then
-    Logs.debug (fun m ->
-        m "  Combined predicates count: %d" (List.length p_combined)
-    );
 
   (* Check if predicates are satisfiable *)
   let* combined_p_sat = Solver.is_sat_cached p_combined in
@@ -478,12 +534,6 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
       let ppo_loc = USet.intersection ppo_loc e_squared in
       let ppo_loc_tree = URelation.adjacency_map ppo_loc in
 
-      if USet.equal path.path tracer_path then
-        Logs.debug (fun m ->
-            m "  Computed ppo with %d pairs and ppo_loc with %d pairs"
-              (USet.size ppo) (USet.size ppo_loc)
-        );
-
       (* Combine dp and ppo *)
       let dp_ppo = USet.union dp ppo in
 
@@ -494,168 +544,11 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
           path ppo_loc ppo_loc_tree dp dp_ppo j_list pp p_combined rf
       in
 
-      if USet.equal path.path tracer_path then
-        Logs.debug (fun m -> m "  Created freeze function");
-
       Lwt.return_some freeze_fn
 
 (** Build justification combinations for all paths with caching *)
 let build_justcombos structure paths init_ppo statex
     (justmap : (int, justification list) Hashtbl.t) =
-  (* Check partial combination of justifications for early pruning. *)
-  let check_partial_combo (path : path_info) (combo : justification list)
-      ?(alternatives = []) (just : justification) =
-    let ( let*? ) (condition, msg) f =
-      if condition then f ()
-      else (
-        if USet.equal path.path tracer_path then
-          Logs.debug (fun m -> m "  Rejected: %s" msg);
-        Lwt.return false
-      )
-    in
-
-    (* Prune if any origins of symbols in d of current justification are not on the path *)
-    let sym_origins =
-      USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
-    in
-      let*? () =
-        (USet.subset sym_origins path.path, "missing symbol origins")
-      in
-
-      (* Prune if delta of current justification is not on the path. *)
-      let just_delta = USet.union just.fwd just.we in
-      let just_delta_events =
-        USet.union (URelation.pi_1 just_delta) (URelation.pi_2 just_delta)
-      in
-        let*? () =
-          (USet.subset just_delta_events path.path, "delta events not on path")
-        in
-
-        (* Prune if any orgins of symbols are elided by fwd edges of the
-           combination and current justification *)
-        let fwd =
-          USet.flatten (USet.map (fun j -> j.fwd) (USet.of_list combo))
-        in
-        (* only consider fwd edges for symbol origins *)
-        let fwd_elided =
-          USet.union (URelation.pi_2 fwd) (URelation.pi_2 just.fwd)
-        in
-        let d_origins =
-          USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
-        in
-        let p_origins =
-          List.map Expr.get_symbols just.p
-          |> List.flatten
-          |> USet.of_list
-          |> USet.map (fun symbol -> origin structure symbol |> Option.get)
-        in
-        let origins = USet.union d_origins p_origins in
-        let origin_elided = USet.intersection origins fwd_elided in
-          let*? () = (USet.size origin_elided = 0, "origins elided") in
-
-          let we =
-            USet.flatten (USet.map (fun j -> j.we) (USet.of_list combo))
-          in
-          (* Prune if delta of current justification is contained in the
-             accumulated delta of the combination and there exists an
-             alternative justification other than the current one, whose delta
-             is also contained in the accumulated delta, and which in turn
-             contains the delta of the current justification. This avoids
-             exploring superseeded justifications. *)
-          let superseeded =
-            USet.subset just.fwd fwd
-            && USet.subset just.we we
-            && List.exists
-                 (fun alt ->
-                   alt != just
-                   && just.w = alt.w (*given*)
-                   && USet.subset alt.fwd fwd
-                   && USet.subset alt.we we
-                   && USet.equal just.d alt.d
-                   && USet.subset just.fwd alt.fwd
-                   && USet.subset just.we alt.we
-                   && List.equal Expr.equal just.p alt.p
-                 )
-                 alternatives
-          in
-            let*? () =
-              (not superseeded, "justification superseeded in delta")
-            in
-
-            (* Prune if delta of current justification is contained in the
-               accumulated delta of the combination and there exists an
-               alternative justification other than the current one, whose delta
-               is also contained in the accumulated delta, and which in turn
-               contains the delta of the current justification, and whose
-               predicates are a superset of the current justification's
-               predicates. This avoids exploring superseeded justifications in
-               terms of ordering constraints. *)
-            let superseeded =
-              USet.subset just.fwd fwd
-              && USet.subset just.we we
-              && List.exists
-                   (fun alt ->
-                     alt != just
-                     && just.w = alt.w (*given*)
-                     && USet.subset alt.fwd fwd
-                     && USet.subset alt.we we
-                     && USet.subset alt.d just.d
-                     && List.for_all
-                          (fun expr ->
-                            List.exists
-                              (fun expr2 -> Expr.equal expr expr2)
-                              just.p
-                          )
-                          alt.p
-                   )
-                   alternatives
-            in
-              let*? () =
-                ( not superseeded,
-                  "justification superseeded in ordering constraints"
-                )
-              in
-
-              Lwt.return true
-  in
-
-  (* Check final combination of justifications for validity. *)
-  let check_final_combo (path : path_info) (combo : justification list) =
-    let ( let*? ) (condition, msg) f =
-      if condition then f ()
-      else (
-        if USet.equal path.path tracer_path then
-          Logs.debug (fun m -> m "  Rejected: %s" msg);
-        Lwt.return false
-      )
-    in
-
-    let delta =
-      USet.flatten
-        (USet.map (fun j -> USet.union j.fwd j.we) (USet.of_list combo))
-    in
-
-    let*? () = (URelation.acyclic delta, "cyclic delta relation") in
-
-    let*? () =
-      ( URelation.is_function (URelation.exhaustive_closure delta),
-        "non-functional delta relation"
-      )
-    in
-
-    let* satisfiable =
-      List.map (fun (just : justification) -> just.p) combo
-      |> List.flatten
-      |> List.append path.p
-      |> USet.of_list
-      |> USet.values
-      |> Solver.is_sat_cached
-    in
-      let*? () = (satisfiable, "unsatisfiable path predicates") in
-
-      Lwt.return true
-  in
-
   (* Given a path, combine justifications for each write on the path. *)
   let combine_justifications_for_path path =
     Logs.debug (fun m ->
@@ -674,9 +567,10 @@ let build_justcombos structure paths init_ppo statex
     let%lwt js_combinations =
       ListMapCombinationBuilder.build_combinations justmap path_writes
         (fun combo ?alternatives just ->
-          check_partial_combo path combo ?alternatives just
+          JustValidation.check_partial_combo structure path combo ?alternatives
+            just
         )
-        (fun combo -> check_final_combo path combo)
+        (fun combo -> JustValidation.check_final_combo structure path combo)
     in
 
     Logs.debug (fun m ->
@@ -776,42 +670,6 @@ let generate_executions (structure : symbolic_event_structure)
       justs;
 
     Logs.debug (fun m -> m "Built justification map");
-
-    Logs.debug (fun m ->
-        m "Justifications for events on tracer path: %s"
-          (String.concat ",\n"
-             (List.map
-                (fun e ->
-                  let js = try Hashtbl.find justmap e with Not_found -> [] in
-                    Printf.sprintf "%d:[%s]" e
-                      (String.concat "; "
-                         (List.map
-                            (fun j ->
-                              Printf.sprintf
-                                "\t%s with origin of symbols\nin d [%s]\n"
-                                (Justifications.to_string j)
-                                (String.concat ", "
-                                   (List.map
-                                      (fun s ->
-                                        Printf.sprintf "%s->%d" s
-                                          (origin structure s
-                                          |> Option.value ~default:(-1)
-                                          )
-                                      )
-                                      (USet.values j.d)
-                                   )
-                                )
-                            )
-                            js
-                         )
-                      )
-                )
-                (USet.intersection tracer_path structure.write_events
-                |> USet.values
-                )
-             )
-          )
-    );
 
     let stream_freeze input_stream =
       let freeze_just_combo (path, just_combo) =

@@ -34,3 +34,16 @@ val origin : symbolic_event_structure -> string -> int option
       List of path information records, each containing a maximal conflict-free
       set of events and the associated predicates *)
 val generate_max_conflictfree_sets : symbolic_event_structure -> path_info list
+
+(** [structure write read] Checks downward-closed same-location writes beofre
+    conditon of write-read pairs.
+
+    The condition holds for a pair (w,r) of write and read events if there is
+    not other write po-between w and r to the same location as w relative to the
+    constraints of r.
+
+    @param structure The symbolic event structure
+    @param write The write event label
+    @param read The read event label
+    @return [Lwt.t] of [true] if condition holds, [false] otherwise *)
+val dslwb : symbolic_event_structure -> int -> int -> bool Lwt.t
