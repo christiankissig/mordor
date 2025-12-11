@@ -12,7 +12,6 @@ on:
 jobs:
   integration-tests:
     name: Integration Tests
-    needs: build-and-test
     strategy:
       fail-fast: false
       matrix:
