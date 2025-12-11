@@ -10,6 +10,8 @@ type context = {
   conflicting_branch : int -> int -> int;
 }
 
+let domain_pool = Lwt_domain.setup_pool 10
+
 let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
     (p : expr list option) ?ppo () =
   let* ppo_result =
@@ -94,6 +96,24 @@ let lifted_to cache x r = USet.add cache.to_ (x, r) |> ignore
 let lifted_clear cache =
   USet.clear cache.t |> ignore;
   USet.clear cache.to_ |> ignore
+
+let close_under_elab justs elab =
+  let* results =
+    let promises =
+      USet.map
+        (fun just -> Lwt_domain.detach domain_pool (fun () -> elab just) ())
+        justs
+      |> USet.values
+    in
+      Lwt_list.map_s
+        (fun promise ->
+          let* result = promise in
+            result
+        )
+        promises
+  in
+  let flattened = List.concat results in
+    Lwt.return (USet.of_list flattened)
 
 (* calculate pre-justifications for write events *)
 let pre_justifications structure =
@@ -398,19 +418,7 @@ let forward elab_ctx justs =
         Lwt.return (List.concat path_results)
   in
 
-  let* out =
-    let justs_list = USet.values justs in
-      let* results =
-        Lwt_list.map_p
-          (fun just ->
-            let* inner = Lwt_preemptive.detach (fun () -> elab just) () in
-              inner
-          )
-          justs_list
-      in
-      let flattened = List.concat results in
-        Lwt.return (USet.of_list flattened)
-  in
+  let* out = close_under_elab justs elab in
 
   Logs.debug (fun m ->
       m "Completed forwarding on justifications. Result size: %d" (USet.size out)

@@ -38,7 +38,7 @@
   uset)
  (flags
   (:standard -g -w -26-27))
- (libraries core ocamlgraph logs logs.fmt lwt lwt.unix z3 zarith)
+ (libraries core ocamlgraph logs logs.fmt lwt lwt.unix lwt_domain z3 zarith)
  (public_name mordor)
  (preprocess
   (pps lwt_ppx)))

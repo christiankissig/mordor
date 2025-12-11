@@ -21,6 +21,7 @@
   (landmarks-ppx (>= 1.4))
   (lwt (>= 5.6.0))
   (lwt_ppx (>= 2.0.0))
+  lwt_domain
   (ocamlgraph (>= 2.2.0))
   (ppx_deriving (>= 5.0))
   (z3 (>= 4.8.0))

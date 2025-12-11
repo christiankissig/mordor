@@ -42,13 +42,10 @@ module RFValidation = struct
         (fun (w, r) ->
           if USet.mem ppo_loc (w, r) then
             (* If (w,r) in ppo_loc, check that r is reachable from w *)
-            let reachable =
-              try
-                let successors = Hashtbl.find ppo_loc_tree w in
-                  USet.mem successors r
-              with Not_found -> false
-            in
-              reachable
+            try
+              let successors = Hashtbl.find ppo_loc_tree w in
+                USet.mem successors r
+            with Not_found -> false
           else true
         )
         rf
@@ -106,7 +103,9 @@ module JustValidation = struct
 
       (* Prune if any orgins of symbols are elided by fwd edges of the
            combination and current justification *)
-      let fwd = USet.flatten (USet.map (fun j -> j.fwd) (USet.of_list combo)) in
+      let fwd =
+        List.map (fun j -> j.fwd) combo |> USet.of_list |> USet.flatten
+      in
       (* only consider fwd edges for symbol origins *)
       let fwd_elided =
         USet.union (URelation.pi_2 fwd) (URelation.pi_2 just.fwd)
@@ -183,8 +182,9 @@ module JustValidation = struct
     in
 
     let delta =
-      USet.flatten
-        (USet.map (fun j -> USet.union j.fwd j.we) (USet.of_list combo))
+      List.map (fun j -> USet.union j.fwd j.we) combo
+      |> USet.of_list
+      |> USet.flatten
     in
 
     let*? () = (URelation.acyclic delta, "cyclic delta relation") in
@@ -275,7 +275,7 @@ let atomicity_pairs structure path rhb p =
 
   USet.async_filter
     (fun (e_1, e_2) ->
-      if e_1 >= e_2 then Lwt.return_false
+      if not (USet.mem structure.po (e_1, e_2)) then Lwt.return_false
       else
         (* Check if there's no intermediate event between e_1 and e_2 *)
         let* has_intermediate =
@@ -471,12 +471,8 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
   in
 
   (* Compute combined fwd and we *)
-  let f =
-    List.fold_left (fun acc j -> USet.union acc j.fwd) (USet.create ()) j_list
-  in
-  let we =
-    List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list
-  in
+  let f = List.map (fun j -> j.fwd) j_list |> USet.of_list |> USet.flatten in
+  let we = List.map (fun j -> j.we) j_list |> USet.of_list |> USet.flatten in
 
   (* Create forwarding context *)
   let con = Forwardingcontext.create ~fwd:f ~we () in
