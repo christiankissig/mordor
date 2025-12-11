@@ -46,9 +46,10 @@ jobs:
       
       - name: Install dependencies
         run: |
+          opam update
           opam depext -y mordor
           opam install . --deps-only --with-test
-          opam install ocamlformat
+          opam install ocamlformat0.28.1
           opam install logs fmt
       
       - name: Build project
@@ -98,6 +99,7 @@ jobs:
       
       - name: Install dependencies
         run: |
+          opam update
           opam depext -y mordor
           opam install . --deps-only --with-test
           opam install logs fmt
