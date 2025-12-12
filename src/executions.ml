@@ -789,10 +789,6 @@ let generate_executions (structure : symbolic_event_structure)
           }
         in
 
-        Logs.debug (fun m ->
-            m "Generated execution:\n%s" (Pretty.exec_to_string exec)
-        );
-
         Lwt.return exec
       in
 
@@ -800,20 +796,9 @@ let generate_executions (structure : symbolic_event_structure)
     in
 
     let stream_filter_coherent_executions input_stream =
-      Lwt_stream.filter_map_s
+      Lwt_stream.filter_s
         (fun exec ->
-          Logs.debug (fun m ->
-              m "Checking coherence of execution:\n%s"
-                (Pretty.exec_to_string exec)
-          );
-          let* coherent =
-            check_for_coherence structure exec restrictions include_dependencies
-          in
-            Logs.debug (fun m ->
-                if coherent then m "Execution is coherent"
-                else m "Execution is not coherent"
-            );
-            if coherent then Lwt.return_some exec else Lwt.return_none
+          check_for_coherence structure exec restrictions include_dependencies
         )
         input_stream
     in
@@ -872,18 +857,13 @@ let generate_executions (structure : symbolic_event_structure)
     in
 
     Logs.debug (fun m ->
-        m "Generated %d executions after coherence filtering\n\n%s"
+        m "Generated %d executions after coherence filtering"
           (List.length executions)
-          (String.concat "\n\n" (List.map Pretty.exec_to_string executions))
     );
 
     let minimal_executions = keep_minimal_executions executions in
       Logs.debug (fun m ->
-          m "Minimized to %d executions\n\n%s"
-            (List.length minimal_executions)
-            (String.concat "\n\n"
-               (List.map Pretty.exec_to_string minimal_executions)
-            )
+          m "Minimized to %d executions" (List.length minimal_executions)
       );
 
       Lwt.return minimal_executions

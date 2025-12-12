@@ -103,8 +103,18 @@ opam install logs fmt
 
 ## Building
 
+Build executables with
+
 ```bash
 dune build
+```
+
+Build and view documentation with
+
+```bash
+opam install odoc
+dune build @doc
+xdg-open _build/default/_doc/_html/index.html 
 ```
 
 ## Profiling
