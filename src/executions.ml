@@ -30,6 +30,22 @@ end
 
 module ExecutionCache = Hashtbl.Make (ExecutionCacheKey)
 
+module Execution = struct
+  (** [exec1 exec2] Check if exec1 contains exec2, i.e. exec1 is a refinement of
+      exec2.
+
+      @param exec1 First symbolic execution
+      @param exec2 Second symbolic execution
+      @return true if exec1 contains exec2, false otherwise *)
+  let contains exec1 exec2 =
+    (* subset suffices as executions are over maximally consistent sets of
+       events *)
+    USet.subset exec2.ex_e exec1.ex_e
+    && USet.subset exec2.dp exec1.dp
+    && USet.subset exec2.ppo exec1.ppo
+    && USet.subset exec2.rf exec1.rf
+end
+
 (** Create disjoint predicate for two (location, value) pairs *)
 let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
@@ -830,6 +846,20 @@ let generate_executions (structure : symbolic_event_structure)
         stream
     in
 
+    let keep_minimal_executions exec_list =
+      let indexed_list = List.mapi (fun i exec -> (i, exec)) exec_list in
+        List.filter_map
+          (fun (i, exec1) ->
+            let has_contained =
+              List.exists
+                (fun (j, exec2) -> i <> j && Execution.contains exec1 exec2)
+                indexed_list
+            in
+              if has_contained then Some exec1 else None
+          )
+          indexed_list
+    in
+
     (* Build justcombos for all paths *)
     let* executions =
       build_justcombos structure paths init_ppo statex justmap
@@ -847,4 +877,13 @@ let generate_executions (structure : symbolic_event_structure)
           (String.concat "\n\n" (List.map Pretty.exec_to_string executions))
     );
 
-    Lwt.return executions
+    let minimal_executions = keep_minimal_executions executions in
+      Logs.debug (fun m ->
+          m "Minimized to %d executions\n\n%s"
+            (List.length minimal_executions)
+            (String.concat "\n\n"
+               (List.map Pretty.exec_to_string minimal_executions)
+            )
+      );
+
+      Lwt.return minimal_executions
