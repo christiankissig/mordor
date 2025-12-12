@@ -182,6 +182,7 @@ let visualize_es_single (name, program) options output_mode output_file
     Lwt.return context
     |> Parse.step_parse_litmus
     |> Interpret.step_interpret
+    |> Symmrd.step_calculate_dependencies
     |> Eventstructureviz.step_visualize_event_structure
     |> print_results
 

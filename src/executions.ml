@@ -44,6 +44,11 @@ module Execution = struct
     && USet.subset exec2.dp exec1.dp
     && USet.subset exec2.ppo exec1.ppo
     && USet.subset exec2.rf exec1.rf
+    && not
+         (USet.equal exec1.rf exec2.rf
+         && USet.equal exec1.ppo exec2.ppo
+         && USet.equal exec1.dp exec2.dp
+         )
 end
 
 (** Create disjoint predicate for two (location, value) pairs *)
@@ -866,4 +871,4 @@ let generate_executions (structure : symbolic_event_structure)
           m "Minimized to %d executions" (List.length minimal_executions)
       );
 
-      Lwt.return minimal_executions
+      Lwt.return executions

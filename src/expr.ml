@@ -87,6 +87,7 @@ and Expr : sig
   val evaluate : t -> (string -> t option) -> t
   val to_value : t -> value_type option
   val of_value : value_type -> t
+  val simplify_dnf : expr list list -> expr list list
 end = struct
   type t = expr
 
@@ -452,4 +453,176 @@ end = struct
     | EOr clauses ->
         let eval_clause clause = List.map (fun e -> evaluate e env) clause in
           EOr (List.map eval_clause clauses)
+
+  (** DNF Simplification *)
+
+  (** Remove double negations from an expression *)
+  let rec remove_double_negation expr =
+    match expr with
+    | EUnOp ("!", EUnOp ("!", e)) -> remove_double_negation e
+    | EUnOp ("!", e) -> EUnOp ("!", remove_double_negation e)
+    | EBinOp (lhs, op, rhs) ->
+        EBinOp (remove_double_negation lhs, op, remove_double_negation rhs)
+    | _ -> expr
+
+  (** Check if two expressions are contradictory (one is the negation of the
+      other) *)
+  let are_contradictory e1 e2 =
+    match (e1, e2) with
+    | EUnOp ("!", inner1), inner2 when equal inner1 inner2 -> true
+    | inner1, EUnOp ("!", inner2) when equal inner1 inner2 -> true
+    | EBinOp (l1, op1, r1), EBinOp (l2, op2, r2) ->
+        (* Check if they're inverse operations on same operands *)
+        if equal l1 l2 && equal r1 r2 then
+          match (op1, op2) with
+          | "=", "!=" | "!=", "=" -> true
+          | "<", ">=" | ">=", "<" -> true
+          | ">", "<=" | "<=", ">" -> true
+          | _ -> false
+        else false
+    | _ -> false
+
+  (** Check if a clause is a tautology (contains contradictory literals) *)
+  let is_clause_contradiction clause =
+    let rec check_pairs = function
+      | [] -> false
+      | e :: rest -> List.exists (are_contradictory e) rest || check_pairs rest
+    in
+      check_pairs clause
+
+  (** Remove duplicate expressions from a list *)
+  let remove_duplicates exprs =
+    let rec aux seen = function
+      | [] -> List.rev seen
+      | e :: rest ->
+          if List.exists (equal e) seen then aux seen rest
+          else aux (e :: seen) rest
+    in
+      aux [] exprs
+
+  (** Check if clause1 subsumes clause2 (clause1 is a subset of clause2) *)
+  let clause_subsumes clause1 clause2 =
+    List.for_all (fun e1 -> List.exists (equal e1) clause2) clause1
+
+  (** Remove subsumed clauses - if clause A is subset of clause B, remove B *)
+  let remove_subsumed_clauses clauses =
+    let rec aux acc = function
+      | [] -> List.rev acc
+      | clause :: rest ->
+          (* Check if this clause is subsumed by any existing clause in acc *)
+          let is_subsumed =
+            List.exists (fun c -> clause_subsumes c clause) acc
+          in
+            if is_subsumed then aux acc rest
+            else
+              (* Remove any clauses in acc that are subsumed by this clause *)
+              let acc' =
+                List.filter (fun c -> not (clause_subsumes clause c)) acc
+              in
+                aux (clause :: acc') rest
+    in
+      aux [] clauses
+
+  (** Simplify a single clause (conjunction of expressions) *)
+  let simplify_clause clause =
+    let clause = List.map remove_double_negation clause in
+
+    (* Check for contradictions *)
+    if is_clause_contradiction clause then None
+      (* Contradiction - this clause is false *)
+    else
+      (* Check for tautologies and contradictions within literals *)
+      let clause = List.filter (fun e -> not (is_contradiction e)) clause in
+
+      (* If any literal is a tautology in a conjunction, we can't simplify further *)
+      (* But if we have true && x, we can simplify to x *)
+      let clause =
+        if List.exists is_tautology clause then
+          List.filter (fun e -> not (is_tautology e)) clause
+        else clause
+      in
+
+      (* Remove duplicates *)
+      let clause = remove_duplicates clause in
+
+      (* Sort for canonical form *)
+      let clause = List.sort compare clause in
+
+      if List.length clause = 0 then Some [ EBoolean true ]
+        (* Empty conjunction is true *)
+      else Some clause
+
+  (** Check if DNF contains complementary single-literal clauses forming a
+      tautology *)
+  let has_complementary_clauses clauses =
+    (* Check all pairs of single-literal clauses *)
+    let rec check_pairs = function
+      | [] -> false
+      | clause :: rest ->
+          (* Only check single-literal clauses *)
+          if List.length clause = 1 then
+            let e = List.hd clause in
+            (* Check if any remaining single-literal clause is contradictory *)
+            let found =
+              List.exists
+                (fun other_clause ->
+                  if List.length other_clause = 1 then
+                    let other_e = List.hd other_clause in
+                      are_contradictory e other_e
+                  else false
+                )
+                rest
+            in
+              if found then true else check_pairs rest
+          else check_pairs rest
+    in
+      check_pairs clauses
+
+  (** Simplify DNF: list of clauses where each clause is a conjunction *)
+  let simplify_dnf (dnf : expr list list) : expr list list =
+    (* Step 1: Simplify each clause *)
+    let simplified_clauses = List.filter_map simplify_clause dnf in
+
+    (* Step 2: Remove duplicate clauses *)
+    let unique_clauses =
+      let rec remove_dup_clauses seen = function
+        | [] -> List.rev seen
+        | clause :: rest ->
+            if
+              List.exists
+                (fun c ->
+                  List.length c = List.length clause
+                  && List.for_all2 equal c clause
+                )
+                seen
+            then remove_dup_clauses seen rest
+            else remove_dup_clauses (clause :: seen) rest
+      in
+        remove_dup_clauses [] simplified_clauses
+    in
+
+    (* Step 2.5: Check for complementary clauses (e.g., A ∨ !A = tautology) *)
+    if has_complementary_clauses unique_clauses then [ [ EBoolean true ] ]
+    else
+      (* Step 3: Check if any clause is a tautology (if so, entire DNF is true) *)
+      let has_tautology_dnf =
+        List.exists
+          (fun clause ->
+            List.length clause = 1
+            &&
+            match List.hd clause with
+            | EBoolean true -> true
+            | _ -> false
+          )
+          unique_clauses
+      in
+
+      if has_tautology_dnf then [ [ EBoolean true ] ]
+      else
+        (* Step 4: Remove subsumed clauses *)
+        let minimal_clauses = remove_subsumed_clauses unique_clauses in
+
+        (* Step 5: Handle empty DNF *)
+        if List.length minimal_clauses = 0 then [ [ EBoolean false ] ]
+        else minimal_clauses
 end

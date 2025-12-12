@@ -23,6 +23,15 @@ module EventStructureViz = struct
     | RMW (* Read-Modify-Write *)
     | LO (* Lock Order *)
     | FJ (* Fork-Join *)
+    | DP of string
+      (* Data Dependency with string representation of relative
+    predicates *)
+    | PPO of string
+    (* Preserved Program Order with string representation of
+    relative predicates *)
+    | RF of string
+  (* Read-From with string representation of relative
+    predicates *)
 
   (** Edge type *)
   module Edge = struct
@@ -35,30 +44,112 @@ module EventStructureViz = struct
   (** Create the graph type *)
   module G = Imperative.Digraph.ConcreteLabeled (Vertex) (Edge)
 
+  (** [structure executions] Generate edges for relaxed dependencies in
+      execution set for symbolic event structure.
+
+      Performs DNF simplification on predicates to minimize edges. *)
+  let generate_relaxed_deps (structure : symbolic_event_structure)
+      (executions : symbolic_execution USet.t option) :
+      (int * int * Edge.t) USet.t =
+    Option.map
+      (fun execs ->
+        (* Collect edges with predicates *)
+        let edge_preds_table = Hashtbl.create 100 in
+
+        USet.iter
+          (fun exec ->
+            let preds = exec.ex_p in
+            let filter_preds src =
+              let src_preds =
+                Hashtbl.find_opt structure.restrict src
+                |> Option.value ~default:[]
+              in
+                List.filter (fun p -> not (List.mem p src_preds)) preds
+            in
+
+            let process_relation rel_type edges =
+              USet.iter
+                (fun (src, dst) ->
+                  let clause = filter_preds src in
+                  let key = (src, dst, rel_type) in
+                  let existing =
+                    Hashtbl.find_opt edge_preds_table key
+                    |> Option.value ~default:[]
+                  in
+                    Hashtbl.replace edge_preds_table key (clause :: existing)
+                )
+                edges
+            in
+
+            process_relation `DP (URelation.transitive_reduction exec.dp);
+            process_relation `PPO (URelation.transitive_reduction exec.ppo);
+            process_relation `RF (URelation.transitive_reduction exec.rf)
+          )
+          execs;
+
+        (* Simplify and create edges *)
+        let result_edges = ref (USet.create ()) in
+
+        Hashtbl.iter
+          (fun (src, dst, rel_type) dnf_clauses ->
+            let simplified_dnf = Expr.simplify_dnf dnf_clauses in
+
+            List.iter
+              (fun clause ->
+                (* Format predicate string *)
+                let preds_str =
+                  match clause with
+                  | [ EBoolean true ] | [] ->
+                      "" (* true predicate -> empty string *)
+                  | _ ->
+                      clause
+                      |> List.map Expr.to_string
+                      |> String.concat
+                           " ∧ " (* Use conjunction symbol for readability *)
+                in
+
+                let edge =
+                  match rel_type with
+                  | `DP -> (src, dst, DP preds_str)
+                  | `PPO -> (src, dst, PPO preds_str)
+                  | `RF -> (src, dst, RF preds_str)
+                in
+                  result_edges := USet.add !result_edges edge
+              )
+              simplified_dnf
+          )
+          edge_preds_table;
+
+        !result_edges
+      )
+      executions
+    |> Option.value ~default:(USet.create ())
+
   (** Build graph from event structure *)
-  let build_graph (ses : symbolic_event_structure)
-      (events : (int, event) Hashtbl.t) : G.t =
+  let build_graph (structure : symbolic_event_structure)
+      (executions : symbolic_execution USet.t option) : G.t =
     let g = G.create () in
 
     (* Create vertices *)
+    let events = structure.events in
     let vertex_map = Hashtbl.create 100 in
       Hashtbl.iter (fun k _v -> Printf.printf "%d " k) events;
-      USet.iter (fun eid -> Printf.printf "%d " eid) ses.e;
+      USet.iter (fun eid -> Printf.printf "%d " eid) structure.e;
 
       USet.iter
         (fun event_id ->
           let evt = Hashtbl.find events event_id in
           let constraints =
-            try Hashtbl.find ses.restrict event_id with Not_found -> []
+            try Hashtbl.find structure.restrict event_id with Not_found -> []
           in
           let v = { Vertex.id = event_id; event = evt; constraints } in
             G.add_vertex g v;
             Hashtbl.add vertex_map event_id v
         )
-        ses.e;
+        structure.e;
 
       (* Apply transitive reduction to po *)
-      let po_reduced = URelation.transitive_reduction ses.po in
+      let po_reduced = URelation.transitive_reduction structure.po in
 
       (* Add program order edges *)
       USet.iter
@@ -76,7 +167,7 @@ module EventStructureViz = struct
           let v_dst = Hashtbl.find vertex_map dst in
             G.add_edge_e g (G.E.create v_src RMW v_dst)
         )
-        ses.rmw;
+        structure.rmw;
 
       (* Add lock order edges *)
       USet.iter
@@ -85,7 +176,7 @@ module EventStructureViz = struct
           let v_dst = Hashtbl.find vertex_map dst in
             G.add_edge_e g (G.E.create v_src LO v_dst)
         )
-        ses.lo;
+        structure.lo;
 
       (* Add fork-join edges *)
       USet.iter
@@ -94,9 +185,19 @@ module EventStructureViz = struct
           let v_dst = Hashtbl.find vertex_map dst in
             G.add_edge_e g (G.E.create v_src FJ v_dst)
         )
-        ses.fj;
+        structure.fj;
 
-      g
+      (* Add relaxed dependency edges from executions *)
+      let relaxed_deps = generate_relaxed_deps structure executions in
+        USet.iter
+          (fun (src, dst, label) ->
+            let v_src = Hashtbl.find vertex_map src in
+            let v_dst = Hashtbl.find vertex_map dst in
+              G.add_edge_e g (G.E.create v_src label v_dst)
+          )
+          relaxed_deps;
+
+        g
 
   (** DOT output using OCamlGraph's Graphviz module *)
   module DotOutput = struct
@@ -171,6 +272,9 @@ module EventStructureViz = struct
         | RMW -> ("rmw", 0xFF0000, `Solid, 2.0)
         | LO -> ("lo", 0x0000FF, `Dashed, 1.0)
         | FJ -> ("fj", 0x00FF00, `Dotted, 1.0)
+        | DP preds -> ("dp: " ^ preds, 0xFFA500, `Bold, 1.5)
+        | PPO preds -> ("ppo: " ^ preds, 0x800080, `Bold, 1.5)
+        | RF preds -> ("rf: " ^ preds, 0xA52A2A, `Bold, 1.5)
       in
         [ `Label label_txt; `Color color; `Style style; `Penwidth penwidth ]
 
@@ -261,6 +365,9 @@ module EventStructureViz = struct
               | RMW -> ("rmw", "red")
               | LO -> ("lo", "blue")
               | FJ -> ("fj", "green")
+              | DP preds -> ("dp - " ^ preds, "orange")
+              | PPO preds -> ("ppo - " ^ preds, "purple")
+              | RF preds -> ("rf - " ^ preds, "brown")
             in
               edges := (src, dst, edge_type, color) :: !edges
           )
@@ -288,22 +395,11 @@ module EventStructureViz = struct
         Buffer.add_string buf "}\n";
         Buffer.contents buf
 
-  (** Main visualization function *)
-  let visualize (format : output_mode) (ses : symbolic_event_structure)
-      (events : (int, event) Hashtbl.t) : string =
-    let g = build_graph ses events in
-      match format with
-      | Dot -> to_dot g
-      | Json -> to_json g
-      | _ ->
-          Logs.err (fun m -> m "Unsupported output format for visualization.");
-          ""
-
   (** Write visualization to file *)
   let write_to_file (filename : string) (format : output_mode)
-      (ses : symbolic_event_structure) (events : (int, event) Hashtbl.t) : unit
-      =
-    let g = build_graph ses events in
+      (structure : symbolic_event_structure)
+      (executions : symbolic_execution USet.t option) : unit =
+    let g = build_graph structure executions in
       match format with
       | Dot ->
           if filename = "stdout" then (
@@ -326,21 +422,16 @@ module EventStructureViz = struct
                 output_string oc content;
                 close_out oc
       | _ -> Logs.err (fun m -> m "Unsupported output format for visualization.")
-
-  (** Export graph for further processing *)
-  let get_graph (ses : symbolic_event_structure)
-      (events : (int, event) Hashtbl.t) : G.t =
-    build_graph ses events
 end
 
 let step_visualize_event_structure (lwt_ctx : mordor_ctx Lwt.t) :
     mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
 
-  match (ctx.structure, ctx.events) with
-  | Some structure, Some events ->
+  match ctx.structure with
+  | Some structure ->
       EventStructureViz.write_to_file ctx.output_file ctx.output_mode structure
-        events;
+        ctx.executions;
 
       Logs.info (fun m ->
           m "Event structure visualization written to %s" ctx.output_file
