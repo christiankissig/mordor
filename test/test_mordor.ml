@@ -19,4 +19,5 @@ let () =
       Test_advanced_mrd.suite;
       Test_histories_futures.suite;
       Test_model_and_tuple_features.suite;
+      Test_uset.suite;
     ]

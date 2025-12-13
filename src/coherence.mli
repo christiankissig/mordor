@@ -53,9 +53,6 @@ val em :
   mode option ->
   (int * int) uset
 
-(** Semicolon relation composition *)
-val semicolon_rel : (int * int) uset list -> (int * int) uset
-
 (** Generate all permutations of a list *)
 val permutations : 'a list -> 'a list list
 

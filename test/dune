@@ -24,7 +24,8 @@
   test_properties_mrd
   test_solver
   test_symbolic_mrd
-  test_types)
+  test_types
+  test_uset)
  (libraries mordor_lib lwt lwt.unix z3 zarith core str alcotest)
  (preprocess
   (pps lwt_ppx)))

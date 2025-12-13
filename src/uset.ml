@@ -214,6 +214,7 @@ module URelation : sig
   type 'a t = ('a * 'a) USet.t
 
   val cross : 'a USet.t -> 'a USet.t -> 'a t
+  val compose : 'a t list -> 'a t
   val identity_relation : 'a USet.t -> 'a t
   val inverse_relation : 'a t -> 'a t
   val reflexive_closure : 'a USet.t -> 'a t -> 'a t
@@ -242,6 +243,28 @@ end = struct
         (fun v1 -> USet.iter (fun v2 -> USet.add result (v1, v2) |> ignore) s2)
         s1;
       result
+
+  (** Helper: compose relations using semicolon (;) *)
+  let compose (rels : 'a t list) : 'a t =
+    match rels with
+    | [] -> USet.create ()
+    | [ r ] -> r
+    | r :: rest ->
+        List.fold_left
+          (fun acc rel ->
+            let result = USet.create () in
+              USet.iter
+                (fun (a, b) ->
+                  USet.iter
+                    (fun (c, d) ->
+                      if b = c then USet.add result (a, d) |> ignore
+                    )
+                    rel
+                )
+                acc;
+              result
+          )
+          r rest
 
   (** Identity relation *)
   let identity_relation s = USet.map (fun x -> (x, x)) s

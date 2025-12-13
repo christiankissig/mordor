@@ -853,7 +853,7 @@ module TestCoherence = struct
   let test_semicolon_composition () =
     let r1 = USet.of_list [ (1, 2); (2, 3) ] in
     let r2 = USet.of_list [ (3, 4); (4, 5) ] in
-    let composed = semicolon_rel [ r1; r2 ] in
+    let composed = URelation.compose [ r1; r2 ] in
 
     check bool "semicolon_doesnt_include_original" false
       (USet.mem composed (1, 2));

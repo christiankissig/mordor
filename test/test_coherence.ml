@@ -71,41 +71,6 @@ let uset_of_list lst =
     List.iter (fun x -> USet.add uset x |> ignore) lst;
     uset
 
-(** Test semicolon_rel with empty list *)
-let test_semicolon_empty () =
-  let result = semicolon_rel [] in
-    check int "empty composition" 0 (USet.size result);
-    ()
-
-(** Test semicolon_rel with single relation *)
-let test_semicolon_single () =
-  let rel = uset_of_list [ (1, 2); (2, 3) ] in
-  let result = semicolon_rel [ rel ] in
-    check int "single relation size" 2 (USet.size result);
-    check bool "contains (1,2)" true (USet.mem result (1, 2));
-    check bool "contains (2,3)" true (USet.mem result (2, 3));
-    ()
-
-(** Test semicolon_rel composition *)
-let test_semicolon_compose () =
-  let r1 = uset_of_list [ (1, 2); (3, 4) ] in
-  let r2 = uset_of_list [ (2, 5); (4, 6) ] in
-  let result = semicolon_rel [ r1; r2 ] in
-    check bool "contains (1,5)" true (USet.mem result (1, 5));
-    check bool "contains (3,6)" true (USet.mem result (3, 6));
-    check bool "not contains (1,2)" false (USet.mem result (1, 2));
-    ()
-
-(** Test semicolon_rel with three relations *)
-let test_semicolon_triple () =
-  let r1 = uset_of_list [ (1, 2) ] in
-  let r2 = uset_of_list [ (2, 3) ] in
-  let r3 = uset_of_list [ (3, 4) ] in
-  let result = semicolon_rel [ r1; r2; r3 ] in
-    check bool "contains (1,4)" true (USet.mem result (1, 4));
-    check int "result size" 1 (USet.size result);
-    ()
-
 (** Test em with Write events *)
 let test_em_write_events () =
   let events =
@@ -517,10 +482,6 @@ let test_permutations_three () =
 let suite =
   ( "Coherence",
     [
-      test_case "semicolon_rel empty" `Quick test_semicolon_empty;
-      test_case "semicolon_rel single" `Quick test_semicolon_single;
-      test_case "semicolon_rel compose" `Quick test_semicolon_compose;
-      test_case "semicolon_rel triple" `Quick test_semicolon_triple;
       test_case "em write events" `Quick test_em_write_events;
       test_case "em with mode" `Quick test_em_with_mode;
       test_case "em fence events" `Quick test_em_fence_events;
