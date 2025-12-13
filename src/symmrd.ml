@@ -155,9 +155,40 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
   Logs.debug (fun m -> m "Generating executions...");
 
+  (* Compute statex: allocation disjointness constraints *)
+  (* Extract all location symbols from malloc/allocation events *)
+  let malloc_locs =
+    USet.values malloc_events
+    |> List.filter_map (fun eid ->
+        match Hashtbl.find_opt events eid with
+        | Some evt -> Option.map Expr.of_value evt.rval
+        | None -> None
+    )
+  in
+
+  (* Create pairwise disjointness constraints for all distinct allocation
+     locations *)
+  (* TODO these constraints do not account for intermediate deallocation:
+
+    • enforces the disjointness of symbolic memory locations introduced by
+    consecutive allocation events, i.e. without an intermediate deallocation
+    event.
+    *)
+  let statex =
+    let pairs = ref [] in
+      for i = 0 to List.length malloc_locs - 1 do
+        for j = i + 1 to List.length malloc_locs - 1 do
+          let loc1 = List.nth malloc_locs i in
+          let loc2 = List.nth malloc_locs j in
+            pairs := Expr.binop loc1 "!=" loc2 :: !pairs
+        done
+      done;
+      !pairs @ structure.constraint_
+  in
+
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions structure final_justs structure.constraint_ init_ppo
+    generate_executions structure final_justs statex init_ppo
       ~include_dependencies ~restrictions
   in
 

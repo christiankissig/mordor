@@ -597,7 +597,7 @@ let build_justcombos structure paths init_ppo statex
 (** Generate executions **)
 
 (* Compute initial RF relation: writes × reads that are not in po^-1 *)
-let compute_path_rf structure path ~elided ~constraints =
+let compute_path_rf structure path ~elided ~constraints statex =
   let write_events =
     USet.set_minus (USet.intersection structure.write_events path.path) elided
   in
@@ -611,7 +611,7 @@ let compute_path_rf structure path ~elided ~constraints =
     if condition then f () else Lwt.return false
   in
 
-  let preds = path.p @ constraints |> USet.of_list |> USet.values in
+  let preds = path.p @ constraints @ statex |> USet.of_list |> USet.values in
 
   (* w must not be po-after r *)
   let po =
@@ -703,7 +703,9 @@ let generate_executions (structure : symbolic_event_structure)
           List.flatten (List.map (fun (j : justification) -> j.p) just_combo)
         in
 
-        let* all_rf = compute_path_rf structure path ~elided ~constraints in
+        let* all_rf =
+          compute_path_rf structure path ~elided ~constraints statex
+        in
 
         let* freeze_fn_opt =
           create_freeze structure path j_remapped init_ppo statex
@@ -840,12 +842,14 @@ let generate_executions (structure : symbolic_event_structure)
       let indexed_list = List.mapi (fun i exec -> (i, exec)) exec_list in
         List.filter_map
           (fun (i, exec1) ->
-            let has_contained =
+            let is_contained =
               List.exists
-                (fun (j, exec2) -> i <> j && Execution.contains exec1 exec2)
+                (fun (j, exec2) -> i <> j && Execution.contains exec2 exec1
+                ) (* Is exec1 contained by exec2? *)
                 indexed_list
             in
-              if has_contained then Some exec1 else None
+              if is_contained then None
+              else Some exec1 (* Keep if NOT contained by any other *)
           )
           indexed_list
     in
@@ -871,4 +875,4 @@ let generate_executions (structure : symbolic_event_structure)
           m "Minimized to %d executions" (List.length minimal_executions)
       );
 
-      Lwt.return executions
+      Lwt.return minimal_executions
