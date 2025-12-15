@@ -14,6 +14,7 @@ type 'a ir_litmus = {
 and 'a ir_stmt =
   | Threads of { threads : 'a ir_node list list }
   | RegisterStore of { register : string; expr : expr }
+  | RegisterRefAssign of { register : string; global : string }
   | GlobalStore of { global : string; expr : expr; assign : assign_info }
   | GlobalLoad of { register : string; global : string; load : assign_info }
   | DerefStore of { address : expr; expr : expr; assign : assign_info }
@@ -41,11 +42,13 @@ and 'a ir_stmt =
       register : string;
       address : expr;
       operand : expr;
+      rmw_mode : string;
       load_mode : mode;
       assign_mode : mode;
     }
   | Malloc of { register : string; size : expr }
   | Labeled of { label : string list; stmt : 'a ir_node }
+  | Skip
 
 (* annotated ir node wrapping ir statements with annotations *)
 and 'a ir_node = { stmt : 'a ir_stmt; annotations : 'a }
@@ -81,6 +84,8 @@ let rec to_string ~ann_to_string (node : 'a ir_node) : string =
           Printf.sprintf "Threads [%s]" (String.concat "; " thread_strs)
     | RegisterStore { register; expr } ->
         Printf.sprintf "Reg Store %s := %s" register (Expr.to_string expr)
+    | RegisterRefAssign { register; global } ->
+        Printf.sprintf "Reg Ref Assign %s := &%s" register global
     | GlobalStore { global; expr; assign } ->
         Printf.sprintf "Store %s := %s with mode %s" global (Expr.to_string expr)
           (Types.mode_to_string assign.mode)
@@ -132,9 +137,11 @@ let rec to_string ~ann_to_string (node : 'a ir_node) : string =
           (Expr.to_string desired)
           (Types.mode_to_string load_mode)
           (Types.mode_to_string assign_mode)
-    | Fadd { register; address; operand; load_mode; assign_mode } ->
-        Printf.sprintf "%s := FADD(%s, %s) with load mode %s and assign mode %s"
-          register (Expr.to_string address) (Expr.to_string operand)
+    | Fadd { register; address; operand; rmw_mode; load_mode; assign_mode } ->
+        Printf.sprintf
+          "%s := FADD(%s, %s) with rmw mode %s and load mode %s and assign \
+           mode %s"
+          register (Expr.to_string address) (Expr.to_string operand) rmw_mode
           (Types.mode_to_string load_mode)
           (Types.mode_to_string assign_mode)
     | Malloc { register; size } ->
@@ -142,3 +149,4 @@ let rec to_string ~ann_to_string (node : 'a ir_node) : string =
     | Labeled { label; stmt } ->
         Printf.sprintf "Labeled [%s]: %s" (String.concat "; " label)
           (to_string stmt)
+    | Skip -> "Skip"

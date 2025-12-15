@@ -62,6 +62,7 @@ type ast_expr =
 type ast_stmt =
   | SThreads of { threads : ast_node list list }
   | SRegisterStore of { register : string; expr : ast_expr }
+  | SRegisterRefAssign of { register : string; global : string }
   | SGlobalStore of { global : string; expr : ast_expr; assign : assign_info }
   | SGlobalLoad of { register : string; global : string; load : assign_info }
   | SLoad of { register : string; address : ast_expr; load : assign_info }
@@ -78,6 +79,7 @@ type ast_stmt =
       register : string;
       address : ast_expr;
       operand : ast_expr;
+      rmw_mode : string;
       load_mode : mode;
       assign_mode : mode;
     }
@@ -94,6 +96,7 @@ type ast_stmt =
   | SMalloc of { register : string; size : ast_expr }
   | SFree of { register : string }
   | SLabeled of { label : string list; stmt : ast_stmt }
+  | SSkip
 
 and ast_node = {
   stmt : ast_stmt;
@@ -167,6 +170,8 @@ let rec stmt_to_string stmt =
         )
   | SRegisterStore { register; expr } ->
       Printf.sprintf "SRegisterStore %s := %s" register (expr_to_string expr)
+  | SRegisterRefAssign { register; global } ->
+      Printf.sprintf "SRegisterRefAssign %s := &%s" register global
   | SGlobalStore { global; expr; assign } ->
       Printf.sprintf "SGlobalStore %s := %s with mode %s and volatile %b" global
         (expr_to_string expr)
@@ -193,9 +198,10 @@ let rec stmt_to_string stmt =
         (expr_to_string desired)
         (Types.mode_to_string load_mode)
         (Types.mode_to_string assign_mode)
-  | SFADD { register; address; operand; load_mode; assign_mode } ->
-      Printf.sprintf "SFADD %s, %s, %s with load mode %s and assign mode %s"
-        register (expr_to_string address) (expr_to_string operand)
+  | SFADD { register; address; operand; rmw_mode; load_mode; assign_mode } ->
+      Printf.sprintf
+        "SFADD %s, %s, %s with rmw_mode %s and load mode %s and assign mode %s"
+        register (expr_to_string address) (expr_to_string operand) rmw_mode
         (Types.mode_to_string load_mode)
         (Types.mode_to_string assign_mode)
   | SIf { condition; then_body; else_body } -> (
@@ -236,6 +242,7 @@ let rec stmt_to_string stmt =
   | SLabeled { label; stmt } ->
       Printf.sprintf "SLabeled [%s]: %s" (String.concat "; " label)
         (stmt_to_string stmt)
+  | SSkip -> "SSkip"
 
 and to_string (node : ast_node) : string =
   let stmt = node.stmt in

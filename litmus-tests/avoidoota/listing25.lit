@@ -1,11 +1,11 @@
-x := 0; y := 41
+x := 0; y := 41;
 {
   r0 := y;
   if (r0 = 42) {
     x := 1
   }
 }|||{
-  ry := FADD(y, rlx, 1);
-  ry := FADD(y, rlx, 1);
+  ry := FADD(rlx, rlx, y, 1);
+  ry := FADD(rlx, rlx, y, 1);
 }
 %% allow (@x = 1) []

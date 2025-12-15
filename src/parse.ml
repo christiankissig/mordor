@@ -68,6 +68,8 @@ let rec convert_stmt_open ~recurse = function
   | Ast.SRegisterStore { register; expr } ->
       let ir_expr = ast_expr_to_expr expr in
         RegisterStore { register; expr = ir_expr }
+  | Ast.SRegisterRefAssign { register; global } ->
+      RegisterRefAssign { register; global }
   | Ast.SGlobalStore { global; expr; assign } ->
       let ir_expr = ast_expr_to_expr expr in
         GlobalStore { global; expr = ir_expr; assign }
@@ -118,7 +120,8 @@ let rec convert_stmt_open ~recurse = function
             load_mode;
             assign_mode;
           }
-  | Ast.SFADD { register; address; operand; load_mode; assign_mode } ->
+  | Ast.SFADD { register; address; operand; rmw_mode; load_mode; assign_mode }
+    ->
       let ir_address = ast_expr_to_expr address in
       let ir_operand = ast_expr_to_expr operand in
         Fadd
@@ -126,12 +129,14 @@ let rec convert_stmt_open ~recurse = function
             register;
             address = ir_address;
             operand = ir_operand;
+            rmw_mode;
             load_mode;
             assign_mode;
           }
   | Ast.SMalloc { register; size } ->
       let ir_size = ast_expr_to_expr size in
         Malloc { register; size = ir_size }
+  | Ast.SSkip -> Skip
 
 let rec convert_stmt ast_node =
   convert_stmt_open ~recurse:convert_stmt ast_node.stmt |> make_ir_node
@@ -188,10 +193,10 @@ let parse_and_convert_litmus ~validate_ast src =
   with
   | Failure msg ->
       Logs.err (fun m -> m "Parse error: %s" msg);
-      ([], [], None)
+      failwith ("Parse error: " ^ msg)
   | e ->
       Logs.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
-      ([], [], None)
+      failwith ("Unexpected error: " ^ Printexc.to_string e)
 
 (** Post-parse validation on ASTs *)
 

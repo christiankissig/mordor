@@ -274,6 +274,10 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               in
                 let* cont = recurse rest env' phi events in
                   Lwt.return cont
+          | RegisterRefAssign { register; global } ->
+              let env' = update_env env register (EVar global) in
+                let* cont = recurse rest env' phi events in
+                  Lwt.return cont
           | GlobalStore { global; expr; assign } ->
               let base_evt : event = Event.create Write 0 () in
               let evt =
@@ -342,7 +346,9 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   Hashtbl.replace env' register (Expr.of_value rval);
                   let* cont = recurse rest env' phi events in
                     Lwt.return (dot event' cont phi)
-          | Fadd { register; address; operand; load_mode; assign_mode } ->
+          | Fadd
+              { register; address; operand; rmw_mode; load_mode; assign_mode }
+            ->
               let symbol = next_greek () in
               let rval = VSymbol symbol in
               let base_evt_load : event = Event.create Read 0 () in
@@ -519,6 +525,9 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               let event' : event = add_event events evt in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
+          | Skip ->
+              let* cont = recurse rest env phi events in
+                Lwt.return cont
           | _ ->
               (* Simplified - return empty structure for unhandled cases *)
               Logs.err (fun m ->

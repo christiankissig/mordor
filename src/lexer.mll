@@ -21,7 +21,6 @@ rule token = parse
 
   (* Keywords *)
   | "nonatomic"           { Parser.NONATOMIC }
-  | "na"                  { Parser.NONATOMIC }
   | "relaxed"             { Parser.RELAXED }
   | "rlx"                 { Parser.RELAXED }
   | "release"             { Parser.RELEASE }
@@ -29,7 +28,6 @@ rule token = parse
   | "acquire"             { Parser.ACQUIRE }
   | "acq"                 { Parser.ACQUIRE }
   | "relacq"              { Parser.RELACQ }
-  | "ra"                  { Parser.RELACQ }
   | "strong"              { Parser.STRONG }
   | "normal"              { Parser.NORMAL }
   | "sequentially_consistent" { Parser.SC }
@@ -51,6 +49,9 @@ rule token = parse
   | "forbid"              { Parser.FORBID }
   | "name"                { Parser.NAME }
   | "values"              { Parser.VALUES }
+  | "load"                { Parser.LOAD }
+  | "store"               { Parser.STORE }
+  | "skip"                { Parser.SKIP }
 
   (* Multi-character operators (must come before single-char ones) *)
   | ":rlx="               { Parser.COLONRLX }
@@ -105,6 +106,7 @@ rule token = parse
   | "|"                   { Parser.PIPE }
   | "~"                   { Parser.TILDE }
   | "'"                   { Parser.QUOTE }
+  | "_"                   { Parser.UNDERSCORE }
 
   (* Numbers - handle both decimal and hex *)
   | digit+ as num

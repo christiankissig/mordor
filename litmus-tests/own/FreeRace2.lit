@@ -1,13 +1,12 @@
 x := 0;
-p := malloc 1;
+rp := malloc(1);
 {
-  rp := p;
   *rp := 1;
   x.store(1, rel);
 } ||| {
   r2 := x.load(acq);
   if (r2 = 1) {
-    free(p);
+    free(rp);
   }
 }
 %%

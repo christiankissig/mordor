@@ -67,6 +67,7 @@ let inc_loop_id () =
 %token FADD CAS IF ELSE WHILE DO FENCE
 %token MALLOC FREE LOCK UNLOCK
 %token ALLOW FORBID NAME VALUES
+%token LOAD STORE SKIP
 %token <Z.t> INT
 %token <string> REGISTER ATLOC GLOBAL STRING BACKTICK
 %token QUOTE PLUS MINUS STAR SLASH RARROW
@@ -76,6 +77,7 @@ let inc_loop_id () =
 %token AMPERSAND CARET PIPE TILDE IN NOTIN FORALL PARALLEL
 %token COLONRLX COLONREL COLONACQ COLONSC
 %token COLONV COLONVRLX COLONVREL COLONVACQ COLONVSC
+%token UNDERSCORE
 %token EOF
 
 (* Operator precedence and associativity *)
@@ -120,6 +122,7 @@ config_body:
 
 name_section:
   | NAME EQ name_parts=name_part+ { String.concat "" name_parts }
+  | NAME EQ n=STRING { n }
   ;
 
 name_part:
@@ -184,9 +187,9 @@ thread:
   ;
 
 statement_list:
-  | s=statement { [s] }
   | s=statement SEMICOLON rest=statement_list { s :: rest }
   | s=statement SEMICOLON { [s] }
+  | s=statement { [s] }
 ;
 
 statement:
@@ -200,7 +203,7 @@ statement:
         (make_labeled labels s)
     }
   (* Parallel threads *)
-  | threads=threads SEMICOLON? {
+  | threads=threads {
       make_ast_node
         ~thread_ctx:(Some (current_thread_ctx()))
         ~src_ctx:(Some (current_src_ctx()))
@@ -220,10 +223,17 @@ label:
 
 stmt_base:
 
+  (** Register to register move **)
+
   (* Register assign from register: reg1 := reg2 *)
   (* needed to contrast load from global below *)
-    reg1=REGISTER ASSIGN reg2=REGISTER
+  | reg1=REGISTER ASSIGN reg2=REGISTER
     { SRegisterStore { register = reg1; expr = ERegister reg2 } }
+
+  | reg=REGISTER ASSIGN AMPERSAND global=GLOBAL
+    { SRegisterRefAssign { register = reg; global } }
+
+  (** Loads from global variables **)
 
   (** Load from global variables **)
 
@@ -234,6 +244,14 @@ stmt_base:
         global;
         load = { mode = Relaxed; volatile = false }
     } }
+
+  | reg=REGISTER ASSIGN global=GLOBAL DOT LOAD LPAREN RPAREN
+    { SGlobalLoad {
+        register = reg;
+        global;
+        load = { mode = Relaxed; volatile = false }
+    } }
+
   (* Volatile load from global pattern 2: reg := :v= global *)
   | mode=volatile_assign_mode reg=REGISTER ASSIGN global=GLOBAL
     { let load, assign = mode in
@@ -242,8 +260,16 @@ stmt_base:
         global;
         load
       } }
+
   (* Explicit load from global with memory order: reg :mode= global *)
   | reg=REGISTER mode=assign_mode global=GLOBAL
+    { SGlobalLoad {
+      register = reg;
+        global;
+        load = mode
+      } }
+
+  | reg=REGISTER ASSIGN global=GLOBAL DOT LOAD LPAREN mode=mode RPAREN
     { SGlobalLoad {
       register = reg;
         global;
@@ -290,8 +316,15 @@ stmt_base:
     { SGlobalStore { global; expr = e; assign = { mode = Relaxed; volatile =
       false } } }
 
+  | global=GLOBAL DOT STORE LPAREN e=expr RPAREN
+    { SGlobalStore { global; expr = e; assign = { mode = Relaxed; volatile =
+      false } } }
+
   (* Global store with memory order: global :mode= expr *)
   | global=GLOBAL mode=assign_mode e=expr
+    { SGlobalStore { global; expr = e; assign = mode } }
+
+  | global=GLOBAL DOT STORE LPAREN e=expr COMMA mode=mode RPAREN
     { SGlobalStore { global; expr = e; assign = mode } }
 
   (* Volatile global store pattern 2: global :v= expr *)
@@ -306,7 +339,7 @@ stmt_base:
     { SStore { address = e1; expr = e2; assign = { mode = Relaxed; volatile = false } } }
 
   (* Volatile pointer store pattern 2: *expr :v= expr *)
-  |  STAR e1=expr mode=volatile_assign_mode e2=expr
+  | STAR e1=expr mode=volatile_assign_mode e2=expr
     { let load, assign = mode in
       SStore { address = e1; expr = e2; assign } }
 
@@ -332,7 +365,26 @@ stmt_base:
         assign_mode
       } }
 
-  (* FADD: reg := fadd(mode, addr, operand) *)
+  (* FADD: reg := fadd(rmw_mode, load_mode, assign_mode, addr, operand) *)
+  | reg=REGISTER ASSIGN
+      FADD LPAREN
+        rmw_mode=rmw_mode COMMA
+        load_mode=memory_order COMMA
+        assign_mode=memory_order COMMA
+        e1=expr COMMA
+        e2=expr
+      RPAREN
+    { SFADD {
+        register = reg;
+        address = e1;
+        operand = e2;
+        rmw_mode;
+        load_mode;
+        assign_mode
+      } }
+
+
+  (* FADD: reg := fadd(load_mode, assign_mode, addr, operand) *)
   | reg=REGISTER ASSIGN
       FADD LPAREN
         load_mode=memory_order COMMA
@@ -344,6 +396,7 @@ stmt_base:
         register = reg;
         address = e1;
         operand = e2;
+        rmw_mode = "strong";
         load_mode;
         assign_mode
       } }
@@ -393,6 +446,9 @@ stmt_base:
   | FREE LPAREN global=GLOBAL RPAREN
     { (* Generate a load from global then free *)
       SFree { register = "tmp_" ^ global } }
+
+  | SKIP { SSkip }
+
   ;
 
 block_or_stmt:
@@ -427,9 +483,20 @@ memory_order:
   | RELEASE { Release }
   | ACQUIRE { Acquire }
   | SC { SC }
-  | NORMAL { Normal }
-  | STRONG { Strong }
   | RELACQ { ReleaseAcquire }
+  ;
+
+mode:
+  | RELAXED { { mode = Relaxed; volatile = false } }
+  | RELEASE { { mode = Release; volatile = false } }
+  | ACQUIRE { { mode = Acquire; volatile = false } }
+  | SC { { mode = SC; volatile = false } }
+  | NONATOMIC { { mode = Nonatomic; volatile = false } }
+  ;
+
+rmw_mode:
+  | NORMAL { "normal" }
+  | STRONG { "strong" }
   ;
 
 (* Expressions *)
@@ -486,7 +553,7 @@ assertion_body:
   | LBRACKET model=model_name? RBRACKET
     { AModel { model = (match model with Some m -> m | None -> "") } }
 
-  | RARROW check=assertion_check PERCENT rest=litmus
+  | RARROW check=assertion_check PERCENT PERCENT rest=litmus
     { let model, outcome = check in
       AChained {
         model = (match model with Some m -> m | None -> "");
@@ -494,7 +561,7 @@ assertion_body:
         rest;
       } }
 
-  | outcome=outcome_keyword cond=expr check=assertion_check
+  | outcome=outcome_keyword cond=expr check=assertion_check message=outcome_message?
     { let model, _ = check in
       AOutcome {
         outcome;
@@ -518,9 +585,14 @@ outcome_keyword:
   | FORBID { "forbid" }
   ;
 
+outcome_message:
+  | s=STRING { s }
+  ;
+
 model_name:
-  | GLOBAL { $1 }
-  | REGISTER { $1 }
+  | UNDERSCORE {"" }
+  | name=GLOBAL { String.lowercase_ascii name }
+  | REGISTER { $1 } (* for rc11 - tokenization conflict TODO *)
   | SC { "sc" }
   | RELAXED { "relaxed" }
   | RELEASE { "release" }

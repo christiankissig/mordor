@@ -1,19 +1,19 @@
-x := 0; z := 0; y := 0; k := 0
-{{
-  r0 := z
+x := 0; z := 0; y := 0; k := 0;
+{
+  r0 := z;
   x := r0
 } ||| {
-  y.store(1, nonatomic)
+  y.store(1, nonatomic);
   k.store(42, release)
-}} ||| {
-  r3 := k.load(acquire)
+} ||| {
+  r3 := k.load(acquire);
   if (r3 = 42) {
-    r1 := x
+    r1 := x;
     if (r1 = 1) {
-      z := r1
+      z := r1;
       //print ("boom")
     } else {
-      r2 := y.load(nonatomic)
+      r2 := y.load(nonatomic);
       z := r2
     }
   }

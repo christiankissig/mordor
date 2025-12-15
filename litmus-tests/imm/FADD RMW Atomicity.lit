@@ -1,6 +1,6 @@
 x := 0;
 {
-  r1 := FADD(x, rlx, 1)
+  r1 := FADD(rlx, rlx, x, 1)
 } ||| {
   x := 2;
   r2 := x; // 1

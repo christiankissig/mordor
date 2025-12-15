@@ -1,10 +1,10 @@
-x := 0; y := 0; z := 0
+x := 0; y := 0; z := 0;
 {
-  rx := x
-  if (rx = 1) { z := 1; ; rz := z; y := rz; }
+  rx := x;
+  if (rx = 1) { z := 1; rz := z; y := rz; }
   else { y := 1; }
 }|||{
-  ry := y
+  ry := y;
   if (ry = 1) { x := 1 }
 }
 %% allow (ry = 1 && rx = 1) []

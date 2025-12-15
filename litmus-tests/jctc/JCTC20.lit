@@ -4,7 +4,7 @@ y := 0;
   // Thread 2
   r2 := y;
   x := r2
-} ||| {{
+} ||| {
   // Thread 3
   r3 := x;
   if (r3 = 0) {
@@ -12,9 +12,9 @@ y := 0;
   } else { skip }
 } ||| {
   skip
-}};
+};
 // Join thread 3
 r1 := x;
-y := r1
+y := r1;
 %%
 allow (r1 = 42 && r2 = 42 && r3 = 42) [] "Allowed. This is the same as test case 18, except that thread 1 has been split into two threads."

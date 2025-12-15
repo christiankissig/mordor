@@ -141,15 +141,22 @@ let check solver =
         in
 
         (* Add to solver *)
-        Z3.Solver.add solver.context.solver z3_exprs;
+        try
+          Z3.Solver.add solver.context.solver z3_exprs;
+          (* Check *)
+          let result = Z3.Solver.check solver.context.solver [] in
 
-        (* Check *)
-        let result = Z3.Solver.check solver.context.solver [] in
-
-        match result with
-        | Z3.Solver.SATISFIABLE -> Lwt.return_some true
-        | Z3.Solver.UNSATISFIABLE -> Lwt.return_some false
-        | Z3.Solver.UNKNOWN -> Lwt.return_none
+          match result with
+          | Z3.Solver.SATISFIABLE -> Lwt.return_some true
+          | Z3.Solver.UNSATISFIABLE -> Lwt.return_some false
+          | Z3.Solver.UNKNOWN -> Lwt.return_none
+        with e ->
+          Logs.err (fun m ->
+              m "Error adding expressions to Z3 solver: %s\n %s"
+                (Printexc.to_string e)
+                (String.concat "\n" (List.map Expr.to_string solver.expressions))
+          );
+          failwith "Z3 solver error"
 
 (** Solve and get model *)
 let solve solver =

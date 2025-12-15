@@ -1,10 +1,10 @@
-x := 0; y := 0
+x := 0; y := 0;
 {
-  rx := x
+  rx := x;
   if (rx = 1) { w.store(1, rel); y := 1 }
   else { w.store(1, rel); y := 1 }
 }|||{
-  ry := y
+  ry := y;
   if (ry = 1) { x := 1 }
 }
 %% allow (ry = 1 && rx = 1) []

@@ -1,22 +1,22 @@
 flag := 0; X := 0; Y := 0; Z := 0; K := 0;
 {
-	rd := Z
+	rd := Z;
 	X := rd
-}|||{{
-	Y := 1
+}|||{
+	Y := 1;
 	K.store(42, release)
 }|||{
-	rk := K.load(acquire)
+	rk := K.load(acquire);
 	if (rk = 42) {
-		ra := X
+		ra := X;
 		if (ra = 1) {
-			Z := ra
+			Z := ra;
 			flag := 1
 		} else {
-			rb := Y
+			rb := Y;
 			Z := rb
 		}
 	}
-}}
+}
 %%
 forbid (rk = 42 && ra = 1) []

@@ -1,7 +1,7 @@
 // Section 3.2: RMW atomicity; rmw-atomicity
 x := 0;
 {
-  r1 := FADD(x, normal, rlx, rlx, 1)
+  r1 := FADD(normal, rlx, rlx, x, 1)
 } ||| {
   x := 2;
   r2 := x

@@ -6,7 +6,7 @@ z := 0;
   z := r1
 } ||| {
   r2 := z;
-  r3 := FADD(x, strong, rlx, rel, 1);
+  r3 := FADD(strong, rlx, rel, x, 1);
   y := r3 + 1
 }
 %%
