@@ -1,0 +1,39 @@
+# Build artifacts
+_build/
+*.install
+*.opam.locked
+
+# Git
+.git/
+.gitignore
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+perf.data
+tracer.txt
+
+# Test outputs
+integ.log
+integ-failed.log
+_tests/
+
+# Documentation that's not needed in container
+*.md
+!README.md
+
+# Graphs and visualizations
+*.dot
+*.png
+graph-deps.*
+graph.*

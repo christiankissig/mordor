@@ -570,7 +570,7 @@ let () =
   Printf.printf "🔮 Mordor Web - Graph Visualization\n";
   Printf.printf "🌐 http://localhost:8080\n\n";
 
-  Dream.run ~port:8080
+  Dream.run ~interface:"0.0.0.0" ~port:8080
   @@ Dream.logger
   @@ Dream.router
        [
