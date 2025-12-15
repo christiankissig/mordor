@@ -253,7 +253,7 @@ stmt_base:
     } }
 
   (* Volatile load from global pattern 2: reg := :v= global *)
-  | mode=volatile_assign_mode reg=REGISTER ASSIGN global=GLOBAL
+  | reg=REGISTER mode=volatile_assign_mode global=GLOBAL
     { let load, assign = mode in
       SGlobalLoad {
         register = reg;
@@ -287,7 +287,7 @@ stmt_base:
     } }
 
   (* Volatile pointer load pattern 2: reg :v= *expr *)
-  | mode=volatile_assign_mode reg=REGISTER ASSIGN STAR e=expr
+  | reg=REGISTER mode=volatile_assign_mode  STAR e=expr
     { let load, assign = mode in
       SLoad {
         register = reg;
@@ -296,7 +296,7 @@ stmt_base:
       } }
 
   (* Explicit pointer load: reg :mode= *expr *)
-  | reg=REGISTER ASSIGN mode=assign_mode STAR e=expr
+  | reg=REGISTER mode=assign_mode STAR e=expr
     { SLoad {
         register = reg;
         address = e;
@@ -435,9 +435,16 @@ stmt_base:
 
   (* Malloc *)
   | reg=REGISTER ASSIGN MALLOC LPAREN size=expr RPAREN
-    { SMalloc { register = reg; size; } }
+    { SRegMalloc { register = reg; size; } }
+
   | reg=REGISTER ASSIGN MALLOC size=expr
-    { SMalloc { register = reg; size; } }
+    { SRegMalloc { register = reg; size; } }
+
+  | global=GLOBAL ASSIGN MALLOC LPAREN size=expr RPAREN
+    { SGlobalMalloc { global; size; } }
+
+  | global=GLOBAL ASSIGN MALLOC size=expr
+    { SGlobalMalloc { global; size; } }
 
   (* Free *)
   | FREE LPAREN reg=REGISTER RPAREN
@@ -466,7 +473,6 @@ assign_mode:
   | COLONREL { { mode = Release; volatile = false } }
   | COLONACQ { { mode = Acquire; volatile = false } }
   | COLONSC { { mode = SC; volatile = false } }
-  | ASSIGN { { mode = Relaxed; volatile = false } }
   ;
 
 volatile_assign_mode:
@@ -530,6 +536,7 @@ expr:
   | BANG e=expr { EUnOp ("!", e) }
   | TILDE e=expr { EUnOp ("~", e) }
   | MINUS e=expr %prec BANG { EUnOp ("-", e) }
+  | AMPERSAND e=expr { EUnOp ("&", e) }
 
   | FORALL e=expr { EUnOp ("forall", e) }
 

@@ -65,7 +65,7 @@ let litmus_test_cases () =
   let files = read_litmus_files litmus_dir in
     List.map
       (fun filepath ->
-        let test_name = Filename.basename filepath in
+        let test_name = filepath in
           Alcotest.test_case test_name `Quick (test_litmus_file filepath)
       )
       files

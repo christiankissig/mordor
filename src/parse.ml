@@ -133,9 +133,12 @@ let rec convert_stmt_open ~recurse = function
             load_mode;
             assign_mode;
           }
-  | Ast.SMalloc { register; size } ->
+  | Ast.SRegMalloc { register; size } ->
       let ir_size = ast_expr_to_expr size in
-        Malloc { register; size = ir_size }
+        RegMalloc { register; size = ir_size }
+  | Ast.SGlobalMalloc { global; size } ->
+      let ir_size = ast_expr_to_expr size in
+        GlobalMalloc { global; size = ir_size }
   | Ast.SSkip -> Skip
 
 let rec convert_stmt ast_node =
@@ -146,7 +149,12 @@ let rec convert_stmt ast_node =
 let rec convert_assertion ast_assertion =
   match ast_assertion with
   | AOutcome { outcome; condition; model } ->
-      let ir_condition = ast_expr_to_expr condition in
+      (* Check if condition is the special "ub" marker *)
+      let ir_condition =
+        match condition with
+        | EGlobal "ub" -> Ir.CondUB
+        | _ -> Ir.CondExpr (ast_expr_to_expr condition)
+      in
       let ir_outcome = outcome_of_string outcome in
         Outcome { outcome = ir_outcome; condition = ir_condition; model }
   | AModel { model } -> Model { model }

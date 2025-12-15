@@ -1,11 +1,16 @@
+//TEMP FIX: globals not supported in expressions yet, thus using pointers
+//directly
 x := 0;
+//TEMP FIX p := malloc 1;
 rp := malloc(1);
 {
+  //TEMP FIX rp := p;
   *rp := 1;
   x := 1;
 } ||| {
   r2 := x;
   if (r2 = 1) {
+    //free(p);
     free(rp);
   }
 }

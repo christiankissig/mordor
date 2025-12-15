@@ -508,7 +508,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               let event' : event = add_event events evt in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
-          | Malloc { register; size } ->
+          | RegMalloc { register; size } ->
               let symbol = next_zh () in
               let rval = VSymbol symbol in
               let base_evt : event = Event.create Malloc 0 () in
@@ -517,6 +517,16 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
+                  let* cont = recurse rest env' phi events in
+                    Lwt.return (dot event' cont phi)
+          | GlobalMalloc { global; size } ->
+              let symbol = next_zh () in
+              let rval = VSymbol symbol in
+              let base_evt : event = Event.create Malloc 0 () in
+              let evt = { base_evt with rval = Some rval } in
+              let event' : event = add_event events evt in
+                Hashtbl.replace events.origin symbol event'.label;
+                let env' = Hashtbl.copy env in
                   let* cont = recurse rest env' phi events in
                     Lwt.return (dot event' cont phi)
           | Free { register } ->

@@ -424,7 +424,7 @@ let test_parse_malloc_stmt () =
   let src = "%% r0 := malloc(8)" in
   let ast = parse_litmus src in
     match List.map get_ast_stmt ast.program with
-    | [ SMalloc { register = "r0"; size = EInt _; _ } ] -> ()
+    | [ SRegMalloc { register = "r0"; size = EInt _; _ } ] -> ()
     | _ -> Alcotest.fail "Expected r0 := malloc(8)"
 
 let test_parse_free () =

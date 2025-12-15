@@ -143,11 +143,11 @@ let string_of_outcome = function
   | Allow -> "allow"
   | Forbid -> "forbid"
 
-type assertion_condition = CondExpr of expr | CondUB
+(* assertion_condition is now defined in Ir module *)
 
 type assertion = {
   outcome : ir_assertion_outcome;
-  condition : assertion_condition;
+  condition : Ir.assertion_condition;
   model : string option;
 }
 
@@ -369,7 +369,7 @@ let do_check_refinement ast =
     Outcome
       {
         outcome = Allow;
-        condition = EBinOp (ENum Z.zero, "=", ENum Z.zero);
+        condition = Ir.CondExpr (EBinOp (ENum Z.zero, "=", ENum Z.zero));
         model;
       }
   in
@@ -456,6 +456,21 @@ let check_assertion (assertion : ir_assertion) executions structure events
       Logs.info (fun m -> m "Using memory model: %s" model);
       Lwt.return { valid = true; ub = false; ub_reasons = [] }
   | Outcome { outcome; condition; model } ->
+      (* Extract the actual expression from the condition, handling UB specially *)
+      let condition_expr_opt =
+        match condition with
+        | Ir.CondUB ->
+            None (* UB condition doesn't have an expression to check *)
+        | Ir.CondExpr expr -> Some expr
+      in
+
+      (* For UB assertions, we only check for undefined behavior, not condition satisfiability *)
+      let is_ub_assertion =
+        match condition with
+        | Ir.CondUB -> true
+        | Ir.CondExpr _ -> false
+      in
+
       (* Check for no executions in exhaustive mode *)
       let%lwt () =
         if exhaustive && List.length executions = 0 then
@@ -667,35 +682,50 @@ let check_assertion (assertion : ir_assertion) executions structure events
 
                       (* Check conditions if not already satisfied *)
                       if not !curr then (
-                        let%lwt conds_satisfied =
-                          (* Check if condition contains set operations *)
-                          if has_set_operation condition then (
-                            (* Evaluate set operations directly, don't use solver *)
-                            try
-                              let set_result =
-                                eval_set_expr condition structure execution
+                        if
+                          (* For UB assertions, we don't check condition satisfiability *)
+                          is_ub_assertion
+                        then Lwt.return ()
+                        else
+                          (* Extract the expression from the condition *)
+                          match condition_expr_opt with
+                          | None ->
+                              Lwt.return
+                                () (* Should not happen for non-UB assertions *)
+                          | Some cond_expr ->
+                              let%lwt conds_satisfied =
+                                (* Check if condition contains set operations *)
+                                if has_set_operation cond_expr then (
+                                  (* Evaluate set operations directly, don't use solver *)
+                                  try
+                                    let set_result =
+                                      eval_set_expr cond_expr structure
+                                        execution
+                                    in
+                                      (* Still check rf_conditions with solver if needed *)
+                                      if List.length rf_conditions > 0 then
+                                        let%lwt rf_ok =
+                                          Solver.is_sat rf_conditions
+                                        in
+                                          Lwt.return (set_result && rf_ok)
+                                      else Lwt.return set_result
+                                  with Failure msg ->
+                                    Logs.err (fun m ->
+                                        m "Error evaluating set expression: %s"
+                                          msg
+                                    );
+                                    Lwt.return false
+                                )
+                                else
+                                  (* No set operations, use solver as normal *)
+                                  Solver.is_sat (cond_expr :: rf_conditions)
                               in
-                                (* Still check rf_conditions with solver if needed *)
-                                if List.length rf_conditions > 0 then
-                                  let%lwt rf_ok = Solver.is_sat rf_conditions in
-                                    Lwt.return (set_result && rf_ok)
-                                else Lwt.return set_result
-                            with Failure msg ->
-                              Logs.err (fun m ->
-                                  m "Error evaluating set expression: %s" msg
-                              );
-                              Lwt.return false
-                          )
-                          else
-                            (* No set operations, use solver as normal *)
-                            Solver.is_sat (condition :: rf_conditions)
-                        in
 
-                        (* Check extended assertions *)
-                        let%lwt extended_ok = Lwt.return true in
+                              (* Check extended assertions *)
+                              let%lwt extended_ok = Lwt.return true in
 
-                        curr := conds_satisfied && extended_ok;
-                        Lwt.return ()
+                              curr := conds_satisfied && extended_ok;
+                              Lwt.return ()
                       )
                       else Lwt.return ()
             )
@@ -704,7 +734,15 @@ let check_assertion (assertion : ir_assertion) executions structure events
 
         (* Compute final result *)
         let ub = List.length !ub_reasons > 0 in
-        let valid = !curr = expected in
+        (* For UB assertions, validity is based on whether UB was found *)
+        let valid =
+          if is_ub_assertion then
+            (* For "allow (ub)", valid if UB found; for "forbid (ub)", valid if no UB *)
+            ub = (outcome = Allow)
+          else
+            (* For regular assertions, check if condition was satisfied *)
+            !curr = expected
+        in
 
         Lwt.return { valid; ub; ub_reasons = List.rev !ub_reasons }
   | Chained { model; outcome; rest } ->

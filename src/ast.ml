@@ -93,7 +93,8 @@ type ast_stmt =
   | SFence of { mode : mode }
   | SLock of { global : string option }
   | SUnlock of { global : string option }
-  | SMalloc of { register : string; size : ast_expr }
+  | SRegMalloc of { register : string; size : ast_expr }
+  | SGlobalMalloc of { global : string; size : ast_expr }
   | SFree of { register : string }
   | SLabeled of { label : string list; stmt : ast_stmt }
   | SSkip
@@ -236,8 +237,10 @@ let rec stmt_to_string stmt =
         | Some g -> g
         | None -> "none"
         )
-  | SMalloc { register; size } ->
-      Printf.sprintf "SMalloc %s := malloc %s" register (expr_to_string size)
+  | SRegMalloc { register; size } ->
+      Printf.sprintf "SRegMalloc %s := malloc %s" register (expr_to_string size)
+  | SGlobalMalloc { global; size } ->
+      Printf.sprintf "SGlobalMalloc %s := malloc %s" global (expr_to_string size)
   | SFree { register } -> Printf.sprintf "SFree %s" register
   | SLabeled { label; stmt } ->
       Printf.sprintf "SLabeled [%s]: %s" (String.concat "; " label)

@@ -5,6 +5,9 @@ open Types
 type ir_assertion_outcome = Allow | Forbid
 type ir_assertion_check = { model : string; condition : ir_assertion_outcome }
 
+(* Assertion condition can be either a regular expression or the special UB marker *)
+type assertion_condition = CondExpr of expr | CondUB
+
 type 'a ir_litmus = {
   name : string;
   program : 'a ir_node list;
@@ -46,7 +49,8 @@ and 'a ir_stmt =
       load_mode : mode;
       assign_mode : mode;
     }
-  | Malloc of { register : string; size : expr }
+  | RegMalloc of { register : string; size : expr }
+  | GlobalMalloc of { global : string; size : expr }
   | Labeled of { label : string list; stmt : 'a ir_node }
   | Skip
 
@@ -56,7 +60,7 @@ and 'a ir_node = { stmt : 'a ir_stmt; annotations : 'a }
 and 'a ir_assertion =
   | Outcome of {
       outcome : ir_assertion_outcome;
-      condition : expr;
+      condition : assertion_condition;
       model : string option;
     }
   | Model of { model : string }
@@ -144,8 +148,10 @@ let rec to_string ~ann_to_string (node : 'a ir_node) : string =
           register (Expr.to_string address) (Expr.to_string operand) rmw_mode
           (Types.mode_to_string load_mode)
           (Types.mode_to_string assign_mode)
-    | Malloc { register; size } ->
+    | RegMalloc { register; size } ->
         Printf.sprintf "%s := MALLOC(%s)" register (Expr.to_string size)
+    | GlobalMalloc { global; size } ->
+        Printf.sprintf "%s := MALLOC(%s)" global (Expr.to_string size)
     | Labeled { label; stmt } ->
         Printf.sprintf "Labeled [%s]: %s" (String.concat "; " label)
           (to_string stmt)

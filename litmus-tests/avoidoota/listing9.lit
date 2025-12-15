@@ -1,25 +1,34 @@
-globalfoop := malloc(2); rglob := &globalfoop;
+//TEMP FIX: handling &global as an expression not fully supported for now
+// thus replacing allocated globals with pointers
+//TEMP FIX globalfoop := malloc(2); rglob := &globalfoop;
+rglob := malloc 2;
 *rglob := 0; *(rglob + 1) := 0;
 {
-  rfp := globalfoop.load(acq);
+  //TEMP FIX rfp := globalfoop.load(acq);
+  rfp :acq= *rglob;
   ra := *(rfp + 0);
   // rfp := globalfoop.load(acq);
   rb := *(rfp + 1);
 }|||{
   rfp2 := malloc 2;
   *(rfp2 + 0) := 1; *(rfp2 + 1) := 1;
-  globalfoop := rfp2;
+  //TEMP FIX globalfoop := rfp2;
+  *rglob := rfp2;
 }
 %% ~~> [_=forbid] %%
-globalfoop := malloc(2); rglob := globalfoop;
+//TEMP FIX globalfoop := malloc(2); rglob := globalfoop;
+rglob := malloc 2;
 *rglob := 0; *(rglob + 1) := 0;
 {
-  rfp := globalfoop.load(acq);
+  //TEMP FIX rfp := globalfoop.load(acq);
+  rfp :acq= *rglob;
   ra := *(rfp + 0);
-  rfp := globalfoop.load(acq);
+  //TEMP FIX rfp := globalfoop.load(acq);
+  rfp :acq= *rglob;
   rb := *(rfp + 1);
 }|||{
   rfp2 := malloc 2;
   *(rfp2 + 0) := 1; *(rfp2 + 1) := 1;
-  globalfoop := rfp2;
+  //TEMP FIX globalfoop := rfp2;
+  *rglob := rfp2;
 }
