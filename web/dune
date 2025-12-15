@@ -1,0 +1,19 @@
+(executable
+ (name server) ; Internal name: server.ml
+ (public_name mordor-web) ; CLI command name: "mordor-web"
+ (package mordor-web) ; Package name
+ (modules server) ; Compile server.ml
+ (flags
+  (:standard -g -w -32-33))
+ ; Debug symbols enabled, disable unused warnings
+ (libraries
+  mordor_lib ; Your existing Mordor library
+  dream ; Web framework
+  yojson ; JSON handling
+  lwt ; Async runtime
+  lwt.unix)
+ ; Unix operations
+ (preprocess
+  (pps lwt_ppx)))
+
+; Lwt syntax sugar (let*, let+, etc.)

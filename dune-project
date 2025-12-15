@@ -6,6 +6,7 @@
 (maintainers "dev@kissig.fastmail.fm")
 (license MIT)
 (using menhir 2.1)
+
 (package
  (name mordor)
  (allow_empty)
@@ -27,3 +28,16 @@
   (z3 (>= 4.8.0))
   (zarith (>= 1.12)))
  )
+
+(package
+ (name mordor-web)
+ (synopsis "Web interface for Mordor")
+ (description "Web-based visualizer for event structures and concurrent program analysis")
+ (depends
+  (ocaml (>= 5.2.0))
+  (dune (>= 3.7))
+  mordor
+  dream
+  yojson
+  lwt
+  lwt_ppx))

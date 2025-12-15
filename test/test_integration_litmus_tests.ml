@@ -4,7 +4,7 @@ open Lwt.Syntax
 
 (* Configuration *)
 let litmus_dir = "litmus-tests"
-let cli_executable = "_build/default/src/main.exe"
+let cli_executable = "_build/default/cli/main.exe"
 
 (* Read all .lit files from directory *)
 let read_litmus_files dir =

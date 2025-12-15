@@ -46,6 +46,7 @@ jobs:
       
       - name: Install dependencies
         run: |
+          sudo apt-get install -y libev-dev
           opam update
           opam depext -y mordor
           opam install . --deps-only --with-test

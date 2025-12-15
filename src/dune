@@ -42,13 +42,3 @@
  (public_name mordor)
  (preprocess
   (pps lwt_ppx)))
-
-(executable
- (name main)
- (public_name mordor)
- (modules main)
- (flags
-  (:standard -g))
- (libraries mordor_lib lwt lwt.unix)
- (preprocess
-  (pps lwt_ppx ppx_deriving.show landmarks-ppx --auto)))
