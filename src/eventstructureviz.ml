@@ -104,8 +104,7 @@ module EventStructureViz = struct
                   | _ ->
                       clause
                       |> List.map Expr.to_string
-                      |> String.concat
-                           " ∧ " (* Use conjunction symbol for readability *)
+                      |> String.concat " AND " (* ASCII instead of Unicode *)
                 in
 
                 let edge =
@@ -252,7 +251,7 @@ module EventStructureViz = struct
         label_lines
         @ [
             Printf.sprintf "φ: %s"
-              (String.concat "∧" (List.map Expr.to_string v.V.constraints));
+              (String.concat " AND " (List.map Expr.to_string v.V.constraints));
           ]
       in
 
@@ -291,6 +290,26 @@ module EventStructureViz = struct
       Format.pp_print_flush fmt ();
       Buffer.contents buf
 
+  (** Proper JSON string escaping *)
+  let json_escape s =
+    let buf = Buffer.create (String.length s * 2) in
+      String.iter
+        (fun c ->
+          match c with
+          | '"' -> Buffer.add_string buf "\\\""
+          | '\\' -> Buffer.add_string buf "\\\\"
+          | '\b' -> Buffer.add_string buf "\\b"
+          | '\012' -> Buffer.add_string buf "\\f"
+          | '\n' -> Buffer.add_string buf "\\n"
+          | '\r' -> Buffer.add_string buf "\\r"
+          | '\t' -> Buffer.add_string buf "\\t"
+          | c when int_of_char c < 0x20 ->
+              Buffer.add_string buf (Printf.sprintf "\\u%04x" (int_of_char c))
+          | c -> Buffer.add_char buf c
+        )
+        s;
+      Buffer.contents buf
+
   (** Export to JSON format *)
   let to_json (g : G.t) : string =
     let buf = Buffer.create 1024 in
@@ -325,7 +344,7 @@ module EventStructureViz = struct
           (* Add location if present *)
           ( match evt.loc with
           | Some loc ->
-              let loc_str = String.escaped (Expr.to_string loc) in
+              let loc_str = json_escape (Expr.to_string loc) in
                 Buffer.add_string buf
                   (Printf.sprintf ",\n      \"location\": \"%s\"" loc_str)
           | None -> ()
@@ -336,7 +355,7 @@ module EventStructureViz = struct
             Buffer.add_string buf ",\n      \"constraints\": [";
             List.iteri
               (fun j c ->
-                let c_str = String.escaped (Expr.to_string c) in
+                let c_str = json_escape (Expr.to_string c) in
                   Buffer.add_string buf (Printf.sprintf "\"%s\"" c_str);
                   if j < List.length v.Vertex.constraints - 1 then
                     Buffer.add_string buf ", "
@@ -369,7 +388,9 @@ module EventStructureViz = struct
               | PPO preds -> ("ppo - " ^ preds, "purple")
               | RF preds -> ("rf - " ^ preds, "brown")
             in
-              edges := (src, dst, edge_type, color) :: !edges
+            (* Escape edge type string which may contain predicates *)
+            let edge_type_escaped = json_escape edge_type in
+              edges := (src, dst, edge_type_escaped, color) :: !edges
           )
           g;
         let edges = List.rev !edges in
@@ -398,30 +419,38 @@ module EventStructureViz = struct
   (** Write visualization to file *)
   let write_to_file (filename : string) (format : output_mode)
       (structure : symbolic_event_structure)
-      (executions : symbolic_execution USet.t option) : unit =
+      (executions : symbolic_execution USet.t option) : string option =
     let g = build_graph structure executions in
       match format with
       | Dot ->
           if filename = "stdout" then (
             let dot_content = to_dot g in
               Printf.printf "%s\n" dot_content;
-              flush stdout
+              flush stdout;
+              Some dot_content
           )
           else
             let oc = open_out filename in
               DotExport.output_graph oc g;
-              close_out oc
+              close_out oc;
+              Some (to_dot g)
       | Json ->
           let content = to_json g in
             if filename = "stdout" then (
               Printf.printf "%s\n" content;
-              flush stdout
+              flush stdout;
+              Some content
             )
             else
               let oc = open_out filename in
                 output_string oc content;
-                close_out oc
-      | _ -> Logs.err (fun m -> m "Unsupported output format for visualization.")
+                close_out oc;
+                Some content
+      | _ ->
+          Logs.err (fun m ->
+              m "Unsupported output format for\n      visualization."
+          );
+          None
 end
 
 let step_visualize_event_structure (lwt_ctx : mordor_ctx Lwt.t) :
@@ -430,14 +459,17 @@ let step_visualize_event_structure (lwt_ctx : mordor_ctx Lwt.t) :
 
   match ctx.structure with
   | Some structure ->
-      EventStructureViz.write_to_file ctx.output_file ctx.output_mode structure
-        ctx.executions;
+      let output =
+        EventStructureViz.write_to_file ctx.output_file ctx.output_mode
+          structure ctx.executions
+      in
+        ctx.output <- output;
 
-      Logs.info (fun m ->
-          m "Event structure visualization written to %s" ctx.output_file
-      );
+        Logs.info (fun m ->
+            m "Event structure visualization written to %s" ctx.output_file
+        );
 
-      Lwt.return ctx
+        Lwt.return ctx
   | _ ->
       Logs.err (fun m ->
           m "Event structure or events not available for visualization."

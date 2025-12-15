@@ -4,7 +4,7 @@
  (package mordor-web) ; Package name
  (modules server) ; Compile server.ml
  (flags
-  (:standard -g -w -32-33))
+  (:standard -g -w -32-33 -w -26))
  ; Debug symbols enabled, disable unused warnings
  (libraries
   mordor_lib ; Your existing Mordor library

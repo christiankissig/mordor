@@ -125,6 +125,8 @@ OCAML_LANDMARKS=on dune exec mordor
 
 ## Running
 
+Run the CLI with
+
 ```bash
 dune exec mordor
 ```
@@ -133,6 +135,12 @@ with stacktraces
 
 ```bash
 OCAMLRUNPARAM=b dune exec mordor
+```
+
+Run the Web interface with
+
+```bash
+dune exec mordor-web
 ```
 
 ## Testing
