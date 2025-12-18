@@ -6,9 +6,9 @@ open Futures
 open Types
 
 (* Helper function to create a symbolic execution for testing *)
-let make_test_exec ex_e rf dp ppo ex_rmw ex_p fix_rf_map pointer_map :
+let make_test_exec ex_e rf dp ppo ex_rmw ex_p fix_rf_map pointer_map final_env :
     symbolic_execution =
-  { ex_e; rf; dp; ppo; ex_rmw; ex_p; fix_rf_map; pointer_map }
+  { ex_e; rf; dp; ppo; ex_rmw; ex_p; fix_rf_map; pointer_map; final_env }
 
 (* Helper to create minimal test execution with just events and relations *)
 let make_simple_exec events rf dp ppo =
@@ -17,6 +17,8 @@ let make_simple_exec events rf dp ppo =
     [] (* ex_p *)
     (Hashtbl.create 10) (* fix_rf_map *)
     None (* pointer_map *)
+    (Hashtbl.create 10)
+(* final_env *)
 
 (* Custom testable for int USet.t *)
 let int_uset_testable =

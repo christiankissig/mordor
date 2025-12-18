@@ -3,6 +3,13 @@ open Eventstructures
 
 (** Execution generation for symbolic memory model checking *)
 
+module Execution : sig
+  type t = symbolic_execution
+
+  val contains : t -> t -> bool
+  val to_string : t -> string
+end
+
 (** {1 Types} *)
 
 (** Result of freezing a justification combination with an RF relation *)

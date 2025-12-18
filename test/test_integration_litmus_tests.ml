@@ -226,7 +226,7 @@ let litmus_test_cases ~strict =
   in
     List.map
       (fun filepath ->
-        let test_name = Filename.basename filepath in
+        let test_name = filepath in
           Alcotest.test_case test_name `Quick (test_fn filepath)
       )
       files

@@ -435,7 +435,7 @@ class GraphVisualizer {
 
                 // Build label based on available data
                 if (n.type && n.location) {
-                    label = n.type + '(' + n.location + ')';
+                    label = n.label + ":" + n.type + '(' + n.location + ')';
                 } else if (n.type) {
                     label = n.type;
                 } else if (n.label !== undefined && n.label !== null) {
@@ -565,7 +565,22 @@ new GraphVisualizer();
 </body>
 </html>|}
 
+(* Add this function before the main function *)
+let setup_logs () =
+  let pp_header ppf (l, h) =
+    let timestamp = Unix.gettimeofday () in
+    let tm = Unix.localtime timestamp in
+      Format.fprintf ppf "[%02d:%02d:%02d.%03d] %a: " tm.Unix.tm_hour
+        tm.Unix.tm_min tm.Unix.tm_sec
+        (int_of_float ((timestamp -. floor timestamp) *. 1000.))
+        Logs_fmt.pp_header (l, h)
+  in
+  let reporter = Logs_fmt.reporter ~pp_header () in
+    Logs.set_reporter reporter;
+    Logs.set_level (Some Logs.Debug)
+
 let () =
+  setup_logs ();
   Printexc.record_backtrace true;
   Printf.printf "🔮 Mordor Web - Graph Visualization\n";
   Printf.printf "🌐 http://localhost:8080\n\n";

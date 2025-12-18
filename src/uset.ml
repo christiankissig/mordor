@@ -227,6 +227,7 @@ module URelation : sig
   val pi_1 : 'a t -> 'a USet.t
   val pi_2 : 'a t -> 'a USet.t
   val adjacency_map : 'a t -> ('a, 'a USet.t) Hashtbl.t
+  val adjacency_list_map : 'a t -> ('a, 'a list) Hashtbl.t
 end = struct
   type 'a t = ('a * 'a) USet.t
 
@@ -357,6 +358,18 @@ end = struct
         (fun (from, to_) ->
           let set = Hashtbl.find tree from in
             USet.add set to_ |> ignore
+        )
+        rel;
+      tree
+
+  (* Build adjacency list map for program order *)
+  let adjacency_list_map rel =
+    let tree = Hashtbl.create 256 in
+      USet.iter (fun e -> Hashtbl.add tree e []) (pi_1 rel);
+      USet.iter
+        (fun (from, to_) ->
+          let lst = Hashtbl.find tree from in
+            Hashtbl.replace tree from (to_ :: lst)
         )
         rel;
       tree

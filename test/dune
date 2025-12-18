@@ -44,4 +44,4 @@
  (libraries mordor_lib lwt lwt.unix z3 zarith core str alcotest unix)
  (preprocess
   (pps lwt_ppx))
- (deps ../src/main.exe))
+ (deps ../cli/main.exe))

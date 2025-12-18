@@ -1,26 +1,6 @@
 open Uset
 
-(** {1 Event Types} *)
-
-(** Types of memory and control flow events *)
-type event_type =
-  | Read
-  | Write
-  | Lock
-  | Unlock
-  | Fence
-  | Init
-  | Branch
-  | Loop
-  | Malloc
-  | Free
-  | RMW
-  | CRMW
-
-(** Convert event type to string representation *)
-val event_type_to_string : event_type -> string
-
-(** {1 Memory Ordering Modes} *)
+(** {1 Basic Types} *)
 
 (** Memory ordering modes for atomic operations *)
 type mode =
@@ -32,12 +12,35 @@ type mode =
   | Normal
   | Strong
   | Nonatomic
+[@@deriving show]
+
+(** Types of memory and control flow events *)
+type event_type =
+  | Read
+  | Write
+  | Lock
+  | Unlock
+  | Fence
+  | Init
+  | Terminal
+  | Branch
+  | Loop
+  | Malloc
+  | Free
+  | RMW
+  | CRMW
+[@@deriving show]
+
+(** {1 Conversion Functions} *)
 
 (** Convert mode to string representation *)
 val mode_to_string : mode -> string
 
 (** Convert mode to string, returning empty string for Relaxed *)
 val mode_to_string_or : mode -> string
+
+(** Convert event type to string representation *)
+val event_type_to_string : event_type -> string
 
 (** {1 Unicode Symbols} *)
 
@@ -120,6 +123,7 @@ type event = {
   hide : bool;
   quot : int option;
 }
+[@@deriving show]
 
 (** {1 Symbolic Event Structure} *)
 
@@ -135,7 +139,7 @@ type symbolic_event_structure = {
   cas_groups : (int, int list * expr list uset) Hashtbl.t;
   pwg : expr list;
   fj : (int * int) uset;
-  p : (string * string) uset;
+  p : (int, (string, expr) Hashtbl.t) Hashtbl.t;
   constraint_ : expr list;
   conflict : (int * int) uset;
   origin : (string, int) Hashtbl.t; (* Origin mapping for symbols *)
@@ -149,6 +153,7 @@ type symbolic_event_structure = {
   malloc_events : int uset;
   free_events : int uset;
 }
+[@@deriving show]
 
 (** {1 Function Maps} *)
 
@@ -175,19 +180,20 @@ type justification = {
   w : event; (* The write event being justified *)
   op : string * justification option * expr option; (* Operation tag *)
 }
+[@@deriving show]
 
 (** Symbolic Execution *)
 type symbolic_execution = {
-  ex_e : int uset; [@printer pp_int_uset] (* Event set *)
-  rf : (int * int) uset; [@printer pp_pair_uset] (* Reads-from relation *)
-  dp : (int * int) uset; [@printer pp_pair_uset] (* Dependencies *)
-  ppo : (int * int) uset; [@printer pp_pair_uset] (* Preserved program order *)
-  ex_rmw : (int * int) uset; [@printer pp_pair_uset] (* RMW pairs *)
+  ex_e : int uset; (* Event set *)
+  rf : (int * int) uset; (* Reads-from relation *)
+  dp : (int * int) uset; (* Dependencies *)
+  ppo : (int * int) uset; (* Preserved program order *)
+  ex_rmw : (int * int) uset; (* RMW pairs *)
   ex_p : expr list; [@opaque] (* Predicates *)
-  fix_rf_map : (string, expr) Hashtbl.t; [@opaque] (* Fixed RF mappings *)
-  pointer_map : (int, value_type) Hashtbl.t option; [@opaque]
-      (* Pointer
+  fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
+  pointer_map : (int, value_type) Hashtbl.t option; (* Pointer
   mappings *)
+  final_env : (string, expr) Hashtbl.t;
 }
 [@@deriving show]
 

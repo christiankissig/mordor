@@ -9,7 +9,7 @@ open Printf
 module ModeOps = struct
   let to_string_or = function
     | Relaxed -> ""
-    | m -> mode_to_string m
+    | m -> show_mode m
 
   let checked_read = function
     | Relaxed -> Relaxed
@@ -183,6 +183,7 @@ end = struct
     | Write -> e.wmod
     | Fence -> e.fmod
     | Init -> e.wmod
+    | Terminal -> Relaxed (* TODO: is this correct? *)
     | Lock | Unlock -> Relaxed
     | Malloc | Branch | Loop | Free -> Relaxed
     | RMW | CRMW -> failwith "RMW/CRMW order not directly accessible"
@@ -275,7 +276,8 @@ end = struct
       let volatile_prefix = if e.volatile then "v" else "" in
       let main_str =
         match e.typ with
-        | Init -> ""
+        | Init -> "Init"
+        | Terminal -> "Terminal"
         | Read ->
             sprintf "R%s %s %s"
               (ModeOps.to_string_or e.rmod)

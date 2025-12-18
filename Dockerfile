@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for Mordor Web Application
-# Optimized with better layer caching
+# Fixed to ensure Z3 version consistency
 
 # Stage 1: Build environment
 FROM ocaml/opam:debian-12-ocaml-5.2 AS builder
@@ -15,10 +15,23 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     python3 \
     python3-pip \
-    z3 libz3-dev \
     curl \
     ca-certificates \
+    cmake \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+# Build Z3 from source to ensure version compatibility
+WORKDIR /tmp
+RUN git clone --depth 1 --branch z3-4.13.0 https://github.com/Z3Prover/z3.git && \
+    cd z3 && \
+    python3 scripts/mk_make.py --prefix=/usr/local && \
+    cd build && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd / && \
+    rm -rf /tmp/z3
 
 # Switch to opam user
 USER opam
@@ -52,10 +65,17 @@ RUN apt-get update && apt-get install -y \
     libgmp10 \
     libffi8 \
     libev4 \
-    z3 libz3-dev \
     curl \
     ca-certificates \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy Z3 libraries from builder stage
+COPY --from=builder /usr/local/lib/libz3.so* /usr/local/lib/
+COPY --from=builder /usr/local/bin/z3 /usr/local/bin/z3
+
+# Update library cache
+RUN ldconfig
 
 # Create app user
 RUN useradd -m -s /bin/bash mordor

@@ -14,14 +14,17 @@ let test_build_combinations =
 
         let sum combo = List.fold_left (fun a b -> a + b) 0 combo in
 
-        let[@warning "-27"] check_partial_combo combo ?alternatives just =
-          Lwt.return (sum combo + just < 15)
+        let[@warning "-27"] check_partial_combo combo ?alternatives pair =
+          Lwt.return (sum (List.map snd combo) + snd pair < 15)
         in
-        let check_final_combo combo = Lwt.return (sum combo < 15) in
+        let check_final_combo combo =
+          Lwt.return (sum (List.map snd combo) < 15)
+        in
           let* combos =
             ListMapCombinationBuilder.build_combinations listmap [ 1; 2; 3 ]
               check_partial_combo check_final_combo
           in
+          let combos = List.map (List.map snd) combos in
             check int "Number of combinations" 10 (List.length combos);
             check bool "[2;4;6] is a valid combination" true
               (List.mem [ 2; 4; 6 ] combos);

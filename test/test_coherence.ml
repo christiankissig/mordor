@@ -63,6 +63,7 @@ let make_empty_execution () =
     ex_p = [];
     fix_rf_map = Hashtbl.create 10;
     pointer_map = Hashtbl.create 10 |> Option.some;
+    final_env = Hashtbl.create 0;
   }
 
 (** Test helper: create uset from list *)
@@ -206,7 +207,7 @@ let test_imm_coherent_simple () =
       cas_groups = Hashtbl.create 10;
       pwg = [];
       fj = USet.create ();
-      p = USet.create ();
+      p = Hashtbl.create 10;
       constraint_ = [];
       conflict = USet.create ();
       origin = Hashtbl.create 10;
@@ -230,6 +231,7 @@ let test_imm_coherent_simple () =
       ex_p = [];
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
+      final_env = Hashtbl.create 0;
     }
   in
   let loc_restrict x = x in
@@ -264,7 +266,7 @@ let test_rc11_coherent_simple () =
       cas_groups = Hashtbl.create 10;
       pwg = [];
       fj = USet.create ();
-      p = USet.create ();
+      p = Hashtbl.create 10;
       constraint_ = [];
       conflict = USet.create ();
       origin = Hashtbl.create 10;
@@ -288,6 +290,7 @@ let test_rc11_coherent_simple () =
       ex_p = [];
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
+      final_env = Hashtbl.create 0;
     }
   in
   let loc_restrict x = x in
@@ -328,7 +331,7 @@ let test_imm_coherent_rmw () =
       cas_groups = Hashtbl.create 10;
       pwg = [];
       fj = USet.create ();
-      p = USet.create ();
+      p = Hashtbl.create 10;
       constraint_ = [];
       conflict = USet.create ();
       origin = Hashtbl.create 10;
@@ -352,6 +355,7 @@ let test_imm_coherent_rmw () =
       ex_p = [];
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
+      final_env = Hashtbl.create 0;
     }
   in
   let loc_restrict x = x in
@@ -382,7 +386,7 @@ let test_cache_types () =
       cas_groups = Hashtbl.create 10;
       pwg = [];
       fj = USet.create ();
-      p = USet.create ();
+      p = Hashtbl.create 10;
       constraint_ = [];
       conflict = USet.create ();
       origin = Hashtbl.create 10;
@@ -406,6 +410,7 @@ let test_cache_types () =
       ex_p = [];
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
+      final_env = Hashtbl.create 0;
     }
   in
   let loc_restrict x = x in

@@ -3,8 +3,9 @@ open Lwt.Syntax
 module ListMapCombinationBuilder = struct
   let build_combinations (type a) (listmap : (int, a list) Hashtbl.t)
       (keys : int list)
-      (check_partial_combo : a list -> ?alternatives:a list -> a -> bool Lwt.t)
-      (check_final_combo : a list -> bool Lwt.t) =
+      (check_partial_combo :
+        (int * a) list -> ?alternatives:a list -> int * a -> bool Lwt.t
+        ) (check_final_combo : (int * a) list -> bool Lwt.t) =
     let rec combine_and_check combinations keys =
       match keys with
       | [] -> Lwt_list.filter_s check_final_combo combinations
@@ -20,13 +21,15 @@ module ListMapCombinationBuilder = struct
                 let* filtered =
                   Lwt_list.filter_s
                     (fun combo ->
-                      check_partial_combo combo ~alternatives:justs just
+                      check_partial_combo combo ~alternatives:justs (key, just)
                     )
                     combinations
                 in
                 (* OPTIMIZATION 3: Use cons (::) instead of append (@) *)
                 (* Reverse the list once at the end instead of maintaining order *)
-                let extended = List.map (fun combo -> just :: combo) filtered in
+                let extended =
+                  List.map (fun combo -> (key, just) :: combo) filtered
+                in
                   (* OPTIMIZATION 4: Use rev_append for efficient concatenation *)
                   Lwt.return (List.rev_append extended acc)
               )

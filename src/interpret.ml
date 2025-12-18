@@ -42,12 +42,20 @@ let next_zh () =
     let base = String.sub zh_alpha (idx * 3) 3 in
       if suffix = 0 then base else base ^ string_of_int suffix
 
-(** Events collection *)
+(** Structure tracking events globally.
+
+    This improves efficiency as events and symbols (and thus origins) are
+    enumerated from the start of the program, but event structures are
+    constructed from the end as continuations. Thus creating the event and
+    origin tables at the end requires repeated merging. The last labels are
+    anyways defined inductively from the start. *)
 type events_t = {
   (* events indexed by label *)
   events : (int, event) Hashtbl.t;
   (* origin mapping for symbols *)
   origin : (string, int) Hashtbl.t;
+  (* p tracks the register environment at each event label *)
+  env_by_evt : (int, (string, expr) Hashtbl.t) Hashtbl.t;
   mutable label : int;
   mutable van : int;
 }
@@ -56,17 +64,19 @@ let create_events () =
   {
     events = Hashtbl.create 256;
     origin = Hashtbl.create 256;
+    env_by_evt = Hashtbl.create 256;
     label = 0;
     van = 0;
   }
 
-let add_event (events : events_t) event =
+let add_event (events : events_t) event env =
   let lbl = events.label in
     events.label <- events.label + 1;
     let v = events.van in
       events.van <- events.van + 1;
       let event' : event = { event with label = lbl; van = v } in
         Hashtbl.replace events.events lbl event';
+        Hashtbl.replace events.env_by_evt lbl (Hashtbl.copy env);
         event'
 
 (** Symbolic Event Structure builders *)
@@ -149,7 +159,8 @@ let plus a b : symbolic_event_structure =
       cas_groups = a.cas_groups;
       pwg = a.pwg @ b.pwg;
       fj = USet.union a.fj b.fj;
-      p = USet.union a.p b.p;
+      p = Hashtbl.create 0;
+      (* TODO value not needed here *)
       constraint_ = a.constraint_ @ b.constraint_;
       conflict =
         USet.union (URelation.cross a.e b.e) (USet.union a.conflict b.conflict);
@@ -180,7 +191,8 @@ let cross a b : symbolic_event_structure =
       cas_groups = a.cas_groups;
       pwg = a.pwg @ b.pwg;
       fj = USet.union a.fj b.fj;
-      p = USet.union a.p b.p;
+      p = Hashtbl.create 0;
+      (* TODO value not needed here *)
       constraint_ = a.constraint_ @ b.constraint_;
       conflict = USet.union a.conflict b.conflict;
       (* a and b share the same origin table *)
@@ -208,7 +220,8 @@ let empty_structure () : symbolic_event_structure =
     cas_groups = Hashtbl.create 16;
     pwg = [];
     fj = USet.create ();
-    p = USet.create ();
+    p = Hashtbl.create 0;
+    (* TODO value not needed here *)
     constraint_ = [];
     conflict = USet.create ();
     origin = Hashtbl.create 16;
@@ -243,14 +256,35 @@ let add_rmw_edge (structure : symbolic_event_structure) (er : int) (ew : int) =
     rmw = USet.add (structure : symbolic_event_structure).rmw (er, ew);
   }
 
+(** Interprets programs as lists of IR nodes depth-first using open recursion.
+
+    The [recurse] argument is the interpretation function to use for recursive
+    calls. The [add_event] argument is the function to use to add events to the
+    global event table.
+
+    The [env] argument is the current register environment mapping registers to
+    expressions. The [phi] argument is the current path condition as a list of
+    expressions. The [events] argument is the global events table being built.
+
+    Returns a symbolic event structure representing the interpreted program
+    fragment. *)
 let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
     events =
   (* note that negative step counters are treated as infinite steps *)
   match nodes with
   | [] ->
       let structure = empty_structure () in
-        Lwt.return
-          { structure with events = events.events; origin = events.origin }
+      let terminal_evt = Event.create Terminal 0 () in
+      let terminal_evt : event = add_event events terminal_evt env in
+      let cont =
+        {
+          structure with
+          events = events.events;
+          origin = events.origin;
+          p = events.env_by_evt;
+        }
+      in
+        Lwt.return (dot terminal_evt cont phi)
   | node :: rest ->
       let stmt = Ir.get_stmt node in
         let* structure =
@@ -290,7 +324,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = assign.volatile;
                 }
               in
-              let event' : event = add_event events evt in
+              let event' : event = add_event events evt env in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | DerefStore { address; expr; assign } ->
@@ -304,7 +338,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = assign.volatile;
                 }
               in
-              let event' : event = add_event events evt in
+              let event' : event = add_event events evt env in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | DerefLoad { register; address; load } ->
@@ -320,7 +354,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = load.volatile;
                 }
               in
-              let event' : event = add_event events evt in
+              let event' : event = add_event events evt env in
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
@@ -340,7 +374,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = load.volatile;
                 }
               in
-              let event' : event = add_event events evt in
+              let event' : event = add_event events evt env in
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
@@ -361,7 +395,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = false;
                 }
               in
-              let event_load' : event = add_event events evt_load in
+              let event_load' : event = add_event events evt_load env in
                 Hashtbl.replace events.origin symbol event_load'.label;
                 let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
                 let result_expr =
@@ -379,7 +413,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                     volatile = false;
                   }
                 in
-                let event_store' : event = add_event events evt_store in
+                let event_store' : event = add_event events evt_store env in
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register result_expr;
                   let* cont = recurse rest env' phi events in
@@ -402,7 +436,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = false;
                 }
               in
-              let event_load' : event = add_event events evt_load in
+              let event_load' : event = add_event events evt_load env in
                 Hashtbl.replace events.origin symbol event_load'.label;
                 let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
                 let expected_expr =
@@ -420,7 +454,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                     cond = Some cond_expr;
                   }
                 in
-                let event_store' : event = add_event events evt_store in
+                let event_store' : event = add_event events evt_store env in
 
                 let phi_succ = cond_expr :: phi in
                 let phi_fail = Expr.unop "!" cond_expr :: phi in
@@ -485,7 +519,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
           | Fence { mode } ->
               let base_evt : event = Event.create Fence 0 () in
               let evt = { base_evt with fmod = mode } in
-              let event' : event = add_event events evt in
+              let event' : event = add_event events evt env in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | Lock { global } ->
@@ -495,7 +529,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 | Some g -> { base_evt with id = Some (VVar g) }
                 | None -> base_evt
               in
-              let event' : event = add_event events evt in
+              let event' : event = add_event events evt env in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | Unlock { global } ->
@@ -505,15 +539,16 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 | Some g -> { base_evt with id = Some (VVar g) }
                 | None -> base_evt
               in
-              let event' : event = add_event events evt in
+              let event' : event = add_event events evt env in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | RegMalloc { register; size } ->
               let symbol = next_zh () in
               let rval = VSymbol symbol in
+              let loc = ESymbol symbol in
               let base_evt : event = Event.create Malloc 0 () in
-              let evt = { base_evt with rval = Some rval } in
-              let event' : event = add_event events evt in
+              let evt = { base_evt with rval = Some rval; loc = Some loc } in
+              let event' : event = add_event events evt env in
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
@@ -522,17 +557,19 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
           | GlobalMalloc { global; size } ->
               let symbol = next_zh () in
               let rval = VSymbol symbol in
+              let loc = ESymbol symbol in
               let base_evt : event = Event.create Malloc 0 () in
-              let evt = { base_evt with rval = Some rval } in
-              let event' : event = add_event events evt in
+              let evt = { base_evt with rval = Some rval; loc = Some loc } in
+              let event' : event = add_event events evt env in
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   let* cont = recurse rest env' phi events in
                     Lwt.return (dot event' cont phi)
           | Free { register } ->
               let base_evt : event = Event.create Free 0 () in
-              let evt = base_evt in
-              let event' : event = add_event events evt in
+              let loc = Hashtbl.find_opt env register in
+              let evt = { base_evt with loc } in
+              let event' : event = add_event events evt env in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | Skip ->
@@ -561,14 +598,19 @@ let interpret_generic ~stmt_semantics stmts defacto restrictions constraint_ =
 
   let init_event = Event.create Init 0 () in
   let init_event' =
-    add_event events { (Event.create Init 4 ()) with label = 0 }
+    add_event events { (Event.create Init 4 ()) with label = 0 } env
   in
 
   let* structure = stmt_semantics stmts env [] events in
   (* prefix with init event *)
   let structure' = dot init_event' structure [] in
   let structure'' =
-    { structure' with events = events.events; origin = events.origin }
+    {
+      structure' with
+      events = events.events;
+      origin = events.origin;
+      p = events.env_by_evt;
+    }
   in
 
   Lwt.return (structure'', events.events)

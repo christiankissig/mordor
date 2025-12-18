@@ -81,6 +81,7 @@ module TestSetMembership = struct
         ex_p = [];
         fix_rf_map = Hashtbl.create 0;
         pointer_map = Some (Hashtbl.create 0);
+        final_env = Hashtbl.create 0;
       }
 
   (** Helper to create minimal structure *)
@@ -96,7 +97,7 @@ module TestSetMembership = struct
       cas_groups = Hashtbl.create 0;
       pwg = [];
       fj = USet.create ();
-      p = USet.create ();
+      p = Hashtbl.create 0;
       constraint_ = [];
       conflict = USet.create ();
       origin = Hashtbl.create 0;

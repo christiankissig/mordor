@@ -31,6 +31,8 @@ end
 module ExecutionCache = Hashtbl.Make (ExecutionCacheKey)
 
 module Execution = struct
+  type t = symbolic_execution
+
   (** [exec1 exec2] Check if exec1 contains exec2, i.e. exec1 is a refinement of
       exec2.
 
@@ -49,6 +51,41 @@ module Execution = struct
          && USet.equal exec1.ppo exec2.ppo
          && USet.equal exec1.dp exec2.dp
          )
+
+  let to_string exec =
+    let pp_uset_pair uset =
+      let pairs =
+        USet.values uset
+        |> List.map (fun (a, b) -> Printf.sprintf "(%d, %d)" a b)
+      in
+        "{" ^ String.concat ", " pairs ^ "}"
+    in
+      Printf.sprintf
+        "E: {%s}\n\
+         DP: %s\n\
+         PPO: %s\n\
+         RF: %s\n\
+         RMW: %s\n\
+         PP: [%s]\n\
+         FixRFMap: %s\n\
+         PointerMap: %s\n"
+        (String.concat ", " (List.map string_of_int (USet.values exec.ex_e)))
+        (pp_uset_pair exec.dp) (pp_uset_pair exec.ppo) (pp_uset_pair exec.rf)
+        (pp_uset_pair exec.ex_rmw)
+        (String.concat ", " (List.map Expr.to_string exec.ex_p))
+        (Hashtbl.fold
+           (fun k v acc -> acc ^ k ^ " -> " ^ Expr.to_string v ^ "; ")
+           exec.fix_rf_map ""
+        )
+        ( match exec.pointer_map with
+        | Some pm ->
+            Hashtbl.fold
+              (fun k v acc ->
+                acc ^ string_of_int k ^ " -> " ^ Value.to_string v ^ "; "
+              )
+              pm ""
+        | None -> "None"
+        )
 end
 
 (** Create disjoint predicate for two (location, value) pairs *)
@@ -104,7 +141,12 @@ module JustValidation = struct
 
   (* Check partial combination of justifications for early pruning. *)
   let check_partial_combo structure (path : path_info)
-      (combo : justification list) ?(alternatives = []) (just : justification) =
+      (combo : (int * justification) list) ?(alternatives = [])
+      (pair : int * justification) =
+    (* conduit code between pair-based and tuple output *)
+    let w, just = pair in
+    let combo = List.map snd combo in
+
     let ( let*? ) (condition, msg) f =
       if condition then f () else Lwt.return false
     in
@@ -196,8 +238,11 @@ module JustValidation = struct
           Lwt.return true
 
   (* Check final combination of justifications for validity. *)
-  let check_final_combo structure (path : path_info) (combo : justification list)
-      =
+  let check_final_combo structure (path : path_info)
+      (combo : (int * justification) list) =
+    (* conduit code between pair-based and tuple output *)
+    let combo = List.map snd combo in
+
     let ( let*? ) (condition, msg) f =
       if condition then f () else Lwt.return false
     in
@@ -285,20 +330,21 @@ end
 module FreezeResultCache = Hashtbl.Make (FreezeResultCacheKey)
 
 (** Compute atomicity pairs for a path given rhb and env_rf *)
-
 let atomicity_pairs structure path rhb p =
-  (* Compute atomicity pairs AF *)
+  (* Compute atomicity pairs AF - matching JS implementation *)
   let e_set = path.path in
-  let read_events = USet.intersection structure.read_events e_set in
   let malloc_events = USet.intersection structure.malloc_events e_set in
-  let a = USet.union read_events malloc_events in
+  let free_events = USet.intersection structure.free_events e_set in
+  (* Only compute pairs from malloc events, not reads *)
+  let a = malloc_events in
   let a_squared = URelation.cross a a in
 
   USet.async_filter
     (fun (e_1, e_2) ->
-      if not (USet.mem structure.po (e_1, e_2)) then Lwt.return_false
+      (* Match JS: e_1 < e_2 instead of checking po *)
+      if e_1 >= e_2 then Lwt.return_false
       else
-        (* Check if there's no intermediate event between e_1 and e_2 *)
+        (* Check if there's no intermediate FREE event between e_1 and e_2 *)
         let* has_intermediate =
           USet.async_exists
             (fun ep ->
@@ -312,7 +358,7 @@ let atomicity_pairs structure path rhb p =
                 | None, _ | _, None -> Lwt.return_false
                 | Some loc_e1, Some loc_ep -> Solver.exeq ~state:p loc_e1 loc_ep
             )
-            e_set
+            free_events
         in
           Lwt.return (not has_intermediate)
     )
@@ -379,6 +425,21 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
       (List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list)
   in
 
+  Logs.debug (fun m -> m "  Delta has %d edges" (USet.size delta));
+  Logs.debug (fun m ->
+      m "  RF has %d edges: %s" (USet.size rf)
+        (String.concat ", "
+           (List.map
+              (fun (w, r) -> Printf.sprintf "(%d -> %d)" w r)
+              (USet.values rf)
+           )
+        )
+  );
+  Logs.debug (fun m ->
+      m "  Read events %s"
+        (String.concat ", " (List.map string_of_int (USet.values read_events)))
+  );
+
   let*? () =
     (RFValidation.check_rf_elided rf delta, "RF fails RF elided check")
   in
@@ -415,47 +476,114 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
       )
     in
     let big_p_exprs = p_combined @ env_rf @ check_rf in
-    let big_p =
-      List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs
-    in
-      (* atomicity constraint *)
-      let* af = atomicity_pairs structure path rhb env_rf in
-
-      (* Create disjointness predicates *)
-      (* TODO why ?
-      let disj =
-        USet.map
-          (fun (a, b) ->
-            let loc_a = get_loc structure.events a |> Option.get in
-            let val_a = get_val structure.events a |> Option.get in
-            let loc_b = get_loc structure.events b |> Option.get in
-            let val_b = get_val structure.events b |> Option.get in
-              (* disjoint only uses location *)
-              disjoint (loc_a, val_a) (loc_b, val_b)
-          )
-          af
-        |> USet.values
+      Logs.debug (fun m ->
+          m "  Evaluating %d combined predicates\n\t%s" (List.length big_p_exprs)
+            (String.concat "\n\t" (List.map Expr.to_string big_p_exprs))
+      );
+      let big_p =
+        List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs
       in
+        Logs.debug (fun m ->
+            m "  Evaluated predicates:\n\t%s"
+              (String.concat "\n\t" (List.map Expr.to_string big_p))
+        );
+        (* atomicity constraint *)
+        let* af = atomicity_pairs structure path rhb env_rf in
+          Logs.debug (fun m ->
+              m "  Found %d atomicity pairs\n%s" (USet.size af)
+                (String.concat "\n\t"
+                   (List.map
+                      (fun (a, b) -> Printf.sprintf "(%d, %d)" a b)
+                      (USet.values af)
+                   )
+                )
+          );
 
-      let bigger_p =
-        List.map (fun expr -> Expr.evaluate expr (fun _ -> None)) (big_p @ disj)
-      in *)
+          (* Create disjointness predicates *)
+          let disj =
+            USet.map
+              (fun (a, b) ->
+                match
+                  ( Hashtbl.find_opt structure.events a,
+                    Hashtbl.find_opt structure.events b
+                  )
+                with
+                | None, _ ->
+                    failwith
+                      ("Event " ^ string_of_int a ^ " not found in structure!")
+                | _, None ->
+                    failwith
+                      ("Event " ^ string_of_int b ^ " not found in structure!")
+                | Some ea, Some eb -> (
+                    Logs.debug (fun m ->
+                        m
+                          "  Creating disjointness predicate for events %s and \
+                           %s"
+                          (show_event ea) (show_event eb)
+                    );
+                    match
+                      ( get_loc structure.events a,
+                        get_val structure.events a,
+                        get_loc structure.events b,
+                        get_val structure.events b
+                      )
+                    with
+                    | None, _, _, _ ->
+                        failwith
+                          ("Event " ^ string_of_int a ^ " has no location!")
+                    | _, None, _, _ ->
+                        failwith ("Event " ^ string_of_int a ^ " has no value!")
+                    | _, _, None, _ ->
+                        failwith
+                          ("Event " ^ string_of_int b ^ " has no location!")
+                    | _, _, _, None ->
+                        failwith ("Event " ^ string_of_int b ^ " has no value!")
+                    | _ ->
+                        let loc_a = get_loc structure.events a |> Option.get in
+                        let val_a = get_val structure.events a |> Option.get in
+                        let loc_b = get_loc structure.events b |> Option.get in
+                        let val_b = get_val structure.events b |> Option.get in
+                          (* disjoint only uses location *)
+                          disjoint (loc_a, val_a) (loc_b, val_b)
+                  )
+              )
+              af
+            |> USet.values
+          in
+            Logs.debug (fun m ->
+                m "  Created %d disjointness predicates\n\t%s" (List.length disj)
+                  (String.concat "\n\t" (List.map Expr.to_string disj))
+            );
 
-      (* Success! Return the freeze result *)
-      let freeze_result =
-        {
-          justs = j_list;
-          e;
-          dp;
-          ppo = dp_ppo;
-          rf;
-          rmw = rmw_filtered;
-          pp;
-          conds = [ EBoolean true ];
-        }
-      in
-        Logs.debug (fun m -> m "  Freeze successful");
-        Lwt.return_some freeze_result
+            let bigger_p =
+              List.map
+                (fun expr -> Expr.evaluate expr (fun _ -> None))
+                (big_p @ disj)
+            in
+
+            Logs.debug (fun m ->
+                m "  Evaluating %d combined predicates with disjointness\n\t%s"
+                  (List.length bigger_p)
+                  (String.concat "\n\t" (List.map Expr.to_string bigger_p))
+            );
+
+            (* Check satisfiability of combined predicates *)
+
+            (* Success! Return the freeze result *)
+            let freeze_result =
+              {
+                justs = j_list;
+                e;
+                dp;
+                ppo = dp_ppo;
+                rf;
+                rmw = rmw_filtered;
+                pp = bigger_p;
+                conds = [ EBoolean true ];
+              }
+            in
+              Logs.debug (fun m -> m "  Freeze successful");
+              Lwt.return_some freeze_result
 
 (** Create a freeze function that validates RF sets for a justification
     combination *)
@@ -588,7 +716,8 @@ let build_justcombos structure paths init_ppo statex
         m "  Found %d justification combinations" (List.length js_combinations)
     );
 
-    Lwt.return (List.map (fun combo -> (path, combo)) js_combinations)
+    Lwt.return
+      (List.map (fun combo -> (path, List.map snd combo)) js_combinations)
   in
 
   Lwt_stream.of_list paths
@@ -647,14 +776,20 @@ let compute_path_rf structure path ~elided ~constraints statex =
     Logs.debug (fun m ->
         m "  Found %d initial RF edges for path" (USet.size all_rf)
     );
-    Lwt.return all_rf
+
+    let all_rf_inv = URelation.inverse_relation all_rf in
+    let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
+      ListMapCombinationBuilder.build_combinations all_rf_inv_map
+        (USet.values read_events)
+        (fun _ ?alternatives:_ _ -> Lwt.return true)
+        (fun _ -> Lwt.return true)
 
 (** Main execution generation - replaces the stub in calculate_dependencies *)
 let generate_executions (structure : symbolic_event_structure)
     (justs : justification uset) statex init_ppo ~include_dependencies
     ~restrictions =
   (* let* _ = Lwt.return_unit in *)
-  Logs.debug (fun m ->
+  Logs.info (fun m ->
       m "Generating executions for structure with %d events"
         (USet.size structure.e)
   );
@@ -680,7 +815,7 @@ let generate_executions (structure : symbolic_event_structure)
       )
       justs;
 
-    Logs.debug (fun m -> m "Built justification map");
+    Logs.info (fun m -> m "Built justification map");
 
     let stream_freeze input_stream =
       let freeze_just_combo (path, just_combo) =
@@ -706,6 +841,8 @@ let generate_executions (structure : symbolic_event_structure)
         let* all_rf =
           compute_path_rf structure path ~elided ~constraints statex
         in
+        let all_rf = List.map (List.map (fun (r, w) -> (w, r))) all_rf in
+        let all_rf = List.map USet.of_list all_rf in
 
         let* freeze_fn_opt =
           create_freeze structure path j_remapped init_ppo statex
@@ -713,20 +850,24 @@ let generate_executions (structure : symbolic_event_structure)
           Logs.debug (fun m ->
               m
                 "Freezing justification combination with %d justifications \
-                 over path with %d events"
+                 over path with %d events, exploring %d RF combinations"
                 (List.length just_combo) (USet.size path.path)
+                (List.length all_rf)
           );
           match freeze_fn_opt with
-          | None -> Lwt.return_none
-          | Some freeze_fn -> (
-              let* freeze_res_opt = freeze_fn all_rf in
-                match freeze_res_opt with
-                | Some freeze_res -> Lwt.return_some freeze_res
-                | None -> Lwt.return_none
-            )
+          | None -> Lwt.return []
+          | Some freeze_fn ->
+              (* Process each RF combination and collect successful freezes *)
+              Lwt_list.filter_map_s
+                (fun rf_combo ->
+                  let* freeze_res_opt = freeze_fn rf_combo in
+                    Lwt.return freeze_res_opt
+                )
+                all_rf
       in
 
-      Lwt_stream.filter_map_s freeze_just_combo input_stream
+      (* Use map_list_s to handle the list results and flatten them into the stream *)
+      Lwt_stream.map_list_s freeze_just_combo input_stream
     in
 
     let stream_freeze_to_execution input_stream =
@@ -782,21 +923,40 @@ let generate_executions (structure : symbolic_event_structure)
 
         let final_map = compute_fixed_point fix_rf_map in
 
-        (* Create execution *)
-        let exec =
-          {
-            ex_e = freeze_res.e;
-            rf = freeze_res.rf;
-            dp = freeze_res.dp;
-            ppo = freeze_res.ppo;
-            ex_rmw = freeze_res.rmw;
-            ex_p = freeze_res.pp;
-            fix_rf_map = final_map;
-            pointer_map = None;
-          }
-        in
+        (* produce final register environment by merging register environment at
+           all terminal events. There are multiple terminal events across
+           multiple threads. *)
+        let final_env = Hashtbl.create 16 in
+          USet.iter
+            (fun lbl ->
+              let evt = Hashtbl.find_opt structure.events lbl |> Option.get in
+                if evt.typ = Terminal then
+                  let reg_env =
+                    Hashtbl.find_opt structure.p lbl
+                    |> Option.value ~default:(Hashtbl.create 0)
+                  in
+                    Hashtbl.iter
+                      (fun reg expr -> Hashtbl.add final_env reg expr)
+                      reg_env
+            )
+            freeze_res.e;
 
-        Lwt.return exec
+          (* Create execution *)
+          let exec =
+            {
+              ex_e = freeze_res.e;
+              rf = freeze_res.rf;
+              dp = freeze_res.dp;
+              ppo = freeze_res.ppo;
+              ex_rmw = freeze_res.rmw;
+              ex_p = freeze_res.pp;
+              fix_rf_map = final_map;
+              pointer_map = None;
+              final_env;
+            }
+          in
+
+          Lwt.return exec
       in
 
       Lwt_stream.map_s freeze_to_execution input_stream

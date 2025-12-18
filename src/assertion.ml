@@ -1,10 +1,10 @@
 open Context
+open Events
 open Expr
 open Ir
+open Lwt.Syntax
 open Types
 open Uset
-open Events
-open Lwt.Syntax
 
 type ir_assertion = unit Ir.ir_assertion
 type ir_litmus = unit Ir.ir_litmus
@@ -405,7 +405,7 @@ let do_check_refinement ast =
             cas_groups = Hashtbl.create 0;
             pwg = [];
             fj = USet.create ();
-            p = USet.create ();
+            p = Hashtbl.create 0;
             constraint_ = [];
             conflict = USet.create ();
             origin = Hashtbl.create 256;
@@ -456,6 +456,15 @@ let check_assertion (assertion : ir_assertion) executions structure events
       Logs.info (fun m -> m "Using memory model: %s" model);
       Lwt.return { valid = true; ub = false; ub_reasons = [] }
   | Outcome { outcome; condition; model } ->
+      Logs.info (fun m ->
+          m "Checking assertion: %s (%s)"
+            (string_of_outcome outcome)
+            ( match condition with
+            | Ir.CondUB -> "ub"
+            | Ir.CondExpr expr -> Expr.to_string expr
+            )
+      );
+
       (* Extract the actual expression from the condition, handling UB specially *)
       let condition_expr_opt =
         match condition with
@@ -479,13 +488,8 @@ let check_assertion (assertion : ir_assertion) executions structure events
       in
 
       (* Handle non-exhaustive forbid case *)
-      let%lwt () =
-        if (not exhaustive) && outcome = Forbid && List.length executions = 0
-        then Lwt.return ()
-        else Lwt.return ()
-      in
-
       if (not exhaustive) && outcome = Forbid && List.length executions = 0 then
+        (* non-exhaustive forbid case allows absence of executions *)
         Lwt.return { valid = true; ub = false; ub_reasons = [] }
       else
         let ub_reasons = ref [] in
@@ -553,6 +557,12 @@ let check_assertion (assertion : ir_assertion) executions structure events
                         restriction @ [ equality ] @ !rf_conditions
                   )
                   execution.rf;
+                Logs.debug (fun m ->
+                    m "RF conditions: %s"
+                      (String.concat ", "
+                         (List.map Expr.to_string !rf_conditions)
+                      )
+                );
                 let rf_conditions = !rf_conditions in
 
                 (* Build rhb (happens-before) relation *)
@@ -717,8 +727,32 @@ let check_assertion (assertion : ir_assertion) executions structure events
                                     Lwt.return false
                                 )
                                 else
-                                  (* No set operations, use solver as normal *)
-                                  Solver.is_sat (cond_expr :: rf_conditions)
+                                  (* instantiate condition expression with final
+                                     register environment *)
+                                  let inst_cond_expr =
+                                    Expr.evaluate cond_expr (fun reg ->
+                                        Hashtbl.find_opt execution.final_env reg
+                                    )
+                                  in
+                                  let cond_expr_and_rf_conditions =
+                                    inst_cond_expr :: rf_conditions
+                                  in
+                                    Logs.debug (fun m ->
+                                        m "Checking condition with solver: %s"
+                                          (String.concat ", "
+                                             (List.map Expr.to_string
+                                                cond_expr_and_rf_conditions
+                                             )
+                                          )
+                                    );
+                                    (* No set operations, use solver as normal *)
+                                    let* is_sat =
+                                      Solver.is_sat cond_expr_and_rf_conditions
+                                    in
+                                      Logs.debug (fun m ->
+                                          m "Solver result: %b" is_sat
+                                      );
+                                      Lwt.return is_sat
                               in
 
                               (* Check extended assertions *)
@@ -744,6 +778,8 @@ let check_assertion (assertion : ir_assertion) executions structure events
             !curr = expected
         in
 
+        Logs.info (fun m -> m "Assertion result: valid=%b, ub=%b" valid ub);
+
         Lwt.return { valid; ub; ub_reasons = List.rev !ub_reasons }
   | Chained { model; outcome; rest } ->
       (* Chained assertions perform refinement checking *)
@@ -759,10 +795,28 @@ let check_assertion (assertion : ir_assertion) executions structure events
         Lwt.return { valid = result.valid; ub = false; ub_reasons = [] }
 
 let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  Logs.debug (fun m -> m "Starting assertion checking step");
   let%lwt ctx = ctx in
     match (ctx.structure, ctx.executions, ctx.events) with
     | Some structure, Some executions, Some events ->
+        Logs.debug (fun m ->
+            m
+              "Event structure and executions available for assertion check:\n\
+               %s"
+              (show_symbolic_event_structure structure)
+        );
         let execution_list = USet.to_list executions in
+          Logs.debug (fun m ->
+              m "Checking assertions against %d executions:\n%s"
+                (List.length execution_list)
+                (String.concat "\n"
+                   (List.map
+                      (fun exec -> show_symbolic_execution exec)
+                      execution_list
+                   )
+                )
+          );
+
           let* assertion_result : assertion_result =
             match ctx.assertions with
             | None -> Lwt.return { valid = true; ub = false; ub_reasons = [] }
