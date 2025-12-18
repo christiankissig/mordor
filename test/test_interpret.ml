@@ -161,7 +161,7 @@ let test_interpret_empty_statements =
       let env = Hashtbl.create 16 in
       let events = create_events () in
         let* result = interpret_statements [] env [] events in
-          Alcotest.(check int) "no events" 0 (USet.size result.e);
+          Alcotest.(check int) "only terminal event" 1 (USet.size result.e);
           Lwt.return_unit
   )
 
@@ -179,7 +179,7 @@ let test_interpret_global_store =
         let* result =
           interpret_statements [ make_ir_node stmt ] env [] events
         in
-          Alcotest.(check int) "one event created" 1 (USet.size result.e);
+          Alcotest.(check int) "two events created" 2 (USet.size result.e);
           (* includes terminal event *)
           Alcotest.(check int)
             "two events in table" 2
@@ -217,7 +217,8 @@ let test_interpret_fence =
         let* result =
           interpret_statements [ make_ir_node stmt ] env [] events
         in
-          Alcotest.(check int) "one fence event" 1 (USet.size result.e);
+          Alcotest.(check int)
+            "one fence event plus terminal event" 2 (USet.size result.e);
           let evt = Hashtbl.find events.events 0 in
             Alcotest.(check bool) "is fence" true (evt.typ = Fence);
             Lwt.return_unit
@@ -242,7 +243,7 @@ let test_interpret_multiple_statements =
           ]
       in
         let* result = interpret_statements stmts env [] events in
-          Alcotest.(check int) "two events" 2 (USet.size result.e);
+          Alcotest.(check int) "three events" 3 (USet.size result.e);
           (* includes terminal event *)
           Alcotest.(check int)
             "three events in table" 3
@@ -267,7 +268,7 @@ let test_interpret_main =
       in
         let* structure, events_tbl = interpret ast None [] [] in
           Alcotest.(check int)
-            "has init and store events" 2 (USet.size structure.e);
+            "has init and store and terminal events" 3 (USet.size structure.e);
           Alcotest.(check bool)
             "init event present" true (USet.mem structure.e 0);
           (* includes terminal event *)
@@ -298,7 +299,7 @@ let test_interpret_main_with_po =
           ]
       in
         let* structure, _ = interpret ast None [] [] in
-          Alcotest.(check int) "has three events" 3 (USet.size structure.e);
+          Alcotest.(check int) "has four events" 4 (USet.size structure.e);
           (* Check that po relations exist *)
           Alcotest.(check bool) "po not empty" true (USet.size structure.po > 0);
           Lwt.return_unit

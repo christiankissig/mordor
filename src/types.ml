@@ -13,7 +13,21 @@ type mode =
   | Normal
   | Strong
   | Nonatomic
-[@@deriving show]
+
+let pp_mode fmt mode =
+  Format.fprintf fmt "%s"
+    ( match mode with
+    | Relaxed -> "rlx"
+    | Acquire -> "acq"
+    | Release -> "rel"
+    | ReleaseAcquire -> "ra"
+    | SC -> "sc"
+    | Normal -> ""
+    | Strong -> "strong"
+    | Nonatomic -> "na"
+    )
+
+let show_mode mode = Format.asprintf "%a" pp_mode mode
 
 type event_type =
   | Read
@@ -82,19 +96,6 @@ let pp_string_uset fmt uset =
   Format.fprintf fmt "{%s}"
     (String.concat ", "
        (List.map (fun a -> Printf.sprintf "%s" a) (USet.to_list uset))
-    )
-
-let pp_mode fmt mode =
-  Format.fprintf fmt "%s"
-    ( match mode with
-    | Relaxed -> "rlx"
-    | Acquire -> "acq"
-    | Release -> "rel"
-    | ReleaseAcquire -> "ra"
-    | SC -> "sc"
-    | Normal -> ""
-    | Strong -> "strong"
-    | Nonatomic -> "na"
     )
 
 let event_type_to_string typ =
