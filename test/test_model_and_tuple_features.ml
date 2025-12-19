@@ -207,17 +207,16 @@ module TestContextModelOptions = struct
 
   let test_default_options_model_name () =
     let opts = default_options in
-      check (option string) "default model_name is None" None opts.model_name
+      check string "default model_name is undefined" "undefined" opts.model
 
   let test_default_options_ubopt () =
     let opts = default_options in
       check bool "default ubopt is false" false opts.ubopt
 
   let test_model_name_mutable () =
-    let opts = { default_options with model_name = None } in
-      opts.model_name <- Some "UB11";
-      check (option string) "model_name can be set" (Some "UB11")
-        opts.model_name
+    let opts = { default_options with model = "undefined" } in
+      opts.model <- "UB11";
+      check string "model_name can be set" "UB11" opts.model
 
   let test_ubopt_mutable () =
     let opts = { default_options with ubopt = false } in

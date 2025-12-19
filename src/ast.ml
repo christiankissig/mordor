@@ -118,10 +118,11 @@ let make_ast_node ?(thread_ctx = None) ?(src_ctx = None) ?(loop_ctx = None) stmt
 
 (* AST for litmust test config *)
 type ast_config = {
-  name : string;
+  name : string option;
+  model : string option;
   values : Z.t list;
   defacto : ast_expr list;
-  constraint_ : ast_expr list;
+  constraints : ast_expr list;
 }
 
 (* AST for litmus test assertions and litmus tests *)

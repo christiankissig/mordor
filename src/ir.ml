@@ -9,9 +9,17 @@ type ir_assertion_check = { model : string; condition : ir_assertion_outcome }
 type assertion_condition = CondExpr of expr | CondUB
 
 type 'a ir_litmus = {
-  name : string;
+  config : ir_config;
   program : 'a ir_node list;
   assertions : 'a ir_assertion list;
+}
+
+and ir_config = {
+  name : string option;
+  model : string option;
+  values : Z.t list;
+  defacto : expr list;
+  constraints : expr list;
 }
 
 and 'a ir_stmt =

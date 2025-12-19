@@ -787,7 +787,14 @@ let check_assertion (assertion : ir_assertion) executions structure events
       let%lwt result =
         do_check_refinement
           {
-            name = "";
+            config =
+              {
+                name = None;
+                model = None;
+                values = [];
+                defacto = [];
+                constraints = [];
+              };
             program = [];
             assertions = [ Chained { model; outcome; rest } ];
           }

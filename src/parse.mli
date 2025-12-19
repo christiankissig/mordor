@@ -7,6 +7,7 @@ open Types
 type ir_stmt = unit Ir.ir_stmt
 type ir_assertion = unit Ir.ir_assertion
 type ir_node = unit Ir.ir_node
+type ir_litmus = unit Ir.ir_litmus
 
 (** Parse a complete litmus test from a string *)
 val parse_litmus : string -> ast_litmus
@@ -16,9 +17,7 @@ val parse_expr : string -> ast_expr
 
 (** Parse a program (list of statements) from a string *)
 val parse_and_convert_litmus :
-  validate_ast:(ast_litmus -> unit) ->
-  string ->
-  expr list * ir_node list * ir_assertion option
+  validate_ast:(ast_litmus -> unit) -> string -> ir_litmus
 
 (** Convert parser AST expression to Types.expr *)
 val ast_expr_to_expr : ast_expr -> Types.expr

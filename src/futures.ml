@@ -121,11 +121,7 @@ let posterior_future_set_explicit (future_set : future_set)
 
 let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
   let* ctx = lwt_ctx in
-  let name =
-    match ctx.litmus_name with
-    | Some n -> n
-    | None -> "unknown_program"
-  in
+  let name = ctx.litmus_name in
   let program =
     match ctx.litmus with
     | Some p -> p

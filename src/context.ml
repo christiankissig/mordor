@@ -21,7 +21,7 @@ let parse_output_mode s =
       exit 1
 
 type options = {
-  mutable model_name : string option;
+  mutable model : string;
   mutable dependencies : bool;
   mutable exhaustive : bool;
   mutable forcerc11 : bool;
@@ -36,7 +36,7 @@ type options = {
 
 let default_options =
   {
-    model_name = None;
+    model = "undefined";
     dependencies = true;
     exhaustive = false;
     forcerc11 = false;
@@ -54,7 +54,7 @@ type mordor_ctx = {
   (* pipeline config *)
   options : options;
   (* inputs *)
-  mutable litmus_name : string option;
+  mutable litmus_name : string;
   mutable litmus_file : string option;
   mutable litmus : string option;
   (* parser *)
@@ -86,7 +86,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     ?(step_counter = 5) () =
   {
     options;
-    litmus_name = None;
+    litmus_name = "";
     litmus_file = None;
     litmus = None;
     litmus_constraints = None;
@@ -106,9 +106,9 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     is_episodic = None;
   }
 
-let apply_model_options (ctx : mordor_ctx) (model_name : string) : unit =
-  ctx.options.model_name <- Some model_name;
-  match model_name with
+let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
+  ctx.options.model <- model;
+  match model with
   | "Power" -> ctx.options.coherent <- "imm"
   | "RC11" -> ctx.options.coherent <- "rc11"
   | "RC11c" -> ctx.options.coherent <- "rc11c"
@@ -122,4 +122,4 @@ let apply_model_options (ctx : mordor_ctx) (model_name : string) : unit =
       ctx.options.ubopt <- true
   | "UB11" -> ctx.options.ubopt <- true
   | "Sevcik" | "Problem" | "JR" | "Bubbly" | "Soham" | "_" -> ()
-  | _ -> Logs.warn (fun m -> m "Unknown model: %s" model_name)
+  | _ -> Logs.warn (fun m -> m "Unknown model: %s" model)

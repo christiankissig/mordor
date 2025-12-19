@@ -66,7 +66,7 @@ let inc_loop_id () =
 %token NONATOMIC RELAXED RELEASE ACQUIRE STRONG NORMAL SC RELACQ
 %token FADD CAS IF ELSE WHILE DO FENCE
 %token MALLOC FREE LOCK UNLOCK
-%token ALLOW FORBID NAME VALUES
+%token ALLOW FORBID NAME MODEL VALUES
 %token LOAD STORE SKIP
 %token <Z.t> INT
 %token <string> REGISTER ATLOC GLOBAL STRING BACKTICK
@@ -110,13 +110,14 @@ config:
   c=config_body PERCENT PERCENT { c }
 
 config_body:
-  | name=name_section? values=values_section? defacto=defacto_list
-  constraint_=constraint_list
+  | name=name_section? model=config_model_section? values=values_section?
+  defacto=defacto_list constraints=constraint_list
     { {
-        name = (match name with Some n -> n | None -> "");
+        name;
+        model;
         values = (match values with Some v -> v | None -> []);
         defacto;
-        constraint_;
+        constraints;
       } }
   ;
 
@@ -129,6 +130,10 @@ name_part:
   | GLOBAL { $1 }
   | REGISTER { $1 }
   | INT { Z.to_string $1 }
+  ;
+
+config_model_section:
+  | MODEL EQ model_name=model_name { model_name }
   ;
 
 int_list:

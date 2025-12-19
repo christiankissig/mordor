@@ -8,6 +8,7 @@ open Types
 type ir_stmt = unit Ir.ir_stmt
 type ir_node = unit Ir.ir_node
 type ir_assertion = unit Ir.ir_assertion
+type ir_litmus = unit Ir.ir_litmus
 
 (** Parse a litmus test from a string *)
 
@@ -168,17 +169,35 @@ let rec convert_assertion ast_assertion =
 
 and convert_litmus ast_litmus =
   let name =
-    match ast_litmus.config with
-    | Some config -> config.name
-    | None -> "unnamed_litmus"
+    Option.map (fun (c : ast_config) -> c.name) ast_litmus.config |> Option.join
   in
+  let model =
+    Option.map (fun (c : ast_config) -> c.model) ast_litmus.config
+    |> Option.join
+  in
+  let values =
+    match ast_litmus.config with
+    | Some config -> config.values
+    | None -> []
+  in
+  let defacto =
+    match ast_litmus.config with
+    | Some config -> convert_expr_list config.defacto
+    | None -> []
+  in
+  let constraints =
+    match ast_litmus.config with
+    | Some config -> convert_expr_list config.constraints
+    | None -> []
+  in
+  let config = { name; model; values; defacto; constraints } in
   let assertions =
     match ast_litmus.assertion with
     | Some assertion -> [ convert_assertion assertion ]
     | None -> []
   in
   let program = List.map convert_stmt ast_litmus.program in
-    { name; assertions; program }
+    { config; assertions; program }
 
 (** Parse litmus to AST and convert from AST to IR *)
 
@@ -188,16 +207,7 @@ let parse_and_convert_litmus ~validate_ast src =
   try
     let litmus_ast = parse_litmus src in
       validate_ast litmus_ast;
-      let constraints =
-        List.map ast_expr_to_expr
-          ( match litmus_ast.config with
-          | Some c -> c.constraint_
-          | None -> []
-          )
-      in
-      let program_stmts = List.map convert_stmt litmus_ast.program in
-      let assertions = Option.map convert_assertion litmus_ast.assertion in
-        (constraints, program_stmts, assertions)
+      convert_litmus litmus_ast
   with
   | Failure msg ->
       Logs.err (fun m -> m "Parse error: %s" msg);
@@ -252,23 +262,32 @@ let step_parse_litmus (ctx_lwt : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   in
     let* ctx = ctx_lwt in
       match ctx.litmus with
-      | Some program -> (
-          let constraints, statements, assertions =
-            parse_and_convert_litmus ~validate_ast program
-          in
-            ctx.litmus_constraints <- Some constraints;
-            ctx.program_stmts <- Some statements;
-            ctx.assertions <- assertions;
-            match assertions with
-            | Some (Ir.Outcome { model = Some model_name; _ })
-            | Some (Ir.Model { model = model_name }) ->
-                apply_model_options ctx model_name;
-                Logs.info (fun m -> m "Applied model options for %s" model_name);
-                Lwt.return ctx
-            | _ ->
-                ();
-                Lwt.return ctx
-        )
+      | Some program ->
+          let litmus_ir = parse_and_convert_litmus ~validate_ast program in
+          let { config; assertions; program } = litmus_ir in
+            Option.iter
+              (fun model ->
+                ctx.options.model <- model;
+                apply_model_options ctx model
+              )
+              config.model;
+            Option.iter (fun name -> ctx.litmus_name <- name) config.name;
+            ctx.litmus_constraints <- Some config.constraints;
+            ctx.program_stmts <- Some program;
+            ctx.assertions <-
+              ( match assertions with
+              | [] -> None
+              | [ a ] -> (
+                  match a with
+                  | Ir.Outcome { model = Some model; _ } | Ir.Model { model } ->
+                      apply_model_options ctx model;
+                      Logs.info (fun m -> m "Applied model options for %s" model);
+                      Some a
+                  | _ -> Some a
+                )
+              | _ -> failwith "Multiple assertions are not supported."
+              );
+            Lwt.return ctx
       | None ->
           Logs.err (fun m -> m "No program provided for parsing.");
           Lwt.return ctx

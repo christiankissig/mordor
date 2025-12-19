@@ -485,14 +485,18 @@ let test_parse_config_name () =
   let src = "name = mytest\n%%r := 0" in
   let ast = parse_litmus src in
     match ast.config with
-    | Some config -> Alcotest.(check string) "config name" "mytest" config.name
+    | Some config ->
+        Alcotest.(check bool) "has name" true (Option.is_some config.name);
+        Alcotest.(check string) "config name" "mytest" (Option.get config.name)
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_name_with_numbers () =
   let src = "name = test123\n%%r := 0" in
   let ast = parse_litmus src in
     match ast.config with
-    | Some config -> Alcotest.(check string) "config name" "test123" config.name
+    | Some config ->
+        Alcotest.(check bool) "has name" true (Option.is_some config.name);
+        Alcotest.(check string) "config name" "test123" (Option.get config.name)
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_values () =
@@ -536,7 +540,7 @@ let test_parse_config_constraint () =
   let ast = parse_litmus src in
     match ast.config with
     | Some config ->
-        Alcotest.(check int) "1 constraint" 1 (List.length config.constraint_)
+        Alcotest.(check int) "1 constraint" 1 (List.length config.constraints)
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_config_multiple_constraints () =
@@ -544,7 +548,7 @@ let test_parse_config_multiple_constraints () =
   let ast = parse_litmus src in
     match ast.config with
     | Some config ->
-        Alcotest.(check int) "2 constraints" 2 (List.length config.constraint_)
+        Alcotest.(check int) "2 constraints" 2 (List.length config.constraints)
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_full_config () =
@@ -552,10 +556,11 @@ let test_parse_full_config () =
   let ast = parse_litmus src in
     match ast.config with
     | Some config ->
-        Alcotest.(check string) "name" "test" config.name;
+        Alcotest.(check bool) "has name" true (Option.is_some config.name);
+        Alcotest.(check string) "name" "test" (Option.get config.name);
         Alcotest.(check int) "values" 2 (List.length config.values);
         Alcotest.(check int) "defacto" 1 (List.length config.defacto);
-        Alcotest.(check int) "constraint" 1 (List.length config.constraint_)
+        Alcotest.(check int) "constraint" 1 (List.length config.constraints)
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_minimal_config () =
@@ -563,7 +568,7 @@ let test_parse_minimal_config () =
   let ast = parse_litmus src in
     match ast.config with
     | Some config ->
-        Alcotest.(check string) "empty name" "" config.name;
+        Alcotest.(check bool) "no name" false (Option.is_some config.name);
         Alcotest.(check int) "no values" 0 (List.length config.values)
     | None -> Alcotest.fail "Expected config section"
 
@@ -623,7 +628,9 @@ let test_parse_message_passing () =
   in
   let ast = parse_litmus src in
     ( match ast.config with
-    | Some config -> Alcotest.(check string) "MP test name" "MP" config.name
+    | Some config ->
+        Alcotest.(check bool) "has name" true (Option.is_some config.name);
+        Alcotest.(check string) "MP test name" "MP" (Option.get config.name)
     | None -> Alcotest.fail "Expected config section"
     );
     match ast.assertion with
@@ -639,7 +646,9 @@ let test_parse_store_buffer () =
   in
   let ast = parse_litmus src in
     match ast.config with
-    | Some config -> Alcotest.(check string) "SB test name" "SB" config.name
+    | Some config ->
+        Alcotest.(check bool) "has name" true (Option.is_some config.name);
+        Alcotest.(check string) "SB test name" "SB" (Option.get config.name)
     | None -> Alcotest.fail "Expected config section"
 
 let test_parse_load_buffering () =
@@ -674,10 +683,11 @@ let test_parse_complex_litmus () =
   let ast = parse_litmus src in
     match ast.config with
     | Some config ->
-        Alcotest.(check string) "name" "Complex" config.name;
+        Alcotest.(check bool) "has name" true (Option.is_some config.name);
+        Alcotest.(check string) "name" "Complex" (Option.get config.name);
         Alcotest.(check int) "values" 3 (List.length config.values);
         Alcotest.(check int) "defacto" 2 (List.length config.defacto);
-        Alcotest.(check int) "constraint" 1 (List.length config.constraint_)
+        Alcotest.(check int) "constraint" 1 (List.length config.constraints)
     | None -> Alcotest.fail "Expected config section"
 
 (** Test Suite *)

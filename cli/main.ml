@@ -129,7 +129,7 @@ let run_tests tests =
 
 let parse_single name program options =
   let context = make_context options () in
-    context.litmus_name <- Some name;
+    context.litmus_name <- name;
     context.litmus <- Some program;
     Lwt.return context |> Parse.step_parse_litmus |> print_results
 
@@ -162,7 +162,7 @@ let futures_single (name, program) options output_mode output_file step_counter
   let context =
     make_context options ~output_mode ~output_file ~step_counter ()
   in
-    context.litmus_name <- Some name;
+    context.litmus_name <- name;
     context.litmus <- Some program;
     Lwt.return context
     |> Parse.step_parse_litmus
@@ -177,7 +177,7 @@ let visualize_es_single (name, program) options output_mode output_file
   let context =
     make_context options ~output_mode ~output_file ~step_counter ()
   in
-    context.litmus_name <- Some name;
+    context.litmus_name <- name;
     context.litmus <- Some program;
     Lwt.return context
     |> Parse.step_parse_litmus

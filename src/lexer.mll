@@ -48,6 +48,7 @@ rule token = parse
   | "allow"               { Parser.ALLOW }
   | "forbid"              { Parser.FORBID }
   | "name"                { Parser.NAME }
+  | "model"               { Parser.MODEL }
   | "values"              { Parser.VALUES }
   | "load"                { Parser.LOAD }
   | "store"               { Parser.STORE }
