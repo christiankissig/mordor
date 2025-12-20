@@ -118,6 +118,77 @@ let lwt_pall f lst =
   let%lwt results = Lwt_list.map_p f lst in
     Lwt.return (List.for_all (fun x -> x) results)
 
+(** {1 Validation Checks} *)
+
+module Validation = struct
+  (* Check use-after-free *)
+  let check_use_after_free (structure : symbolic_event_structure) execution
+      ub_reasons exec_id pointer_map_of rhb all_alloc_read_writes =
+    let all_frees = USet.intersection structure.free_events execution.ex_e in
+
+    let all_before_free =
+      USet.for_all
+        (fun free ->
+          let free_event = Hashtbl.find structure.events free in
+          let free_id =
+            match free_event.id with
+            | Some id -> Value.to_string id
+            | None -> ""
+          in
+
+          (* Find all events using the same pointer *)
+          let related_events =
+            USet.filter
+              (fun e ->
+                match Hashtbl.find_opt pointer_map_of e with
+                | Some sym -> sym = free_id
+                | None -> false
+              )
+              all_alloc_read_writes
+          in
+
+          (* Check if all related events happen before free *)
+          USet.for_all (fun e -> USet.mem rhb (e, free)) related_events
+        )
+        all_frees
+    in
+      if not all_before_free then
+        ub_reasons := (exec_id, "Use after free") :: !ub_reasons
+
+  let check_unbounded_pointer_deref (structure : symbolic_event_structure)
+      execution ub_reasons exec_id pointer_map_of rhb all_alloc_read_writes =
+    let all_alloc = USet.intersection structure.malloc_events execution.ex_e in
+
+    (* based on the definition this is always empty? *)
+    let all_pointer_read_writes =
+      USet.difference all_alloc_read_writes all_alloc
+    in
+
+    (* Check pointer dereference after allocation *)
+    let all_after_alloc =
+      USet.for_all
+        (fun alloc ->
+          let alloc_ptr = Hashtbl.find_opt pointer_map_of alloc in
+
+          let related_events =
+            USet.filter
+              (fun e ->
+                match (alloc_ptr, Hashtbl.find_opt pointer_map_of e) with
+                | Some ap, Some ep -> ap = ep
+                | _ -> false
+              )
+              all_pointer_read_writes
+          in
+
+          (* Check if all related events happen after alloc *)
+          USet.for_all (fun e -> USet.mem rhb (alloc, e)) related_events
+        )
+        all_alloc
+    in
+      if not all_after_alloc then
+        ub_reasons := (exec_id, "Unbounded pointer dereference") :: !ub_reasons
+end
+
 (** Check refinement between two programs
 
     Refinement semantics (from JS implementation):
@@ -457,152 +528,87 @@ let check_assertion_per_execution (assertion : ir_assertion) execution structure
               )
               pointers;
 
-            (* Get all malloc, free, read, write events *)
-            let all_frees =
-              USet.intersection execution.ex_e structure.free_events
-            in
-            let all_alloc =
-              USet.intersection execution.ex_e structure.malloc_events
-            in
-
             (* All events that use pointers (read, write, malloc) *)
             let all_alloc_read_writes =
               Hashtbl.to_seq_keys pointer_map_of
               |> Seq.fold_left (fun acc e -> USet.add acc e) (USet.create ())
             in
 
-            (* based on the definition this is always empty? *)
-            let all_pointer_read_writes =
-              USet.difference all_alloc_read_writes all_alloc
-            in
-
-            (* Check use-after-free *)
-            let all_before_free =
-              USet.for_all
-                (fun free ->
-                  let free_event = Hashtbl.find events free in
-                  let free_id =
-                    match free_event.id with
-                    | Some id -> Value.to_string id
-                    | None -> ""
-                  in
-
-                  (* Find all events using the same pointer *)
-                  let related_events =
-                    USet.filter
-                      (fun e ->
-                        match Hashtbl.find_opt pointer_map_of e with
-                        | Some sym -> sym = free_id
-                        | None -> false
-                      )
-                      all_alloc_read_writes
-                  in
-
-                  (* Check if all related events happen before free *)
-                  USet.for_all (fun e -> USet.mem rhb (e, free)) related_events
-                )
-                all_frees
-            in
-
-            (* Check pointer dereference after allocation *)
-            let all_after_alloc =
-              USet.for_all
-                (fun alloc ->
-                  let alloc_ptr = Hashtbl.find_opt pointer_map_of alloc in
-
-                  let related_events =
-                    USet.filter
-                      (fun e ->
-                        match
-                          (alloc_ptr, Hashtbl.find_opt pointer_map_of e)
-                        with
-                        | Some ap, Some ep -> ap = ep
-                        | _ -> false
-                      )
-                      all_pointer_read_writes
-                  in
-
-                  (* Check if all related events happen after alloc *)
-                  USet.for_all (fun e -> USet.mem rhb (alloc, e)) related_events
-                )
-                all_alloc
-            in
-
             (* Record UB reasons *)
             let exec_idx = 0 in
-              (* We'd need to track this properly *)
-              if not all_before_free then
-                ub_reasons := (exec_idx, "Use after free") :: !ub_reasons;
-              if not all_after_alloc then
-                ub_reasons :=
-                  (exec_idx, "Unbounded pointer dereference") :: !ub_reasons;
 
-              (* Check conditions if not already satisfied *)
-              if not !curr then (
-                if
-                  (* For UB assertions, we don't check condition satisfiability *)
-                  is_ub_assertion
-                then Lwt.return ()
-                else
-                  (* Extract the expression from the condition *)
-                  match condition_expr_opt with
-                  | None ->
-                      Lwt.return
-                        () (* Should not happen for non-UB assertions *)
-                  | Some cond_expr ->
-                      let%lwt conds_satisfied =
-                        (* Check if condition contains set operations *)
-                        if has_set_operation cond_expr then (
-                          (* Evaluate set operations directly, don't use solver *)
-                          try
-                            let set_result =
-                              eval_set_expr cond_expr structure execution
-                            in
-                              (* Still check rf_conditions with solver if needed *)
-                              if List.length rf_conditions > 0 then
-                                let%lwt rf_ok = Solver.is_sat rf_conditions in
-                                  Lwt.return (set_result && rf_ok)
-                              else Lwt.return set_result
-                          with Failure msg ->
-                            Logs.err (fun m ->
-                                m "Error evaluating set expression: %s" msg
-                            );
-                            Lwt.return false
-                        )
-                        else
-                          (* instantiate condition expression with final
+            Validation.check_use_after_free structure execution ub_reasons
+              exec_idx pointer_map_of rhb all_alloc_read_writes;
+            Validation.check_unbounded_pointer_deref structure execution
+              ub_reasons exec_idx pointer_map_of rhb all_alloc_read_writes;
+
+            (* We'd need to track this properly *)
+
+            (* Check conditions if not already satisfied *)
+            if not !curr then (
+              if
+                (* For UB assertions, we don't check condition satisfiability *)
+                is_ub_assertion
+              then Lwt.return ()
+              else
+                (* Extract the expression from the condition *)
+                match condition_expr_opt with
+                | None ->
+                    Lwt.return () (* Should not happen for non-UB assertions *)
+                | Some cond_expr ->
+                    let%lwt conds_satisfied =
+                      (* Check if condition contains set operations *)
+                      if has_set_operation cond_expr then (
+                        (* Evaluate set operations directly, don't use solver *)
+                        try
+                          let set_result =
+                            eval_set_expr cond_expr structure execution
+                          in
+                            (* Still check rf_conditions with solver if needed *)
+                            if List.length rf_conditions > 0 then
+                              let%lwt rf_ok = Solver.is_sat rf_conditions in
+                                Lwt.return (set_result && rf_ok)
+                            else Lwt.return set_result
+                        with Failure msg ->
+                          Logs.err (fun m ->
+                              m "Error evaluating set expression: %s" msg
+                          );
+                          Lwt.return false
+                      )
+                      else
+                        (* instantiate condition expression with final
                                      register environment *)
-                          let inst_cond_expr =
-                            Expr.evaluate cond_expr (fun reg ->
-                                Hashtbl.find_opt execution.final_env reg
-                            )
+                        let inst_cond_expr =
+                          Expr.evaluate cond_expr (fun reg ->
+                              Hashtbl.find_opt execution.final_env reg
+                          )
+                        in
+                        let cond_expr_and_rf_conditions =
+                          inst_cond_expr :: rf_conditions
+                        in
+                          Logs.debug (fun m ->
+                              m "Checking condition with solver: %s"
+                                (String.concat ", "
+                                   (List.map Expr.to_string
+                                      cond_expr_and_rf_conditions
+                                   )
+                                )
+                          );
+                          (* No set operations, use solver as normal *)
+                          let* is_sat =
+                            Solver.is_sat cond_expr_and_rf_conditions
                           in
-                          let cond_expr_and_rf_conditions =
-                            inst_cond_expr :: rf_conditions
-                          in
-                            Logs.debug (fun m ->
-                                m "Checking condition with solver: %s"
-                                  (String.concat ", "
-                                     (List.map Expr.to_string
-                                        cond_expr_and_rf_conditions
-                                     )
-                                  )
-                            );
-                            (* No set operations, use solver as normal *)
-                            let* is_sat =
-                              Solver.is_sat cond_expr_and_rf_conditions
-                            in
-                              Logs.debug (fun m -> m "Solver result: %b" is_sat);
-                              Lwt.return is_sat
-                      in
+                            Logs.debug (fun m -> m "Solver result: %b" is_sat);
+                            Lwt.return is_sat
+                    in
 
-                      (* Check extended assertions *)
-                      let%lwt extended_ok = Lwt.return true in
+                    (* Check extended assertions *)
+                    let%lwt extended_ok = Lwt.return true in
 
-                      curr := conds_satisfied && extended_ok;
-                      Lwt.return ()
-              )
-              else Lwt.return ()
+                    curr := conds_satisfied && extended_ok;
+                    Lwt.return ()
+            )
+            else Lwt.return ()
   | _ -> failwith "unexpected assertion to be checked per execution"
 
 (** Main assertion checking function *)
