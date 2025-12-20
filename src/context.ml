@@ -112,25 +112,26 @@ type model_options = { coherent : string option; ubopt : bool }
 
 let model_options_table : (string, model_options) Hashtbl.t =
   let tbl = Hashtbl.create 20 in
-    Hashtbl.add tbl "Power" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "Sevcik" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "Problem" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "JR" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "RC11" { coherent = Some "rc11"; ubopt = false };
-    Hashtbl.add tbl "RC11c" { coherent = Some "rc11c"; ubopt = false };
-    Hashtbl.add tbl "Bridging" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "Bubbly" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "Grounding" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "Promising" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "Soham" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "IMM" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "RC11UB" { coherent = Some "rc11"; ubopt = true };
-    Hashtbl.add tbl "IMMUB" { coherent = Some "imm"; ubopt = true };
-    Hashtbl.add tbl "UB11" { coherent = None; ubopt = true };
+    Hashtbl.add tbl "power" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "sevcik" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "problem" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "jr" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "rc11" { coherent = Some "rc11"; ubopt = false };
+    Hashtbl.add tbl "rc11c" { coherent = Some "rc11c"; ubopt = false };
+    Hashtbl.add tbl "bridging" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "bubbly" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "grounding" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "promising" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "soham" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "imm" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "rc11ub" { coherent = Some "rc11"; ubopt = true };
+    Hashtbl.add tbl "immub" { coherent = Some "imm"; ubopt = true };
+    Hashtbl.add tbl "ub11" { coherent = None; ubopt = true };
     Hashtbl.add tbl "_" { coherent = None; ubopt = false };
     tbl
 
-let get_model_options name = Hashtbl.find_opt model_options_table name
+let get_model_options name =
+  Hashtbl.find_opt model_options_table (String.lowercase_ascii name)
 
 let model_names =
   [
@@ -154,7 +155,11 @@ let model_names =
 
 let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
   ctx.options.model <- model;
+  Logs.debug (fun m -> m "applying model options for model %s" model);
   Hashtbl.find_opt model_options_table model
   |> Option.map (fun options -> options.coherent)
   |> Option.value ~default:None
-  |> Option.iter (fun coherent -> ctx.options.coherent <- coherent)
+  |> Option.iter (fun coherent ->
+      Logs.debug (fun m -> m "setting coherent %s" coherent);
+      ctx.options.coherent <- coherent
+  )
