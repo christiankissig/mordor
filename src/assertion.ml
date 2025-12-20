@@ -441,8 +441,8 @@ let check_assertion_in_execution (assertion : ir_assertion) execution structure
           USet.iter (fun edge -> USet.add rhb edge |> ignore) rhb_trans;
 
           (* Build pointer map with substitutions from fix_rf_map *)
-          let pointer_map_of = Hashtbl.create (List.length pointers) in
-            List.iter
+          let pointer_map_of = Hashtbl.create (USet.size pointers) in
+            USet.iter
               (fun (event_label, loc_value) ->
                 let substituted =
                   Hashtbl.fold
@@ -457,8 +457,12 @@ let check_assertion_in_execution (assertion : ir_assertion) execution structure
               pointers;
 
             (* Get all malloc, free, read, write events *)
-            let all_frees = filter_events events execution.ex_e Free () in
-            let all_alloc = filter_events events execution.ex_e Malloc () in
+            let all_frees =
+              USet.intersection execution.ex_e structure.free_events
+            in
+            let all_alloc =
+              USet.intersection execution.ex_e structure.malloc_events
+            in
 
             (* All events that use pointers (read, write, malloc) *)
             let all_alloc_read_writes =
@@ -604,8 +608,8 @@ let check_assertion_in_execution (assertion : ir_assertion) execution structure
   | _ -> failwith "unexpected assertion to be checked per execution"
 
 (** Main assertion checking function *)
-let check_assertion (assertion : ir_assertion) executions structure events
-    ~exhaustive =
+let check_assertion (assertion : ir_assertion) executions
+    (structure : symbolic_event_structure) events ~exhaustive =
   match assertion with
   | Model { model } ->
       (* Model assertions just specify which memory model to use *)
@@ -653,33 +657,20 @@ let check_assertion (assertion : ir_assertion) executions structure events
         let expected = outcome = Allow in
         let curr = ref false in
 
-        (* Helper to get pointers (events with locations that are not variables) *)
-        let get_pointers () =
-          let read_events = structure.read_events in
-          let write_events = structure.write_events in
-          let free_events = structure.free_events in
-          let malloc_events = structure.malloc_events in
-
-          let all_pointer_events =
-            USet.union
-              (USet.union read_events write_events)
-              (USet.union free_events malloc_events)
-          in
-
-          let result = ref [] in
-            USet.iter
-              (fun label ->
-                (* everything but Malloc produces a Value.var here in
-                    get_event_loc. By construction Malloc always produces a
-                    symbol. *)
-                let loc = get_event_loc events label in
-                  if Value.is_not_var loc then result := (label, loc) :: !result
+        let pointers =
+          USet.map
+            (fun (label : int) ->
+              ( label,
+                (* this assumes that loc is a symbol. TODO check whether loc is
+                   a variable *)
+                get_loc structure.events label
+                |> Option.map Expr.to_value
+                |> Option.join
+                |> Option.get
               )
-              all_pointer_events;
-            !result
+            )
+            structure.malloc_events
         in
-
-        let pointers = get_pointers () in
 
         (* Process each execution *)
         let%lwt () =
