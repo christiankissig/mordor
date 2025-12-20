@@ -94,24 +94,6 @@ type refinement_result = {
   valid : bool;
 }
 
-(** Helper to get location from an event *)
-let get_event_loc events event_label =
-  match Hashtbl.find_opt events event_label with
-  | None -> VVar (string_of_int event_label)
-  | Some e -> (
-      match e.typ with
-      | Malloc -> (
-          match e.rval with
-          | Some v -> v
-          | None -> VVar (string_of_int event_label)
-        )
-      | _ -> (
-          match e.id with
-          | Some id -> id
-          | None -> VVar (string_of_int event_label)
-        )
-    )
-
 (** Parallel map for lists using Lwt *)
 let lwt_pmap f lst = Lwt_list.map_p f lst
 
@@ -375,8 +357,8 @@ let do_check_refinement ast =
 
   Lwt.return { !refinement_result with valid = final_valid }
 
-let check_assertion_in_execution (assertion : ir_assertion) execution structure
-    events pointers curr ub_reasons ~exhaustive =
+let check_assertion_per_execution (assertion : ir_assertion) execution structure
+    events curr ub_reasons ~exhaustive =
   let%lwt () = Lwt.return () in
 
   match assertion with
@@ -440,10 +422,28 @@ let check_assertion_in_execution (assertion : ir_assertion) execution structure
           USet.iter (fun e -> USet.add rhb (e, e) |> ignore) execution.ex_e;
           USet.iter (fun edge -> USet.add rhb edge |> ignore) rhb_trans;
 
+          let pointers =
+            USet.map
+              (fun (label : int) ->
+                ( label,
+                  (* This assumes that loc is a symbol in line with construction
+                    in Interpret. The JS implmentation tests if loc is a
+                    variable and considers other event types without effect. *)
+                  get_loc structure.events label
+                  |> Option.map Expr.to_value
+                  |> Option.join
+                  |> Option.get
+                )
+              )
+              (USet.intersection structure.malloc_events execution.ex_e)
+          in
+
           (* Build pointer map with substitutions from fix_rf_map *)
           let pointer_map_of = Hashtbl.create (USet.size pointers) in
             USet.iter
               (fun (event_label, loc_value) ->
+                (* TODO what does this do ? fix_rf_map is already the fix point
+              and maps symbols to values *)
                 let substituted =
                   Hashtbl.fold
                     (fun var value acc -> Expr.subst acc var value)
@@ -452,6 +452,7 @@ let check_assertion_in_execution (assertion : ir_assertion) execution structure
                 (* Extract symbol if it's a single symbol *)
                 let symbols = Expr.get_symbols substituted in
                   if List.length symbols = 1 then
+                    (* TODO Why the list head? *)
                     Hashtbl.add pointer_map_of event_label (List.hd symbols)
               )
               pointers;
@@ -466,14 +467,11 @@ let check_assertion_in_execution (assertion : ir_assertion) execution structure
 
             (* All events that use pointers (read, write, malloc) *)
             let all_alloc_read_writes =
-              USet.filter
-                (fun label ->
-                  USet.mem execution.ex_e label
-                  && Hashtbl.mem pointer_map_of label
-                )
-                structure.e
+              Hashtbl.to_seq_keys pointer_map_of
+              |> Seq.fold_left (fun acc e -> USet.add acc e) (USet.create ())
             in
 
+            (* based on the definition this is always empty? *)
             let all_pointer_read_writes =
               USet.difference all_alloc_read_writes all_alloc
             in
@@ -657,27 +655,12 @@ let check_assertion (assertion : ir_assertion) executions
         let expected = outcome = Allow in
         let curr = ref false in
 
-        let pointers =
-          USet.map
-            (fun (label : int) ->
-              ( label,
-                (* this assumes that loc is a symbol. TODO check whether loc is
-                   a variable *)
-                get_loc structure.events label
-                |> Option.map Expr.to_value
-                |> Option.join
-                |> Option.get
-              )
-            )
-            structure.malloc_events
-        in
-
         (* Process each execution *)
         let%lwt () =
           lwt_piter
             (fun execution ->
-              check_assertion_in_execution assertion execution structure events
-                pointers curr ub_reasons ~exhaustive
+              check_assertion_per_execution assertion execution structure events
+                curr ub_reasons ~exhaustive
             )
             executions
         in
