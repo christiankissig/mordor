@@ -106,20 +106,55 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     is_episodic = None;
   }
 
+(** {1 Model Options} *)
+
+type model_options = { coherent : string option; ubopt : bool }
+
+let model_options_table : (string, model_options) Hashtbl.t =
+  let tbl = Hashtbl.create 20 in
+    Hashtbl.add tbl "Power" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "Sevcik" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "Problem" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "JR" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "RC11" { coherent = Some "rc11"; ubopt = false };
+    Hashtbl.add tbl "RC11c" { coherent = Some "rc11c"; ubopt = false };
+    Hashtbl.add tbl "Bridging" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "Bubbly" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "Grounding" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "Promising" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "Soham" { coherent = None; ubopt = false };
+    Hashtbl.add tbl "IMM" { coherent = Some "imm"; ubopt = false };
+    Hashtbl.add tbl "RC11UB" { coherent = Some "rc11"; ubopt = true };
+    Hashtbl.add tbl "IMMUB" { coherent = Some "imm"; ubopt = true };
+    Hashtbl.add tbl "UB11" { coherent = None; ubopt = true };
+    Hashtbl.add tbl "_" { coherent = None; ubopt = false };
+    tbl
+
+let get_model_options name = Hashtbl.find_opt model_options_table name
+
+let model_names =
+  [
+    "Power";
+    "Sevcik";
+    "Problem";
+    "JR";
+    "RC11";
+    "RC11c";
+    "Bridging";
+    "Bubbly";
+    "Grounding";
+    "Promising";
+    "Soham";
+    "IMM";
+    "RC11UB";
+    "IMMUB";
+    "UB11";
+    "_";
+  ]
+
 let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
   ctx.options.model <- model;
-  match model with
-  | "Power" -> ctx.options.coherent <- "imm"
-  | "RC11" -> ctx.options.coherent <- "rc11"
-  | "RC11c" -> ctx.options.coherent <- "rc11c"
-  | "Bridging" | "Grounding" | "Promising" | "IMM" ->
-      ctx.options.coherent <- "imm"
-  | "RC11UB" ->
-      ctx.options.coherent <- "rc11";
-      ctx.options.ubopt <- true
-  | "IMMUB" ->
-      ctx.options.coherent <- "imm";
-      ctx.options.ubopt <- true
-  | "UB11" -> ctx.options.ubopt <- true
-  | "Sevcik" | "Problem" | "JR" | "Bubbly" | "Soham" | "_" -> ()
-  | _ -> Logs.warn (fun m -> m "Unknown model: %s" model)
+  Hashtbl.find_opt model_options_table model
+  |> Option.map (fun options -> options.coherent)
+  |> Option.value ~default:None
+  |> Option.iter (fun coherent -> ctx.options.coherent <- coherent)

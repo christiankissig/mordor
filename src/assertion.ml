@@ -69,52 +69,6 @@ let rec eval_set_expr expr (structure : symbolic_event_structure)
         ^ "expected 'in' or 'notin' operator"
         )
 
-(** {1 Model Options} *)
-
-type model_options = { coherent : string option; ubopt : bool }
-
-let model_options_table : (string, model_options) Hashtbl.t =
-  let tbl = Hashtbl.create 20 in
-    Hashtbl.add tbl "Power" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "Sevcik" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "Problem" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "JR" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "RC11" { coherent = Some "rc11"; ubopt = false };
-    Hashtbl.add tbl "RC11c" { coherent = Some "rc11c"; ubopt = false };
-    Hashtbl.add tbl "Bridging" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "Bubbly" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "Grounding" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "Promising" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "Soham" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "IMM" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "RC11UB" { coherent = Some "rc11"; ubopt = true };
-    Hashtbl.add tbl "IMMUB" { coherent = Some "imm"; ubopt = true };
-    Hashtbl.add tbl "UB11" { coherent = None; ubopt = true };
-    Hashtbl.add tbl "_" { coherent = None; ubopt = false };
-    tbl
-
-let get_model_options name = Hashtbl.find_opt model_options_table name
-
-let model_names =
-  [
-    "Power";
-    "Sevcik";
-    "Problem";
-    "JR";
-    "RC11";
-    "RC11c";
-    "Bridging";
-    "Bubbly";
-    "Grounding";
-    "Promising";
-    "Soham";
-    "IMM";
-    "RC11UB";
-    "IMMUB";
-    "UB11";
-    "_";
-  ]
-
 (** {1 Assertion Types} *)
 
 let outcome_of_string = function
@@ -569,9 +523,7 @@ let check_assertion (assertion : ir_assertion) executions structure events
                       (fun (event_label, loc_value) ->
                         let substituted =
                           Hashtbl.fold
-                            (fun var value acc ->
-                              Expr.subst acc var value
-                            )
+                            (fun var value acc -> Expr.subst acc var value)
                             execution.fix_rf_map (Expr.of_value loc_value)
                         in
                         (* Extract symbol if it's a single symbol *)
