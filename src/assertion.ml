@@ -80,14 +80,6 @@ let string_of_outcome = function
   | Allow -> "allow"
   | Forbid -> "forbid"
 
-(* assertion_condition is now defined in Ir module *)
-
-type assertion = {
-  outcome : ir_assertion_outcome;
-  condition : Ir.assertion_condition;
-  model : string option;
-}
-
 (** {1 Assertion Checking} *)
 
 type ub_reason = int * string
@@ -383,6 +375,234 @@ let do_check_refinement ast =
 
   Lwt.return { !refinement_result with valid = final_valid }
 
+let check_assertion_in_execution (assertion : ir_assertion) execution structure
+    events pointers curr ub_reasons ~exhaustive =
+  let%lwt () = Lwt.return () in
+
+  match assertion with
+  | Outcome { outcome; condition; model } ->
+      (* For UB assertions, we only check for undefined behavior, not condition satisfiability *)
+      let is_ub_assertion =
+        match condition with
+        | Ir.CondUB -> true
+        | Ir.CondExpr _ -> false
+      in
+
+      (* Extract the actual expression from the condition, handling UB specially *)
+      let condition_expr_opt =
+        match condition with
+        | Ir.CondUB ->
+            None (* UB condition doesn't have an expression to check *)
+        | Ir.CondExpr expr -> Some expr
+      in
+
+      (* Build RF conditions *)
+      let rf_conditions = ref [] in
+        USet.iter
+          (fun (w, r) ->
+            let read_event = Hashtbl.find events r in
+            let read_rval =
+              match read_event.rval with
+              | Some rv -> rv
+              | None -> VVar ("r" ^ string_of_int r)
+            in
+            let rf_value =
+              let rval_str = Value.to_string read_rval in
+                match Hashtbl.find_opt execution.fix_rf_map rval_str with
+                | Some v -> v
+                | None -> Expr.of_value read_rval
+            in
+            let restriction =
+              match Hashtbl.find_opt structure.restrict w with
+              | Some r -> r
+              | None -> []
+            in
+            let equality = EBinOp (Expr.of_value read_rval, "=", rf_value) in
+              rf_conditions := restriction @ [ equality ] @ !rf_conditions
+          )
+          execution.rf;
+        Logs.debug (fun m ->
+            m "RF conditions: %s"
+              (String.concat ", " (List.map Expr.to_string !rf_conditions))
+        );
+        let rf_conditions = !rf_conditions in
+
+        (* Build rhb (happens-before) relation *)
+        (* rhb = (ppo ∪ fj ∪ dp ∪ rf)+ ∩ (E × E) *)
+        let rhb_base =
+          USet.union
+            (USet.union execution.ppo structure.fj)
+            (USet.union execution.dp execution.rf)
+        in
+        let rhb_trans = URelation.transitive_closure rhb_base in
+        (* Add reflexive edges: (e, e) for all e in ex_e *)
+        let rhb = USet.create () in
+          USet.iter (fun e -> USet.add rhb (e, e) |> ignore) execution.ex_e;
+          USet.iter (fun edge -> USet.add rhb edge |> ignore) rhb_trans;
+
+          (* Build pointer map with substitutions from fix_rf_map *)
+          let pointer_map_of = Hashtbl.create (List.length pointers) in
+            List.iter
+              (fun (event_label, loc_value) ->
+                let substituted =
+                  Hashtbl.fold
+                    (fun var value acc -> Expr.subst acc var value)
+                    execution.fix_rf_map (Expr.of_value loc_value)
+                in
+                (* Extract symbol if it's a single symbol *)
+                let symbols = Expr.get_symbols substituted in
+                  if List.length symbols = 1 then
+                    Hashtbl.add pointer_map_of event_label (List.hd symbols)
+              )
+              pointers;
+
+            (* Get all malloc, free, read, write events *)
+            let all_frees = filter_events events execution.ex_e Free () in
+            let all_alloc = filter_events events execution.ex_e Malloc () in
+
+            (* All events that use pointers (read, write, malloc) *)
+            let all_alloc_read_writes =
+              USet.filter
+                (fun label ->
+                  USet.mem execution.ex_e label
+                  && Hashtbl.mem pointer_map_of label
+                )
+                structure.e
+            in
+
+            let all_pointer_read_writes =
+              USet.difference all_alloc_read_writes all_alloc
+            in
+
+            (* Check use-after-free *)
+            let all_before_free =
+              USet.for_all
+                (fun free ->
+                  let free_event = Hashtbl.find events free in
+                  let free_id =
+                    match free_event.id with
+                    | Some id -> Value.to_string id
+                    | None -> ""
+                  in
+
+                  (* Find all events using the same pointer *)
+                  let related_events =
+                    USet.filter
+                      (fun e ->
+                        match Hashtbl.find_opt pointer_map_of e with
+                        | Some sym -> sym = free_id
+                        | None -> false
+                      )
+                      all_alloc_read_writes
+                  in
+
+                  (* Check if all related events happen before free *)
+                  USet.for_all (fun e -> USet.mem rhb (e, free)) related_events
+                )
+                all_frees
+            in
+
+            (* Check pointer dereference after allocation *)
+            let all_after_alloc =
+              USet.for_all
+                (fun alloc ->
+                  let alloc_ptr = Hashtbl.find_opt pointer_map_of alloc in
+
+                  let related_events =
+                    USet.filter
+                      (fun e ->
+                        match
+                          (alloc_ptr, Hashtbl.find_opt pointer_map_of e)
+                        with
+                        | Some ap, Some ep -> ap = ep
+                        | _ -> false
+                      )
+                      all_pointer_read_writes
+                  in
+
+                  (* Check if all related events happen after alloc *)
+                  USet.for_all (fun e -> USet.mem rhb (alloc, e)) related_events
+                )
+                all_alloc
+            in
+
+            (* Record UB reasons *)
+            let exec_idx = 0 in
+              (* We'd need to track this properly *)
+              if not all_before_free then
+                ub_reasons := (exec_idx, "Use after free") :: !ub_reasons;
+              if not all_after_alloc then
+                ub_reasons :=
+                  (exec_idx, "Unbounded pointer dereference") :: !ub_reasons;
+
+              (* Check conditions if not already satisfied *)
+              if not !curr then (
+                if
+                  (* For UB assertions, we don't check condition satisfiability *)
+                  is_ub_assertion
+                then Lwt.return ()
+                else
+                  (* Extract the expression from the condition *)
+                  match condition_expr_opt with
+                  | None ->
+                      Lwt.return
+                        () (* Should not happen for non-UB assertions *)
+                  | Some cond_expr ->
+                      let%lwt conds_satisfied =
+                        (* Check if condition contains set operations *)
+                        if has_set_operation cond_expr then (
+                          (* Evaluate set operations directly, don't use solver *)
+                          try
+                            let set_result =
+                              eval_set_expr cond_expr structure execution
+                            in
+                              (* Still check rf_conditions with solver if needed *)
+                              if List.length rf_conditions > 0 then
+                                let%lwt rf_ok = Solver.is_sat rf_conditions in
+                                  Lwt.return (set_result && rf_ok)
+                              else Lwt.return set_result
+                          with Failure msg ->
+                            Logs.err (fun m ->
+                                m "Error evaluating set expression: %s" msg
+                            );
+                            Lwt.return false
+                        )
+                        else
+                          (* instantiate condition expression with final
+                                     register environment *)
+                          let inst_cond_expr =
+                            Expr.evaluate cond_expr (fun reg ->
+                                Hashtbl.find_opt execution.final_env reg
+                            )
+                          in
+                          let cond_expr_and_rf_conditions =
+                            inst_cond_expr :: rf_conditions
+                          in
+                            Logs.debug (fun m ->
+                                m "Checking condition with solver: %s"
+                                  (String.concat ", "
+                                     (List.map Expr.to_string
+                                        cond_expr_and_rf_conditions
+                                     )
+                                  )
+                            );
+                            (* No set operations, use solver as normal *)
+                            let* is_sat =
+                              Solver.is_sat cond_expr_and_rf_conditions
+                            in
+                              Logs.debug (fun m -> m "Solver result: %b" is_sat);
+                              Lwt.return is_sat
+                      in
+
+                      (* Check extended assertions *)
+                      let%lwt extended_ok = Lwt.return true in
+
+                      curr := conds_satisfied && extended_ok;
+                      Lwt.return ()
+              )
+              else Lwt.return ()
+  | _ -> failwith "unexpected assertion to be checked per execution"
+
 (** Main assertion checking function *)
 let check_assertion (assertion : ir_assertion) executions structure events
     ~exhaustive =
@@ -449,6 +669,9 @@ let check_assertion (assertion : ir_assertion) executions structure events
           let result = ref [] in
             USet.iter
               (fun label ->
+                (* everything but Malloc produces a Value.var here in
+                    get_event_loc. By construction Malloc always produces a
+                    symbol. *)
                 let loc = get_event_loc events label in
                   if Value.is_not_var loc then result := (label, loc) :: !result
               )
@@ -461,242 +684,9 @@ let check_assertion (assertion : ir_assertion) executions structure events
         (* Process each execution *)
         let%lwt () =
           lwt_piter
-            (fun (execution : symbolic_execution) ->
-              let%lwt () = Lwt.return () in
-
-              (* Build RF conditions *)
-              let rf_conditions = ref [] in
-                USet.iter
-                  (fun (w, r) ->
-                    let read_event = Hashtbl.find events r in
-                    let read_rval =
-                      match read_event.rval with
-                      | Some rv -> rv
-                      | None -> VVar ("r" ^ string_of_int r)
-                    in
-                    let rf_value =
-                      let rval_str = Value.to_string read_rval in
-                        match
-                          Hashtbl.find_opt execution.fix_rf_map rval_str
-                        with
-                        | Some v -> v
-                        | None -> Expr.of_value read_rval
-                    in
-                    let restriction =
-                      match Hashtbl.find_opt structure.restrict w with
-                      | Some r -> r
-                      | None -> []
-                    in
-                    let equality =
-                      EBinOp (Expr.of_value read_rval, "=", rf_value)
-                    in
-                      rf_conditions :=
-                        restriction @ [ equality ] @ !rf_conditions
-                  )
-                  execution.rf;
-                Logs.debug (fun m ->
-                    m "RF conditions: %s"
-                      (String.concat ", "
-                         (List.map Expr.to_string !rf_conditions)
-                      )
-                );
-                let rf_conditions = !rf_conditions in
-
-                (* Build rhb (happens-before) relation *)
-                (* rhb = (ppo ∪ fj ∪ dp ∪ rf)+ ∩ (E × E) *)
-                let rhb_base =
-                  USet.union
-                    (USet.union execution.ppo structure.fj)
-                    (USet.union execution.dp execution.rf)
-                in
-                let rhb_trans = URelation.transitive_closure rhb_base in
-                (* Add reflexive edges: (e, e) for all e in ex_e *)
-                let rhb = USet.create () in
-                  USet.iter
-                    (fun e -> USet.add rhb (e, e) |> ignore)
-                    execution.ex_e;
-                  USet.iter (fun edge -> USet.add rhb edge |> ignore) rhb_trans;
-
-                  (* Build pointer map with substitutions from fix_rf_map *)
-                  let pointer_map_of = Hashtbl.create (List.length pointers) in
-                    List.iter
-                      (fun (event_label, loc_value) ->
-                        let substituted =
-                          Hashtbl.fold
-                            (fun var value acc -> Expr.subst acc var value)
-                            execution.fix_rf_map (Expr.of_value loc_value)
-                        in
-                        (* Extract symbol if it's a single symbol *)
-                        let symbols = Expr.get_symbols substituted in
-                          if List.length symbols = 1 then
-                            Hashtbl.add pointer_map_of event_label
-                              (List.hd symbols)
-                      )
-                      pointers;
-
-                    (* Get all malloc, free, read, write events *)
-                    let all_frees =
-                      filter_events events execution.ex_e Free ()
-                    in
-                    let all_alloc =
-                      filter_events events execution.ex_e Malloc ()
-                    in
-
-                    (* All events that use pointers (read, write, malloc) *)
-                    let all_alloc_read_writes =
-                      USet.filter
-                        (fun label ->
-                          USet.mem execution.ex_e label
-                          && Hashtbl.mem pointer_map_of label
-                        )
-                        structure.e
-                    in
-
-                    let all_pointer_read_writes =
-                      USet.difference all_alloc_read_writes all_alloc
-                    in
-
-                    (* Check use-after-free *)
-                    let all_before_free =
-                      USet.for_all
-                        (fun free ->
-                          let free_event = Hashtbl.find events free in
-                          let free_id =
-                            match free_event.id with
-                            | Some id -> Value.to_string id
-                            | None -> ""
-                          in
-
-                          (* Find all events using the same pointer *)
-                          let related_events =
-                            USet.filter
-                              (fun e ->
-                                match Hashtbl.find_opt pointer_map_of e with
-                                | Some sym -> sym = free_id
-                                | None -> false
-                              )
-                              all_alloc_read_writes
-                          in
-
-                          (* Check if all related events happen before free *)
-                          USet.for_all
-                            (fun e -> USet.mem rhb (e, free))
-                            related_events
-                        )
-                        all_frees
-                    in
-
-                    (* Check pointer dereference after allocation *)
-                    let all_after_alloc =
-                      USet.for_all
-                        (fun alloc ->
-                          let alloc_ptr =
-                            Hashtbl.find_opt pointer_map_of alloc
-                          in
-
-                          let related_events =
-                            USet.filter
-                              (fun e ->
-                                match
-                                  (alloc_ptr, Hashtbl.find_opt pointer_map_of e)
-                                with
-                                | Some ap, Some ep -> ap = ep
-                                | _ -> false
-                              )
-                              all_pointer_read_writes
-                          in
-
-                          (* Check if all related events happen after alloc *)
-                          USet.for_all
-                            (fun e -> USet.mem rhb (alloc, e))
-                            related_events
-                        )
-                        all_alloc
-                    in
-
-                    (* Record UB reasons *)
-                    let exec_idx = 0 in
-                      (* We'd need to track this properly *)
-                      if not all_before_free then
-                        ub_reasons :=
-                          (exec_idx, "Use after free") :: !ub_reasons;
-                      if not all_after_alloc then
-                        ub_reasons :=
-                          (exec_idx, "Unbounded pointer dereference")
-                          :: !ub_reasons;
-
-                      (* Check conditions if not already satisfied *)
-                      if not !curr then (
-                        if
-                          (* For UB assertions, we don't check condition satisfiability *)
-                          is_ub_assertion
-                        then Lwt.return ()
-                        else
-                          (* Extract the expression from the condition *)
-                          match condition_expr_opt with
-                          | None ->
-                              Lwt.return
-                                () (* Should not happen for non-UB assertions *)
-                          | Some cond_expr ->
-                              let%lwt conds_satisfied =
-                                (* Check if condition contains set operations *)
-                                if has_set_operation cond_expr then (
-                                  (* Evaluate set operations directly, don't use solver *)
-                                  try
-                                    let set_result =
-                                      eval_set_expr cond_expr structure
-                                        execution
-                                    in
-                                      (* Still check rf_conditions with solver if needed *)
-                                      if List.length rf_conditions > 0 then
-                                        let%lwt rf_ok =
-                                          Solver.is_sat rf_conditions
-                                        in
-                                          Lwt.return (set_result && rf_ok)
-                                      else Lwt.return set_result
-                                  with Failure msg ->
-                                    Logs.err (fun m ->
-                                        m "Error evaluating set expression: %s"
-                                          msg
-                                    );
-                                    Lwt.return false
-                                )
-                                else
-                                  (* instantiate condition expression with final
-                                     register environment *)
-                                  let inst_cond_expr =
-                                    Expr.evaluate cond_expr (fun reg ->
-                                        Hashtbl.find_opt execution.final_env reg
-                                    )
-                                  in
-                                  let cond_expr_and_rf_conditions =
-                                    inst_cond_expr :: rf_conditions
-                                  in
-                                    Logs.debug (fun m ->
-                                        m "Checking condition with solver: %s"
-                                          (String.concat ", "
-                                             (List.map Expr.to_string
-                                                cond_expr_and_rf_conditions
-                                             )
-                                          )
-                                    );
-                                    (* No set operations, use solver as normal *)
-                                    let* is_sat =
-                                      Solver.is_sat cond_expr_and_rf_conditions
-                                    in
-                                      Logs.debug (fun m ->
-                                          m "Solver result: %b" is_sat
-                                      );
-                                      Lwt.return is_sat
-                              in
-
-                              (* Check extended assertions *)
-                              let%lwt extended_ok = Lwt.return true in
-
-                              curr := conds_satisfied && extended_ok;
-                              Lwt.return ()
-                      )
-                      else Lwt.return ()
+            (fun execution ->
+              check_assertion_in_execution assertion execution structure events
+                pointers curr ub_reasons ~exhaustive
             )
             executions
         in
