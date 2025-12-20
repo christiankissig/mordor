@@ -466,7 +466,9 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
             | None -> loce structure.events w r
           in
             match get_loc structure.events r with
-            | Some r_loc -> Expr.binop w_loc "=" r_loc
+            | Some r_loc ->
+                if Expr.compare w_loc r_loc < 0 then Expr.binop w_loc "=" r_loc
+                else Expr.binop r_loc "=" w_loc
             | None ->
                 failwith
                   ("Read event "
@@ -477,11 +479,22 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
     in
     let big_p_exprs = p_combined @ env_rf @ check_rf in
       Logs.debug (fun m ->
-          m "  Evaluating %d combined predicates\n\t%s" (List.length big_p_exprs)
-            (String.concat "\n\t" (List.map Expr.to_string big_p_exprs))
+          m
+            "  Evaluating %d combined\n\
+            \          predicates\n\
+             \tp_combined=%s\n\
+             \tenv_rf=%s\n\
+             \tcheck_rf=%s"
+            (List.length big_p_exprs)
+            (String.concat ", " (List.map Expr.to_string p_combined))
+            (String.concat ", " (List.map Expr.to_string env_rf))
+            (String.concat ", " (List.map Expr.to_string check_rf))
       );
       let big_p =
         List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs
+        |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))
+        |> USet.of_list
+        |> USet.values
       in
         Logs.debug (fun m ->
             m "  Evaluated predicates:\n\t%s"

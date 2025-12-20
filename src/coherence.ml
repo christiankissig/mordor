@@ -596,7 +596,10 @@ let check_for_coherence (structure : symbolic_event_structure)
             )
         in
 
-        (* Build cache based on memory model *)
+        Logs.info (fun m ->
+            m "Building coherence cache for model %s" restrictions.coherent
+        );
+
         (* Build cache based on memory model *)
         let cache_result, deps_fn, thin_fn, coherent_fn =
           match restrictions.coherent with
@@ -638,7 +641,6 @@ let check_for_coherence (structure : symbolic_event_structure)
                 )
             )
           | "undefined" | "" ->
-              Logs.info (fun m -> m "Using undefined/minimal coherence model");
               let cache =
                 if USet.size execution.ex_rmw > 0 then
                   UndefinedCache
