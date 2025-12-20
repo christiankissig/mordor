@@ -69,23 +69,6 @@ let rec eval_set_expr expr (structure : symbolic_event_structure)
         ^ "expected 'in' or 'notin' operator"
         )
 
-(** {1 Helper Modules} *)
-
-(** Expression utilities *)
-module ExprUtil = struct
-  (** Substitute variable with expression *)
-  let rec subst expr var_expr new_expr =
-    if expr = var_expr then new_expr
-    else
-      match expr with
-      | EBinOp (e1, op, e2) ->
-          EBinOp (subst e1 var_expr new_expr, op, subst e2 var_expr new_expr)
-      | EUnOp (op, e) -> EUnOp (op, subst e var_expr new_expr)
-      | EOr lst ->
-          EOr (List.map (List.map (fun e -> subst e var_expr new_expr)) lst)
-      | _ -> expr
-end
-
 (** {1 Model Options} *)
 
 type model_options = { coherent : string option; ubopt : bool }
@@ -587,7 +570,7 @@ let check_assertion (assertion : ir_assertion) executions structure events
                         let substituted =
                           Hashtbl.fold
                             (fun var value acc ->
-                              ExprUtil.subst acc (EVar var) value
+                              Expr.subst acc var value
                             )
                             execution.fix_rf_map (Expr.of_value loc_value)
                         in
