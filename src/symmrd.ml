@@ -156,7 +156,30 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   Logs.debug (fun m -> m "Generating executions...");
 
   (* Compute statex: allocation disjointness constraints *)
-  (* Extract all location symbols from malloc/allocation events *)
+
+  (* 1. Extract static/global locations from all events *)
+  let static_locs =
+    USet.values e_set
+    |> List.filter_map (fun eid ->
+        match Hashtbl.find_opt events eid with
+        | Some evt -> (
+            (* Get location from event if it exists and is a variable *)
+            match Events.get_loc events eid with
+            | Some loc when Expr.is_var loc -> Some loc
+            | _ -> None
+          )
+        | None -> None
+    )
+    |> List.sort_uniq compare (* Remove duplicates *)
+  in
+
+  (* 2. Extract malloc locations *)
+  (* TODO these constraints do not account for intermediate deallocation:
+
+    • enforces the disjointness of symbolic memory locations introduced by
+    consecutive allocation events, i.e. without an intermediate deallocation
+    event.
+    *)
   let malloc_locs =
     USet.values malloc_events
     |> List.filter_map (fun eid ->
@@ -166,20 +189,16 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
     )
   in
 
-  (* Create pairwise disjointness constraints for all distinct allocation
-     locations *)
-  (* TODO these constraints do not account for intermediate deallocation:
+  (* 3. Combine both sets *)
+  let all_locs = static_locs @ malloc_locs in
 
-    • enforces the disjointness of symbolic memory locations introduced by
-    consecutive allocation events, i.e. without an intermediate deallocation
-    event.
-    *)
+  (* 4. Create pairwise disjointness for ALL distinct locations *)
   let statex =
     let pairs = ref [] in
-      for i = 0 to List.length malloc_locs - 1 do
-        for j = i + 1 to List.length malloc_locs - 1 do
-          let loc1 = List.nth malloc_locs i in
-          let loc2 = List.nth malloc_locs j in
+      for i = 0 to List.length all_locs - 1 do
+        for j = i + 1 to List.length all_locs - 1 do
+          let loc1 = List.nth all_locs i in
+          let loc2 = List.nth all_locs j in
             pairs := Expr.binop loc1 "!=" loc2 :: !pairs
         done
       done;
@@ -201,6 +220,9 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
   let* ctx = lwt_ctx in
 
   (* Create restrictions for coherence checking *)
+  Logs.debug (fun m ->
+      m "Setting up coherence restrictions...%s" ctx.options.coherent
+  );
   let coherence_restrictions =
     {
       Coherence.coherent =

@@ -80,6 +80,7 @@ and Expr : sig
   val is_tautology : t -> bool
   val is_contradiction : t -> bool
   val is_value : t -> bool
+  val is_var : t -> bool
   val is_expression : t -> bool
   val is_number : t -> bool
   val compare : t -> t -> int
@@ -116,6 +117,10 @@ end = struct
     | ESymbol s -> Some (VSymbol s)
     | EBoolean b -> Some (VBoolean b)
     | _ -> None
+
+  let is_var = function
+    | EVar _ -> true
+    | _ -> false
 
   let is_expression e = not (is_value e)
 
