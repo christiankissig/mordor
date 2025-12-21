@@ -83,7 +83,10 @@ RUN useradd -m -s /bin/bash mordor
 # Copy built executable from builder
 COPY --from=builder /home/opam/install/bin/mordor-web /usr/local/bin/mordor-web
 
-# Make sure it's executable
+# Copy frontend files from builder
+COPY --from=builder --chown=mordor:mordor /home/opam/web/frontend /home/mordor/web/frontend
+
+# Make sure executable is executable
 RUN chmod +x /usr/local/bin/mordor-web
 
 # Switch to app user
