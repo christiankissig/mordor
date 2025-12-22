@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mordor - Event Structure Visualizer</title>
+    <title>MoRDor - Weak Memory Semantics</title>
     <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
     <script src="https://unpkg.com/layout-base@2.0.1/layout-base.js"></script>
     <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
@@ -26,12 +26,28 @@
         .panel-header { background: #252526; border-bottom: 1px solid #3e3e42; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; }
         .panel-header h2 { font-size: 1rem; color: #cccccc; }
         #litmus-input { flex: 1; padding: 1rem; background: #1e1e1e; border: none; color: #d4d4d4; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.95rem; resize: none; outline: none; }
+        
+        /* Carousel styles */
+        .carousel-container { flex: 1; position: relative; display: none; }
+        .carousel-container.active { display: flex; flex-direction: column; }
         #cy { flex: 1; background: #1e1e1e; }
-        .graph-controls { position: absolute; top: 60px; right: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 100; }
+        
+        .carousel-controls { position: absolute; top: 50%; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; pointer-events: none; z-index: 200; transform: translateY(-50%); padding: 0 10px; }
+        .carousel-btn { pointer-events: all; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; color: #cccccc; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: all 0.2s; }
+        .carousel-btn:hover:not(:disabled) { background: #505050; transform: scale(1.1); }
+        .carousel-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        
+        .carousel-indicator { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 20px; padding: 0.5rem 1rem; font-size: 0.9rem; color: #cccccc; z-index: 100; }
+        
+        .graph-controls { position: absolute; top: 60px; right: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem; display: none; flex-direction: column; gap: 0.5rem; z-index: 100; }
+        .graph-controls.active { display: flex; }
         .graph-controls button { background: #3c3c3c; border: none; color: #cccccc; padding: 0.4rem 0.8rem; border-radius: 3px; cursor: pointer; font-size: 0.85rem; }
         .graph-controls button:hover { background: #505050; }
         .graph-controls select { background: #3c3c3c; border: 1px solid #555; color: #d4d4d4; padding: 0.4rem; border-radius: 3px; font-size: 0.85rem; }
-        .graph-stats { position: absolute; bottom: 10px; left: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.85rem; z-index: 100; }
+        
+        .graph-stats { position: absolute; bottom: 10px; left: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.85rem; z-index: 100; display: none; }
+        .graph-stats.active { display: block; }
+        
         .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #6a6a6a; position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
         button { cursor: pointer; border: none; border-radius: 4px; padding: 0.5rem 1.5rem; font-size: 0.9rem; font-weight: 500; }
         .btn-primary { background: #0e639c; color: white; }
@@ -50,7 +66,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>🔮 Mordor - Event Structure Visualizer</h1>
+            <h1>🔮 MoRDor - Weak Memory Semantics</h1>
             <div class="header-controls">
                 <label>Steps: <input type="number" id="step-counter" value="5" min="1" max="100" style="width:70px; padding:0.3rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px;"></label>
                 <button id="visualize-btn" class="btn-primary">Visualize</button>
@@ -72,15 +88,24 @@
             <div class="resizer" id="resizer"></div>
             <div class="panel" id="right-panel">
                 <div class="panel-header">
-                    <h2>Event Structure</h2>
+                    <h2>Event Structure & Executions</h2>
                     <div class="status" id="status">Ready</div>
                 </div>
-                <div id="cy"></div>
-                <div id="json-view" style="display: none; flex: 1; overflow: auto; padding: 1rem;">
-                    <pre id="json-content" style="color: #d4d4d4; background: #252526; padding: 1rem; border-radius: 4px; overflow: auto;"></pre>
+                
+                <div class="carousel-container" id="carousel-container">
+                    <div id="cy"></div>
+                    <div class="carousel-controls">
+                        <button class="carousel-btn" id="prev-btn" disabled>‹</button>
+                        <button class="carousel-btn" id="next-btn" disabled>›</button>
+                    </div>
+                    <div class="carousel-indicator" id="carousel-indicator">Event Structure</div>
                 </div>
-                <div id="empty-state" class="empty-state"><p>Enter litmus source and click "Visualize"</p></div>
-                <div class="graph-controls" id="graph-controls" style="display: none;">
+                
+                <div id="empty-state" class="empty-state">
+                    <p>Enter litmus source and click "Visualize"</p>
+                </div>
+                
+                <div class="graph-controls" id="graph-controls">
                     <select id="layout-select">
                         <option value="fcose">fCoSE (Fast)</option>
                         <option value="cose-bilkent">COSE (Quality)</option>
@@ -88,12 +113,13 @@
                         <option value="circle">Circle</option>
                     </select>
                     <button id="fit-btn">Fit</button>
-                    <button id="toggle-view-btn">View JSON</button>
                     <button id="export-png-btn">Export PNG</button>
                 </div>
-                <div class="graph-stats" id="graph-stats" style="display: none;">
+                
+                <div class="graph-stats" id="graph-stats">
                     <div><strong>Nodes:</strong> <span id="node-count">0</span></div>
                     <div><strong>Edges:</strong> <span id="edge-count">0</span></div>
+                    <div><strong>Executions:</strong> <span id="execution-count">0</span></div>
                 </div>
             </div>
         </div>
@@ -105,7 +131,20 @@ const EXAMPLES = {
     mp: "name = MP\n%%\n{ x := 1; y := 1 } ||| { r1 := y; r2 := x }\n%% forbid (r1 = 1 && r2 = 0) [rc11]",
     lb: "name = LB\n%%\n{ r1 := x; y := 1 } ||| { r2 := y; x := 1 }\n%% forbid (r1 = 1 && r2 = 1) [rc11]"
 };
-const EDGE_COLORS = { po: '#4ec9b0', rf: '#0e639c', co: '#ffa500', fr: '#f48771', default: '#6a6a6a' };
+
+// Edge color mapping - moved from backend
+const EDGE_COLORS = { 
+    po: '#4ec9b0',    // Teal
+    rf: '#0e639c',    // Blue
+    dp: '#ffa500',    // Orange
+    ppo: '#9370db',   // Purple
+    rmw: '#f48771',   // Red
+    co: '#ffa500',    // Orange
+    fr: '#f48771',    // Red
+    lo: '#0e639c',    // Blue
+    fj: '#89d185',    // Green
+    default: '#6a6a6a' 
+};
 
 // Resizer functionality
 const resizer = document.getElementById('resizer');
@@ -127,7 +166,6 @@ document.addEventListener('mousemove', (e) => {
     const offsetLeft = e.clientX - containerRect.left;
     const containerWidth = containerRect.width;
     
-    // Calculate percentage, constrained between 20% and 80%
     let percentage = (offsetLeft / containerWidth) * 100;
     percentage = Math.max(20, Math.min(80, percentage));
     
@@ -142,11 +180,11 @@ document.addEventListener('mouseup', () => {
     }
 });
 
-
 class GraphVisualizer {
     constructor() {
-        this.currentGraphData = null;
-        this.isJsonView = false;
+        this.graphs = [];  // Array to store all graphs
+        this.currentIndex = 0;
+        this.executionCount = 0;
 
         this.cy = cytoscape({
             container: document.getElementById('cy'),
@@ -163,10 +201,16 @@ class GraphVisualizer {
                         'font-weight': 'bold',
                         'width': '35px',
                         'height': '35px',
-                        'border-width': 2,
-                        'border-color': '#1177bb',
-                        'text-outline-color': '#000000',
-                        'text-outline-width': 2
+                        'text-wrap': 'wrap',
+                        'text-max-width': '100px'
+                    }
+                },
+                {
+                    selector: 'node[isRoot]',
+                    style: {
+                        'background-color': '#1177bb',
+                        'border-width': '3px',
+                        'border-color': '#ffffff'
                     }
                 },
                 {
@@ -177,134 +221,177 @@ class GraphVisualizer {
                         'target-arrow-color': 'data(color)',
                         'target-arrow-shape': 'triangle',
                         'curve-style': 'bezier',
+                        'arrow-scale': 1.2,
                         'label': 'data(type)',
                         'font-size': '9px',
-                        'color': '#d4d4d4',
+                        'color': '#cccccc',
                         'text-background-color': '#1e1e1e',
                         'text-background-opacity': 0.8,
                         'text-background-padding': '2px'
                     }
                 }
             ],
+            layout: { name: 'preset' },
             minZoom: 0.1,
-            maxZoom: 5,
+            maxZoom: 3,
             wheelSensitivity: 0.2
         });
 
-        document.getElementById('examples').addEventListener('change', (e) => {
-            if (e.target.value) {
-                document.getElementById('litmus-input').value = EXAMPLES[e.target.value];
-                this.log('Loaded example');
-                e.target.value = '';
-            }
-        });
-
-        document.getElementById('visualize-btn').addEventListener('click', () => this.visualize());
-        document.getElementById('layout-select').addEventListener('change', (e) => this.applyLayout(e.target.value));
-        document.getElementById('fit-btn').addEventListener('click', () => this.cy.fit());
-        document.getElementById('toggle-view-btn').addEventListener('click', () => this.toggleView());
-        document.getElementById('export-png-btn').addEventListener('click', () => {
-            const png = this.cy.png({ output: 'blob', bg: '#1e1e1e', full: true, scale: 2 });
-            const url = URL.createObjectURL(png);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'event-structure.png';
-            a.click();
-        });
-
-        this.log('Ready');
+        this.setupEventListeners();
     }
 
-    visualize() {
-        const program = document.getElementById('litmus-input').value.trim();
-        if (!program) { this.log('Enter a program', 'error'); return; }
+    setupEventListeners() {
+        document.getElementById('examples').addEventListener('change', (e) => {
+            const example = EXAMPLES[e.target.value];
+            if (example) {
+                document.getElementById('litmus-input').value = example;
+                this.log('Example loaded: ' + e.target.options[e.target.selectedIndex].text);
+            }
+        });
 
+        document.getElementById('visualize-btn').addEventListener('click', () => {
+            const program = document.getElementById('litmus-input').value.trim();
+            if (!program) {
+                this.log('Please enter a litmus test', 'error');
+                return;
+            }
+            this.visualize(program);
+        });
+
+        document.getElementById('layout-select').addEventListener('change', (e) => {
+            this.applyLayout(e.target.value);
+        });
+
+        document.getElementById('fit-btn').addEventListener('click', () => {
+            this.cy.fit(null, 50);
+            this.log('View reset to fit');
+        });
+
+        document.getElementById('export-png-btn').addEventListener('click', () => {
+            const png = this.cy.png({ full: true, scale: 2 });
+            const link = document.createElement('a');
+            link.download = `graph-${this.currentIndex}.png`;
+            link.href = png;
+            link.click();
+            this.log('Graph exported as PNG');
+        });
+
+        // Carousel controls
+        document.getElementById('prev-btn').addEventListener('click', () => {
+            this.navigateTo(this.currentIndex - 1);
+        });
+
+        document.getElementById('next-btn').addEventListener('click', () => {
+            this.navigateTo(this.currentIndex + 1);
+        });
+    }
+
+    navigateTo(index) {
+        if (index < 0 || index >= this.graphs.length) return;
+        
+        this.currentIndex = index;
+        this.renderGraph(this.graphs[index]);
+        this.updateCarouselUI();
+    }
+
+    updateCarouselUI() {
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const indicator = document.getElementById('carousel-indicator');
+
+        prevBtn.disabled = this.currentIndex === 0;
+        nextBtn.disabled = this.currentIndex === this.graphs.length - 1;
+
+        if (this.currentIndex === 0) {
+            indicator.textContent = 'Event Structure';
+        } else {
+            indicator.textContent = `Execution ${this.currentIndex}/${this.executionCount}`;
+        }
+    }
+
+    visualize(program) {
+        const steps = parseInt(document.getElementById('step-counter').value) || 5;
+        this.log('Starting visualization with ' + steps + ' steps...');
+        
+        // Reset state
+        this.graphs = [];
+        this.currentIndex = 0;
+        this.executionCount = 0;
+        
         document.getElementById('visualize-btn').disabled = true;
-        document.getElementById('empty-state').innerHTML = '<div class="spinner"></div>';
-        this.log('Visualizing...');
+        document.getElementById('status').textContent = 'Processing...';
 
-        const params = new URLSearchParams({ program, steps: document.getElementById('step-counter').value });
+        const params = new URLSearchParams({
+            program: program,
+            steps: steps.toString()
+        });
+
         const es = new EventSource('/api/visualize/stream?' + params);
-
-        es.onmessage = (e) => {
+        
+        es.onmessage = (event) => {
             try {
-                const d = JSON.parse(e.data);
-                if (d.error) {
-                    this.log('Error: ' + d.error, 'error');
+                const data = JSON.parse(event.data);
+                
+                if (data.status === 'parsing') {
+                    this.log('Parsing litmus test...');
+                } else if (data.status === 'interpreting') {
+                    this.log('Interpreting program...');
+                } else if (data.status === 'visualizing') {
+                    this.log('Generating visualizations...');
+                } else if (data.type === 'event_structure') {
+                    this.log('Received event structure');
+                    this.graphs.push(data.graph);
+                    if (this.graphs.length === 1) {
+                        this.renderGraph(data.graph);
+                        this.updateCarouselUI();
+                    }
+                } else if (data.type === 'execution') {
+                    this.log('Received execution ' + data.index);
+                    this.graphs.push(data.graph);
+                } else if (data.type === 'complete') {
+                    this.executionCount = data.total_executions;
+                    document.getElementById('execution-count').textContent = this.executionCount;
+                    this.log('Visualization complete: ' + this.executionCount + ' executions', 'success');
+                    this.updateCarouselUI();
+                    document.getElementById('status').textContent = 'Complete';
                     es.close();
                     document.getElementById('visualize-btn').disabled = false;
-                    return;
+                } else if (data.error) {
+                    this.log('Error: ' + data.error, 'error');
+                    this.showError(data.error);
+                    es.close();
+                    document.getElementById('visualize-btn').disabled = false;
                 }
-                if (d.status === 'complete') {
-                    if (d.size && d.size > 1000000) {
-                        this.log('Processing large dataset (' + Math.round(d.size/1024) + ' KB)...', 'info');
-                    }
-                    // d.result is already a parsed JSON object from the server
-                    this.renderGraph(d.result);
-                    es.close();
-                    document.getElementById('visualize-btn').disabled = false;
-                } else if (d.status === 'complete_raw') {
-                    // Server couldn't parse, try on client side
-                    if (d.warning) {
-                        this.log('Warning: ' + d.warning, 'warning');
-                    }
-                    this.log('Parsing JSON client-side...', 'info');
-                    try {
-                        const parsed = JSON.parse(d.result_raw);
-                        this.renderGraph(parsed);
-                    } catch (parseErr) {
-                        this.log('Client parse also failed: ' + parseErr.message, 'error');
-                        console.error('Parse error:', parseErr);
-                        console.error('First 1000 chars of raw data:', d.result_raw.substring(0, 1000));
-                    }
-                    es.close();
-                    document.getElementById('visualize-btn').disabled = false;
-                } else if (d.status === 'error') {
-                    this.log('Server error: ' + d.error, 'error');
-                    es.close();
-                    document.getElementById('visualize-btn').disabled = false;
-                } else {
-                    this.log(d.status + '...');
-                }
-            } catch (err) {
-                this.log('Parse error: ' + err.message, 'error');
-                console.error('Full error:', err);
-                console.error('Event data length:', e.data ? e.data.length : 'undefined');
-                console.error('First 500 chars:', e.data ? e.data.substring(0, 500) : 'undefined');
-                es.close();
-                document.getElementById('visualize-btn').disabled = false;
+            } catch (e) {
+                console.error('Failed to parse SSE message:', e);
+                this.log('Parse error: ' + e.message, 'error');
             }
         };
-        es.onerror = () => { this.log('Connection error', 'error'); es.close(); document.getElementById('visualize-btn').disabled = false; };
+
+        es.onerror = () => { 
+            this.log('Connection error', 'error'); 
+            es.close(); 
+            document.getElementById('visualize-btn').disabled = false; 
+        };
     }
 
     renderGraph(data) {
         try {
-            // Data is already a parsed object from the server, no need to parse again
             const graph = data;
-            this.currentGraphData = graph;  // Store for JSON view toggle
-
-            this.log('Rendering graph...');
-            console.log('Graph data nodes:', graph.nodes ? graph.nodes.length : 0, 'edges:', graph.edges ? graph.edges.length : 0);
+            
+            this.log('Rendering graph with ' + graph.nodes.length + ' nodes...');
 
             if (!graph.nodes || graph.nodes.length === 0) {
                 this.log('No nodes in graph data', 'error');
-                console.log('Graph structure:', graph);
                 return;
-            }
-
-            if (graph.nodes.length > 1000) {
-                this.log('Warning: Large graph (' + graph.nodes.length + ' nodes), rendering may be slow', 'warning');
             }
 
             this.cy.elements().remove();
 
             // Add nodes
-            let nodeCount = 0;
             graph.nodes.forEach(n => {
                 let label = '';
 
-                // Build label based on available data
                 if (n.type && n.location) {
                     label = n.label + ":" + n.type + '(' + n.location + ')';
                 } else if (n.type) {
@@ -318,56 +405,40 @@ class GraphVisualizer {
                 this.cy.add({
                     data: {
                         id: String(n.id),
-                        label: label
+                        label: label,
+                        isRoot: n.isRoot
                     }
                 });
-                nodeCount++;
-
-                // Progress indicator for large graphs
-                if (nodeCount % 100 === 0 && graph.nodes.length > 500) {
-                    console.log('Added ' + nodeCount + '/' + graph.nodes.length + ' nodes');
-                }
             });
 
-            // Add edges
-            let edgeCount = 0;
+            // Add edges with color mapping from frontend
             graph.edges.forEach(e => {
-                const color = e.color || EDGE_COLORS[e.type] || EDGE_COLORS.default;
-                const edgeType = e.type || 'edge';
+                // Extract base edge type (before any " - " predicates)
+                const baseType = e.type.split(' - ')[0];
+                const color = EDGE_COLORS[baseType] || EDGE_COLORS.default;
 
                 this.cy.add({
                     data: {
                         source: String(e.source),
                         target: String(e.target),
                         color: color,
-                        type: edgeType
+                        type: e.type
                     }
                 });
-                edgeCount++;
-
-                // Progress indicator for large graphs
-                if (edgeCount % 500 === 0 && graph.edges.length > 1000) {
-                    console.log('Added ' + edgeCount + '/' + graph.edges.length + ' edges');
-                }
             });
 
-            this.log('Applying layout...');
             this.applyLayout('fcose');
 
             document.getElementById('empty-state').style.display = 'none';
-            document.getElementById('graph-controls').style.display = 'flex';
-            document.getElementById('graph-stats').style.display = 'block';
+            document.getElementById('carousel-container').classList.add('active');
+            document.getElementById('graph-controls').classList.add('active');
+            document.getElementById('graph-stats').classList.add('active');
             document.getElementById('node-count').textContent = graph.nodes.length;
             document.getElementById('edge-count').textContent = graph.edges.length;
-            this.log('Rendered: ' + graph.nodes.length + ' nodes, ' + graph.edges.length + ' edges', 'success');
-
-            // Show graph view by default
-            this.showGraphView();
 
         } catch (error) {
             this.log('Render failed: ' + error.message, 'error');
             console.error('Render error:', error);
-            console.error('Stack:', error.stack);
             this.showError('Failed to render graph: ' + error.message);
         }
     }
@@ -375,42 +446,6 @@ class GraphVisualizer {
     showError(message) {
         document.getElementById('empty-state').innerHTML = '<div style="color: #f48771; padding: 2rem; text-align: center;"><p>' + message + '</p><p style="margin-top: 1rem; font-size: 0.9rem;">Check browser console for details (F12)</p></div>';
         document.getElementById('empty-state').style.display = 'flex';
-    }
-
-    toggleView() {
-        if (this.isJsonView) {
-            this.showGraphView();
-        } else {
-            this.showJsonView();
-        }
-    }
-
-    showGraphView() {
-        this.isJsonView = false;
-        document.getElementById('cy').style.display = 'block';
-        document.getElementById('json-view').style.display = 'none';
-        document.getElementById('toggle-view-btn').textContent = 'View JSON';
-        document.getElementById('layout-select').disabled = false;
-        document.getElementById('fit-btn').disabled = false;
-        document.getElementById('export-png-btn').disabled = false;
-        this.log('Switched to graph view');
-    }
-
-    showJsonView() {
-        if (!this.currentGraphData) {
-            this.log('No graph data available', 'error');
-            return;
-        }
-
-        this.isJsonView = true;
-        document.getElementById('cy').style.display = 'none';
-        document.getElementById('json-view').style.display = 'block';
-        document.getElementById('json-content').textContent = JSON.stringify(this.currentGraphData, null, 2);
-        document.getElementById('toggle-view-btn').textContent = 'View Graph';
-        document.getElementById('layout-select').disabled = true;
-        document.getElementById('fit-btn').disabled = true;
-        document.getElementById('export-png-btn').disabled = true;
-        this.log('Switched to JSON view');
     }
 
     applyLayout(name) {

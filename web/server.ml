@@ -4,25 +4,26 @@ open Lwt.Syntax
 open Context
 open Types
 
-let visualize_to_json program options step_counter =
+let visualize_to_stream program options step_counter stream =
   let context = make_context options ~output_mode:Json ~step_counter () in
     context.litmus <- Some program;
+
+    (* Create a function to send graph data through SSE *)
+    let send_graph json_str =
+      let* () = Dream.write stream
+        (Printf.sprintf "data: %s\n\n" json_str) in
+      Dream.flush stream
+    in
 
     let* ctx =
       Lwt.return context
       |> Parse.step_parse_litmus
       |> Interpret.step_interpret
       |> Symmrd.step_calculate_dependencies
-      |> Eventstructureviz.step_visualize_event_structure
+      |> (fun ctx -> Eventstructureviz.step_visualize_graphs ctx send_graph)
     in
 
-    let output =
-      match ctx.output with
-      | Some output -> output
-      | None -> "{\"error\": \"No output generated\"}"
-    in
-
-    Lwt.return output
+    Lwt.return ctx
 
 let sse_data json_obj =
   let json_str = Yojson.Basic.to_string json_obj in
@@ -70,90 +71,30 @@ let visualize_sse_handler request =
             in
               let* () = Dream.flush stream in
 
-              let* json_result_string =
-                Lwt.catch
-                  (fun () -> visualize_to_json program options step_counter)
-                  (fun exn ->
-                    let error = Printexc.to_string exn in
-                      Printf.printf "❌ Error: %s\n%!" error;
-                      Lwt.return
-                        (Printf.sprintf "{\"error\": %s}"
-                           (Yojson.Basic.to_string (`String error))
-                        )
-                  )
+              let* () =
+                Dream.write stream
+                  (sse_data (`Assoc [ ("status", `String "visualizing") ]))
               in
+                let* () = Dream.flush stream in
 
-              Printf.printf "✅ Result: %d bytes\n%!"
-                (String.length json_result_string);
-
-              (* Check result size *)
-              let result_size = String.length json_result_string in
-                Printf.printf "📊 Result size: %d bytes\n%!" result_size;
-
-                (* Try to parse the JSON, with fallback for invalid escapes *)
-                let result_json =
-                  try
-                    (* First attempt: parse directly *)
-                    let parsed_result =
-                      Yojson.Basic.from_string json_result_string
-                    in
-
-                    if result_size > 500000 then
-                      Printf.printf "⚠️ Large result (%d bytes)\n%!" result_size;
-
-                    `Assoc
-                      [
-                        ("status", `String "complete");
-                        ("result", parsed_result);
-                        ("size", `Int result_size);
-                      ]
-                  with
-                  | Yojson.Json_error msg ->
-                      (* JSON parse error - likely invalid escape sequences *)
-                      Printf.printf "⚠️ JSON has invalid escapes: %s\n%!" msg;
-                      Printf.printf
-                        "📝 Attempting to fix escape sequences...\n%!";
-
-                      (* Try to fix common escape issues *)
-                      let fixed_json =
-                        (* Replace invalid UTF-8 escape sequences *)
-                        let s = json_result_string in
-                          (* This is a simple fix - you might need to adjust based on actual content *)
-                          s
-                      in
-
-                      (* Send as raw string to let client handle it *)
-                      Printf.printf
-                        "📤 Sending as raw string for client-side parsing\n%!";
-                      `Assoc
-                        [
-                          ("status", `String "complete_raw");
-                          ("result_raw", `String json_result_string);
-                          ("size", `Int result_size);
-                          ( "warning",
-                            `String
-                              "JSON contains special characters, rendering may \
-                               be limited"
-                          );
-                        ]
-                  | e ->
-                      Printf.printf "⚠️ Unexpected parse error: %s\n%!"
-                        (Printexc.to_string e);
-                      `Assoc
-                        [
-                          ("status", `String "error");
-                          ( "error",
-                            `String
-                              ("Failed to parse result: " ^ Printexc.to_string e)
-                          );
-                        ]
+                let* _ctx =
+                  Lwt.catch
+                    (fun () -> visualize_to_stream program options step_counter stream)
+                    (fun exn ->
+                      let error = Printexc.to_string exn in
+                        Printf.printf "❌ Error: %s\n%!" error;
+                        let* () = Dream.write stream
+                          (sse_data (`Assoc [
+                            ("error", `String error)
+                          ]))
+                        in
+                        let* () = Dream.flush stream in
+                        Lwt.fail exn
+                    )
                 in
 
-                let* () = Dream.write stream (sse_data result_json) in
-                  let* () = Dream.flush stream in
-                    Printf.printf "🎉 Complete!\n%!";
-
-                    Dream.close stream
+                Printf.printf "🎉 Complete!\n%!";
+                Dream.close stream
         )
         (fun exn ->
           Printf.printf "❌ SSE error: %s\n%!" (Printexc.to_string exn);
