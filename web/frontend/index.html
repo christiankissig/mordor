@@ -17,7 +17,12 @@
         header h1 { font-size: 1.5rem; color: #cccccc; }
         .header-controls { display: flex; gap: 1rem; align-items: center; }
         .main-content { display: flex; flex: 1; overflow: hidden; }
-        .panel { display: flex; flex-direction: column; background: #1e1e1e; border: 1px solid #3e3e42; flex: 1; position: relative; }
+        .panel { display: flex; flex-direction: column; background: #1e1e1e; border: 1px solid #3e3e42; position: relative; }
+        .panel:first-child { flex: 0 0 50%; min-width: 200px; }
+        .panel:last-child { flex: 1; min-width: 200px; }
+        .resizer { width: 5px; background: #3e3e42; cursor: col-resize; flex-shrink: 0; position: relative; }
+        .resizer:hover { background: #0e639c; }
+        .resizer:active { background: #1177bb; }
         .panel-header { background: #252526; border-bottom: 1px solid #3e3e42; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; }
         .panel-header h2 { font-size: 1rem; color: #cccccc; }
         #litmus-input { flex: 1; padding: 1rem; background: #1e1e1e; border: none; color: #d4d4d4; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.95rem; resize: none; outline: none; }
@@ -52,7 +57,7 @@
             </div>
         </header>
         <div class="main-content">
-            <div class="panel">
+            <div class="panel" id="left-panel">
                 <div class="panel-header">
                     <h2>Litmus Source</h2>
                     <select id="examples" style="padding:0.3rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px;">
@@ -64,7 +69,8 @@
                 </div>
                 <textarea id="litmus-input" placeholder="Enter your litmus test here..."></textarea>
             </div>
-            <div class="panel">
+            <div class="resizer" id="resizer"></div>
+            <div class="panel" id="right-panel">
                 <div class="panel-header">
                     <h2>Event Structure</h2>
                     <div class="status" id="status">Ready</div>
@@ -100,6 +106,42 @@ const EXAMPLES = {
     lb: "name = LB\n%%\n{ r1 := x; y := 1 } ||| { r2 := y; x := 1 }\n%% forbid (r1 = 1 && r2 = 1) [rc11]"
 };
 const EDGE_COLORS = { po: '#4ec9b0', rf: '#0e639c', co: '#ffa500', fr: '#f48771', default: '#6a6a6a' };
+
+// Resizer functionality
+const resizer = document.getElementById('resizer');
+const leftPanel = document.getElementById('left-panel');
+const rightPanel = document.getElementById('right-panel');
+
+let isResizing = false;
+
+resizer.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+    
+    const containerRect = leftPanel.parentElement.getBoundingClientRect();
+    const offsetLeft = e.clientX - containerRect.left;
+    const containerWidth = containerRect.width;
+    
+    // Calculate percentage, constrained between 20% and 80%
+    let percentage = (offsetLeft / containerWidth) * 100;
+    percentage = Math.max(20, Math.min(80, percentage));
+    
+    leftPanel.style.flex = `0 0 ${percentage}%`;
+});
+
+document.addEventListener('mouseup', () => {
+    if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    }
+});
+
 
 class GraphVisualizer {
     constructor() {
