@@ -107,9 +107,9 @@
                 
                 <div class="graph-controls" id="graph-controls">
                     <select id="layout-select">
+                        <option value="breadthfirst">Hierarchical</option>
                         <option value="fcose">fCoSE (Fast)</option>
                         <option value="cose-bilkent">COSE (Quality)</option>
-                        <option value="breadthfirst">Hierarchical</option>
                         <option value="circle">Circle</option>
                     </select>
                     <button id="fit-btn">Fit</button>
@@ -199,10 +199,13 @@ class GraphVisualizer {
                         'text-halign': 'center',
                         'font-size': '11px',
                         'font-weight': 'bold',
-                        'width': '35px',
-                        'height': '35px',
+                        'shape': 'roundrectangle',
+                        'width': 'label',
+                        'min-width': '30px',
+                        'height': '20px',
+                        'padding': '12px',
                         'text-wrap': 'wrap',
-                        'text-max-width': '100px'
+                        'text-max-width': '180px'
                     }
                 },
                 {
@@ -392,8 +395,13 @@ class GraphVisualizer {
             graph.nodes.forEach(n => {
                 let label = '';
 
-                if (n.type && n.location) {
-                    label = n.label + ":" + n.type + '(' + n.location + ')';
+                if (n.type && n.location && n.value) {
+                    label = n.label + ":" + n.type + ' ' + n.location + ' ' +
+                    n.value;
+                } else if (n.type && n.location) {
+                    label = n.label + ":" + n.type + ' ' + n.location;
+                } else if (n.type && n.value) {
+                    label = n.label + ":" + n.type + ' ' + n.value;
                 } else if (n.type) {
                     label = n.type;
                 } else if (n.label !== undefined && n.label !== null) {
@@ -427,7 +435,7 @@ class GraphVisualizer {
                 });
             });
 
-            this.applyLayout('fcose');
+            this.applyLayout('breadthfirst');
 
             document.getElementById('empty-state').style.display = 'none';
             document.getElementById('carousel-container').classList.add('active');
@@ -452,10 +460,16 @@ class GraphVisualizer {
         const configs = {
             fcose: { name: 'fcose', animate: true, fit: true, padding: 50, nodeSeparation: 150 },
             'cose-bilkent': { name: 'cose-bilkent', animate: true, fit: true, padding: 50 },
-            breadthfirst: { name: 'breadthfirst', directed: true, animate: true },
+            breadthfirst: { name: 'breadthfirst', directed: true, animate: true, fit: true, padding: 50 },
             circle: { name: 'circle', animate: true }
         };
-        this.cy.layout(configs[name] || configs.fcose).run();
+        const layout = this.cy.layout(configs[name] || configs.breadthfirst);
+        layout.run();
+        
+        // Automatically fit the graph after layout completes
+        layout.one('layoutstop', () => {
+            this.cy.fit(null, 50);
+        });
     }
 
     log(msg, type = 'info') {

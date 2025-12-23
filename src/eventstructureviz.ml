@@ -463,6 +463,20 @@ module EventStructureViz = struct
           | None -> ()
           );
 
+          ( match evt.rval with
+          | Some rval ->
+              let rval_str = json_escape (Value.to_string rval) in
+                Buffer.add_string buf
+                  (Printf.sprintf ",\"value\":\"%s\"" rval_str)
+          | None ->
+              match evt.wval with
+              | Some wval ->
+                  let wval_str = json_escape (Expr.to_string wval) in
+                    Buffer.add_string buf
+                      (Printf.sprintf ",\"value\":\"%s\"" wval_str)
+              | None -> ()
+          );
+
           (* Add constraints if present *)
           if v.Vertex.constraints <> [] then (
             Buffer.add_string buf ",\"constraints\":[";

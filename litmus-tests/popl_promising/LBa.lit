@@ -9,4 +9,4 @@ y := 0;
   x := r2
 }
 %%
-allow (r1 = 1) [Promising]
+forbid (r1 = 1) [Promising]

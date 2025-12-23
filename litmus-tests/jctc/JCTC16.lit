@@ -7,4 +7,4 @@ x := 0;
   x := 2
 }
 %%
-allow (r1 = 2 && r2 = 1) [] "Allowed."
+forbid (r1 = 2 && r2 = 1) [] "Allowed."

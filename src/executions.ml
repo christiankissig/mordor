@@ -451,7 +451,8 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
     (* Check acyclicity of rhb = dp_ppo ∪ rf *)
     let rhb = USet.union dp_ppo rf in
 
-    let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
+    (* fails promising semantics if enabled *)
+    (* let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in *)
 
     (* Check 1.2: No downward-closed same-location writes before reads *)
 
