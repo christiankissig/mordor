@@ -233,10 +233,10 @@ let litmus_test_cases ~strict =
 
 (* Test suites *)
 let suite_strict =
-  ("Integration Tests - Litmus Tests (Strict)", litmus_test_cases ~strict:true)
+  ("Integration Tests - Litmus Tests Strict", litmus_test_cases ~strict:true)
 
 let suite_permissive =
-  ( "Integration Tests - Litmus Tests (Permissive)",
+  ( "Integration Tests - Litmus Tests Permissive",
     litmus_test_cases ~strict:false
   )
 
