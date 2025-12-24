@@ -2,7 +2,6 @@
 
 open Ast
 open Context
-open Types
 
 type ir_stmt = unit Ir.ir_stmt
 type ir_assertion = unit Ir.ir_assertion
@@ -21,9 +20,6 @@ val parse_and_convert_litmus :
 
 (** Convert parser AST expression to Types.expr *)
 val ast_expr_to_expr : ast_expr -> Types.expr
-
-(** Convert parser mode to Types.mode *)
-val ast_mode_to_mode : mode -> Types.mode
 
 (** Convert a list of parser expressions to Types.expr list *)
 val convert_expr_list : ast_expr list -> Types.expr list

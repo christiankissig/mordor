@@ -13,6 +13,7 @@ type mode =
   | Normal
   | Strong
   | Nonatomic
+  | Consume
 
 let pp_mode fmt mode =
   Format.fprintf fmt "%s"
@@ -25,6 +26,7 @@ let pp_mode fmt mode =
     | Normal -> ""
     | Strong -> "strong"
     | Nonatomic -> "na"
+    | Consume -> "con"
     )
 
 let show_mode mode = Format.asprintf "%a" pp_mode mode

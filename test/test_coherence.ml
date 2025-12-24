@@ -1,12 +1,22 @@
 (** Unit tests for coherence checking *)
 open Uset
 
+open Algorithms
 open Alcotest
 open Coherence
 open Executions
 open Expr
 open Lwt.Syntax
 open Types
+
+(* Instantiate RC11 functor for testing *)
+module RC11Test = RC11 (struct
+  let config = RC11Config.default
+end)
+
+module RC11CTest = RC11 (struct
+  let config = RC11Config.with_consume
+end)
 
 (* Helper to run Lwt tests *)
 let lwt_test fn () = Lwt_main.run (fn ())
@@ -72,7 +82,7 @@ let uset_of_list lst =
     List.iter (fun x -> USet.add uset x |> ignore) lst;
     uset
 
-(** Test em with Write events *)
+(** Test ModelUtils.match_events with Write events *)
 let test_em_write_events () =
   let events =
     make_events_table
@@ -83,14 +93,14 @@ let test_em_write_events () =
       ]
   in
   let e = uset_of_list [ 1; 2; 3 ] in
-  let result = em events e Write None None None in
+  let result = ModelUtils.match_events events e Write None None None in
     check int "two write events" 2 (USet.size result);
     check bool "contains (1,1)" true (USet.mem result (1, 1));
     check bool "contains (3,3)" true (USet.mem result (3, 3));
     check bool "not contains (2,2)" false (USet.mem result (2, 2));
     ()
 
-(** Test em with mode filtering *)
+(** Test ModelUtils.match_events with mode filtering *)
 let test_em_with_mode () =
   let events =
     make_events_table
@@ -100,12 +110,14 @@ let test_em_with_mode () =
       ]
   in
   let e = uset_of_list [ 1; 2 ] in
-  let result = em events e Write (Some Release) None None in
+  let result =
+    ModelUtils.match_events events e Write (Some Release) None None
+  in
     check int "one release write" 1 (USet.size result);
     check bool "contains (1,1)" true (USet.mem result (1, 1));
     ()
 
-(** Test em with fence events *)
+(** Test ModelUtils.match_events with fence events *)
 let test_em_fence_events () =
   let events =
     make_events_table
@@ -116,11 +128,11 @@ let test_em_fence_events () =
       ]
   in
   let e = uset_of_list [ 1; 2; 3 ] in
-  let result = em events e Fence None None None in
+  let result = ModelUtils.match_events events e Fence None None None in
     check int "two fence events" 2 (USet.size result);
     ()
 
-(** Test em with strong mode *)
+(** Test ModelUtils.match_events with strong mode *)
 let test_em_strong_mode () =
   let events =
     make_events_table
@@ -133,12 +145,12 @@ let test_em_strong_mode () =
       ]
   in
   let e = uset_of_list [ 1; 2 ] in
-  let result = em events e Write None None (Some Strong) in
+  let result = ModelUtils.match_events events e Write None None (Some Strong) in
     check int "one strong write" 1 (USet.size result);
     check bool "contains (1,1)" true (USet.mem result (1, 1));
     ()
 
-(** Test imm_deps with data dependency *)
+(** Test IMM.compute_dependencies with data dependency *)
 let test_imm_deps_data () =
   let events =
     make_events_table
@@ -158,12 +170,14 @@ let test_imm_deps_data () =
   let po = uset_of_list [ (1, 2) ] in
   let e = uset_of_list [ 1; 2 ] in
   let restrict = Hashtbl.create 10 in
-  let result = imm_deps (make_empty_execution ()) events po e restrict in
+  let result =
+    IMM.compute_dependencies (make_empty_execution ()) events po e restrict
+  in
     (* Should detect data dependency since wval references rval *)
     check bool "has data dependency" true (USet.size result >= 0);
     ()
 
-(** Test imm_deps with control dependency *)
+(** Test IMM.compute_dependencies with control dependency *)
 let test_imm_deps_ctrl () =
   let events =
     make_events_table
@@ -177,12 +191,14 @@ let test_imm_deps_ctrl () =
   let restrict = Hashtbl.create 10 in
     Hashtbl.add restrict 1 [ ENum (Z.of_int 1) ];
     Hashtbl.add restrict 2 [ ENum (Z.of_int 2) ];
-    let result = imm_deps (make_empty_execution ()) events po e restrict in
+    let result =
+      IMM.compute_dependencies (make_empty_execution ()) events po e restrict
+    in
       (* Should detect control dependency since restricts differ *)
       check bool "has control dependency" true (USet.size result > 0);
       ()
 
-(** Test imm_coherent with simple coherence *)
+(** Test IMM.check_coherence with simple coherence *)
 let test_imm_coherent_simple () =
   let events =
     make_events_table
@@ -235,13 +251,13 @@ let test_imm_coherent_simple () =
     }
   in
   let loc_restrict x = x in
-  let cache = imm_coherent_cache execution structure events loc_restrict in
+  let cache = IMM.build_cache execution structure events loc_restrict in
   let co = uset_of_list [ (1, 2) ] in
-  let result = imm_coherent co cache in
+  let result = IMM.check_coherence co cache in
     check bool "simple coherence passes" true result;
     ()
 
-(** Test rc11_coherent with simple scenario *)
+(** Test RC11.check_coherence with simple scenario *)
 let test_rc11_coherent_simple () =
   let events =
     make_events_table
@@ -294,13 +310,72 @@ let test_rc11_coherent_simple () =
     }
   in
   let loc_restrict x = x in
-  let cache = rc11_coherent_cache execution structure events loc_restrict in
+  let cache = RC11Test.build_cache execution structure events loc_restrict in
   let co = USet.create () in
-  let result = rc11_coherent co cache in
+  let result = RC11Test.check_coherence co cache in
     check bool "simple RC11 coherence passes" true result;
     ()
 
-(** Test imm_coherent with RMW atomicity *)
+(** Test RC11c (with consume) configuration *)
+let test_rc11c_coherent_simple () =
+  let events =
+    make_events_table
+      [
+        (1, make_event 1 Write None (Some Release) None None None None None);
+        (2, make_event 2 Read (Some Consume) None None None None None None);
+      ]
+  in
+  let ex_e = uset_of_list [ 1; 2 ] in
+  let po = uset_of_list [ (1, 2) ] in
+  let rf = uset_of_list [ (1, 2) ] in
+  let restrict = Hashtbl.create 10 in
+  let structure =
+    {
+      e = ex_e;
+      events;
+      po;
+      po_iter = USet.create ();
+      restrict;
+      rmw = USet.create ();
+      lo = USet.create ();
+      cas_groups = Hashtbl.create 10;
+      pwg = [];
+      fj = USet.create ();
+      p = Hashtbl.create 10;
+      constraint_ = [];
+      conflict = USet.create ();
+      origin = Hashtbl.create 10;
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      fence_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
+    }
+  in
+  let execution =
+    {
+      ex_e;
+      rf;
+      ex_rmw = USet.create ();
+      dp = USet.create ();
+      ppo = USet.create ();
+      ex_p = [];
+      fix_rf_map = Hashtbl.create 10;
+      pointer_map = Hashtbl.create 10 |> Option.some;
+      final_env = Hashtbl.create 0;
+    }
+  in
+  let loc_restrict x = x in
+  let cache = RC11CTest.build_cache execution structure events loc_restrict in
+  let co = USet.create () in
+  let result = RC11CTest.check_coherence co cache in
+    check bool "simple RC11c coherence with consume passes" true result;
+    ()
+
+(** Test IMM.check_coherence with RMW atomicity *)
 let test_imm_coherent_rmw () =
   let events =
     make_events_table
@@ -359,15 +434,15 @@ let test_imm_coherent_rmw () =
     }
   in
   let loc_restrict x = x in
-  let cache = imm_coherent_cache execution structure events loc_restrict in
+  let cache = IMM.build_cache execution structure events loc_restrict in
   (* co ordering that violates atomicity: 0 -> 3 -> 2 *)
   let co = uset_of_list [ (0, 3); (3, 2) ] in
-  let result = imm_coherent co cache in
+  let result = IMM.check_coherence co cache in
     check bool "RMW atomicity violated" false result;
     (* Should fail *)
     ()
 
-(** Test cache type construction *)
+(** Test cache creation for different models *)
 let test_cache_types () =
   let events = make_events_table [] in
   let ex_e = USet.create () in
@@ -415,41 +490,28 @@ let test_cache_types () =
   in
   let loc_restrict x = x in
 
-  (* Test IMM cache creation *)
-  let imm_cache = imm_coherent_cache execution structure events loc_restrict in
-  let wrapped_imm = IMMCache imm_cache in
-    check bool "IMM cache created" true
-      ( match wrapped_imm with
-      | IMMCache _ -> true
-      | _ -> false
-      );
+  (* Test IMM cache creation - just verify it doesn't raise *)
+  let _imm_cache = IMM.build_cache execution structure events loc_restrict in
+    check bool "IMM cache created" true true;
 
     (* Test RC11 cache creation *)
-    let rc11_cache =
-      rc11_coherent_cache execution structure events loc_restrict
+    let _rc11_cache =
+      RC11Test.build_cache execution structure events loc_restrict
     in
-    let wrapped_rc11 = RC11Cache rc11_cache in
-      check bool "RC11 cache created" true
-        ( match wrapped_rc11 with
-        | RC11Cache _ -> true
-        | _ -> false
-        );
+      check bool "RC11 cache created" true true;
 
-      (* Test UndefinedCache *)
-      let undef = UndefinedCache { rfi = None; rmw = None } in
-        check bool "Undefined cache created" true
-          ( match undef with
-          | UndefinedCache _ -> true
-          | _ -> false
-          );
+      (* Test RC11c cache creation *)
+      let _rc11c_cache =
+        RC11CTest.build_cache execution structure events loc_restrict
+      in
+        check bool "RC11c cache created" true true;
 
-        (* Test EmptyCache *)
-        check bool "Empty cache is empty" true
-          ( match EmptyCache with
-          | EmptyCache -> true
-          | _ -> false
-          );
-        ()
+        (* Test Undefined cache creation *)
+        let _undefined_cache =
+          Undefined.build_cache execution structure events loc_restrict
+        in
+          check bool "Undefined cache created" true true;
+          ()
 
 (** Test permutations with empty list *)
 let test_permutations_empty () =
@@ -495,6 +557,7 @@ let suite =
       test_case "imm_deps control" `Quick test_imm_deps_ctrl;
       test_case "imm_coherent simple" `Quick test_imm_coherent_simple;
       test_case "rc11_coherent simple" `Quick test_rc11_coherent_simple;
+      test_case "rc11c_coherent simple" `Quick test_rc11c_coherent_simple;
       test_case "imm_coherent RMW" `Quick test_imm_coherent_rmw;
       test_case "cache types" `Quick test_cache_types;
       test_case "permutations empty" `Quick test_permutations_empty;

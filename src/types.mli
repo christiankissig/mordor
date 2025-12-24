@@ -12,6 +12,7 @@ type mode =
   | Normal
   | Strong
   | Nonatomic
+  | Consume
 [@@deriving show]
 
 (** Types of memory and control flow events *)

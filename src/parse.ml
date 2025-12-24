@@ -3,7 +3,6 @@ open Ast
 open Context
 open Ir
 open Lwt.Syntax
-open Types
 
 type ir_stmt = unit Ir.ir_stmt
 type ir_node = unit Ir.ir_node
@@ -42,17 +41,6 @@ let rec ast_expr_to_expr : ast_expr -> Types.expr = function
   | ETuple (e1, e2) ->
       (* Represent tuple as a special binop *)
       Types.EBinOp (ast_expr_to_expr e1, ",", ast_expr_to_expr e2)
-
-(** Convert ast_mode to Types.mode *)
-let ast_mode_to_mode : mode -> Types.mode = function
-  | Nonatomic -> Types.Nonatomic
-  | Relaxed -> Types.Relaxed
-  | Release -> Types.Release
-  | ReleaseAcquire -> Types.ReleaseAcquire
-  | Acquire -> Types.Acquire
-  | SC -> Types.SC
-  | Normal -> Types.Normal
-  | Strong -> Types.Strong
 
 (** Helper to convert expression lists *)
 let convert_expr_list exprs = List.map ast_expr_to_expr exprs

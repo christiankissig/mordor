@@ -271,6 +271,7 @@ module JustValidation = struct
     in
       let*? () = (satisfiable, "unsatisfiable path predicates") in
 
+      Logs.info (fun m -> m "  Found valid justification combination");
       Lwt.return true
 end
 
@@ -373,9 +374,6 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
         (USet.size rf) (List.length j_list)
   );
 
-  (* Combine dp and ppo *)
-  let dp_ppo = USet.union dp ppo in
-
   (* let* _ = Lwt.return_unit in *)
   let ( let*? ) (condition, msg) f =
     if condition then f ()
@@ -448,11 +446,15 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
         "RF fails RF total check"
       )
     in
+
+    (* Combine dp and ppo *)
+    let dp_ppo = USet.union dp ppo in
+
     (* Check acyclicity of rhb = dp_ppo ∪ rf *)
     let rhb = USet.union dp_ppo rf in
 
     (* fails promising semantics if enabled *)
-    (* let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in *)
+    let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
 
     (* Check 1.2: No downward-closed same-location writes before reads *)
 
@@ -818,6 +820,10 @@ let generate_executions (structure : symbolic_event_structure)
       paths
   in
 
+  Logs.info (fun m ->
+      m "Generated %d paths through the structure" (List.length paths)
+  );
+
   (* Build justification map: write event label -> list of justifications *)
   (* TODO remove justifications with elided origins *)
   let justmap = Hashtbl.create 16 in
@@ -861,10 +867,10 @@ let generate_executions (structure : symbolic_event_structure)
         let* freeze_fn_opt =
           create_freeze structure path j_remapped init_ppo statex
         in
-          Logs.debug (fun m ->
+          Logs.info (fun m ->
               m
-                "Freezing justification combination with %d justifications \
-                 over path with %d events, exploring %d RF combinations"
+                "Computed freeze function with %d justifications over path \
+                 with %d events, exploring %d RF combinations"
                 (List.length just_combo) (USet.size path.path)
                 (List.length all_rf)
           );
@@ -969,6 +975,11 @@ let generate_executions (structure : symbolic_event_structure)
               final_env;
             }
           in
+
+          Logs.info (fun m ->
+              m "Generated execution with %d events, %d RF edges"
+                (USet.size exec.ex_e) (USet.size exec.rf)
+          );
 
           Lwt.return exec
       in

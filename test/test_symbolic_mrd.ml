@@ -871,7 +871,9 @@ module TestCoherence = struct
     Hashtbl.add events 3 e3;
 
     let e_set = USet.of_list [ 1; 2; 3 ] in
-    let rel = em events e_set Read (Some Acquire) None None in
+    let rel =
+      ModelUtils.match_events events e_set Read (Some Acquire) None None
+    in
 
     (* Should include only acquire reads: (1,1) and (3,3) *)
     check bool "em_includes_acq_read_1" true (USet.mem rel (1, 1));

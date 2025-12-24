@@ -155,7 +155,7 @@ let model_names =
 
 let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
   ctx.options.model <- model;
-  Logs.debug (fun m -> m "applying model options for model %s" model);
+  Logs.info (fun m -> m "applying model options for model %s" model);
   Hashtbl.find_opt model_options_table model
   |> Option.map (fun options -> options.coherent)
   |> Option.value ~default:None

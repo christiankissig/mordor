@@ -45,3 +45,22 @@ module ListMapCombinationBuilder = struct
       (* OPTIMIZATION 5: Reverse each combination to restore original order *)
       Lwt.return (List.map List.rev result)
 end
+
+(** Generate all permutations of a list *)
+let rec permutations = function
+  | [] -> [ [] ]
+  | x :: xs ->
+      let perms = permutations xs in
+        List.concat
+          (List.map
+             (fun perm ->
+               let rec insert_at_all_positions acc = function
+                 | [] -> [ List.rev (x :: acc) ]
+                 | y :: ys as rest ->
+                     (List.rev acc @ (x :: rest))
+                     :: insert_at_all_positions (y :: acc) ys
+               in
+                 insert_at_all_positions [] perm
+             )
+             perms
+          )
