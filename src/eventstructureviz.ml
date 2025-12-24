@@ -212,8 +212,8 @@ module EventStructureViz = struct
           try Hashtbl.find structure.restrict event_id with Not_found -> []
         in
         let v = { Vertex.id = event_id; event = evt; constraints } in
-        G.add_vertex g v;
-        Hashtbl.add vertex_map event_id v
+          G.add_vertex g v;
+          Hashtbl.add vertex_map event_id v
       )
       structure.e;
 
@@ -225,7 +225,7 @@ module EventStructureViz = struct
       (fun (src, dst) ->
         let v_src = Hashtbl.find vertex_map src in
         let v_dst = Hashtbl.find vertex_map dst in
-        G.add_edge_e g (G.E.create v_src PO v_dst)
+          G.add_edge_e g (G.E.create v_src PO v_dst)
       )
       po_reduced;
 
@@ -242,20 +242,26 @@ module EventStructureViz = struct
     let exec_events = Hashtbl.create 100 in
 
     (* Extract events from dp, ppo, and rf relations *)
-    USet.iter (fun (src, dst) ->
-      Hashtbl.replace exec_events src ();
-      Hashtbl.replace exec_events dst ()
-    ) exec.dp;
+    USet.iter
+      (fun (src, dst) ->
+        Hashtbl.replace exec_events src ();
+        Hashtbl.replace exec_events dst ()
+      )
+      exec.dp;
 
-    USet.iter (fun (src, dst) ->
-      Hashtbl.replace exec_events src ();
-      Hashtbl.replace exec_events dst ()
-    ) exec.ppo;
+    USet.iter
+      (fun (src, dst) ->
+        Hashtbl.replace exec_events src ();
+        Hashtbl.replace exec_events dst ()
+      )
+      exec.ppo;
 
-    USet.iter (fun (src, dst) ->
-      Hashtbl.replace exec_events src ();
-      Hashtbl.replace exec_events dst ()
-    ) exec.rf;
+    USet.iter
+      (fun (src, dst) ->
+        Hashtbl.replace exec_events src ();
+        Hashtbl.replace exec_events dst ()
+      )
+      exec.rf;
 
     (* Create vertices only for events in this execution *)
     Hashtbl.iter
@@ -265,8 +271,8 @@ module EventStructureViz = struct
           try Hashtbl.find structure.restrict event_id with Not_found -> []
         in
         let v = { Vertex.id = event_id; event = evt; constraints } in
-        G.add_vertex g v;
-        Hashtbl.add vertex_map event_id v
+          G.add_vertex g v;
+          Hashtbl.add vertex_map event_id v
       )
       exec_events;
 
@@ -276,41 +282,41 @@ module EventStructureViz = struct
         if Hashtbl.mem exec_events src && Hashtbl.mem exec_events dst then
           let v_src = Hashtbl.find vertex_map src in
           let v_dst = Hashtbl.find vertex_map dst in
-          G.add_edge_e g (G.E.create v_src PO v_dst)
+            G.add_edge_e g (G.E.create v_src PO v_dst)
       )
       po_relation;
 
     (* Add DP edges (transitive reduction) *)
     let dp_reduced = URelation.transitive_reduction exec.dp in
-    USet.iter
-      (fun (src, dst) ->
-        let v_src = Hashtbl.find vertex_map src in
-        let v_dst = Hashtbl.find vertex_map dst in
-        G.add_edge_e g (G.E.create v_src (DP "") v_dst)
-      )
-      dp_reduced;
+      USet.iter
+        (fun (src, dst) ->
+          let v_src = Hashtbl.find vertex_map src in
+          let v_dst = Hashtbl.find vertex_map dst in
+            G.add_edge_e g (G.E.create v_src (DP "") v_dst)
+        )
+        dp_reduced;
 
-    (* Add PPO edges (transitive reduction) *)
-    let ppo_reduced = URelation.transitive_reduction exec.ppo in
-    USet.iter
-      (fun (src, dst) ->
-        let v_src = Hashtbl.find vertex_map src in
-        let v_dst = Hashtbl.find vertex_map dst in
-        G.add_edge_e g (G.E.create v_src (PPO "") v_dst)
-      )
-      ppo_reduced;
+      (* Add PPO edges (transitive reduction) *)
+      let ppo_reduced = URelation.transitive_reduction exec.ppo in
+        USet.iter
+          (fun (src, dst) ->
+            let v_src = Hashtbl.find vertex_map src in
+            let v_dst = Hashtbl.find vertex_map dst in
+              G.add_edge_e g (G.E.create v_src (PPO "") v_dst)
+          )
+          ppo_reduced;
 
-    (* Add RF edges (transitive reduction) *)
-    let rf_reduced = URelation.transitive_reduction exec.rf in
-    USet.iter
-      (fun (src, dst) ->
-        let v_src = Hashtbl.find vertex_map src in
-        let v_dst = Hashtbl.find vertex_map dst in
-        G.add_edge_e g (G.E.create v_src (RF "") v_dst)
-      )
-      rf_reduced;
+        (* Add RF edges (transitive reduction) *)
+        let rf_reduced = URelation.transitive_reduction exec.rf in
+          USet.iter
+            (fun (src, dst) ->
+              let v_src = Hashtbl.find vertex_map src in
+              let v_dst = Hashtbl.find vertex_map dst in
+                G.add_edge_e g (G.E.create v_src (RF "") v_dst)
+            )
+            rf_reduced;
 
-    g
+          g
 
   (** DOT output using OCamlGraph's Graphviz module *)
   module DotOutput = struct
@@ -443,14 +449,10 @@ module EventStructureViz = struct
           let is_last = i = List.length vertices - 1 in
 
           Buffer.add_string buf "{";
+          Buffer.add_string buf (Printf.sprintf "\"id\":%d," v.Vertex.id);
           Buffer.add_string buf
-            (Printf.sprintf "\"id\":%d," v.Vertex.id);
-          Buffer.add_string buf
-            (Printf.sprintf "\"type\":\"%s\","
-               (event_type_to_string evt.typ)
-            );
-          Buffer.add_string buf
-            (Printf.sprintf "\"label\":%d," evt.label);
+            (Printf.sprintf "\"type\":\"%s\"," (event_type_to_string evt.typ));
+          Buffer.add_string buf (Printf.sprintf "\"label\":%d," evt.label);
           Buffer.add_string buf
             (Printf.sprintf "\"isRoot\":%b" (v.Vertex.id = 0));
 
@@ -468,13 +470,14 @@ module EventStructureViz = struct
               let rval_str = json_escape (Value.to_string rval) in
                 Buffer.add_string buf
                   (Printf.sprintf ",\"value\":\"%s\"" rval_str)
-          | None ->
+          | None -> (
               match evt.wval with
               | Some wval ->
                   let wval_str = json_escape (Expr.to_string wval) in
                     Buffer.add_string buf
                       (Printf.sprintf ",\"value\":\"%s\"" wval_str)
               | None -> ()
+            )
           );
 
           (* Add constraints if present *)
@@ -525,12 +528,9 @@ module EventStructureViz = struct
           (fun i (src, dst, edge_type) ->
             let is_last = i = List.length edges - 1 in
               Buffer.add_string buf "{";
-              Buffer.add_string buf
-                (Printf.sprintf "\"source\":%d," src);
-              Buffer.add_string buf
-                (Printf.sprintf "\"target\":%d," dst);
-              Buffer.add_string buf
-                (Printf.sprintf "\"type\":\"%s\"" edge_type);
+              Buffer.add_string buf (Printf.sprintf "\"source\":%d," src);
+              Buffer.add_string buf (Printf.sprintf "\"target\":%d," dst);
+              Buffer.add_string buf (Printf.sprintf "\"type\":\"%s\"" edge_type);
               Buffer.add_string buf
                 (Printf.sprintf "}%s" (if is_last then "" else ","))
           )
@@ -570,9 +570,7 @@ module EventStructureViz = struct
                 close_out oc;
                 Some content
       | _ ->
-          Logs.err (fun m ->
-              m "Unsupported output format for\n      visualization."
-          );
+          Logs.err (fun m -> m "Unsupported output format for visualization.");
           None
 end
 
@@ -599,27 +597,43 @@ let step_visualize_event_structure (lwt_ctx : mordor_ctx Lwt.t) :
       );
       Lwt.return ctx
 
-(** New step function that produces a stream of graphs *)
-let step_visualize_graphs (lwt_ctx : mordor_ctx Lwt.t)
+(** Step function to send the event structure graph (PO edges only) after
+    interpret *)
+let step_send_event_structure_graph (lwt_ctx : mordor_ctx Lwt.t)
     (send_graph : string -> unit Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
 
   match ctx.structure with
   | Some structure ->
-      (* First, send the event structure graph with PO edges only *)
+      (* Send the event structure graph with PO edges only *)
       let es_graph = EventStructureViz.build_event_structure_graph structure in
       let es_json = EventStructureViz.to_json es_graph in
 
       (* Wrap in graph message with type *)
-      let es_message = Printf.sprintf
-        "{\"type\": \"event_structure\", \"graph\": %s}"
-        es_json in
-      let* () = send_graph es_message in
+      let es_message =
+        Printf.sprintf "{\"type\": \"event_structure\", \"graph\": %s}" es_json
+      in
+        let* () = send_graph es_message in
 
+        Logs.info (fun m -> m "Event structure graph sent after interpret");
+        Lwt.return ctx
+  | None ->
+      Logs.err (fun m ->
+          m "Event structure not available for visualization after interpret."
+      );
+      Lwt.return ctx
+
+(** Step function to send execution graphs after dependency calculation *)
+let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
+    (send_graph : string -> unit Lwt.t) : mordor_ctx Lwt.t =
+  let* ctx = lwt_ctx in
+
+  match ctx.structure with
+  | Some structure ->
       (* Get PO relation for use in execution graphs *)
       let po_reduced = URelation.transitive_reduction structure.po in
 
-      (* Then, send each execution as a separate graph *)
+      (* Send each execution as a separate graph *)
       let* () =
         match ctx.executions with
         | Some execs ->
@@ -630,36 +644,46 @@ let step_visualize_graphs (lwt_ctx : mordor_ctx Lwt.t)
             let* () =
               Lwt_list.iteri_s
                 (fun i exec ->
-                  let exec_graph = EventStructureViz.build_execution_graph
-                    structure exec po_reduced in
+                  let exec_graph =
+                    EventStructureViz.build_execution_graph structure exec
+                      po_reduced
+                  in
                   let exec_json = EventStructureViz.to_json exec_graph in
 
+                  let exec_preds_string =
+                    String.concat ", " (List.map Expr.to_string exec.ex_p)
+                  in
+
                   (* Wrap in graph message with type and index *)
-                  let exec_message = Printf.sprintf
-                    "{\"type\": \"execution\", \"index\": %d, \"graph\": %s}"
-                    (i + 1) exec_json in
-                  send_graph exec_message
+                  let exec_message =
+                    Printf.sprintf
+                      "{\"type\": \"execution\", \"index\": %d, \"preds\": \
+                       \"%s\", \"graph\": %s}"
+                      (i + 1) exec_preds_string exec_json
+                  in
+                    send_graph exec_message
                 )
                 exec_list
             in
 
             (* Send completion message with total count *)
-            let complete_message = Printf.sprintf
-              "{\"type\": \"complete\", \"total_executions\": %d}"
-              exec_count in
-            send_graph complete_message
+            let complete_message =
+              Printf.sprintf
+                "{\"type\": \"complete\", \"total_executions\": %d}" exec_count
+            in
+              send_graph complete_message
         | None ->
             (* No executions, just send completion *)
             let complete_message =
-              "{\"type\": \"complete\", \"total_executions\": 0}" in
-            send_graph complete_message
+              "{\"type\": \"complete\", \"total_executions\": 0}"
+            in
+              send_graph complete_message
       in
 
-      Logs.info (fun m -> m "Graph stream visualization complete");
+      Logs.info (fun m -> m "Execution graphs sent after dependency calculation");
       Lwt.return ctx
-
   | None ->
       Logs.err (fun m ->
-          m "Event structure not available for graph streaming."
+          m "Event structure not available for execution graph streaming."
       );
       Lwt.return ctx

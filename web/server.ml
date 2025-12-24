@@ -10,17 +10,20 @@ let visualize_to_stream program options step_counter stream =
 
     (* Create a function to send graph data through SSE *)
     let send_graph json_str =
-      let* () = Dream.write stream
-        (Printf.sprintf "data: %s\n\n" json_str) in
-      Dream.flush stream
+      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
+        Dream.flush stream
     in
 
     let* ctx =
       Lwt.return context
       |> Parse.step_parse_litmus
       |> Interpret.step_interpret
+      (* Send event structure graph immediately after interpret *)
+      |> (fun ctx ->
+      Eventstructureviz.step_send_event_structure_graph ctx send_graph
+      )
       |> Symmrd.step_calculate_dependencies
-      |> (fun ctx -> Eventstructureviz.step_visualize_graphs ctx send_graph)
+      |> fun ctx -> Eventstructureviz.step_send_execution_graphs ctx send_graph
     in
 
     Lwt.return ctx
@@ -79,17 +82,18 @@ let visualize_sse_handler request =
 
                 let* _ctx =
                   Lwt.catch
-                    (fun () -> visualize_to_stream program options step_counter stream)
+                    (fun () ->
+                      visualize_to_stream program options step_counter stream
+                    )
                     (fun exn ->
                       let error = Printexc.to_string exn in
                         Printf.printf "❌ Error: %s\n%!" error;
-                        let* () = Dream.write stream
-                          (sse_data (`Assoc [
-                            ("error", `String error)
-                          ]))
+                        let* () =
+                          Dream.write stream
+                            (sse_data (`Assoc [ ("error", `String error) ]))
                         in
-                        let* () = Dream.flush stream in
-                        Lwt.fail exn
+                          let* () = Dream.flush stream in
+                            Lwt.fail exn
                     )
                 in
 
