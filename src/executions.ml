@@ -601,13 +601,85 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
               Logs.debug (fun m -> m "  Freeze successful");
               Lwt.return_some freeze_result
 
+(* Compute initial RF relation: writes × reads that are not in po^-1 *)
+let compute_path_rf structure path ~elided ~constraints statex ppo dp =
+  let write_events =
+    USet.set_minus (USet.intersection structure.write_events path.path) elided
+  in
+  let read_events =
+    USet.set_minus (USet.intersection structure.read_events path.path) elided
+  in
+  let w_with_init = USet.union write_events (USet.singleton 0) in
+  let w_cross_r = URelation.cross w_with_init read_events in
+
+  let ( let*? ) (condition, msg) f =
+    if condition then f () else Lwt.return false
+  in
+
+  let preds = path.p @ constraints @ statex |> USet.of_list |> USet.values in
+
+  (* w must not be po-after r *)
+  let po =
+    USet.intersection structure.po (URelation.cross path.path path.path)
+  in
+  let po_inv = URelation.inverse_relation po in
+  let w_cross_r_minus_po = USet.set_minus w_cross_r po_inv in
+    let* all_rf =
+      USet.async_filter
+        (fun rf_edge ->
+          let w, r = rf_edge in
+          let r_restrict =
+            Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
+          in
+            (* Check that loc(w) = loc(r) is satisfiable *)
+            let* loc_eq =
+              match
+                (get_loc structure.events w, get_loc structure.events r)
+              with
+              | Some loc_w, Some loc_r ->
+                  Solver.expoteq ~state:preds loc_w loc_r
+              | _ -> Lwt.return false
+            in
+              let*? () = (loc_eq, "RF locs not equal") in
+                (* Check that writes are not shadowed for read-from *)
+                let* has_dslwb = dslwb structure w r in
+                  let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
+                    Lwt.return true
+        )
+        w_cross_r_minus_po
+    in
+
+    let dp_ppo = USet.union dp ppo in
+    let dp_ppo_tc = URelation.transitive_closure dp_ppo in
+
+    (* exclude rf edges that form immediate cycles with ppo and dp *)
+    let all_rf_inv = URelation.inverse_relation all_rf in
+    let all_rf_inv =
+      USet.filter (fun (r, w) -> not (USet.mem dp_ppo_tc (r, w))) all_rf_inv
+    in
+
+    Logs.debug (fun m ->
+        m "  Found %d initial RF edges for path" (USet.size all_rf_inv)
+    );
+
+    let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
+      ListMapCombinationBuilder.build_combinations all_rf_inv_map
+        (USet.values read_events)
+        (fun _ ?alternatives:_ _ -> Lwt.return true)
+        (fun combo ->
+          let combo_rev = List.map (fun (r, w) -> (w, r)) combo in
+          let rhb = USet.union dp_ppo_tc (USet.of_list combo_rev) in
+          let acyclic = URelation.acyclic rhb in
+            Lwt.return acyclic
+        )
+
 (** Create a freeze function that validates RF sets for a justification
     combination *)
-let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
-    statex =
+let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
+    ~elided ~constraints =
   (* let* _ = Lwt.return_unit in *)
   let ( let*? ) (condition, msg) f =
-    if condition then f () else Lwt.return_none
+    if condition then f () else Lwt.return []
   in
 
   let e = path.path in
@@ -696,10 +768,18 @@ let create_freeze (structure : symbolic_event_structure) path j_list init_ppo
       let ppo_loc = USet.intersection ppo_loc e_squared in
       let ppo_loc = URelation.transitive_closure ppo_loc in
 
-      (* Return the freeze validation function *)
-      Lwt.return_some (fun rf ->
-          validate_rf structure path ppo_loc dp ppo j_list pp p_combined rf
-      )
+      let* all_rf =
+        compute_path_rf structure path ~elided ~constraints statex ppo dp
+      in
+      let all_validations =
+        List.map (List.map (fun (r, w) -> (w, r))) all_rf
+        |> List.map USet.of_list
+        |> List.map (fun rf ->
+            validate_rf structure path ppo_loc dp ppo j_list pp p_combined rf
+        )
+      in
+        let* results = Lwt.all all_validations in
+          Lwt.return (List.filter_map Fun.id results)
 
 (** Build justification combinations for all paths with caching *)
 let build_justcombos structure paths init_ppo statex
@@ -740,65 +820,6 @@ let build_justcombos structure paths init_ppo statex
   |> Lwt_stream.map_list_s combine_justifications_for_path
 
 (** Generate executions **)
-
-(* Compute initial RF relation: writes × reads that are not in po^-1 *)
-let compute_path_rf structure path ~elided ~constraints statex =
-  let write_events =
-    USet.set_minus (USet.intersection structure.write_events path.path) elided
-  in
-  let read_events =
-    USet.set_minus (USet.intersection structure.read_events path.path) elided
-  in
-  let w_with_init = USet.union write_events (USet.singleton 0) in
-  let w_cross_r = URelation.cross w_with_init read_events in
-
-  let ( let*? ) (condition, msg) f =
-    if condition then f () else Lwt.return false
-  in
-
-  let preds = path.p @ constraints @ statex |> USet.of_list |> USet.values in
-
-  (* w must not be po-after r *)
-  let po =
-    USet.intersection structure.po (URelation.cross path.path path.path)
-  in
-  let po_inv = URelation.inverse_relation po in
-  let w_cross_r_minus_po = USet.set_minus w_cross_r po_inv in
-    let* all_rf =
-      USet.async_filter
-        (fun rf_edge ->
-          let w, r = rf_edge in
-          let r_restrict =
-            Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
-          in
-            (* Check that loc(w) = loc(r) is satisfiable *)
-            let* loc_eq =
-              match
-                (get_loc structure.events w, get_loc structure.events r)
-              with
-              | Some loc_w, Some loc_r ->
-                  Solver.expoteq ~state:preds loc_w loc_r
-              | _ -> Lwt.return false
-            in
-              let*? () = (loc_eq, "RF locs not equal") in
-                (* Check that writes are not shadowed for read-from *)
-                let* has_dslwb = dslwb structure w r in
-                  let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
-                    Lwt.return true
-        )
-        w_cross_r_minus_po
-    in
-
-    Logs.debug (fun m ->
-        m "  Found %d initial RF edges for path" (USet.size all_rf)
-    );
-
-    let all_rf_inv = URelation.inverse_relation all_rf in
-    let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
-      ListMapCombinationBuilder.build_combinations all_rf_inv_map
-        (USet.values read_events)
-        (fun _ ?alternatives:_ _ -> Lwt.return true)
-        (fun _ -> Lwt.return true)
 
 (** Main execution generation - replaces the stub in calculate_dependencies *)
 let generate_executions (structure : symbolic_event_structure)
@@ -858,32 +879,17 @@ let generate_executions (structure : symbolic_event_structure)
           List.flatten (List.map (fun (j : justification) -> j.p) just_combo)
         in
 
-        let* all_rf =
-          compute_path_rf structure path ~elided ~constraints statex
-        in
-        let all_rf = List.map (List.map (fun (r, w) -> (w, r))) all_rf in
-        let all_rf = List.map USet.of_list all_rf in
-
-        let* freeze_fn_opt =
-          create_freeze structure path j_remapped init_ppo statex
+        let* freeze_results =
+          freeze structure path j_remapped init_ppo statex ~elided ~constraints
         in
           Logs.info (fun m ->
               m
-                "Computed freeze function with %d justifications over path \
-                 with %d events, exploring %d RF combinations"
+                "Computed %d freeze results with %d justifications over path \
+                 with %d events"
+                (List.length freeze_results)
                 (List.length just_combo) (USet.size path.path)
-                (List.length all_rf)
           );
-          match freeze_fn_opt with
-          | None -> Lwt.return []
-          | Some freeze_fn ->
-              (* Process each RF combination and collect successful freezes *)
-              Lwt_list.filter_map_s
-                (fun rf_combo ->
-                  let* freeze_res_opt = freeze_fn rf_combo in
-                    Lwt.return freeze_res_opt
-                )
-                all_rf
+          Lwt.return freeze_results
       in
 
       (* Use map_list_s to handle the list results and flatten them into the stream *)

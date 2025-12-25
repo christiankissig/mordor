@@ -79,13 +79,15 @@ val validate_rf :
 
     The returned freeze function has type:
     [(int * int) uset -> freeze_result option Lwt.t] *)
-val create_freeze :
+val freeze :
   symbolic_event_structure ->
   path_info ->
   justification list ->
   (int * int) uset ->
   expr list ->
-  ((int * int) uset -> freeze_result option Lwt.t) option Lwt.t
+  elided:int uset ->
+  constraints:expr list ->
+  freeze_result list Lwt.t
 
 (** {1 Justification Combinations} *)
 
