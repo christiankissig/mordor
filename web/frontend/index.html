@@ -465,7 +465,21 @@ class GraphVisualizer {
         const configs = {
             fcose: { name: 'fcose', animate: true, fit: true, padding: 50, nodeSeparation: 150 },
             'cose-bilkent': { name: 'cose-bilkent', animate: true, fit: true, padding: 50 },
-            breadthfirst: { name: 'breadthfirst', directed: true, animate: true, fit: true, padding: 50 },
+            breadthfirst: { 
+                name: 'breadthfirst', 
+                directed: true, 
+                animate: true, 
+                fit: true, 
+                padding: 50,
+                spacingFactor: 1.5,
+                // Only use "po" edges for determining hierarchy
+                roots: this.cy.nodes().roots(),
+                edgeFilter: (edge) => {
+                    const type = edge.data('type');
+                    const baseType = type ? type.split(' - ')[0] : '';
+                    return baseType === 'po';
+                }
+            },
             circle: { name: 'circle', animate: true }
         };
         const layout = this.cy.layout(configs[name] || configs.breadthfirst);
