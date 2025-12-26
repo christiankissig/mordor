@@ -431,8 +431,17 @@ let ppo ctx predicates =
               )
             | None -> !State.ppo_loc_base
           in
-            (* In full implementation: filter with alias analysis using solver *)
-            Lwt.return base
+            (* Filter with alias analysis using solver - check if locations are
+               equal given predicates and psi of forwarding context *)
+            USet.async_filter
+              (fun (e1, e2) ->
+                let loc1 = Events.get_loc !State.events e1 in
+                let loc2 = Events.get_loc !State.events e2 in
+                  match (loc1, loc2) with
+                  | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                  | _ -> Lwt.return false
+              )
+              base
         in
         let remapped = remap_rel ctx (USet.union !State.ppo_base result) in
           Lwt.return (cache_set ctx "ppo" p remapped)
@@ -444,10 +453,32 @@ let ppo_loc ctx predicates =
     match cached.ppo_loc with
     | Some v -> Lwt.return v
     | None ->
-        let* ppo_result = ppo ctx predicates in
-        (* In full implementation: additional filtering for exact location equality *)
-        let remapped = remap_rel ctx ppo_result in
-          Lwt.return (cache_set ctx "ppo_loc" p remapped)
+        (* Get base ppo_alias from cache or compute it *)
+        let* ppo_alias =
+          let sub = cache_get_subset ctx p in
+            match sub with
+            | Some s -> (
+                match (s.ppo_loc, s.ppo) with
+                | Some ppo_loc, _ -> Lwt.return ppo_loc
+                | None, Some ppo -> Lwt.return ppo
+                | None, None -> ppo ctx predicates
+              )
+            | None -> ppo ctx predicates
+        in
+          (* Filter for exact location equality using the predicates P *)
+          let* filtered =
+            USet.async_filter
+              (fun (e1, e2) ->
+                let loc1 = Events.get_loc !State.events e1 in
+                let loc2 = Events.get_loc !State.events e2 in
+                  match (loc1, loc2) with
+                  | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                  | _ -> Lwt.return false
+              )
+              ppo_alias
+          in
+          let remapped = remap_rel ctx filtered in
+            Lwt.return (cache_set ctx "ppo_loc" p remapped)
 
 (** Compute synchronization preserved program order *)
 let ppo_sync ctx = remap_rel ctx !State.ppo_sync

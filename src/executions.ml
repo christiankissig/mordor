@@ -447,159 +447,115 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
       )
     in
 
-    (* Combine dp and ppo *)
-    let dp_ppo = USet.union dp ppo in
-
     (* Check acyclicity of rhb = dp_ppo ∪ rf *)
+    let dp_ppo = USet.union dp ppo in
     let rhb = USet.union dp_ppo rf in
+      (* TODO discern memory model *)
+      let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
 
-    (* fails promising semantics if enabled *)
-    let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
+      (* Check 1.2: No downward-closed same-location writes before reads *)
 
-    (* Check 1.2: No downward-closed same-location writes before reads *)
-
-    (* Rewrite predicates *)
-    let check_rf =
-      USet.values rf
-      |> List.map (fun (w, r) ->
-          let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
-          let w_loc =
-            match just_w with
-            | Some j -> loce structure.events j.w.label r
-            | None -> loce structure.events w r
-          in
-            match get_loc structure.events r with
-            | Some r_loc ->
-                if Expr.compare w_loc r_loc < 0 then Expr.binop w_loc "=" r_loc
-                else Expr.binop r_loc "=" w_loc
-            | None ->
-                failwith
-                  ("Read event "
-                  ^ string_of_int r
-                  ^ " has no\n          location!"
-                  )
-      )
-    in
-    let big_p_exprs = p_combined @ env_rf @ check_rf in
-      Logs.debug (fun m ->
-          m
-            "  Evaluating %d combined\n\
-            \          predicates\n\
-             \tp_combined=%s\n\
-             \tenv_rf=%s\n\
-             \tcheck_rf=%s"
-            (List.length big_p_exprs)
-            (String.concat ", " (List.map Expr.to_string p_combined))
-            (String.concat ", " (List.map Expr.to_string env_rf))
-            (String.concat ", " (List.map Expr.to_string check_rf))
-      );
+      (* Rewrite predicates *)
+      let check_rf =
+        USet.values rf
+        |> List.map (fun (w, r) ->
+            let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
+            let w_loc =
+              match just_w with
+              | Some j -> loce structure.events j.w.label r
+              | None -> loce structure.events w r
+            in
+              match get_loc structure.events r with
+              | Some r_loc ->
+                  if Expr.compare w_loc r_loc < 0 then
+                    Expr.binop w_loc "=" r_loc
+                  else Expr.binop r_loc "=" w_loc
+              | None ->
+                  failwith
+                    ("Read event "
+                    ^ string_of_int r
+                    ^ " has no\n          location!"
+                    )
+        )
+      in
+      let big_p_exprs = p_combined @ env_rf @ check_rf in
       let big_p =
         List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs
         |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))
         |> USet.of_list
         |> USet.values
       in
-        Logs.debug (fun m ->
-            m "  Evaluated predicates:\n\t%s"
-              (String.concat "\n\t" (List.map Expr.to_string big_p))
-        );
         (* atomicity constraint *)
         let* af = atomicity_pairs structure path rhb env_rf in
-          Logs.debug (fun m ->
-              m "  Found %d atomicity pairs\n%s" (USet.size af)
-                (String.concat "\n\t"
-                   (List.map
-                      (fun (a, b) -> Printf.sprintf "(%d, %d)" a b)
-                      (USet.values af)
-                   )
+
+        (* Create disjointness predicates *)
+        let disj =
+          USet.map
+            (fun (a, b) ->
+              match
+                ( Hashtbl.find_opt structure.events a,
+                  Hashtbl.find_opt structure.events b
                 )
-          );
+              with
+              | None, _ ->
+                  failwith
+                    ("Event " ^ string_of_int a ^ " not found in structure!")
+              | _, None ->
+                  failwith
+                    ("Event " ^ string_of_int b ^ " not found in structure!")
+              | Some ea, Some eb -> (
+                  match
+                    ( get_loc structure.events a,
+                      get_val structure.events a,
+                      get_loc structure.events b,
+                      get_val structure.events b
+                    )
+                  with
+                  | None, _, _, _ ->
+                      failwith ("Event " ^ string_of_int a ^ " has no location!")
+                  | _, None, _, _ ->
+                      failwith ("Event " ^ string_of_int a ^ " has no value!")
+                  | _, _, None, _ ->
+                      failwith ("Event " ^ string_of_int b ^ " has no location!")
+                  | _, _, _, None ->
+                      failwith ("Event " ^ string_of_int b ^ " has no value!")
+                  | _ ->
+                      let loc_a = get_loc structure.events a |> Option.get in
+                      let val_a = get_val structure.events a |> Option.get in
+                      let loc_b = get_loc structure.events b |> Option.get in
+                      let val_b = get_val structure.events b |> Option.get in
+                        (* disjoint only uses location *)
+                        disjoint (loc_a, val_a) (loc_b, val_b)
+                )
+            )
+            af
+          |> USet.values
+        in
+        let bigger_p =
+          List.map
+            (fun expr -> Expr.evaluate expr (fun _ -> None))
+            (big_p @ disj)
+        in
 
-          (* Create disjointness predicates *)
-          let disj =
-            USet.map
-              (fun (a, b) ->
-                match
-                  ( Hashtbl.find_opt structure.events a,
-                    Hashtbl.find_opt structure.events b
-                  )
-                with
-                | None, _ ->
-                    failwith
-                      ("Event " ^ string_of_int a ^ " not found in structure!")
-                | _, None ->
-                    failwith
-                      ("Event " ^ string_of_int b ^ " not found in structure!")
-                | Some ea, Some eb -> (
-                    Logs.debug (fun m ->
-                        m
-                          "  Creating disjointness predicate for events %s and \
-                           %s"
-                          (show_event ea) (show_event eb)
-                    );
-                    match
-                      ( get_loc structure.events a,
-                        get_val structure.events a,
-                        get_loc structure.events b,
-                        get_val structure.events b
-                      )
-                    with
-                    | None, _, _, _ ->
-                        failwith
-                          ("Event " ^ string_of_int a ^ " has no location!")
-                    | _, None, _, _ ->
-                        failwith ("Event " ^ string_of_int a ^ " has no value!")
-                    | _, _, None, _ ->
-                        failwith
-                          ("Event " ^ string_of_int b ^ " has no location!")
-                    | _, _, _, None ->
-                        failwith ("Event " ^ string_of_int b ^ " has no value!")
-                    | _ ->
-                        let loc_a = get_loc structure.events a |> Option.get in
-                        let val_a = get_val structure.events a |> Option.get in
-                        let loc_b = get_loc structure.events b |> Option.get in
-                        let val_b = get_val structure.events b |> Option.get in
-                          (* disjoint only uses location *)
-                          disjoint (loc_a, val_a) (loc_b, val_b)
-                  )
-              )
-              af
-            |> USet.values
+        (* Check satisfiability of combined predicates *)
+        let* satisfiable = Solver.is_sat_cached bigger_p in
+          let*? () = (satisfiable, "unsatisfiable combined predicates") in
+
+          (* Success! Return the freeze result *)
+          let freeze_result =
+            {
+              justs = j_list;
+              e;
+              dp;
+              ppo;
+              rf;
+              rmw = rmw_filtered;
+              pp = bigger_p;
+              conds = [ EBoolean true ];
+            }
           in
-            Logs.debug (fun m ->
-                m "  Created %d disjointness predicates\n\t%s" (List.length disj)
-                  (String.concat "\n\t" (List.map Expr.to_string disj))
-            );
-
-            let bigger_p =
-              List.map
-                (fun expr -> Expr.evaluate expr (fun _ -> None))
-                (big_p @ disj)
-            in
-
-            Logs.debug (fun m ->
-                m "  Evaluating %d combined predicates with disjointness\n\t%s"
-                  (List.length bigger_p)
-                  (String.concat "\n\t" (List.map Expr.to_string bigger_p))
-            );
-
-            (* Check satisfiability of combined predicates *)
-
-            (* Success! Return the freeze result *)
-            let freeze_result =
-              {
-                justs = j_list;
-                e;
-                dp;
-                ppo = dp_ppo;
-                rf;
-                rmw = rmw_filtered;
-                pp = bigger_p;
-                conds = [ EBoolean true ];
-              }
-            in
-              Logs.debug (fun m -> m "  Freeze successful");
-              Lwt.return_some freeze_result
+            Logs.debug (fun m -> m "  Freeze successful");
+            Lwt.return_some freeze_result
 
 (* Compute initial RF relation: writes × reads that are not in po^-1 *)
 let compute_path_rf structure path ~elided ~constraints statex ppo dp =
@@ -664,14 +620,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp =
 
     let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
       ListMapCombinationBuilder.build_combinations all_rf_inv_map
-        (USet.values read_events)
-        (fun _ ?alternatives:_ _ -> Lwt.return true)
-        (fun combo ->
-          let combo_rev = List.map (fun (r, w) -> (w, r)) combo in
-          let rhb = USet.union dp_ppo_tc (USet.of_list combo_rev) in
-          let acyclic = URelation.acyclic rhb in
-            Lwt.return acyclic
-        )
+        (USet.values read_events) ()
 
 (** Create a freeze function that validates RF sets for a justification
     combination *)
@@ -737,12 +686,17 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
               let* ppo_j = Forwardingcontext.ppo just_con just.p in
 
               (* TODO path should be po-downward closed *)
-              (* Intersect with po pairs ending at this write *)
+              (* Intersect with po pairs ending at or before this write *)
               let po_to_w =
                 USet.filter (fun (_, t) -> t = just.w.label) structure.po
               in
+              (* Include the write event itself in the cross product
+                 so ppo edges TO the write are preserved *)
+              let po_predecessors_and_w =
+                USet.add (URelation.pi_1 po_to_w) just.w.label
+              in
               let po_to_w_squared =
-                URelation.cross (URelation.pi_1 po_to_w) (URelation.pi_1 po_to_w)
+                URelation.cross po_predecessors_and_w po_predecessors_and_w
               in
                 Lwt.return (USet.intersection ppo_j po_to_w_squared)
           )
@@ -751,7 +705,18 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
 
       let ppo = List.fold_left USet.union (USet.create ()) ppos in
       let ppo = USet.union ppo (Forwardingcontext.ppo_sync con) in
+      let ppo = USet.union ppo init_ppo in
       let ppo = USet.intersection ppo e_squared in
+
+      Logs.debug (fun m ->
+          m "Computed ppo with %d edges: %s" (USet.size ppo)
+            (String.concat ", "
+               (List.map
+                  (fun (a, b) -> Printf.sprintf "(%d->%d)" a b)
+                  (USet.values ppo)
+               )
+            )
+      );
 
       (* Compute ppo_loc *)
       let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
@@ -771,15 +736,18 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
       let* all_rf =
         compute_path_rf structure path ~elided ~constraints statex ppo dp
       in
-      let all_validations =
-        List.map (List.map (fun (r, w) -> (w, r))) all_rf
-        |> List.map USet.of_list
-        |> List.map (fun rf ->
-            validate_rf structure path ppo_loc dp ppo j_list pp p_combined rf
-        )
-      in
-        let* results = Lwt.all all_validations in
-          Lwt.return (List.filter_map Fun.id results)
+        Logs.debug (fun m ->
+            m "Computed %d RF combinations to validate" (List.length all_rf)
+        );
+        let all_validations =
+          List.map (List.map (fun (r, w) -> (w, r))) all_rf
+          |> List.map USet.of_list
+          |> List.map (fun rf ->
+              validate_rf structure path ppo_loc dp ppo j_list pp p_combined rf
+          )
+        in
+          let* results = Lwt.all all_validations in
+            Lwt.return (List.filter_map Fun.id results)
 
 (** Build justification combinations for all paths with caching *)
 let build_justcombos structure paths init_ppo statex
@@ -801,11 +769,14 @@ let build_justcombos structure paths init_ppo statex
 
     let%lwt js_combinations =
       ListMapCombinationBuilder.build_combinations justmap path_writes
-        (fun combo ?alternatives just ->
+        ~check_partial_combo:(fun combo ?alternatives just ->
           JustValidation.check_partial_combo structure path combo ?alternatives
             just
         )
-        (fun combo -> JustValidation.check_final_combo structure path combo)
+        ~check_final_combo:(fun combo ->
+          JustValidation.check_final_combo structure path combo
+        )
+        ()
     in
 
     Logs.debug (fun m ->

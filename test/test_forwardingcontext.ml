@@ -358,7 +358,7 @@ let test_ppo_caches_result () =
     (let params = TestUtil.make_init_params () in
        let* () = init params in
        let ctx = create () in
-       let predicates = [ ENum Z.one ] in
+       let predicates = [] in
 
        (* First call *)
        let* ppo1 = ppo ctx predicates in

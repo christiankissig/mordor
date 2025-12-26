@@ -22,7 +22,7 @@ let test_build_combinations =
         in
           let* combos =
             ListMapCombinationBuilder.build_combinations listmap [ 1; 2; 3 ]
-              check_partial_combo check_final_combo
+              ~check_partial_combo ~check_final_combo ()
           in
           let combos = List.map (List.map snd) combos in
             check int "Number of combinations" 10 (List.length combos);
