@@ -3,11 +3,11 @@ open Lwt.Syntax
 module ListMapCombinationBuilder = struct
   let build_combinations (type a) (listmap : (int, a list) Hashtbl.t)
       (keys : int list)
-      ?(check_partial_combo = fun _ ?alternatives:_ _ -> Lwt.return true)
-      ?(check_final_combo = fun _ -> Lwt.return true) () =
+      ?(check_partial = fun _ ?alternatives:_ _ -> Lwt.return true)
+      ?(check_final = fun _ -> Lwt.return true) () =
     let rec combine_and_check combinations keys =
       match keys with
-      | [] -> Lwt_list.filter_s check_final_combo combinations
+      | [] -> Lwt_list.filter_s check_final combinations
       | key :: rest_keys ->
           let justs = try Hashtbl.find listmap key with Not_found -> [] in
 
@@ -20,8 +20,7 @@ module ListMapCombinationBuilder = struct
                 let* filtered =
                   Lwt_list.filter_s
                     (fun combo ->
-                      check_partial_combo combo ?alternatives:(Some justs)
-                        (key, just)
+                      check_partial combo ?alternatives:(Some justs) (key, just)
                     )
                     combinations
                 in

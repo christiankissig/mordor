@@ -453,7 +453,25 @@ end = struct
           | ESymbol v1, ESymbol v2
             when List.mem op [ "!="; "<"; ">" ] && String.equal v1 v2 ->
               EBoolean false
-          | _ -> EBinOp (l_val, op, r_val)
+          | e1, e2 -> (
+              let cmp = compare e1 e2 in
+                if cmp = 0 then
+                  match op with
+                  | "=" -> EBoolean true
+                  | "!=" -> EBoolean false
+                  | "<=" -> EBoolean true
+                  | ">=" -> EBoolean true
+                  | "&&" -> e1
+                  | "||" -> e1
+                  | _ -> EBinOp (e1, op, e2)
+                else
+                  (* order commutative operations *)
+                  match op with
+                  | "=" | "!=" | "&&" | "+" | "*" ->
+                      if cmp < 0 then EBinOp (e1, op, e2)
+                      else EBinOp (e2, op, e1)
+                  | _ -> EBinOp (e1, op, e2)
+            )
       )
     | EOr clauses ->
         let eval_clause clause = List.map (fun e -> evaluate e env) clause in

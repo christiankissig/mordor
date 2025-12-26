@@ -156,6 +156,8 @@ type symbolic_event_structure = {
 }
 [@@deriving show]
 
+val create_symbolic_event_structure : unit -> symbolic_event_structure
+
 (** {1 Function Maps} *)
 
 (** Function map type with default value *)

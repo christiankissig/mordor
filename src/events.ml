@@ -1,9 +1,9 @@
 (** Event operations and utilities for sMRD *)
 
-open Types
 open Expr
-open Uset
 open Printf
+open Types
+open Uset
 
 (** Mode utility functions *)
 module ModeOps = struct
@@ -449,85 +449,90 @@ module EventsContainer = struct
     t
 end
 
-let get_loc events event_id =
-  Hashtbl.find_opt events event_id
-  |> Option.map (fun event -> event.loc)
-  |> Option.join
+let get_loc structure event_id =
+  let events = structure.events in
+    Hashtbl.find_opt events event_id
+    |> Option.map (fun event -> event.loc)
+    |> Option.join
 
-let get_val events e =
-  try
-    let event = Hashtbl.find events e in
-      match event.wval with
-      | Some v -> Some v
-      | None -> (
-          match event.rval with
-          | Some v -> Some (Expr.of_value v)
-          | None -> None
-        )
-  with Not_found -> None
+let get_val structure e =
+  let events = structure.events in
+    try
+      let event = Hashtbl.find events e in
+        match event.wval with
+        | Some v -> Some v
+        | None -> (
+            match event.rval with
+            | Some v -> Some (Expr.of_value v)
+            | None -> None
+          )
+    with Not_found -> None
 
 (** Get value from event e, or create symbolic value based on x's location *)
-let vale events e x =
-  match Hashtbl.find_opt events e with
-  | Some event when event.label >= 0 -> (
-      match get_val events e with
-      | Some v -> v
-      | None ->
-          let loc_x =
-            match get_loc events x with
-            | Some l -> Expr.to_string l
-            | None -> string_of_int x
-          in
-            EVar (sprintf "v(%s)" loc_x)
-    )
-  | _ ->
-      let loc_x =
-        match get_loc events x with
-        | Some l -> Expr.to_string l
-        | None -> string_of_int x
-      in
-        EVar (sprintf "v(%s)" loc_x)
+let vale structure e x =
+  let events = structure.events in
+    match Hashtbl.find_opt events e with
+    | Some event when event.label >= 0 -> (
+        match get_val structure e with
+        | Some v -> v
+        | None ->
+            let loc_x =
+              match get_loc structure x with
+              | Some l -> Expr.to_string l
+              | None -> string_of_int x
+            in
+              EVar (sprintf "v(%s)" loc_x)
+      )
+    | _ ->
+        let loc_x =
+          match get_loc structure x with
+          | Some l -> Expr.to_string l
+          | None -> string_of_int x
+        in
+          EVar (sprintf "v(%s)" loc_x)
 
 (** Get location from event e, or create symbolic location based on x's location
 *)
-let loce events e x =
-  match Hashtbl.find_opt events e with
-  | Some event when event.label >= 0 -> (
-      match get_loc events e with
-      | Some l -> l
-      | None ->
-          let loc_x =
-            match get_loc events x with
-            | Some l -> Expr.to_string l
-            | None -> string_of_int x
-          in
-            EVar (sprintf "l(%s)" loc_x)
-    )
-  | _ ->
-      let loc_x =
-        match get_loc events x with
-        | Some l -> Expr.to_string l
-        | None -> string_of_int x
-      in
-        EVar (sprintf "l(%s)" loc_x)
+let loce structure e x =
+  let events = structure.events in
+    match Hashtbl.find_opt events e with
+    | Some event when event.label >= 0 -> (
+        match get_loc structure e with
+        | Some l -> l
+        | None ->
+            let loc_x =
+              match get_loc structure x with
+              | Some l -> Expr.to_string l
+              | None -> string_of_int x
+            in
+              EVar (sprintf "l(%s)" loc_x)
+      )
+    | _ ->
+        let loc_x =
+          match get_loc structure x with
+          | Some l -> Expr.to_string l
+          | None -> string_of_int x
+        in
+          EVar (sprintf "l(%s)" loc_x)
 
 (* Event type filters *)
-let filter_events events e_set typ ?mode () =
-  USet.filter
-    (fun e ->
-      try
-        let event = Hashtbl.find events e in
-          event.typ = typ
-          &&
-          match mode with
-          | None -> true
-          | Some m -> (
-              match event.typ with
-              | Read -> event.rmod = m
-              | Write -> event.wmod = m
-              | Fence -> event.fmod = m
-              | _ -> false
-            )
-      with Not_found -> false
-    )
-    e_set
+let filter_events structure e_set typ ?mode () =
+  let events = structure.events in
+    USet.filter
+      (fun e ->
+        try
+          let event = Hashtbl.find events e in
+            event.typ = typ
+            &&
+            match mode with
+            | None -> true
+            | Some m -> (
+                match event.typ with
+                | Read -> event.rmod = m
+                | Write -> event.wmod = m
+                | Fence -> event.fmod = m
+                | _ -> false
+              )
+        with Not_found -> false
+      )
+      e_set

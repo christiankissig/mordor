@@ -60,6 +60,16 @@ module TestUtil = struct
     let rmw = USet.create () in
       USet.add rmw (1, 2)
 
+  (** Create test structure *)
+  let make_structure () =
+    {
+      (create_symbolic_event_structure ()) with
+      e = make_e_set ();
+      events = make_events ();
+      po = make_po ();
+      rmw = make_rmw ();
+    }
+
   (** Value function for tests *)
   let test_val_fn e = Some (ESymbol (Printf.sprintf "v%d" e))
 
@@ -67,8 +77,7 @@ module TestUtil = struct
   let make_init_params () =
     {
       init_e = make_e_set ();
-      init_po = make_po ();
-      init_events = make_events ();
+      init_structure = make_structure ();
       init_val = test_val_fn;
       init_rmw = make_rmw ();
     }

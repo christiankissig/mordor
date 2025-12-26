@@ -252,8 +252,8 @@ let value_assign elab_ctx justs =
 
 let fprime elab_ctx pred_fn ppo_loc just e1 e2 =
   if USet.mem ppo_loc (e1, e2) && USet.mem (pred_fn e2) e1 then
-    let loc1 = Events.get_loc elab_ctx.structure.events e1 in
-    let loc2 = Events.get_loc elab_ctx.structure.events e2 in
+    let loc1 = Events.get_loc elab_ctx.structure e1 in
+    let loc2 = Events.get_loc elab_ctx.structure e2 in
       match (loc1, loc2) with
       | Some l1, Some l2 -> Solver.exeq ~state:just.p l1 l2
       | _ -> Lwt.return false

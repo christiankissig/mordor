@@ -500,7 +500,7 @@ let check_assertion_per_execution (assertion : ir_assertion) execution structure
                   (* This assumes that loc is a symbol in line with construction
                     in Interpret. The JS implmentation tests if loc is a
                     variable and considers other event types without effect. *)
-                  get_loc structure.events label
+                  get_loc structure label
                   |> Option.map Expr.to_value
                   |> Option.join
                   |> Option.get

@@ -147,7 +147,6 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
    prevents r reading from shadowed writes w.*)
 (* TODO optimize *)
 let dslwb structure w r =
-  let events = structure.events in
   let write_events = structure.write_events in
   let r_restrict =
     Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
@@ -163,7 +162,7 @@ let dslwb structure w r =
         then
           (* w2 potentially shadows w *)
           (* TODO use semantic equivalence relative to valres *)
-          match (get_loc events w, get_loc events w2) with
+          match (get_loc structure w, get_loc structure w2) with
           | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
           | _ -> Lwt.return false
         else Lwt.return false

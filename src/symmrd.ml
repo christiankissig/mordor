@@ -72,8 +72,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
     Forwardingcontext.init
       {
         init_e = e_set;
-        init_po = po;
-        init_events = events;
+        init_structure = structure;
         init_val = val_fn;
         init_rmw = rmw;
       }
@@ -164,7 +163,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
         match Hashtbl.find_opt events eid with
         | Some evt -> (
             (* Get location from event if it exists and is a variable *)
-            match Events.get_loc events eid with
+            match Events.get_loc structure eid with
             | Some loc when Expr.is_var loc -> Some loc
             | _ -> None
           )

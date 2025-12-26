@@ -8,7 +8,10 @@ open Expr
 (** Global state - mutable references *)
 module State = struct
   let e : int uset ref = ref (USet.create ())
-  let events : (int, event) Hashtbl.t ref = ref (Hashtbl.create 0)
+
+  let structure : symbolic_event_structure ref =
+    ref (create_symbolic_event_structure ())
+
   let val_fn : (int -> expr option) ref = ref (fun _ -> None)
   let ppo_loc_base : (int * int) uset ref = ref (USet.create ())
   let ppo_base : (int * int) uset ref = ref (USet.create ())
@@ -131,8 +134,7 @@ let update_po po =
 (** Initialization parameters type *)
 type init_params = {
   init_e : int uset;
-  init_po : (int * int) uset;
-  init_events : (int, event) Hashtbl.t;
+  init_structure : symbolic_event_structure;
   init_val : int -> expr option;
   init_rmw : (int * int) uset;
 }
@@ -153,20 +155,20 @@ let init params =
 
   State.e := params.init_e;
   let rmw = params.init_rmw in
-    State.events := params.init_events;
+    State.structure := params.init_structure;
     State.val_fn := params.init_val;
 
     ignore (USet.clear goodcon);
     ignore (USet.clear badcon);
 
-    let po = params.init_po in
+    let po = params.init_structure.po in
 
     (* Filter events by mode *)
     let filter_by_mode events mode_fn =
       USet.filter
         (fun e ->
           try
-            let ev = Hashtbl.find !State.events e in
+            let ev = Hashtbl.find !State.structure.events e in
               mode_fn ev
           with Not_found ->
             (* Event ID in E but not in events hashtable - skip it *)
@@ -191,7 +193,8 @@ let init params =
     let e_vol =
       USet.filter
         (fun e ->
-          try (Hashtbl.find !State.events e).volatile with Not_found -> false
+          try (Hashtbl.find !State.structure.events e).volatile
+          with Not_found -> false
         )
         !State.e
     in
@@ -200,8 +203,8 @@ let init params =
       USet.filter
         (fun (from, to_) ->
           try
-            let from_ev = Hashtbl.find !State.events from in
-            let to_ev = Hashtbl.find !State.events to_ in
+            let from_ev = Hashtbl.find !State.structure.events from in
+            let to_ev = Hashtbl.find !State.structure.events to_ in
               from_ev.typ <> Fence
               && to_ev.typ <> Fence
               && from_ev.typ <> Branch
@@ -215,7 +218,7 @@ let init params =
     let filter_order events mode =
       USet.filter
         (fun e ->
-          let ev = Hashtbl.find !State.events e in
+          let ev = Hashtbl.find !State.structure.events e in
             match ev.typ with
             | Read -> ev.rmod = mode
             | Write -> ev.wmod = mode
@@ -293,8 +296,8 @@ let init params =
       let* eqA =
         USet.async_filter
           (fun (e1, e2) ->
-            let loc1 = Events.get_loc !State.events e1 in
-            let loc2 = Events.get_loc !State.events e2 in
+            let loc1 = Events.get_loc !State.structure e1 in
+            let loc2 = Events.get_loc !State.structure e2 in
               match (loc1, loc2) with
               | Some l1, Some l2 -> Solver.exeq ~state:[] l1 l2
               | _ -> Lwt.return false
@@ -435,8 +438,8 @@ let ppo ctx predicates =
                equal given predicates and psi of forwarding context *)
             USet.async_filter
               (fun (e1, e2) ->
-                let loc1 = Events.get_loc !State.events e1 in
-                let loc2 = Events.get_loc !State.events e2 in
+                let loc1 = Events.get_loc !State.structure e1 in
+                let loc2 = Events.get_loc !State.structure e2 in
                   match (loc1, loc2) with
                   | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
                   | _ -> Lwt.return false
@@ -469,8 +472,8 @@ let ppo_loc ctx predicates =
           let* filtered =
             USet.async_filter
               (fun (e1, e2) ->
-                let loc1 = Events.get_loc !State.events e1 in
-                let loc2 = Events.get_loc !State.events e2 in
+                let loc1 = Events.get_loc !State.structure e1 in
+                let loc2 = Events.get_loc !State.structure e2 in
                   match (loc1, loc2) with
                   | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
                   | _ -> Lwt.return false

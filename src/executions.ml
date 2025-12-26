@@ -52,40 +52,7 @@ module Execution = struct
          && USet.equal exec1.dp exec2.dp
          )
 
-  let to_string exec =
-    let pp_uset_pair uset =
-      let pairs =
-        USet.values uset
-        |> List.map (fun (a, b) -> Printf.sprintf "(%d, %d)" a b)
-      in
-        "{" ^ String.concat ", " pairs ^ "}"
-    in
-      Printf.sprintf
-        "E: {%s}\n\
-         DP: %s\n\
-         PPO: %s\n\
-         RF: %s\n\
-         RMW: %s\n\
-         PP: [%s]\n\
-         FixRFMap: %s\n\
-         PointerMap: %s\n"
-        (String.concat ", " (List.map string_of_int (USet.values exec.ex_e)))
-        (pp_uset_pair exec.dp) (pp_uset_pair exec.ppo) (pp_uset_pair exec.rf)
-        (pp_uset_pair exec.ex_rmw)
-        (String.concat ", " (List.map Expr.to_string exec.ex_p))
-        (Hashtbl.fold
-           (fun k v acc -> acc ^ k ^ " -> " ^ Expr.to_string v ^ "; ")
-           exec.fix_rf_map ""
-        )
-        ( match exec.pointer_map with
-        | Some pm ->
-            Hashtbl.fold
-              (fun k v acc ->
-                acc ^ string_of_int k ^ " -> " ^ Value.to_string v ^ "; "
-              )
-              pm ""
-        | None -> "None"
-        )
+  let to_string exec = show_symbolic_execution exec
 end
 
 (** Create disjoint predicate for two (location, value) pairs *)
@@ -115,6 +82,29 @@ module RFValidation = struct
     USet.subset
       (USet.set_minus read_events (URelation.pi_2 delta))
       (URelation.pi_2 rf)
+
+  let env_rf structure rf =
+    USet.values rf
+    |> List.map (fun (w, r) ->
+        (* TODO this look-up logic is contrived *)
+        let w_val = vale structure w r in
+          match get_val structure r with
+          | Some r_val ->
+              Expr.evaluate (Expr.binop w_val "=" r_val) (fun _ -> None)
+          | None -> failwith ("Read event " ^ string_of_int r ^ " has no value!")
+    )
+
+  let check_rf structure rf =
+    USet.values rf
+    |> List.map (fun (w, r) ->
+        (* TODO this look-up logic is contrived *)
+        let w_loc = loce structure w r in
+          match get_loc structure r with
+          | Some r_loc ->
+              Expr.evaluate (Expr.binop w_loc "=" r_loc) (fun _ -> None)
+          | None ->
+              failwith ("Read event " ^ string_of_int r ^ " has no location!")
+    )
 end
 
 module JustValidation = struct
@@ -140,7 +130,7 @@ module JustValidation = struct
       USet.subset just_delta_events path.path
 
   (* Check partial combination of justifications for early pruning. *)
-  let check_partial_combo structure (path : path_info)
+  let check_partial structure (path : path_info)
       (combo : (int * justification) list) ?(alternatives = [])
       (pair : int * justification) =
     (* conduit code between pair-based and tuple output *)
@@ -238,7 +228,7 @@ module JustValidation = struct
           Lwt.return true
 
   (* Check final combination of justifications for validity. *)
-  let check_final_combo structure (path : path_info)
+  let check_final structure (path : path_info)
       (combo : (int * justification) list) =
     (* conduit code between pair-based and tuple output *)
     let combo = List.map snd combo in
@@ -353,9 +343,7 @@ let atomicity_pairs structure path rhb p =
                 Lwt.return_false
               else
                 (* Check if loc(e_1) = loc(ep) under env_rf using semeq *)
-                match
-                  (get_loc structure.events e_1, get_loc structure.events ep)
-                with
+                match (get_loc structure e_1, get_loc structure ep) with
                 | None, _ | _, None -> Lwt.return_false
                 | Some loc_e1, Some loc_ep -> Solver.exeq ~state:p loc_e1 loc_ep
             )
@@ -398,20 +386,7 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
   in
 
   (* Create environment from RF *)
-  let env_rf =
-    USet.values rf
-    |> List.map (fun (w, r) ->
-        let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
-        let w_val =
-          match just_w with
-          | Some j -> vale structure.events j.w.label r
-          | None -> vale structure.events w r
-        in
-          match get_val structure.events r with
-          | Some r_val -> Expr.binop w_val "=" r_val
-          | None -> failwith ("Read event " ^ string_of_int r ^ " has no value!")
-    )
-  in
+  let env_rf = RFValidation.env_rf structure rf in
 
   (* Check 1.1: Various consistency checks *)
   let delta =
@@ -456,28 +431,7 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
       (* Check 1.2: No downward-closed same-location writes before reads *)
 
       (* Rewrite predicates *)
-      let check_rf =
-        USet.values rf
-        |> List.map (fun (w, r) ->
-            let just_w = List.find_opt (fun j -> j.w.label = w) j_list in
-            let w_loc =
-              match just_w with
-              | Some j -> loce structure.events j.w.label r
-              | None -> loce structure.events w r
-            in
-              match get_loc structure.events r with
-              | Some r_loc ->
-                  if Expr.compare w_loc r_loc < 0 then
-                    Expr.binop w_loc "=" r_loc
-                  else Expr.binop r_loc "=" w_loc
-              | None ->
-                  failwith
-                    ("Read event "
-                    ^ string_of_int r
-                    ^ " has no\n          location!"
-                    )
-        )
-      in
+      let check_rf = RFValidation.check_rf structure rf in
       let big_p_exprs = p_combined @ env_rf @ check_rf in
       let big_p =
         List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs
@@ -505,10 +459,10 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
                     ("Event " ^ string_of_int b ^ " not found in structure!")
               | Some ea, Some eb -> (
                   match
-                    ( get_loc structure.events a,
-                      get_val structure.events a,
-                      get_loc structure.events b,
-                      get_val structure.events b
+                    ( get_loc structure a,
+                      get_val structure a,
+                      get_loc structure b,
+                      get_val structure b
                     )
                   with
                   | None, _, _, _ ->
@@ -520,10 +474,10 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
                   | _, _, _, None ->
                       failwith ("Event " ^ string_of_int b ^ " has no value!")
                   | _ ->
-                      let loc_a = get_loc structure.events a |> Option.get in
-                      let val_a = get_val structure.events a |> Option.get in
-                      let loc_b = get_loc structure.events b |> Option.get in
-                      let val_b = get_val structure.events b |> Option.get in
+                      let loc_a = get_loc structure a |> Option.get in
+                      let val_a = get_val structure a |> Option.get in
+                      let loc_b = get_loc structure b |> Option.get in
+                      let val_b = get_val structure b |> Option.get in
                         (* disjoint only uses location *)
                         disjoint (loc_a, val_a) (loc_b, val_b)
                 )
@@ -536,6 +490,12 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
             (fun expr -> Expr.evaluate expr (fun _ -> None))
             (big_p @ disj)
         in
+
+        Logs.debug (fun m ->
+            m "  Combined predicates has %d expressions: %s"
+              (List.length bigger_p)
+              (String.concat ", " (List.map Expr.to_string bigger_p))
+        );
 
         (* Check satisfiability of combined predicates *)
         let* satisfiable = Solver.is_sat_cached bigger_p in
@@ -558,7 +518,8 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
             Lwt.return_some freeze_result
 
 (* Compute initial RF relation: writes × reads that are not in po^-1 *)
-let compute_path_rf structure path ~elided ~constraints statex ppo dp =
+let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
+    =
   let write_events =
     USet.set_minus (USet.intersection structure.write_events path.path) elided
   in
@@ -589,9 +550,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp =
           in
             (* Check that loc(w) = loc(r) is satisfiable *)
             let* loc_eq =
-              match
-                (get_loc structure.events w, get_loc structure.events r)
-              with
+              match (get_loc structure w, get_loc structure r) with
               | Some loc_w, Some loc_r ->
                   Solver.expoteq ~state:preds loc_w loc_r
               | _ -> Lwt.return false
@@ -620,6 +579,15 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp =
 
     let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
       ListMapCombinationBuilder.build_combinations all_rf_inv_map
+        ~check_partial:(fun combo ?alternatives pair ->
+          let new_combo_inv =
+            URelation.inverse_relation (USet.of_list (pair :: combo))
+          in
+          let env_rf = RFValidation.env_rf structure new_combo_inv in
+          let check_rf = RFValidation.check_rf structure new_combo_inv in
+          let predicates = p_combined @ env_rf @ check_rf in
+            Solver.is_sat_cached predicates
+        )
         (USet.values read_events) ()
 
 (** Create a freeze function that validates RF sets for a justification
@@ -735,6 +703,7 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
 
       let* all_rf =
         compute_path_rf structure path ~elided ~constraints statex ppo dp
+          p_combined
       in
         Logs.debug (fun m ->
             m "Computed %d RF combinations to validate" (List.length all_rf)
@@ -769,12 +738,11 @@ let build_justcombos structure paths init_ppo statex
 
     let%lwt js_combinations =
       ListMapCombinationBuilder.build_combinations justmap path_writes
-        ~check_partial_combo:(fun combo ?alternatives just ->
-          JustValidation.check_partial_combo structure path combo ?alternatives
-            just
+        ~check_partial:(fun combo ?alternatives just ->
+          JustValidation.check_partial structure path combo ?alternatives just
         )
-        ~check_final_combo:(fun combo ->
-          JustValidation.check_final_combo structure path combo
+        ~check_final:(fun combo ->
+          JustValidation.check_final structure path combo
         )
         ()
     in
@@ -875,15 +843,9 @@ let generate_executions (structure : symbolic_event_structure)
         (* Build initial mapping from RF *)
         USet.iter
           (fun (w, r) ->
-            let just_w =
-              List.find_opt (fun j -> j.w.label = w) freeze_res.justs
-            in
-            let w_val =
-              match just_w with
-              | Some j -> vale structure.events j.w.label r
-              | None -> vale structure.events w r
-            in
-              match get_val structure.events r with
+            (* TODO look up logic is contrived *)
+            let w_val = vale structure w r in
+              match get_val structure r with
               | None ->
                   failwith ("Read event " ^ string_of_int r ^ " has no value!")
               | Some r_val ->
