@@ -524,15 +524,21 @@ module EventStructureViz = struct
           )
           g;
         (* Sort edges to show PO edges first *)
-        let edges = List.sort (fun (_, _, _, label1) (_, _, _, label2) ->
-          match (label1, label2) with
-          | (PO, PO) -> 0
-          | (PO, _) -> -1
-          | (_, PO) -> 1
-          | _ -> 0
-        ) !edges in
+        let edges =
+          List.sort
+            (fun (_, _, _, label1) (_, _, _, label2) ->
+              match (label1, label2) with
+              | PO, PO -> 0
+              | PO, _ -> -1
+              | _, PO -> 1
+              | _ -> 0
+            )
+            !edges
+        in
         (* Remove label from tuples after sorting *)
-        let edges = List.map (fun (src, dst, edge_type, _) -> (src, dst, edge_type)) edges in
+        let edges =
+          List.map (fun (src, dst, edge_type, _) -> (src, dst, edge_type)) edges
+        in
 
         List.iteri
           (fun i (src, dst, edge_type) ->
