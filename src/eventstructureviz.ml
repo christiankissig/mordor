@@ -507,8 +507,9 @@ module EventStructureViz = struct
           (fun e ->
             let src = (G.E.src e).Vertex.id in
             let dst = (G.E.dst e).Vertex.id in
+            let label = G.E.label e in
             let edge_type =
-              match G.E.label e with
+              match label with
               | PO -> "po"
               | RMW -> "rmw"
               | LO -> "lo"
@@ -519,10 +520,19 @@ module EventStructureViz = struct
             in
             (* Escape edge type string which may contain predicates *)
             let edge_type_escaped = json_escape edge_type in
-              edges := (src, dst, edge_type_escaped) :: !edges
+              edges := (src, dst, edge_type_escaped, label) :: !edges
           )
           g;
-        let edges = List.rev !edges in
+        (* Sort edges to show PO edges first *)
+        let edges = List.sort (fun (_, _, _, label1) (_, _, _, label2) ->
+          match (label1, label2) with
+          | (PO, PO) -> 0
+          | (PO, _) -> -1
+          | (_, PO) -> 1
+          | _ -> 0
+        ) !edges in
+        (* Remove label from tuples after sorting *)
+        let edges = List.map (fun (src, dst, edge_type, _) -> (src, dst, edge_type)) edges in
 
         List.iteri
           (fun i (src, dst, edge_type) ->
