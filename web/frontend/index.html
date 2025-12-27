@@ -9,6 +9,13 @@
     <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
     <script src="https://unpkg.com/cytoscape-cose-bilkent@4.1.0/cytoscape-cose-bilkent.js"></script>
     <script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
+    
+    <!-- PrismJS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" data-manual></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1e1e1e; color: #d4d4d4; height: 100vh; overflow: hidden; }
@@ -25,7 +32,113 @@
         .resizer:active { background: #1177bb; }
         .panel-header { background: #252526; border-bottom: 1px solid #3e3e42; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; }
         .panel-header h2 { font-size: 1rem; color: #cccccc; }
-        #litmus-input { flex: 1; padding: 1rem; background: #1e1e1e; border: none; color: #d4d4d4; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.95rem; resize: none; outline: none; }
+        
+        /* Editor container with overlay */
+        .editor-container { 
+            flex: 1; 
+            overflow: hidden; 
+            position: relative;
+            background: #1e1e1e;
+        }
+        
+        .editor-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Highlighted code overlay */
+        #litmus-highlight {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            margin: 0 !important;
+            padding: 1rem !important;
+            background: transparent !important;
+            overflow: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Consolas', 'Courier New', monospace !important;
+            font-size: 0.95rem !important;
+            line-height: 1.5 !important;
+            border: none !important;
+        }
+        
+        #litmus-highlight code {
+            background: transparent !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        
+        /* Textarea for input */
+        #litmus-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0 !important;
+            padding: 1rem !important;
+            background: transparent !important;
+            font-family: 'Consolas', 'Courier New', monospace !important;
+            font-size: 0.95rem !important;
+            line-height: 1.5 !important;
+            outline: none !important;
+            border: none !important;
+            resize: none;
+            color: transparent;
+            caret-color: #d4d4d4;
+            tab-size: 4;
+            z-index: 1;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        #litmus-input:focus {
+            outline: none;
+        }
+        
+        #litmus-input::selection {
+            background: rgba(14, 99, 156, 0.3);
+        }
+        
+        /* Override PrismJS colors for dark theme */
+        pre[class*="language-"] {
+            background: #1e1e1e !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            font-family: 'Consolas', 'Courier New', monospace !important;
+            font-size: 0.95rem !important;
+            line-height: 1.5 !important;
+            white-space: pre-wrap !important;
+            word-wrap: break-word !important;
+            tab-size: 4 !important;
+        }
+        
+        code[class*="language-"] {
+            background: transparent !important;
+            color: #d4d4d4 !important;
+            font-family: 'Consolas', 'Courier New', monospace !important;
+            font-size: 0.95rem !important;
+            line-height: 1.5 !important;
+            white-space: pre-wrap !important;
+            word-wrap: break-word !important;
+            tab-size: 4 !important;
+        }
+        
+        .token.comment { color: #6a9955; }
+        .token.keyword { color: #569cd6; }
+        .token.string { color: #ce9178; }
+        .token.number { color: #b5cea8; }
+        .token.operator { color: #d4d4d4; }
+        .token.punctuation { color: #d4d4d4; }
+        .token.function { color: #dcdcaa; }
         
         /* Carousel styles */
         .carousel-container { flex: 1; position: relative; display: none; }
@@ -83,7 +196,12 @@
                         <option value="lb">Load Buffering (LB)</option>
                     </select>
                 </div>
-                <textarea id="litmus-input" placeholder="Enter your litmus test here..."></textarea>
+                <div class="editor-container">
+                    <div class="editor-wrapper">
+                        <pre id="litmus-highlight" aria-hidden="true"><code class="language-c"></code></pre>
+                        <textarea id="litmus-input" placeholder="Enter your litmus test here..." spellcheck="false"></textarea>
+                    </div>
+                </div>
             </div>
             <div class="resizer" id="resizer"></div>
             <div class="panel" id="right-panel">
@@ -249,16 +367,36 @@ class GraphVisualizer {
     }
 
     setupEventListeners() {
+        const textarea = document.getElementById('litmus-input');
+        const highlight = document.getElementById('litmus-highlight');
+        const code = highlight.querySelector('code');
+        
+        // Update highlighting function
+        const updateHighlight = () => {
+            code.textContent = textarea.value;
+            Prism.highlightElement(code);
+        };
+        
+        // Sync scrolling
+        textarea.addEventListener('scroll', () => {
+            highlight.scrollTop = textarea.scrollTop;
+            highlight.scrollLeft = textarea.scrollLeft;
+        });
+        
+        // Update highlighting on input
+        textarea.addEventListener('input', updateHighlight);
+        
         document.getElementById('examples').addEventListener('change', (e) => {
             const example = EXAMPLES[e.target.value];
             if (example) {
-                document.getElementById('litmus-input').value = example;
+                textarea.value = example;
+                updateHighlight();
                 this.log('Example loaded: ' + e.target.options[e.target.selectedIndex].text);
             }
         });
 
         document.getElementById('visualize-btn').addEventListener('click', () => {
-            const program = document.getElementById('litmus-input').value.trim();
+            const program = textarea.value.trim();
             if (!program) {
                 this.log('Please enter a litmus test', 'error');
                 return;
