@@ -88,16 +88,24 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
         )
   );
 
-  (* Initialize initial PPO relation *)
+  (* Initialize initial PPO relation - relates all initial events and terminal
+     events to other events along po-edges. *)
   let init_ppo =
     if Hashtbl.mem events 0 then
-      URelation.cross (USet.singleton 0)
-        (USet.set_minus
-           (USet.of_list (Hashtbl.fold (fun k _ acc -> k :: acc) events []))
-           (USet.singleton 0)
-        )
+     USet.filter (fun (f, t) -> f<>t && f = 0) po
     else USet.create ()
   in
+  let terminal_events =
+    Hashtbl.fold
+    (fun lbl ev acc -> if (ev.typ = Terminal) then (USet.add acc lbl) else acc)
+    structure.events
+    (USet.create ())
+  in
+  let terminal_ppo =
+    USet.filter (fun (f, t) -> f<>t && USet.mem terminal_events t) po
+  in
+  (* TODO discern in subsequent computation *)
+  let init_ppo = USet.union init_ppo terminal_ppo in
 
   let fj = USet.union structure.fj init_ppo in
 
