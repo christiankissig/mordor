@@ -7,13 +7,18 @@ open Lwt.Syntax
 open Types
 open Uset
 
-let execution_equal ex1 ex2 =
+(** {1 Basic Types} *)
+
+module Execution = struct
+  type t = symbolic_execution
+
+let equal ex1 ex2 =
   USet.equal ex1.ex_e ex2.ex_e
   && USet.equal ex1.dp ex2.dp
   && USet.equal ex1.ppo ex2.ppo
   && USet.equal ex1.rf ex2.rf
 
-let execution_hash ex =
+let hash ex =
   let hash_list lst =
     List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
   in
@@ -21,17 +26,7 @@ let execution_hash ex =
     Hashtbl.hash
       (hash_uset ex.ex_e, hash_uset ex.dp, hash_uset ex.ppo, hash_uset ex.rf)
 
-module ExecutionCacheKey = struct
-  type t = symbolic_execution
 
-  let equal = execution_equal
-  let hash = execution_hash
-end
-
-module ExecutionCache = Hashtbl.Make (ExecutionCacheKey)
-
-module Execution = struct
-  type t = symbolic_execution
 
   (** [exec1 exec2] Check if exec1 contains exec2, i.e. exec1 is a refinement of
       exec2.
@@ -55,10 +50,23 @@ module Execution = struct
   let to_string exec = show_symbolic_execution exec
 end
 
+module ExecutionCacheKey = struct
+  type t = symbolic_execution
+
+  let equal = Execution.equal
+  let hash = Execution.hash
+end
+
+module ExecutionCache = Hashtbl.Make (ExecutionCacheKey)
+
+(** {1 Utilities} *)
+
 (** Create disjoint predicate for two (location, value) pairs *)
 let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
   EBinOp (loc1, "!=", loc2)
+
+(** {1 RF Validation} *)
 
 module RFValidation = struct
   let rf_respects_ppo rf ppo_loc =
@@ -108,6 +116,8 @@ module RFValidation = struct
       )
       rf
 end
+
+(** {1 Justification Validation} *)
 
 module JustValidation = struct
   let check_origins_elided structure just fwd_elided =
@@ -268,11 +278,13 @@ module JustValidation = struct
       Lwt.return true
 end
 
-(** Freezing **)
+(**  {1 Freezing} *)
+
+module FreezeResult = struct
 
 (** Type for a freeze function - validates an RF set for a justification
     combination *)
-type freeze_result = {
+type t = {
   e : int uset;
   dp : (int * int) uset;
   ppo : (int * int) uset;
@@ -282,7 +294,7 @@ type freeze_result = {
   conds : expr list;
 }
 
-let freeze_result_equal fr1 fr2 =
+let equal fr1 fr2 =
   USet.equal fr1.e fr2.e
   && USet.equal fr1.dp fr2.dp
   && USet.equal fr1.ppo fr2.ppo
@@ -291,7 +303,7 @@ let freeze_result_equal fr1 fr2 =
   && List.equal Expr.equal fr1.pp fr2.pp
   && List.equal Expr.equal fr1.conds fr2.conds
 
-let freeze_result_hash fr =
+let hash fr =
   let hash_list lst =
     List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
   in
@@ -303,12 +315,13 @@ let freeze_result_hash fr =
         hash_uset fr.rf,
         hash_uset fr.rmw
       )
+end
 
 module FreezeResultCacheKey = struct
-  type t = freeze_result
+  type t = FreezeResult.t
 
-  let equal = freeze_result_equal
-  let hash = freeze_result_hash
+  let equal = FreezeResult.equal
+  let hash = FreezeResult.hash
 end
 
 module FreezeResultCache = Hashtbl.Make (FreezeResultCacheKey)
@@ -346,7 +359,7 @@ let atomicity_pairs structure path rhb p =
     )
     a_squared
 
-let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
+let instantiate_execution (structure : symbolic_event_structure) path ppo_loc dp ppo
     j_list (pp : expr list) p_combined rf =
   Logs.debug (fun m ->
       m
@@ -489,7 +502,7 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
         let*? () = (satisfiable, "unsatisfiable combined predicates") in
 
         (* Success! Return the freeze result *)
-        let freeze_result =
+        let freeze_result: FreezeResult.t =
           {
             e;
             dp;
@@ -701,7 +714,7 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
           List.map (List.map (fun (r, w) -> (w, r))) all_rf
           |> List.map USet.of_list
           |> List.map (fun rf ->
-              validate_rf structure path ppo_loc dp ppo j_list pp p_combined rf
+              instantiate_execution structure path ppo_loc dp ppo j_list pp p_combined rf
           )
         in
           let* results = Lwt.all all_validations in
@@ -825,7 +838,7 @@ let generate_executions (structure : symbolic_event_structure)
     in
 
     let stream_freeze_to_execution input_stream =
-      let freeze_to_execution freeze_res =
+      let freeze_to_execution (freeze_res: FreezeResult.t) =
         (* Fixed point computation for RF mapping *)
         let fix_rf_map = Hashtbl.create 16 in
 
@@ -928,9 +941,13 @@ let generate_executions (structure : symbolic_event_structure)
 
       Lwt_stream.filter_map
         (fun fr ->
-          if FreezeResultCache.mem seen fr then None
+          if FreezeResultCache.mem seen fr then (
+            Logs.debug (fun m -> m "Deduplicated freeze result");
+            None
+          )
           else begin
             FreezeResultCache.add seen fr ();
+            Logs.debug (fun m -> m "Keeping new freeze result");
             Some fr
           end
         )
@@ -942,9 +959,13 @@ let generate_executions (structure : symbolic_event_structure)
 
       Lwt_stream.filter_map
         (fun ex ->
-          if ExecutionCache.mem seen ex then None
+          if ExecutionCache.mem seen ex then (
+            Logs.debug (fun m -> m "Deduplicated execution");
+            None
+          )
           else begin
             ExecutionCache.add seen ex ();
+            Logs.debug (fun m -> m "Keeping new execution");
             Some ex
           end
         )

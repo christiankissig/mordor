@@ -155,16 +155,6 @@ end
 
 (** Parameterized test utilities *)
 
-let test_disjoint (name, loc1, val1, loc2, val2) () =
-  let result = disjoint (loc1, val1) (loc2, val2) in
-    match result with
-    | EBinOp (l1, "!=", l2) ->
-        check bool
-          (name ^ ": should create disjoint predicate")
-          true
-          (l1 = loc1 && l2 = loc2)
-    | _ -> fail (name ^ ": Expected binary operation with !=")
-
 let test_origin (name, setup) () =
   let events, origin, read_events, malloc_events, symbol, expected = setup () in
   let e = USet.union read_events malloc_events in
@@ -260,7 +250,7 @@ let test_type_constructors () =
     check int "path_info predicates" 2 (List.length path_info.p);
 
     (* Test freeze_result *)
-    let freeze_res =
+    let freeze_res: FreezeResult.t =
       {
         e = USet.create ();
         dp = USet.create ();
@@ -331,12 +321,6 @@ let test_integration () =
 
 let suite =
   [
-    (* Parameterized disjoint tests *)
-    List.map
-      (fun ((name, _, _, _, _) as case) ->
-        ("disjoint " ^ name, `Quick, test_disjoint case)
-      )
-      TestData.disjoint_cases;
     (* Parameterized origin tests *)
     List.map
       (fun (name, setup) ->

@@ -12,8 +12,10 @@ end
 
 (** {1 Types} *)
 
+module FreezeResult : sig
+
 (** Result of freezing a justification combination with an RF relation *)
-type freeze_result = {
+type t = {
   e : int uset;  (** Event set *)
   dp : (int * int) uset;  (** Dependency relation *)
   ppo : (int * int) uset;  (** Preserved program order *)
@@ -23,14 +25,11 @@ type freeze_result = {
   conds : expr list;  (** Combined conditions *)
 }
 
-(** [disjoint (loc1, val1) (loc2, val2)] creates a disjoint predicate for two
-    (location, value) pairs. Returns an expression asserting that [loc1 ≠ loc2].
-*)
-val disjoint : expr * expr -> expr * expr -> expr
+end
 
 (** {1 RF Validation} *)
 
-(** [validate_rf structure path ppo dp j_list pp p_combined rf] validates a
+(** [instantiate_execution structure path ppo dp j_list pp p_combined rf] validates a
     reads-from relation for a justification combination.
 
     Performs multiple checks:
@@ -48,7 +47,7 @@ val disjoint : expr * expr -> expr * expr -> expr
     @param p_combined Combined predicates
     @param rf Reads-from relation to validate
     @return [Lwt.t] of [Some freeze_result] if valid, [None] otherwise *)
-val validate_rf :
+val instantiate_execution :
   Types.symbolic_event_structure ->
   path_info ->
   (int * int) Uset.USet.t ->
@@ -58,7 +57,7 @@ val validate_rf :
   Types.expr list ->
   Types.expr list ->
   int Uset.URelation.t ->
-  freeze_result option Lwt.t
+  FreezeResult.t option Lwt.t
 
 (** {1 Freeze Function Creation} *)
 
@@ -77,7 +76,7 @@ val validate_rf :
     @return [Lwt.t] of [Some freeze_fn] if valid combination, [None] otherwise
 
     The returned freeze function has type:
-    [(int * int) uset -> freeze_result option Lwt.t] *)
+    [(int * int) uset -> FreezeResult.t list Lwt.t] *)
 val freeze :
   symbolic_event_structure ->
   path_info ->
@@ -86,7 +85,7 @@ val freeze :
   expr list ->
   elided:int uset ->
   constraints:expr list ->
-  freeze_result list Lwt.t
+  FreezeResult.t list Lwt.t
 
 (** {1 Justification Combinations} *)
 

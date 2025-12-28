@@ -404,9 +404,9 @@ module TestExample4_1 = struct
 
     (* Create disjoint predicate *)
     let disj_pred =
-      disjoint
-        (ESymbol "π", ENum (Z.of_int 4))
-        (Expr.of_value (make_var "x"), ENum Z.one)
+      EBinOp
+        (ESymbol "π", "!=",
+        (Expr.of_value (make_var "x")))
     in
 
     check bool "disjointness_predicate_created" true
