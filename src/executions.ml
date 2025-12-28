@@ -1,9 +1,9 @@
-open Lwt.Syntax
 open Algorithms
 open Coherence
 open Events
-open Expr
 open Eventstructures
+open Expr
+open Lwt.Syntax
 open Types
 open Uset
 
@@ -84,19 +84,20 @@ module RFValidation = struct
       (URelation.pi_2 rf)
 
   let env_rf structure rf =
-    USet.values rf
-    |> List.map (fun (w, r) ->
+    USet.map
+      (fun (w, r) ->
         (* TODO this look-up logic is contrived *)
         let w_val = vale structure w r in
           match get_val structure r with
           | Some r_val ->
               Expr.evaluate (Expr.binop w_val "=" r_val) (fun _ -> None)
           | None -> failwith ("Read event " ^ string_of_int r ^ " has no value!")
-    )
+      )
+      rf
 
   let check_rf structure rf =
-    USet.values rf
-    |> List.map (fun (w, r) ->
+    USet.map
+      (fun (w, r) ->
         (* TODO this look-up logic is contrived *)
         let w_loc = loce structure w r in
           match get_loc structure r with
@@ -104,7 +105,8 @@ module RFValidation = struct
               Expr.evaluate (Expr.binop w_loc "=" r_loc) (fun _ -> None)
           | None ->
               failwith ("Read event " ^ string_of_int r ^ " has no location!")
-    )
+      )
+      rf
 end
 
 module JustValidation = struct
@@ -255,6 +257,7 @@ module JustValidation = struct
       List.map (fun (just : justification) -> just.p) combo
       |> List.flatten
       |> List.append path.p
+      |> List.map (fun expr -> Expr.evaluate expr (fun _ -> None))
       |> USet.of_list
       |> USet.values
       |> Solver.is_sat_cached
@@ -270,7 +273,6 @@ end
 (** Type for a freeze function - validates an RF set for a justification
     combination *)
 type freeze_result = {
-  justs : justification list;
   e : int uset;
   dp : (int * int) uset;
   ppo : (int * int) uset;
@@ -288,15 +290,6 @@ let freeze_result_equal fr1 fr2 =
   && USet.equal fr1.rmw fr2.rmw
   && List.equal Expr.equal fr1.pp fr2.pp
   && List.equal Expr.equal fr1.conds fr2.conds
-  && List.equal
-       (fun j1 j2 ->
-         j1.w = j2.w
-         && USet.equal j1.fwd j2.fwd
-         && USet.equal j1.we j2.we
-         && USet.equal j1.d j2.d
-         && List.equal Expr.equal j1.p j2.p
-       )
-       fr1.justs fr2.justs
 
 let freeze_result_hash fr =
   let hash_list lst =
@@ -385,9 +378,6 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
     USet.filter (fun (f, t) -> USet.mem e f || USet.mem e t) structure.rmw
   in
 
-  (* Create environment from RF *)
-  let env_rf = RFValidation.env_rf structure rf in
-
   (* Check 1.1: Various consistency checks *)
   let delta =
     USet.union
@@ -428,94 +418,90 @@ let validate_rf (structure : symbolic_event_structure) path ppo_loc dp ppo
       (* TODO discern memory model *)
       let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
 
-      (* Check 1.2: No downward-closed same-location writes before reads *)
-
-      (* Rewrite predicates *)
+      (* Create environment from RF *)
+      let env_rf = RFValidation.env_rf structure rf in
       let check_rf = RFValidation.check_rf structure rf in
-      let big_p_exprs = p_combined @ env_rf @ check_rf in
-      let big_p =
-        List.map (fun e -> Expr.evaluate e (fun _ -> None)) big_p_exprs
-        |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))
-        |> USet.of_list
-        |> USet.values
+
+      (* atomicity constraint *)
+      let* af = atomicity_pairs structure path rhb (USet.values env_rf) in
+
+      (* Create disjointness predicates *)
+      let disj =
+        USet.map
+          (fun (a, b) ->
+            match
+              ( Hashtbl.find_opt structure.events a,
+                Hashtbl.find_opt structure.events b
+              )
+            with
+            | None, _ ->
+                failwith
+                  ("Event " ^ string_of_int a ^ " not found in structure!")
+            | _, None ->
+                failwith
+                  ("Event " ^ string_of_int b ^ " not found in structure!")
+            | Some ea, Some eb -> (
+                match
+                  ( get_loc structure a,
+                    get_val structure a,
+                    get_loc structure b,
+                    get_val structure b
+                  )
+                with
+                | None, _, _, _ ->
+                    failwith ("Event " ^ string_of_int a ^ " has no location!")
+                | _, None, _, _ ->
+                    failwith ("Event " ^ string_of_int a ^ " has no value!")
+                | _, _, None, _ ->
+                    failwith ("Event " ^ string_of_int b ^ " has no location!")
+                | _, _, _, None ->
+                    failwith ("Event " ^ string_of_int b ^ " has no value!")
+                | _ ->
+                    let loc_a = get_loc structure a |> Option.get in
+                    let val_a = get_val structure a |> Option.get in
+                    let loc_b = get_loc structure b |> Option.get in
+                    let val_b = get_val structure b |> Option.get in
+                      (* disjoint only uses location *)
+                      Expr.evaluate
+                        (disjoint (loc_a, val_a) (loc_b, val_b))
+                        (fun _ -> None)
+              )
+          )
+          af
       in
-        (* atomicity constraint *)
-        let* af = atomicity_pairs structure path rhb env_rf in
 
-        (* Create disjointness predicates *)
-        let disj =
-          USet.map
-            (fun (a, b) ->
-              match
-                ( Hashtbl.find_opt structure.events a,
-                  Hashtbl.find_opt structure.events b
-                )
-              with
-              | None, _ ->
-                  failwith
-                    ("Event " ^ string_of_int a ^ " not found in structure!")
-              | _, None ->
-                  failwith
-                    ("Event " ^ string_of_int b ^ " not found in structure!")
-              | Some ea, Some eb -> (
-                  match
-                    ( get_loc structure a,
-                      get_val structure a,
-                      get_loc structure b,
-                      get_val structure b
-                    )
-                  with
-                  | None, _, _, _ ->
-                      failwith ("Event " ^ string_of_int a ^ " has no location!")
-                  | _, None, _, _ ->
-                      failwith ("Event " ^ string_of_int a ^ " has no value!")
-                  | _, _, None, _ ->
-                      failwith ("Event " ^ string_of_int b ^ " has no location!")
-                  | _, _, _, None ->
-                      failwith ("Event " ^ string_of_int b ^ " has no value!")
-                  | _ ->
-                      let loc_a = get_loc structure a |> Option.get in
-                      let val_a = get_val structure a |> Option.get in
-                      let loc_b = get_loc structure b |> Option.get in
-                      let val_b = get_val structure b |> Option.get in
-                        (* disjoint only uses location *)
-                        disjoint (loc_a, val_a) (loc_b, val_b)
-                )
-            )
-            af
-          |> USet.values
+      let bigger_p =
+        USet.of_list p_combined
+        |> USet.union env_rf
+        |> USet.union check_rf
+        |> USet.union disj
+        |> USet.filter (fun e -> not (Expr.equal e (EBoolean true)))
+        |> USet.values
+        |> List.sort Expr.compare
+      in
+
+      Logs.debug (fun m ->
+          m "  Combined predicates has %d expressions" (List.length bigger_p)
+      );
+
+      (* Check satisfiability of combined predicates *)
+      let* satisfiable = Solver.is_sat_cached bigger_p in
+        let*? () = (satisfiable, "unsatisfiable combined predicates") in
+
+        (* Success! Return the freeze result *)
+        let freeze_result =
+          {
+            e;
+            dp;
+            ppo;
+            rf;
+            rmw = rmw_filtered;
+            pp = bigger_p;
+            conds = [ EBoolean true ];
+          }
         in
-        let bigger_p =
-          List.map
-            (fun expr -> Expr.evaluate expr (fun _ -> None))
-            (big_p @ disj)
-        in
-
-        Logs.debug (fun m ->
-            m "  Combined predicates has %d expressions: %s"
-              (List.length bigger_p)
-              (String.concat ", " (List.map Expr.to_string bigger_p))
-        );
-
-        (* Check satisfiability of combined predicates *)
-        let* satisfiable = Solver.is_sat_cached bigger_p in
-          let*? () = (satisfiable, "unsatisfiable combined predicates") in
-
-          (* Success! Return the freeze result *)
-          let freeze_result =
-            {
-              justs = j_list;
-              e;
-              dp;
-              ppo;
-              rf;
-              rmw = rmw_filtered;
-              pp = bigger_p;
-              conds = [ EBoolean true ];
-            }
-          in
-            Logs.debug (fun m -> m "  Freeze successful");
-            Lwt.return_some freeze_result
+          Logs.debug (fun m -> m "  Freeze successful");
+          Lwt.return_some freeze_result
 
 (* Compute initial RF relation: writes × reads that are not in po^-1 *)
 let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
@@ -585,8 +571,11 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
           in
           let env_rf = RFValidation.env_rf structure new_combo_inv in
           let check_rf = RFValidation.check_rf structure new_combo_inv in
-          let predicates = p_combined @ env_rf @ check_rf in
-            Solver.is_sat_cached predicates
+            USet.of_list p_combined
+            |> USet.union env_rf
+            |> USet.union check_rf
+            |> USet.values
+            |> Solver.is_sat_cached
         )
         (USet.values read_events) ()
 

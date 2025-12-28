@@ -14,7 +14,6 @@ end
 
 (** Result of freezing a justification combination with an RF relation *)
 type freeze_result = {
-  justs : justification list;  (** Justifications for writes *)
   e : int uset;  (** Event set *)
   dp : (int * int) uset;  (** Dependency relation *)
   ppo : (int * int) uset;  (** Preserved program order *)

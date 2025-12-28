@@ -3,6 +3,7 @@
 open Context
 open Executions
 open Expr
+open Justifications
 open Lwt.Syntax
 open Types
 open Uset
@@ -84,25 +85,23 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   Logs.debug (fun m ->
       m "Pre-justifications for event\n\t%s"
         (String.concat "\n\t"
-           (List.map Justifications.to_string (USet.values pre_justs))
+           (List.map Justification.to_string (USet.values pre_justs))
         )
   );
 
   (* Initialize initial PPO relation - relates all initial events and terminal
      events to other events along po-edges. *)
   let init_ppo =
-    if Hashtbl.mem events 0 then
-     USet.filter (fun (f, t) -> f<>t && f = 0) po
+    if Hashtbl.mem events 0 then USet.filter (fun (f, t) -> f <> t && f = 0) po
     else USet.create ()
   in
   let terminal_events =
     Hashtbl.fold
-    (fun lbl ev acc -> if (ev.typ = Terminal) then (USet.add acc lbl) else acc)
-    structure.events
-    (USet.create ())
+      (fun lbl ev acc -> if ev.typ = Terminal then USet.add acc lbl else acc)
+      structure.events (USet.create ())
   in
   let terminal_ppo =
-    USet.filter (fun (f, t) -> f<>t && USet.mem terminal_events t) po
+    USet.filter (fun (f, t) -> f <> t && USet.mem terminal_events t) po
   in
   (* TODO discern in subsequent computation *)
   let init_ppo = USet.union init_ppo terminal_ppo in
@@ -132,7 +131,7 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
                 let justs_str =
                   String.concat "\n\t"
-                    (USet.values (USet.map Justifications.to_string filtered))
+                    (USet.values (USet.map Justification.to_string filtered))
                 in
                   if USet.equal filtered justs then (
                     Logs.debug (fun m ->

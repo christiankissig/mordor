@@ -262,7 +262,6 @@ let test_type_constructors () =
     (* Test freeze_result *)
     let freeze_res =
       {
-        justs = [];
         e = USet.create ();
         dp = USet.create ();
         ppo = USet.create ();
@@ -272,7 +271,7 @@ let test_type_constructors () =
         conds = [];
       }
     in
-      check int "freeze_result empty" 0 (List.length freeze_res.justs)
+      check int "freeze_result empty" 0 (USet.size freeze_res.e)
 
 (** Property tests *)
 

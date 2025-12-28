@@ -97,6 +97,10 @@ let lifted_clear cache =
   USet.clear cache.t |> ignore;
   USet.clear cache.to_ |> ignore
 
+(** [justs elab] Close justification set under elaborations.
+
+    Applies [elab] to each justification in [justs] in parallel using domain
+    pool, collecting results in a list. *)
 let close_under_elab justs elab =
   let* results =
     let promises =
