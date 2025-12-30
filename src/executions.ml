@@ -120,7 +120,7 @@ let disjoint (loc1, val1) (loc2, val2) =
 
 (** {1 RF Validation} *)
 
-module RFValidation = struct
+module ReadFromValidation = struct
   let rf_respects_ppo rf ppo_loc =
     let ppo_loc_tree = URelation.adjacency_map ppo_loc in
       USet.for_all
@@ -167,11 +167,47 @@ module RFValidation = struct
               failwith ("Read event " ^ string_of_int r ^ " has no location!")
       )
       rf
+
+  (** Compute pairs of allocation events at same location without intermediate
+      free events given read-from environment *)
+  let adjacent_same_location_allocation_events structure path rhb p =
+    let e_set = path.path in
+    let malloc_events = USet.intersection structure.malloc_events e_set in
+    let free_events = USet.intersection structure.free_events e_set in
+    (* Only compute pairs from malloc events, not reads *)
+    let allocation_events = malloc_events in
+    let allocation_events_in_po =
+      URelation.cross allocation_events allocation_events
+      |> USet.intersection structure.po
+    in
+
+    USet.async_filter
+      (fun (e_1, e_2) ->
+        (* Check if there's no intermediate FREE event between e_1 and e_2 *)
+        let* has_intermediate =
+          USet.async_exists
+            (fun ep ->
+              if not (USet.mem rhb (e_1, ep) && USet.mem rhb (ep, e_2)) then
+                Lwt.return_false
+              else
+                (* Check if loc(e_1) = loc(ep) under env_rf using semeq *)
+                match (get_loc structure e_1, get_loc structure ep) with
+                | None, _ | _, None -> Lwt.return_false
+                | Some loc_e1, Some loc_ep -> Solver.exeq ~state:p loc_e1 loc_ep
+            )
+            free_events
+        in
+          Lwt.return (not has_intermediate)
+      )
+      allocation_events_in_po
 end
 
 (** {1 Justification Validation} *)
 
 module JustValidation = struct
+
+  (** Check if any origins of symbols in justification D are elided by
+      fwd edges. Consider fwd edges, and not we edges, as origins are read events. *)
   let check_origins_elided structure just fwd_elided =
     let d_origins =
       USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
@@ -186,6 +222,7 @@ module JustValidation = struct
     let origin_elided = USet.intersection origins fwd_elided in
       USet.size origin_elided = 0
 
+      (** Whether if any edges in delta are not on the path *)
   let check_delta_not_on_path just path =
     let just_delta = USet.union just.fwd just.we in
     let just_delta_events =
@@ -193,7 +230,8 @@ module JustValidation = struct
     in
       USet.subset just_delta_events path.path
 
-  (* Check partial combination of justifications for early pruning. *)
+  (** Check partial combination of justifications for early pruning. Used in
+  Algorithms.ListMapCombinationBuilder. *)
   let check_partial structure (path : path_info)
       (combo : (int * justification) list) ?(alternatives = [])
       (pair : int * justification) =
@@ -291,7 +329,8 @@ module JustValidation = struct
 
           Lwt.return true
 
-  (* Check final combination of justifications for validity. *)
+  (** Check final combination of justifications. Used in
+    ListMapCombinationBuilder. *)
   let check_final structure (path : path_info)
       (combo : (int * justification) list) =
     (* conduit code between pair-based and tuple output *)
@@ -330,39 +369,8 @@ end
 
 (** {1 Freezing} *)
 
-(** Compute atomicity pairs for a path given rhb and env_rf *)
-let atomicity_pairs structure path rhb p =
-  (* Compute atomicity pairs AF - matching JS implementation *)
-  let e_set = path.path in
-  let malloc_events = USet.intersection structure.malloc_events e_set in
-  let free_events = USet.intersection structure.free_events e_set in
-  (* Only compute pairs from malloc events, not reads *)
-  let a = malloc_events in
-  let a_squared = URelation.cross a a in
-
-  USet.async_filter
-    (fun (e_1, e_2) ->
-      (* Match JS: e_1 < e_2 instead of checking po *)
-      if e_1 >= e_2 then Lwt.return_false
-      else
-        (* Check if there's no intermediate FREE event between e_1 and e_2 *)
-        let* has_intermediate =
-          USet.async_exists
-            (fun ep ->
-              if not (USet.mem rhb (e_1, ep) && USet.mem rhb (ep, e_2)) then
-                Lwt.return_false
-              else
-                (* Check if loc(e_1) = loc(ep) under env_rf using semeq *)
-                match (get_loc structure e_1, get_loc structure ep) with
-                | None, _ | _, None -> Lwt.return_false
-                | Some loc_e1, Some loc_ep -> Solver.exeq ~state:p loc_e1 loc_ep
-            )
-            free_events
-        in
-          Lwt.return (not has_intermediate)
-    )
-    a_squared
-
+(** Instantiate execution from justification list and read-from
+    relation. If successful returns optional freeze result. *)
 let instantiate_execution (structure : symbolic_event_structure) path dp ppo
     j_list (pp : expr list) p_combined rf =
   (* let* _ = Lwt.return_unit in *)
@@ -381,10 +389,11 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
 
   (* Check 3: All rf edges respect ppo_loc *)
   let*? () =
-    (RFValidation.rf_respects_ppo rf ppo, "RF edges do not respect PPO")
+    (ReadFromValidation.rf_respects_ppo rf ppo, "RF edges do not respect PPO")
   in
   (* Filter RMW pairs *)
   let rmw_filtered =
+    (* TODO does this make sense if RMW pair lies out side of execution? *)
     USet.filter (fun (f, t) -> USet.mem e f || USet.mem e t) structure.rmw
   in
 
@@ -399,10 +408,10 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
   in
 
   let*? () =
-    (RFValidation.check_rf_elided rf delta, "RF fails RF elided check")
+    (ReadFromValidation.check_rf_elided rf delta, "RF fails RF elided check")
   in
     let*? () =
-      ( RFValidation.check_rf_total rf read_events delta,
+      ( ReadFromValidation.check_rf_total rf read_events delta,
         "RF fails RF total check"
       )
     in
@@ -414,11 +423,14 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
       let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
 
       (* Create environment from RF *)
-      let env_rf = RFValidation.env_rf structure rf in
-      let check_rf = RFValidation.check_rf structure rf in
+      let env_rf = ReadFromValidation.env_rf structure rf in
+      let check_rf = ReadFromValidation.check_rf structure rf in
 
       (* atomicity constraint *)
-      let* af = atomicity_pairs structure path rhb (USet.values env_rf) in
+      let* af =
+        ReadFromValidation.adjacent_same_location_allocation_events structure
+          path rhb (USet.values env_rf)
+      in
 
       (* Create disjointness predicates *)
       let disj =
@@ -465,7 +477,7 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
           af
       in
 
-      let bigger_p =
+      let execution_predicates =
         USet.of_list p_combined
         |> USet.union env_rf
         |> USet.union check_rf
@@ -476,7 +488,7 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
       in
 
       (* Check satisfiability of combined predicates *)
-      let* satisfiable = Solver.is_sat_cached bigger_p in
+      let* satisfiable = Solver.is_sat_cached execution_predicates in
         let*? () = (satisfiable, "unsatisfiable combined predicates") in
 
         (* Success! Return the freeze result *)
@@ -487,14 +499,14 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
             ppo;
             rf;
             rmw = rmw_filtered;
-            pp = bigger_p;
+            pp = execution_predicates;
             conds = [ EBoolean true ];
           }
         in
           Lwt.return_some freeze_result
 
 (** [structure path elided constraints statex ppo dp p_combined] Compute
-    candidate RF relations for path.
+    candidate read-from relations for given path.
 
     @param structure Symbolic Event Structure
     @param path Path information
@@ -570,8 +582,8 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
           let new_combo_inv =
             URelation.inverse_relation (USet.of_list (pair :: combo))
           in
-          let env_rf = RFValidation.env_rf structure new_combo_inv in
-          let check_rf = RFValidation.check_rf structure new_combo_inv in
+          let env_rf = ReadFromValidation.env_rf structure new_combo_inv in
+          let check_rf = ReadFromValidation.check_rf structure new_combo_inv in
             USet.of_list p_combined
             |> USet.union env_rf
             |> USet.union check_rf
@@ -580,8 +592,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
         )
         (USet.values read_events) ()
 
-(** Create a freeze function that validates RF sets for a justification
-    combination *)
+(** Creates executions from a list of justifications for a given path. *)
 let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
     ~elided ~constraints =
   (* let* _ = Lwt.return_unit in *)
@@ -708,8 +719,8 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
           let* results = Lwt.all all_validations in
             Lwt.return (List.filter_map Fun.id results)
 
-(** Build justification combinations for all paths with caching *)
-let build_justcombos structure paths init_ppo statex
+(** Compute justification combinations for write events on path. *)
+let compute_justification_combinations structure paths init_ppo statex
     (justmap : (int, justification list) Hashtbl.t) =
   (* Given a path, combine justifications for each write on the path. *)
   let combine_justifications_for_path path =
@@ -993,7 +1004,7 @@ let generate_executions (structure : symbolic_event_structure)
 
     (* Build justcombos for all paths *)
     let* freeze_results =
-      build_justcombos structure paths init_ppo statex justmap
+      compute_justification_combinations structure paths init_ppo statex justmap
       |> stream_freeze
       |> dedup_freeze_results
       |> Lwt_stream.to_list

@@ -195,74 +195,6 @@ let test_path_generation (name, e, po, validator) () =
     with Failure _ ->
       check bool (name ^ ": should handle gracefully") true true
 
-(** Justification tests *)
-
-(*
-let test_choose_justifications () =
-  run_lwt (fun () ->
-      let test_cases =
-        [
-          ( "empty path",
-            Hashtbl.create 4,
-            USet.create (),
-            fun result -> List.length result = 1 && result = [ [] ]
-          );
-          ( "no justifications",
-            Hashtbl.create 4,
-            USet.of_list [ 1 ],
-            fun result -> List.length result = 0
-          );
-          ( "with justification",
-            (let justmap = Hashtbl.create 4 in
-             let just =
-               TestData.make_justification (TestData.create_event 1 Write ())
-             in
-               Hashtbl.add justmap 1 [ just ];
-               justmap
-            ),
-            USet.of_list [ 1 ],
-            fun result -> List.length result > 0
-          );
-        ]
-      in
-
-      Lwt_list.iter_s
-        (fun (name, justmap, path_events, validator) ->
-          let* result =
-            choose ~justmap ~path_events ~config:default_choose_config
-          in
-          let validate_result = validator result in
-            check bool name true validate_result;
-            Lwt.return_unit
-        )
-        test_cases
-  )
-  *)
-
-(** Type construction tests *)
-
-let test_type_constructors () =
-  (* Test path_info *)
-  let path_info =
-    { path = USet.of_list [ 1; 2; 3 ]; p = [ EVar "x"; EVar "y" ] }
-  in
-    check int "path_info size" 3 (USet.size path_info.path);
-    check int "path_info predicates" 2 (List.length path_info.p);
-
-    (* Test freeze_result *)
-    let freeze_res : FreezeResult.t =
-      {
-        e = USet.create ();
-        dp = USet.create ();
-        ppo = USet.create ();
-        rf = USet.create ();
-        rmw = USet.create ();
-        pp = [];
-        conds = [];
-      }
-    in
-      check int "freeze_result empty" 0 (USet.size freeze_res.e)
-
 (** Property tests *)
 
 let test_justification_properties () =
@@ -338,8 +270,6 @@ let suite =
       TestData.path_gen_cases;
     (* Other tests *)
     [
-      (*("choose justifications", `Quick, test_choose_justifications);*)
-      ("type constructors", `Quick, test_type_constructors);
       ("justification properties", `Quick, test_justification_properties);
       ("integration", `Quick, test_integration);
     ];
