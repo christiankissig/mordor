@@ -10,10 +10,11 @@
   mordor_lib ; Your existing Mordor library
   dream ; Web framework
   yojson ; JSON handling
+  landmarks
   lwt ; Async runtime
   lwt.unix)
  ; Unix operations
  (preprocess
-  (pps lwt_ppx)))
+  (pps lwt_ppx landmarks-ppx --auto)))
 
 ; Lwt syntax sugar (let*, let+, etc.)

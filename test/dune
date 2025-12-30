@@ -26,9 +26,9 @@
   test_symbolic_mrd
   test_types
   test_uset)
- (libraries mordor_lib lwt lwt.unix z3 zarith core str alcotest)
+ (libraries mordor_lib landmarks lwt lwt.unix z3 zarith core str alcotest)
  (preprocess
-  (pps lwt_ppx)))
+  (pps lwt_ppx landmarks-ppx)))
 
 (test
  (name test_integration)
@@ -41,7 +41,17 @@
   test_integration
   ; other integration test modules
   test_integration_litmus_tests)
- (libraries mordor_lib lwt lwt.unix z3 zarith core str alcotest unix)
+ (libraries
+  mordor_lib
+  landmarks
+  lwt
+  lwt.unix
+  z3
+  zarith
+  core
+  str
+  alcotest
+  unix)
  (preprocess
-  (pps lwt_ppx))
+  (pps lwt_ppx landmarks-ppx))
  (deps ../cli/main.exe))

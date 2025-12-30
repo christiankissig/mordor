@@ -5,6 +5,6 @@
  (modules main)
  (flags
   (:standard -g))
- (libraries mordor_lib lwt lwt.unix)
+ (libraries mordor_lib landmarks lwt lwt.unix)
  (preprocess
-  (pps lwt_ppx ppx_deriving.show landmarks-ppx --auto)))
+  (pps lwt_ppx ppx_deriving.show)))
