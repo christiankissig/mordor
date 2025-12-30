@@ -65,10 +65,20 @@ and expr_to_z3 context = function
         | "=>" -> Z3.Boolean.mk_implies context.ctx l r
         | _ -> failwith ("Unsupported operator: " ^ op)
     )
-  | EUnOp ("!", rhs) ->
+  | EUnOp ("!", rhs) -> (
+      let int_to_bool z3_expr =
+        let zero = Z3.Arithmetic.Integer.mk_numeral_i context.ctx 0 in
+        Z3.Boolean.mk_eq context.ctx z3_expr zero
+      in
       let r = expr_to_z3 context rhs in
+      if Z3.Boolean.is_bool r then
         Z3.Boolean.mk_not context.ctx r
-  | EUnOp ("~", rhs) ->
+      else
+        (* Assume integer semantics: !x is true if x == 0, false otherwise *)
+        let zero = Z3.Arithmetic.Integer.mk_numeral_i context.ctx 0 in
+        Z3.Boolean.mk_eq context.ctx r zero
+    )
+       | EUnOp ("~", rhs) ->
       let r = expr_to_z3 context rhs in
         Z3.Arithmetic.mk_unary_minus context.ctx r
   | EUnOp (op, _) -> failwith (sprintf "Unsupported unary operator %s" op)
