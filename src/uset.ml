@@ -215,6 +215,7 @@ module URelation : sig
 
   val cross : 'a USet.t -> 'a USet.t -> 'a t
   val compose : 'a t list -> 'a t
+  val compose_adj_map : ('a t * ('a, 'a USet.t) Hashtbl.t) list -> 'a t
   val identity_relation : 'a USet.t -> 'a t
   val inverse_relation : 'a t -> 'a t
   val reflexive_closure : 'a USet.t -> 'a t -> 'a t
@@ -245,27 +246,97 @@ end = struct
         s1;
       result
 
-  (** Helper: compose relations using semicolon (;) *)
+  (** Adjacency map of relation. Neighbours are grouped in USets. *)
+  let adjacency_map rel =
+    let map = Hashtbl.create (USet.size rel) in
+    USet.iter
+      (fun (from, to_) ->
+        let existing =
+          try Hashtbl.find map from with Not_found -> USet.create ()
+        in
+          USet.add existing to_ |> ignore;
+          Hashtbl.replace map from existing
+      )
+      rel;
+    map
+
+  (** Adjacency map of relation. Neighbours are grouped in Lists. *)
+  let adjacency_list_map rel =
+    let map = Hashtbl.create (USet.size rel) in
+    USet.iter
+    (fun (from, to_) ->
+      let existing = try Hashtbl.find map from with Not_found -> []
+      in
+      Hashtbl.replace map from (to_ :: existing)
+    )
+    rel;
+    map
+
+  (** Cummulative composition of multiple relations, optimized for worst case
+      complexity: O(n^2 * k) where n is size of largest relation and k is, now
+      O(n * k). *)
   let compose (rels : 'a t list) : 'a t =
-    match rels with
-    | [] -> USet.create ()
-    | [ r ] -> r
-    | r :: rest ->
-        List.fold_left
-          (fun acc rel ->
-            let result = USet.create () in
-              USet.iter
-                (fun (a, b) ->
+    let landmark = Landmark.register "URelation.compose" in
+      Landmark.enter landmark;
+      let composition =
+        match rels with
+        | [] -> USet.create ()
+        | [ r ] -> r
+        | r :: rest ->
+            List.fold_left
+              (fun acc rel ->
+                (* Build index: c -> list of d where (c, d) in rel *)
+                let index = adjacency_list_map rel in
+                  (* Compose using index *)
+                  let result = USet.create () in
+                    USet.iter
+                      (fun (a, b) ->
+                        match Hashtbl.find_opt index b with
+                        | Some ds ->
+                            List.iter
+                              (fun d -> USet.add result (a, d) |> ignore)
+                              ds
+                        | None -> ()
+                      )
+                      acc;
+                    result
+              )
+              r rest
+      in
+        Landmark.exit landmark;
+        composition
+
+  (** Cummulative composition of multiple relations, given their pre-computed
+      adjacency maps. Optimized for worst case complexity: O(n^2 * k) where n is
+      size of largest relation and k is, now O(n * k). *)
+  let compose_adj_map (rels : ('a t * ('a, 'a USet.t) Hashtbl.t) list) : 'a t =
+    let landmark = Landmark.register "URelation.compose" in
+      Landmark.enter landmark;
+      let composition =
+        match rels with
+        | [] -> USet.create ()
+        | [ (r, _) ] -> r
+        | (r, _) :: rest ->
+            List.fold_left
+              (fun acc (r, index) ->
+                let result = USet.create () in
                   USet.iter
-                    (fun (c, d) ->
-                      if b = c then USet.add result (a, d) |> ignore
+                    (fun (a, b) ->
+                      match Hashtbl.find_opt index b with
+                      | Some ds ->
+                          USet.iter
+                            (fun d -> USet.add result (a, d) |> ignore)
+                            ds
+                      | None -> ()
                     )
-                    rel
-                )
-                acc;
-              result
-          )
-          r rest
+                    acc;
+                  result
+              )
+              r rest
+      in
+        Landmark.exit landmark;
+        composition
+
 
   (** Identity relation *)
   let identity_relation s = USet.map (fun x -> (x, x)) s
@@ -337,8 +408,12 @@ end = struct
 
   (** Check if acyclic *)
   let acyclic s =
-    let s_tc = transitive_closure s in
-      USet.for_all (fun (a, b) -> not (a = b)) s_tc
+    let landmark = Landmark.register "URelation.acyclic" in
+      Landmark.enter landmark;
+      let s_tc = transitive_closure s in
+      let result = USet.for_all (fun (a, b) -> not (a = b)) s_tc in
+        Landmark.exit landmark;
+        result
 
   (** Check if irreflexive *)
   let is_irreflexive s = USet.for_all (fun (a, b) -> not (a = b)) s
@@ -349,28 +424,4 @@ end = struct
     USet.for_all
       (fun a -> USet.size (USet.filter (fun (x, _) -> x = a) s) <= 1)
       (pi_1 s)
-
-  (* Build tree for program order *)
-  let adjacency_map rel =
-    let tree = Hashtbl.create 256 in
-      USet.iter (fun e -> Hashtbl.add tree e (USet.create ())) (pi_1 rel);
-      USet.iter
-        (fun (from, to_) ->
-          let set = Hashtbl.find tree from in
-            USet.add set to_ |> ignore
-        )
-        rel;
-      tree
-
-  (* Build adjacency list map for program order *)
-  let adjacency_list_map rel =
-    let tree = Hashtbl.create 256 in
-      USet.iter (fun e -> Hashtbl.add tree e []) (pi_1 rel);
-      USet.iter
-        (fun (from, to_) ->
-          let lst = Hashtbl.find tree from in
-            Hashtbl.replace tree from (to_ :: lst)
-        )
-        rel;
-      tree
 end
