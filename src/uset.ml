@@ -249,28 +249,27 @@ end = struct
   (** Adjacency map of relation. Neighbours are grouped in USets. *)
   let adjacency_map rel =
     let map = Hashtbl.create (USet.size rel) in
-    USet.iter
-      (fun (from, to_) ->
-        let existing =
-          try Hashtbl.find map from with Not_found -> USet.create ()
-        in
-          USet.add existing to_ |> ignore;
-          Hashtbl.replace map from existing
-      )
-      rel;
-    map
+      USet.iter
+        (fun (from, to_) ->
+          let existing =
+            try Hashtbl.find map from with Not_found -> USet.create ()
+          in
+            USet.add existing to_ |> ignore;
+            Hashtbl.replace map from existing
+        )
+        rel;
+      map
 
   (** Adjacency map of relation. Neighbours are grouped in Lists. *)
   let adjacency_list_map rel =
     let map = Hashtbl.create (USet.size rel) in
-    USet.iter
-    (fun (from, to_) ->
-      let existing = try Hashtbl.find map from with Not_found -> []
-      in
-      Hashtbl.replace map from (to_ :: existing)
-    )
-    rel;
-    map
+      USet.iter
+        (fun (from, to_) ->
+          let existing = try Hashtbl.find map from with Not_found -> [] in
+            Hashtbl.replace map from (to_ :: existing)
+        )
+        rel;
+      map
 
   (** Cummulative composition of multiple relations, optimized for worst case
       complexity: O(n^2 * k) where n is size of largest relation and k is, now
@@ -287,19 +286,19 @@ end = struct
               (fun acc rel ->
                 (* Build index: c -> list of d where (c, d) in rel *)
                 let index = adjacency_list_map rel in
-                  (* Compose using index *)
-                  let result = USet.create () in
-                    USet.iter
-                      (fun (a, b) ->
-                        match Hashtbl.find_opt index b with
-                        | Some ds ->
-                            List.iter
-                              (fun d -> USet.add result (a, d) |> ignore)
-                              ds
-                        | None -> ()
-                      )
-                      acc;
-                    result
+                (* Compose using index *)
+                let result = USet.create () in
+                  USet.iter
+                    (fun (a, b) ->
+                      match Hashtbl.find_opt index b with
+                      | Some ds ->
+                          List.iter
+                            (fun d -> USet.add result (a, d) |> ignore)
+                            ds
+                      | None -> ()
+                    )
+                    acc;
+                  result
               )
               r rest
       in
@@ -336,7 +335,6 @@ end = struct
       in
         Landmark.exit landmark;
         composition
-
 
   (** Identity relation *)
   let identity_relation s = USet.map (fun x -> (x, x)) s
