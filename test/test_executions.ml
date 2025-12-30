@@ -250,7 +250,7 @@ let test_type_constructors () =
     check int "path_info predicates" 2 (List.length path_info.p);
 
     (* Test freeze_result *)
-    let freeze_res: FreezeResult.t =
+    let freeze_res : FreezeResult.t =
       {
         e = USet.create ();
         dp = USet.create ();

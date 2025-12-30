@@ -12,32 +12,27 @@ open Uset
 module Execution = struct
   type t = symbolic_execution
 
-let equal ex1 ex2 =
-  USet.equal ex1.ex_e ex2.ex_e
-  && USet.equal ex1.dp ex2.dp
-  && USet.equal ex1.ppo ex2.ppo
-  && USet.equal ex1.rf ex2.rf
+  let equal ex1 ex2 =
+    USet.equal ex1.ex_e ex2.ex_e
+    && USet.equal ex1.dp ex2.dp
+    && USet.equal ex1.ppo ex2.ppo
+    && USet.equal ex1.rf ex2.rf
 
-let hash ex =
-  let hash_list lst =
-    List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
-  in
-  let hash_uset uset = USet.values uset |> List.sort compare |> hash_list in
-    Hashtbl.hash
-      (hash_uset ex.ex_e, hash_uset ex.dp, hash_uset ex.ppo, hash_uset ex.rf)
+  let hash ex =
+    let hash_list lst =
+      List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
+    in
+    let hash_uset uset = USet.values uset |> List.sort compare |> hash_list in
+      Hashtbl.hash
+        (hash_uset ex.ex_e, hash_uset ex.dp, hash_uset ex.ppo, hash_uset ex.rf)
 
-
-
-  (** [exec1 exec2] Check if exec1 contains exec2, i.e. exec1 is a refinement of
-      exec2.
+  (** [exec1 exec2] Check whether exec1 subsumes exec2.
 
       @param exec1 First symbolic execution
       @param exec2 Second symbolic execution
       @return true if exec1 contains exec2, false otherwise *)
   let contains exec1 exec2 =
-    (* subset suffices as executions are over maximally consistent sets of
-       events *)
-    USet.subset exec2.ex_e exec1.ex_e
+    USet.equal exec2.ex_e exec1.ex_e
     && USet.subset exec2.dp exec1.dp
     && USet.subset exec2.ppo exec1.ppo
     && USet.subset exec2.rf exec1.rf
@@ -58,6 +53,63 @@ module ExecutionCacheKey = struct
 end
 
 module ExecutionCache = Hashtbl.Make (ExecutionCacheKey)
+
+module FreezeResult = struct
+  (** Type for a freeze function - validates an RF set for a justification
+      combination *)
+  type t = {
+    e : int uset;
+    dp : (int * int) uset;
+    ppo : (int * int) uset;
+    rf : (int * int) uset;
+    rmw : (int * int) uset;
+    pp : expr list;
+    conds : expr list;
+  }
+
+  let equal fr1 fr2 =
+    USet.equal fr1.e fr2.e
+    && USet.equal fr1.dp fr2.dp
+    && USet.equal fr1.ppo fr2.ppo
+    && USet.equal fr1.rf fr2.rf
+    && USet.equal fr1.rmw fr2.rmw
+    && List.equal Expr.equal fr1.pp fr2.pp
+    && List.equal Expr.equal fr1.conds fr2.conds
+
+  let hash fr =
+    let hash_list lst =
+      List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
+    in
+    let hash_uset uset = USet.values uset |> List.sort compare |> hash_list in
+      Hashtbl.hash
+        ( hash_uset fr.e,
+          hash_uset fr.dp,
+          hash_uset fr.ppo,
+          hash_uset fr.rf,
+          hash_uset fr.rmw
+        )
+
+  (** [fr1 fr2] Check whether fr1 subsumes fr2. *)
+  let contains fr1 fr2 =
+    USet.equal fr2.e fr1.e
+    && USet.subset fr2.dp fr1.dp
+    && USet.subset fr2.ppo fr1.ppo
+    && USet.subset fr2.rf fr1.rf
+    && not
+         (USet.equal fr1.rf fr2.rf
+         && USet.equal fr1.ppo fr2.ppo
+         && USet.equal fr1.dp fr2.dp
+         )
+end
+
+module FreezeResultCacheKey = struct
+  type t = FreezeResult.t
+
+  let equal = FreezeResult.equal
+  let hash = FreezeResult.hash
+end
+
+module FreezeResultCache = Hashtbl.Make (FreezeResultCacheKey)
 
 (** {1 Utilities} *)
 
@@ -273,58 +325,10 @@ module JustValidation = struct
       |> Solver.is_sat_cached
     in
       let*? () = (satisfiable, "unsatisfiable path predicates") in
-
-      Logs.info (fun m -> m "  Found valid justification combination");
-      Lwt.return true
+        Lwt.return true
 end
 
-(**  {1 Freezing} *)
-
-module FreezeResult = struct
-
-(** Type for a freeze function - validates an RF set for a justification
-    combination *)
-type t = {
-  e : int uset;
-  dp : (int * int) uset;
-  ppo : (int * int) uset;
-  rf : (int * int) uset;
-  rmw : (int * int) uset;
-  pp : expr list;
-  conds : expr list;
-}
-
-let equal fr1 fr2 =
-  USet.equal fr1.e fr2.e
-  && USet.equal fr1.dp fr2.dp
-  && USet.equal fr1.ppo fr2.ppo
-  && USet.equal fr1.rf fr2.rf
-  && USet.equal fr1.rmw fr2.rmw
-  && List.equal Expr.equal fr1.pp fr2.pp
-  && List.equal Expr.equal fr1.conds fr2.conds
-
-let hash fr =
-  let hash_list lst =
-    List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
-  in
-  let hash_uset uset = USet.values uset |> List.sort compare |> hash_list in
-    Hashtbl.hash
-      ( hash_uset fr.e,
-        hash_uset fr.dp,
-        hash_uset fr.ppo,
-        hash_uset fr.rf,
-        hash_uset fr.rmw
-      )
-end
-
-module FreezeResultCacheKey = struct
-  type t = FreezeResult.t
-
-  let equal = FreezeResult.equal
-  let hash = FreezeResult.hash
-end
-
-module FreezeResultCache = Hashtbl.Make (FreezeResultCacheKey)
+(** {1 Freezing} *)
 
 (** Compute atomicity pairs for a path given rhb and env_rf *)
 let atomicity_pairs structure path rhb p =
@@ -359,15 +363,8 @@ let atomicity_pairs structure path rhb p =
     )
     a_squared
 
-let instantiate_execution (structure : symbolic_event_structure) path ppo_loc dp ppo
+let instantiate_execution (structure : symbolic_event_structure) path dp ppo
     j_list (pp : expr list) p_combined rf =
-  Logs.debug (fun m ->
-      m
-        "Validating RF with %d edges for justification combination with %d \
-         justs"
-        (USet.size rf) (List.length j_list)
-  );
-
   (* let* _ = Lwt.return_unit in *)
   let ( let*? ) (condition, msg) f =
     if condition then f ()
@@ -384,7 +381,7 @@ let instantiate_execution (structure : symbolic_event_structure) path ppo_loc dp
 
   (* Check 3: All rf edges respect ppo_loc *)
   let*? () =
-    (RFValidation.rf_respects_ppo rf ppo_loc, "RF edges do not respect PPO")
+    (RFValidation.rf_respects_ppo rf ppo, "RF edges do not respect PPO")
   in
   (* Filter RMW pairs *)
   let rmw_filtered =
@@ -400,21 +397,6 @@ let instantiate_execution (structure : symbolic_event_structure) path ppo_loc dp
       )
       (List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list)
   in
-
-  Logs.debug (fun m -> m "  Delta has %d edges" (USet.size delta));
-  Logs.debug (fun m ->
-      m "  RF has %d edges: %s" (USet.size rf)
-        (String.concat ", "
-           (List.map
-              (fun (w, r) -> Printf.sprintf "(%d -> %d)" w r)
-              (USet.values rf)
-           )
-        )
-  );
-  Logs.debug (fun m ->
-      m "  Read events %s"
-        (String.concat ", " (List.map string_of_int (USet.values read_events)))
-  );
 
   let*? () =
     (RFValidation.check_rf_elided rf delta, "RF fails RF elided check")
@@ -493,16 +475,12 @@ let instantiate_execution (structure : symbolic_event_structure) path ppo_loc dp
         |> List.sort Expr.compare
       in
 
-      Logs.debug (fun m ->
-          m "  Combined predicates has %d expressions" (List.length bigger_p)
-      );
-
       (* Check satisfiability of combined predicates *)
       let* satisfiable = Solver.is_sat_cached bigger_p in
         let*? () = (satisfiable, "unsatisfiable combined predicates") in
 
         (* Success! Return the freeze result *)
-        let freeze_result: FreezeResult.t =
+        let freeze_result : FreezeResult.t =
           {
             e;
             dp;
@@ -513,10 +491,20 @@ let instantiate_execution (structure : symbolic_event_structure) path ppo_loc dp
             conds = [ EBoolean true ];
           }
         in
-          Logs.debug (fun m -> m "  Freeze successful");
           Lwt.return_some freeze_result
 
-(* Compute initial RF relation: writes × reads that are not in po^-1 *)
+(** [structure path elided constraints statex ppo dp p_combined] Compute
+    candidate RF relations for path.
+
+    @param structure Symbolic Event Structure
+    @param path Path information
+    @param elided Set of elided events
+    @param constraints Additional constraints
+    @param statex State expressions
+    @param ppo
+      Preserved program order relation implied by justifications on path
+    @param dp Dependency relation implied by justifications on path
+    @param p_combined Combined predicates from justifications on path *)
 let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
     =
   let write_events =
@@ -603,7 +591,6 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
 
   let e = path.path in
   let e_squared = URelation.cross e e in
-  let pp = path.p in
 
   let read_events = USet.intersection structure.read_events e in
   let write_events = USet.intersection structure.write_events e in
@@ -637,10 +624,11 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
   let p_combined =
     List.concat_map (fun (j : justification) -> j.p) j_list
     @ con.psi
-    @ pp
+    @ path.p
     @ statex
     |> USet.of_list
     |> USet.values
+    |> List.sort Expr.compare
   in
 
   (* Check if predicates are satisfiable *)
@@ -673,49 +661,49 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
           j_list
       in
 
-      let ppo = List.fold_left USet.union (USet.create ()) ppos in
-      let ppo = USet.union ppo (Forwardingcontext.ppo_sync con) in
-      let ppo = USet.union ppo init_ppo in
-      let ppo = USet.intersection ppo e_squared in
-
-      Logs.debug (fun m ->
-          m "Computed ppo with %d edges: %s" (USet.size ppo)
-            (String.concat ", "
-               (List.map
-                  (fun (a, b) -> Printf.sprintf "(%d->%d)" a b)
-                  (USet.values ppo)
-               )
-            )
-      );
-
       (* Compute ppo_loc *)
       let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
-      let ppo_loc = USet.union ppo_loc_base init_ppo in
-
-      (* Filter out read-read pairs *)
       let ppo_loc =
-        USet.filter
-          (fun (a, b) -> not (USet.mem read_events a && USet.mem read_events b))
-          ppo_loc
+        USet.union ppo_loc_base init_ppo
+        (* Filter out read-read pairs *)
+        |> USet.filter (fun (a, b) ->
+            not
+              (USet.mem structure.read_events a
+              && USet.mem structure.read_events b
+              )
+        )
+        |> USet.intersection e_squared
+        |> URelation.transitive_closure
       in
 
-      (* Compute transitive closure *)
-      let ppo_loc = USet.intersection ppo_loc e_squared in
-      let ppo_loc = URelation.transitive_closure ppo_loc in
+      let ppo =
+        List.fold_left USet.union (USet.create ()) ppos
+        |> USet.union (Forwardingcontext.ppo_sync con)
+        |> USet.union init_ppo
+        |> USet.union ppo_loc
+        |> USet.intersection e_squared
+        |> URelation.transitive_closure
+      in
 
-      let* all_rf =
+      let* all_fr =
         compute_path_rf structure path ~elided ~constraints statex ppo dp
           p_combined
       in
+      let all_rf =
+        List.map
+          (fun fr -> List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
+          all_fr
+      in
         Logs.debug (fun m ->
-            m "Computed %d RF combinations to validate" (List.length all_rf)
+            m "Computed %d RF combination for path" (List.length all_rf)
         );
         let all_validations =
-          List.map (List.map (fun (r, w) -> (w, r))) all_rf
-          |> List.map USet.of_list
-          |> List.map (fun rf ->
-              instantiate_execution structure path ppo_loc dp ppo j_list pp p_combined rf
-          )
+          List.map
+            (fun rf ->
+              instantiate_execution structure path dp ppo j_list path.p
+                p_combined rf
+            )
+            all_rf
         in
           let* results = Lwt.all all_validations in
             Lwt.return (List.filter_map Fun.id results)
@@ -838,7 +826,7 @@ let generate_executions (structure : symbolic_event_structure)
     in
 
     let stream_freeze_to_execution input_stream =
-      let freeze_to_execution (freeze_res: FreezeResult.t) =
+      let freeze_to_execution (freeze_res : FreezeResult.t) =
         (* Fixed point computation for RF mapping *)
         let fix_rf_map = Hashtbl.create 16 in
 
@@ -947,7 +935,6 @@ let generate_executions (structure : symbolic_event_structure)
           )
           else begin
             FreezeResultCache.add seen fr ();
-            Logs.debug (fun m -> m "Keeping new freeze result");
             Some fr
           end
         )
@@ -972,6 +959,22 @@ let generate_executions (structure : symbolic_event_structure)
         stream
     in
 
+    let keep_minimal_freeze_results fr_list =
+      let indexed_list = List.mapi (fun i fr -> (i, fr)) fr_list in
+        List.filter_map
+          (fun (i, fr1) ->
+            let is_contained =
+              List.exists
+                (fun (j, fr2) -> i <> j && FreezeResult.contains fr2 fr1
+                ) (* Is fr1 contained by fr2? *)
+                indexed_list
+            in
+              if is_contained then None
+              else Some fr1 (* Keep if NOT contained by any other *)
+          )
+          indexed_list
+    in
+
     let keep_minimal_executions exec_list =
       let indexed_list = List.mapi (fun i exec -> (i, exec)) exec_list in
         List.filter_map
@@ -989,24 +992,39 @@ let generate_executions (structure : symbolic_event_structure)
     in
 
     (* Build justcombos for all paths *)
-    let* executions =
+    let* freeze_results =
       build_justcombos structure paths init_ppo statex justmap
       |> stream_freeze
       |> dedup_freeze_results
-      |> stream_freeze_to_execution
-      |> dedup_executions
-      |> stream_filter_coherent_executions
       |> Lwt_stream.to_list
     in
 
-    Logs.debug (fun m ->
-        m "Generated %d executions after coherence filtering"
-          (List.length executions)
+    Logs.info (fun m ->
+        m "Generated %d freeze results before minimization"
+          (List.length freeze_results)
     );
 
-    let minimal_executions = keep_minimal_executions executions in
-      Logs.debug (fun m ->
-          m "Minimized to %d executions" (List.length minimal_executions)
+    let minimal_freeze_results = keep_minimal_freeze_results freeze_results in
+      Logs.info (fun m ->
+          m "Minimized to %d freeze results" (List.length minimal_freeze_results)
       );
 
-      Lwt.return minimal_executions
+      let* executions =
+        Lwt_stream.of_list minimal_freeze_results
+        |> stream_freeze_to_execution
+        |> dedup_executions
+        |> stream_filter_coherent_executions
+        |> Lwt_stream.to_list
+      in
+
+      Logs.debug (fun m ->
+          m "Generated %d executions after coherence filtering"
+            (List.length executions)
+      );
+
+      let minimal_executions = keep_minimal_executions executions in
+        Logs.debug (fun m ->
+            m "Minimized to %d executions" (List.length minimal_executions)
+        );
+
+        Lwt.return minimal_executions

@@ -13,24 +13,22 @@ end
 (** {1 Types} *)
 
 module FreezeResult : sig
-
-(** Result of freezing a justification combination with an RF relation *)
-type t = {
-  e : int uset;  (** Event set *)
-  dp : (int * int) uset;  (** Dependency relation *)
-  ppo : (int * int) uset;  (** Preserved program order *)
-  rf : (int * int) uset;  (** Reads-from relation *)
-  rmw : (int * int) uset;  (** Read-modify-write pairs *)
-  pp : expr list;  (** Path predicates *)
-  conds : expr list;  (** Combined conditions *)
-}
-
+  (** Result of freezing a justification combination with an RF relation *)
+  type t = {
+    e : int uset;  (** Event set *)
+    dp : (int * int) uset;  (** Dependency relation *)
+    ppo : (int * int) uset;  (** Preserved program order *)
+    rf : (int * int) uset;  (** Reads-from relation *)
+    rmw : (int * int) uset;  (** Read-modify-write pairs *)
+    pp : expr list;  (** Path predicates *)
+    conds : expr list;  (** Combined conditions *)
+  }
 end
 
 (** {1 RF Validation} *)
 
-(** [instantiate_execution structure path ppo dp j_list pp p_combined rf] validates a
-    reads-from relation for a justification combination.
+(** [instantiate_execution structure path ppo dp j_list pp p_combined rf]
+    validates a reads-from relation for a justification combination.
 
     Performs multiple checks:
     - RF edges are valid (elided RF subset of RF)
@@ -50,7 +48,6 @@ end
 val instantiate_execution :
   Types.symbolic_event_structure ->
   path_info ->
-  (int * int) Uset.USet.t ->
   (int * int) Uset.USet.t ->
   (int * int) Uset.USet.t ->
   Types.justification list ->

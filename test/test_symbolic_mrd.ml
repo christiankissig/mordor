@@ -403,11 +403,7 @@ module TestExample4_1 = struct
     (* With disjointness from allocation: can reorder *)
 
     (* Create disjoint predicate *)
-    let disj_pred =
-      EBinOp
-        (ESymbol "π", "!=",
-        (Expr.of_value (make_var "x")))
-    in
+    let disj_pred = EBinOp (ESymbol "π", "!=", Expr.of_value (make_var "x")) in
 
     check bool "disjointness_predicate_created" true
       ( match disj_pred with

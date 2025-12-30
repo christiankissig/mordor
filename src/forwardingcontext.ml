@@ -451,7 +451,12 @@ let ppo ctx predicates =
 
 (** Compute location-based preserved program order *)
 let ppo_loc ctx predicates =
-  let p = predicates @ ctx.psi in
+  let p =
+    predicates @ ctx.psi
+    |> USet.of_list
+    |> USet.values
+    |> List.sort Expr.compare
+  in
   let cached = cache_get ctx p in
     match cached.ppo_loc with
     | Some v -> Lwt.return v
