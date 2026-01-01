@@ -305,7 +305,6 @@ module IMM : MEMORY_MODEL = struct
           |> USet.inplace_union fr
         in
 
-        let int_to_string = fun (a, b) -> Printf.sprintf "(%d,%d)" a b in
         let eco_adj_map = URelation.adjacency_map eco in
         let hb_adj_map = URelation.adjacency_map hb in
 
@@ -844,15 +843,6 @@ let try_all_coherence_orders structure execution cache check_coherence eqlocs =
                 (* Convert each valid permutation to pairs *)
                 List.map (fun perm -> to_pairs [] perm) valid_perms
             )
-        in
-
-        (* Try all coherence orders *)
-        let rec try_all_orders = function
-          | [] -> Lwt.return true
-          | co_list :: rest ->
-              let co = URelation.transitive_closure (USet.of_list co_list) in
-                if check_coherence co cache then try_all_orders rest
-                else Lwt.return false
         in
 
         let rec choose_one i vals =

@@ -790,7 +790,7 @@ let compute_justification_combinations structure paths init_ppo statex
   Lwt_stream.of_list paths
   |> Lwt_stream.map_list_s combine_justifications_for_path
 
-(** {1 Generate executions} **)
+(** {1 Generate executions} *)
 
 (** Main execution generation - replaces the stub in calculate_dependencies *)
 let generate_executions (structure : symbolic_event_structure)

@@ -57,7 +57,6 @@ type events_t = {
   (* p tracks the register environment at each event label *)
   env_by_evt : (int, (string, expr) Hashtbl.t) Hashtbl.t;
   mutable label : int;
-  mutable van : int;
 }
 
 let create_events () =
@@ -66,18 +65,15 @@ let create_events () =
     origin = Hashtbl.create 256;
     env_by_evt = Hashtbl.create 256;
     label = 0;
-    van = 0;
   }
 
 let add_event (events : events_t) event env =
   let lbl = events.label in
     events.label <- events.label + 1;
-    let v = events.van in
-      events.van <- events.van + 1;
-      let event' : event = { event with label = lbl; van = v } in
-        Hashtbl.replace events.events lbl event';
-        Hashtbl.replace events.env_by_evt lbl (Hashtbl.copy env);
-        event'
+    let event' : event = { event with label = lbl } in
+      Hashtbl.replace events.events lbl event';
+      Hashtbl.replace events.env_by_evt lbl (Hashtbl.copy env);
+      event'
 
 (** Symbolic Event Structure builders *)
 let dot (event : event) structure phi : symbolic_event_structure =

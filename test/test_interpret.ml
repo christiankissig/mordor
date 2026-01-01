@@ -61,7 +61,6 @@ let test_next_zh () =
 let test_create_events () =
   let events = create_events () in
     Alcotest.(check int) "initial label is 1" 0 events.label;
-    Alcotest.(check int) "initial van is 1" 0 events.van;
     Alcotest.(check int) "events table is empty" 0 (Hashtbl.length events.events)
 
 (** Test adding events *)
@@ -72,9 +71,7 @@ let test_add_event () =
   let env = Hashtbl.create 16 in
   let added_evt = add_event events evt env in
     Alcotest.(check int) "event label assigned" 0 added_evt.label;
-    Alcotest.(check int) "event van assigned" 0 added_evt.van;
     Alcotest.(check int) "label counter incremented" 1 events.label;
-    Alcotest.(check int) "van counter incremented" 1 events.van;
     Alcotest.(check int) "event added to table" 1 (Hashtbl.length events.events)
 
 let test_add_multiple_events () =

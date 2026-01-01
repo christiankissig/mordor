@@ -38,7 +38,7 @@ type lifted_cache = {
 let create_lifted_cache () = { t = USet.create (); to_ = USet.create () }
 
 (** Compare two events for equality *)
-let event_equal e1 e2 = e1.label = e2.label && e1.van = e2.van
+let event_equal e1 e2 = e1.label = e2.label
 
 let lifted_has cache (a, b) =
   (* Filter to find matching elements *)

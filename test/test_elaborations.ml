@@ -21,7 +21,6 @@ module TestData = struct
       wmod;
       volatile;
       cond;
-      van = label;
       rval;
       rmod;
       fmod;

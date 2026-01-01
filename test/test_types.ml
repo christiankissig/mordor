@@ -34,7 +34,6 @@ let test_zh_alpha () =
 let test_make_event () =
   let evt = Event.create Read 42 () in
     Alcotest.(check int) "event label is 42" 42 evt.label;
-    Alcotest.(check int) "event van is 42" 42 evt.van;
     Alcotest.(check bool) "event id is None" true (evt.id = None);
     Alcotest.(check bool) "event rval is None" true (evt.rval = None);
     Alcotest.(check bool) "event wval is None" true (evt.wval = None);

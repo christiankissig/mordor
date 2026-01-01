@@ -12,7 +12,6 @@ module TestUtil = struct
   let make_test_event label typ =
     {
       label;
-      van = label;
       typ;
       id = Some (VNumber (Z.of_int label));
       loc = Some (ENum (Z.of_int label));

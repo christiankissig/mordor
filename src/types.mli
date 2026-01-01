@@ -106,7 +106,6 @@ type expr =
 (** Event structure representing a memory or control flow event *)
 type event = {
   label : int;
-  van : int;
   typ : event_type;
   id : value_type option;
   loc : expr option;

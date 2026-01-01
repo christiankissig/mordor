@@ -167,7 +167,6 @@ let test_event_order () =
 let test_event_creation () =
   let e = Event.create Read 1 () in
     check int "label is 1" 1 e.label;
-    check int "van equals label" 1 e.van;
     check bool "type is read" true (e.typ = Read);
     check bool "id is none" true (e.id = None);
     check bool "default rmod is relaxed" true (e.rmod = Relaxed)
@@ -229,8 +228,7 @@ let test_event_equality () =
 (** Test EventsContainer *)
 let test_container_create () =
   let c = EventsContainer.create () in
-    check int "initial next_label" 1 c.next_label;
-    check int "initial next_van" 1 c.next_van
+    check int "initial next_label" 1 c.next_label
 
 let test_container_add () =
   let c = EventsContainer.create () in
@@ -238,9 +236,7 @@ let test_container_add () =
   let e1' = EventsContainer.add c e1 in
 
   check int "auto assigned label" 1 e1'.label;
-  check int "auto assigned van" 1 e1'.van;
   check int "next_label incremented" 2 c.next_label;
-  check int "next_van incremented" 2 c.next_van;
 
   let e2 = make_test_event Write 0 in
   let e2' = EventsContainer.add c ~label:10 e2 in

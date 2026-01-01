@@ -15,7 +15,6 @@ module TestData = struct
   let create_event id typ ?id_val ?cond ?rval ?wval () =
     {
       label = id;
-      van = id;
       typ;
       id = id_val;
       loc = Option.map Expr.of_value id_val;

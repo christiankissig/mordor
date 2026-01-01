@@ -196,7 +196,6 @@ end = struct
     let base =
       {
         label;
-        van = label;
         typ;
         id = None;
         loc = None;
@@ -327,7 +326,7 @@ end = struct
                 (ModeOps.to_string_or e.wmod)
                 (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
       in
-        sprintf "%d: %s%s" e.van volatile_prefix main_str
+        sprintf "%d: %s%s" e.label volatile_prefix main_str
 
   (** Event equality *)
   let equal e1 e2 =
@@ -357,23 +356,11 @@ end
 
 (** Events container/manager *)
 module EventsContainer = struct
-  type t = {
-    mutable events : (int, event) Hashtbl.t;
-    mutable next_label : int;
-    mutable next_van : int;
-  }
+  type t = { mutable events : (int, event) Hashtbl.t; mutable next_label : int }
 
-  let create () = { events = Hashtbl.create 16; next_label = 1; next_van = 1 }
+  let create () = { events = Hashtbl.create 16; next_label = 1 }
 
-  let add t ?van ?label e =
-    let van =
-      match van with
-      | Some v -> v
-      | None ->
-          let v = t.next_van in
-            t.next_van <- v + 1;
-            v
-    in
+  let add t ?label e =
     let label =
       match label with
       | Some l -> l
@@ -382,15 +369,12 @@ module EventsContainer = struct
             t.next_label <- l + 1;
             l
     in
-    let e = { e with van; label } in
+    let e = { e with label } in
       Hashtbl.replace t.events label e;
       (* Update next_label to be at least label + 1 *)
       t.next_label <- max t.next_label (label + 1);
-      (* Update next_van to be at least van + 1 *)
-      t.next_van <- max t.next_van (van + 1);
       e
 
-  let set_next_van t n = t.next_van <- n
   let get t label = Hashtbl.find_opt t.events label
 
   let get_exn t label =
@@ -438,7 +422,6 @@ module EventsContainer = struct
   let clone t =
     let new_t = create () in
       new_t.next_label <- t.next_label;
-      new_t.next_van <- t.next_van;
       Hashtbl.iter
         (fun label e -> Hashtbl.replace new_t.events label (Event.clone e))
         t.events;

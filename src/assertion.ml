@@ -432,8 +432,12 @@ let check_assertion_per_execution (assertion : ir_assertion) execution structure
     events curr ub_reasons ~exhaustive =
   let%lwt () = Lwt.return () in
 
+  let ( let*? ) (condition, msg) f =
+    if condition then f () else Lwt.return_unit
+  in
+
   match assertion with
-  | Outcome { outcome; condition; model } ->
+  | Outcome { outcome; condition; model } -> (
       (* For UB assertions, we only check for undefined behavior, not condition satisfiability *)
       let is_ub_assertion =
         match condition with
@@ -474,10 +478,7 @@ let check_assertion_per_execution (assertion : ir_assertion) execution structure
               rf_conditions := restriction @ [ equality ] @ !rf_conditions
           )
           execution.rf;
-        Logs.debug (fun m ->
-            m "RF conditions: %s"
-              (String.concat ", " (List.map Expr.to_string !rf_conditions))
-        );
+
         let rf_conditions = !rf_conditions in
 
         (* Build rhb (happens-before) relation *)
@@ -543,72 +544,71 @@ let check_assertion_per_execution (assertion : ir_assertion) execution structure
               ub_reasons exec_idx pointer_map_of rhb all_alloc_read_writes;
 
             (* We'd need to track this properly *)
+            let*? () = (not !curr, "Condition not already satisfied") in
+              let*? () =
+                ( is_ub_assertion,
+                  "Don't check condition satisfiability\n\
+                  \              for UB assertions"
+                )
+              in
 
-            (* Check conditions if not already satisfied *)
-            if not !curr then (
-              if
-                (* For UB assertions, we don't check condition satisfiability *)
-                is_ub_assertion
-              then Lwt.return ()
-              else
-                (* Extract the expression from the condition *)
-                match condition_expr_opt with
-                | None ->
-                    Lwt.return () (* Should not happen for non-UB assertions *)
-                | Some cond_expr ->
-                    let%lwt conds_satisfied =
-                      (* Check if condition contains set operations *)
-                      if has_set_operation cond_expr then (
-                        (* Evaluate set operations directly, don't use solver *)
-                        try
-                          let set_result =
-                            eval_set_expr cond_expr structure execution
-                          in
-                            (* Still check rf_conditions with solver if needed *)
-                            if List.length rf_conditions > 0 then
-                              let%lwt rf_ok = Solver.is_sat rf_conditions in
-                                Lwt.return (set_result && rf_ok)
-                            else Lwt.return set_result
-                        with Failure msg ->
-                          Logs.err (fun m ->
-                              m "Error evaluating set expression: %s" msg
-                          );
-                          Lwt.return false
-                      )
-                      else
-                        (* instantiate condition expression with final
+              (* Extract the expression from the condition *)
+              match condition_expr_opt with
+              | None ->
+                  Lwt.return () (* Should not happen for non-UB assertions *)
+              | Some cond_expr ->
+                  let%lwt conds_satisfied =
+                    (* Check if condition contains set operations *)
+                    if has_set_operation cond_expr then (
+                      (* Evaluate set operations directly, don't use solver *)
+                      try
+                        let set_result =
+                          eval_set_expr cond_expr structure execution
+                        in
+                          (* Still check rf_conditions with solver if needed *)
+                          if List.length rf_conditions > 0 then
+                            let%lwt rf_ok = Solver.is_sat rf_conditions in
+                              Lwt.return (set_result && rf_ok)
+                          else Lwt.return set_result
+                      with Failure msg ->
+                        Logs.err (fun m ->
+                            m "Error evaluating set expression: %s" msg
+                        );
+                        Lwt.return false
+                    )
+                    else
+                      (* instantiate condition expression with final
                                      register environment *)
-                        let inst_cond_expr =
-                          Expr.evaluate cond_expr (fun reg ->
-                              Hashtbl.find_opt execution.final_env reg
-                          )
+                      let inst_cond_expr =
+                        Expr.evaluate cond_expr (fun reg ->
+                            Hashtbl.find_opt execution.final_env reg
+                        )
+                      in
+                      let cond_expr_and_rf_conditions =
+                        inst_cond_expr :: rf_conditions
+                      in
+                        Logs.debug (fun m ->
+                            m "Checking condition with solver: %s"
+                              (String.concat ", "
+                                 (List.map Expr.to_string
+                                    cond_expr_and_rf_conditions
+                                 )
+                              )
+                        );
+                        (* No set operations, use solver as normal *)
+                        let* is_sat =
+                          Solver.is_sat cond_expr_and_rf_conditions
                         in
-                        let cond_expr_and_rf_conditions =
-                          inst_cond_expr :: rf_conditions
-                        in
-                          Logs.debug (fun m ->
-                              m "Checking condition with solver: %s"
-                                (String.concat ", "
-                                   (List.map Expr.to_string
-                                      cond_expr_and_rf_conditions
-                                   )
-                                )
-                          );
-                          (* No set operations, use solver as normal *)
-                          let* is_sat =
-                            Solver.is_sat cond_expr_and_rf_conditions
-                          in
-                            Logs.debug (fun m -> m "Solver result: %b" is_sat);
-                            Lwt.return is_sat
-                    in
+                          Logs.debug (fun m -> m "Solver result: %b" is_sat);
+                          Lwt.return is_sat
+                  in
 
-                    (* Check extended assertions *)
-                    let%lwt extended_ok = Lwt.return true in
+                  (* Check extended assertions *)
+                  let%lwt extended_ok = Lwt.return true in
 
-                    curr := conds_satisfied && extended_ok;
-                    Lwt.return ()
-            )
-            else Lwt.return ()
+                  curr := conds_satisfied && extended_ok;
+                  Lwt.return ()
+    )
   | _ -> failwith "unexpected assertion to be checked per execution"
 
 (** Main assertion checking function *)
