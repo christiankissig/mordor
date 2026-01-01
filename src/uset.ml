@@ -280,7 +280,7 @@ end = struct
       let composition =
         match rels with
         | [] -> USet.create ()
-        | [ r ] -> r
+        | [ r ] -> USet.clone r
         | r :: rest ->
             List.fold_left
               (fun acc rel ->
@@ -300,7 +300,7 @@ end = struct
                     acc;
                   result
               )
-              r rest
+              (USet.clone r) rest
       in
         Landmark.exit landmark;
         composition
@@ -314,7 +314,7 @@ end = struct
       let composition =
         match rels with
         | [] -> USet.create ()
-        | [ (r, _) ] -> r
+        | [ (r, _) ] -> USet.clone r
         | (r, _) :: rest ->
             List.fold_left
               (fun acc (r, index) ->
@@ -331,7 +331,7 @@ end = struct
                     acc;
                   result
               )
-              r rest
+              (USet.clone r) rest
       in
         Landmark.exit landmark;
         composition

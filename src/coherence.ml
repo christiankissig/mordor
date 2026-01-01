@@ -62,11 +62,11 @@ module ModelUtils = struct
                 )
             in
               if type_match && mode_match && second_mode_match then
-                USet.add result (ev_id, ev_id) |> ignore
+                USet.add result ev_id |> ignore
           with Not_found -> ()
         )
         e;
-      result
+      URelation.identity_relation result
 
   (** Thread-local restriction *)
   let thread_internal po x = USet.intersection x po
@@ -155,13 +155,12 @@ module IMM : MEMORY_MODEL = struct
 
       (* sw = release;(rf ∩ ¬po ∪ [po ∩ loc]?;(rf \ po));([R_acq] ∪ po;[F_acq]) *)
       let sw =
-        let rf_internal = thread_internal_restriction rf in
-        let rf_external = thread_external_restriction rf in
+        let rfi = thread_internal_restriction rf in
+        let rfe = thread_external_restriction rf in
         let middle =
-          USet.inplace_union rf_internal
-            (URelation.compose
-               [ URelation.reflexive_closure _E (loc_restrict po); rf_external ]
-            )
+          URelation.compose
+            [ URelation.reflexive_closure _E (loc_restrict po); rfe ]
+          |> USet.union rfi
         in
         let r_acq =
           ModelUtils.match_events events _E Read (Some Acquire) None None
@@ -174,12 +173,11 @@ module IMM : MEMORY_MODEL = struct
                 None;
             ]
         in
-          URelation.compose
-            [ release; middle; USet.inplace_union r_acq po_f_acq ]
+          URelation.compose [ release; middle; USet.union r_acq po_f_acq ]
       in
 
       (* hb = (sw ∪ po)⁺ *)
-      let hb = URelation.transitive_closure (USet.inplace_union sw po) in
+      let hb = USet.union sw po |> URelation.transitive_closure in
 
       (* bob (bounded ordered-before) *)
       let bob =
@@ -281,45 +279,45 @@ module IMM : MEMORY_MODEL = struct
     let landmark = Landmark.register "IMM.check_coherence" in
       Landmark.enter landmark;
 
-      let thread_external_restriction x = USet.set_minus x po in
-
-      let dummy_adj_map = Hashtbl.create 0 in
-
-      let co_adj_map = URelation.adjacency_map co in
-      let rf_adj_map = URelation.adjacency_map rf in
-
-      (* fr = rf⁻¹;co *)
-      let fr = URelation.compose [ rfi; co ] in
-      let fre = thread_external_restriction fr in
-
-      (* eco = rf ∪ co;rf ∪ co ∪ fr;rf ∪ fr *)
-      let eco =
-        URelation.compose_adj_map [ (co, dummy_adj_map); (rf, rf_adj_map) ]
-        |> USet.inplace_union rf
-        |> USet.inplace_union co
-        |> USet.inplace_union
-             (URelation.compose_adj_map
-                [ (fr, dummy_adj_map); (rf, rf_adj_map) ]
-             )
-        |> USet.inplace_union fr
-      in
-      let eco_adj_map = URelation.adjacency_map eco in
-      let hb_adj_map = URelation.adjacency_map hb in
-
-      (* Coherence: hb;eco ∪ hb is irreflexive *)
       let result =
-        if
-          not
-            (URelation.is_irreflexive
-               (USet.inplace_union
-                  (URelation.compose_adj_map
-                     [ (hb, hb_adj_map); (eco, eco_adj_map) ]
-                  )
-                  hb
+        let ( let*? ) (condition, msg) f = if condition then f () else false in
+
+        let thread_external_restriction x = USet.set_minus x po in
+
+        let dummy_adj_map = Hashtbl.create 0 in
+
+        let co_adj_map = URelation.adjacency_map co in
+        let rf_adj_map = URelation.adjacency_map rf in
+
+        (* fr = rf⁻¹;co *)
+        let fr = URelation.compose [ rfi; co ] in
+        let fre = thread_external_restriction fr in
+
+        (* eco = rf ∪ co;rf ∪ co ∪ fr;rf ∪ fr *)
+        let eco =
+          URelation.compose_adj_map [ (co, dummy_adj_map); (rf, rf_adj_map) ]
+          |> USet.inplace_union rf
+          |> USet.inplace_union co
+          |> USet.inplace_union
+               (URelation.compose_adj_map
+                  [ (fr, dummy_adj_map); (rf, rf_adj_map) ]
                )
-            )
-        then false
-        else
+          |> USet.inplace_union fr
+        in
+
+        let int_to_string = fun (a, b) -> Printf.sprintf "(%d,%d)" a b in
+        let eco_adj_map = URelation.adjacency_map eco in
+        let hb_adj_map = URelation.adjacency_map hb in
+
+        (* Coherence: hb;eco ∪ hb is irreflexive *)
+        let hb_eco_hb =
+          USet.inplace_union
+            (URelation.compose_adj_map [ (hb, hb_adj_map); (eco, eco_adj_map) ])
+            hb
+        in
+        let hb_eco_hb_irreflexive = URelation.is_irreflexive hb_eco_hb in
+          let*? () = (hb_eco_hb_irreflexive, "hb;eco ∪ hb is irreflexive") in
+
           (* Thin-air *)
           let coe = thread_external_restriction co in
           let coe_adj_map = URelation.adjacency_map coe in
@@ -340,19 +338,23 @@ module IMM : MEMORY_MODEL = struct
           in
           let ar = USet.union ar_ psc |> USet.inplace_union detour in
 
-          if not (URelation.acyclic ar) then false
-          else if
+          let*? () = (URelation.acyclic ar, "ar is acyclic") in
+
+          if
             (* Atomicity *)
             USet.size rmw = 0
           then true
           else
-            (* rmw ∩ (fre;coe) = ∅ *)
-            USet.size
-              (URelation.compose_adj_map
-                 [ (fre, dummy_adj_map); (coe, coe_adj_map) ]
-              |> USet.intersection rmw
-              )
-            = 0
+            let rmw_fre_coe_empty =
+              USet.size
+                (URelation.compose_adj_map
+                   [ (fre, dummy_adj_map); (coe, coe_adj_map) ]
+                |> USet.intersection rmw
+                )
+              = 0
+            in
+              let*? () = (rmw_fre_coe_empty, "rmw ∩ (fre;coe) = ∅") in
+                true
       in
         Landmark.exit landmark;
         result
@@ -783,7 +785,6 @@ let try_all_coherence_orders structure execution cache check_coherence eqlocs =
                   List.iter
                     (fun group ->
                       if USet.mem eqlocs (List.hd !group, w) then (
-                        (* Add ! here *)
                         group := w :: !group;
                         found := true
                       )
@@ -796,17 +797,52 @@ let try_all_coherence_orders structure execution cache check_coherence eqlocs =
               )
               writes;
             List.filter (fun g -> List.length !g > 1) !groups
+            (* After grouping writes by location *)
             |> List.map (fun g ->
-                let perms = permutations !g in
-                  List.map
-                    (fun perm ->
-                      let rec to_pairs acc = function
-                        | [] | [ _ ] -> List.rev acc
-                        | x :: (y :: _ as rest) -> to_pairs ((x, y) :: acc) rest
-                      in
-                        to_pairs [] perm
+                let writes_list = !g in
+
+                (* Extract po edges among these writes *)
+                let po_edges_in_group =
+                  USet.filter
+                    (fun (a, b) ->
+                      List.mem a writes_list && List.mem b writes_list
                     )
-                    perms
+                    po
+                in
+
+                (* Helper function to convert permutation to pairs *)
+                let rec to_pairs acc = function
+                  | [] | [ _ ] -> List.rev acc
+                  | x :: (y :: _ as rest) -> to_pairs ((x, y) :: acc) rest
+                in
+
+                (* Generate only permutations that respect po *)
+                let valid_perms =
+                  permutations writes_list
+                  |> List.filter (fun perm ->
+                      (* Check: for each (w1,w2) in po, w1 comes before w2 in perm *)
+                      USet.for_all
+                        (fun (w1, w2) ->
+                          (* Find positions of w1 and w2 in permutation *)
+                          let rec find_index x lst idx =
+                            match lst with
+                            | [] -> None
+                            | h :: t ->
+                                if h = x then Some idx
+                                else find_index x t (idx + 1)
+                          in
+                          let idx1 = find_index w1 perm 0 in
+                          let idx2 = find_index w2 perm 0 in
+                            match (idx1, idx2) with
+                            | Some i1, Some i2 -> i1 < i2
+                            | _ -> true
+                        )
+                        po_edges_in_group
+                  )
+                in
+
+                (* Convert each valid permutation to pairs *)
+                List.map (fun perm -> to_pairs [] perm) valid_perms
             )
         in
 
