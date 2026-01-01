@@ -20,6 +20,7 @@ rule token = parse
   | "//" [^ '\n']* eof    { token lexbuf }
 
   (* Keywords *)
+  | "na"                  { Parser.NONATOMIC }
   | "nonatomic"           { Parser.NONATOMIC }
   | "relaxed"             { Parser.RELAXED }
   | "rlx"                 { Parser.RELAXED }
