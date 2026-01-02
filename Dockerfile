@@ -49,6 +49,18 @@ RUN opam update && \
     opam install -y . --deps-only --with-test && \
     opam install -y dream yojson
 
+# Fix Landmarks stubs library
+RUN eval $(opam env) && \
+    LANDMARKS_DIR=$(opam var lib)/landmarks && \
+    if [ -d "$LANDMARKS_DIR" ] && [ -f "$LANDMARKS_DIR/liblandmark_stubs.a" ]; then \
+        cd "$LANDMARKS_DIR" && \
+        ar x liblandmark_stubs.a && \
+        ocamlmklib -o landmark_stubs *.o && \
+        cp dlllandmark_stubs.so $(ocamlc -where)/stublibs/ && \
+        rm *.o && \
+        echo "Successfully fixed landmarks stubs library"; \
+    fi
+
 # Now copy the source code (changes here won't invalidate dependency cache)
 COPY --chown=opam:opam . .
 
