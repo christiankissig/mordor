@@ -5,6 +5,7 @@ open Ir
 open Lwt.Syntax
 open Types
 open Uset
+open Lwt_utils
 
 type ir_assertion = unit Ir.ir_assertion
 type ir_litmus = unit Ir.ir_litmus
@@ -85,39 +86,6 @@ let string_of_outcome = function
 type ub_reason = int * string
 type assertion_result = { valid : bool; ub : bool; ub_reasons : ub_reason list }
 
-(** {1 Refinement Checking} *)
-
-type refinement_result = {
-  structure : symbolic_event_structure;
-  executions : symbolic_execution list;
-  events : (int, event) Hashtbl.t;
-  valid : bool;
-}
-
-(** Parallel map for lists using Lwt *)
-let lwt_pmap f lst = Lwt_list.map_p f lst
-
-let lwt_piter f lst = Lwt_list.iter_p f lst
-
-(** Parallel some (short-circuit OR) for lists using Lwt *)
-let rec lwt_psome f = function
-  | [] -> Lwt.return false
-  | x :: xs ->
-      let%lwt result = f x in
-        if result then Lwt.return true else lwt_psome f xs
-
-(** Parallel every (short-circuit AND) for lists using Lwt *)
-let rec lwt_pevery f = function
-  | [] -> Lwt.return true
-  | x :: xs ->
-      let%lwt result = f x in
-        if not result then Lwt.return false else lwt_pevery f xs
-
-(** Parallel all (no short-circuit) for lists using Lwt *)
-let lwt_pall f lst =
-  let%lwt results = Lwt_list.map_p f lst in
-    Lwt.return (List.for_all (fun x -> x) results)
-
 (** {1 Validation Checks} *)
 
 module Validation = struct
@@ -189,7 +157,9 @@ module Validation = struct
         ub_reasons := (exec_id, "Unbounded pointer dereference") :: !ub_reasons
 end
 
-(** Check refinement between two programs
+(** {1 Refinement Checking} *)
+
+(** Refinement checking between two programs
 
     Refinement semantics (from JS implementation):
     - Build symbol maps from both programs' executions
@@ -198,235 +168,245 @@ end
     - Matching means: for each symbol in "to" execution, there exists a
       corresponding symbol in "from" execution with the same value
     - Refinement holds if all "to" executions have matches in "from" *)
-let check_refinement from_prog to_prog =
-  (* Build symbol map: register -> set of symbolic expressions *)
-  let build_symbol_map executions =
-    let map = Hashtbl.create 32 in
-      List.iter
-        (fun (exec : symbolic_execution) ->
-          Hashtbl.iter
-            (fun register sym_expr ->
-              (* Only add non-numeric expressions *)
-              if not (Expr.is_number sym_expr) then (
-                let entry =
-                  match Hashtbl.find_opt map register with
-                  | Some s -> s
-                  | None -> USet.create ()
-                in
-                  USet.add entry sym_expr |> ignore;
-                  Hashtbl.replace map register entry
+module Refinement = struct
+  type refinement_result = {
+    structure : symbolic_event_structure;
+    executions : symbolic_execution list;
+    events : (int, event) Hashtbl.t;
+    valid : bool;
+  }
+
+  (** Check refinement between two programs *)
+  let check_refinement from_prog to_prog =
+    (* Build symbol map: register -> set of symbolic expressions *)
+    let build_symbol_map executions =
+      let map = Hashtbl.create 32 in
+        List.iter
+          (fun (exec : symbolic_execution) ->
+            Hashtbl.iter
+              (fun register sym_expr ->
+                (* Only add non-numeric expressions *)
+                if not (Expr.is_number sym_expr) then (
+                  let entry =
+                    match Hashtbl.find_opt map register with
+                    | Some s -> s
+                    | None -> USet.create ()
+                  in
+                    USet.add entry sym_expr |> ignore;
+                    Hashtbl.replace map register entry
+                )
               )
-            )
-            exec.fix_rf_map
-        )
-        executions;
-      map
-  in
-
-  (* Build reverse symbol map: symbol_string -> set of registers *)
-  let build_reverse_map executions =
-    let map = Hashtbl.create 32 in
-      List.iter
-        (fun (exec : symbolic_execution) ->
-          Hashtbl.iter
-            (fun register sym_expr ->
-              if not (Expr.is_number sym_expr) then (
-                let sym_str = Expr.to_string sym_expr in
-                let entry =
-                  match Hashtbl.find_opt map sym_str with
-                  | Some s -> s
-                  | None -> USet.create ()
-                in
-                  USet.add entry register |> ignore;
-                  Hashtbl.replace map sym_str entry
-              )
-            )
-            exec.fix_rf_map
-        )
-        executions;
-      map
-  in
-
-  let%lwt from_result = from_prog in
-  let%lwt to_result = to_prog in
-
-  let from_execs = from_result.executions in
-  let to_execs = to_result.executions in
-
-  let from_map = build_symbol_map from_execs in
-  let to_reverse_map = build_reverse_map to_execs in
-
-  (* Check if every "to" execution can be matched with a "from" execution *)
-  let refinement_holds =
-    List.for_all
-      (fun to_exec ->
-        (* Start with all from executions as candidates *)
-        let candidates = ref from_execs in
-
-        (* Filter candidates based on each symbol in to_exec *)
-        Hashtbl.iter
-          (fun sym_str value ->
-            match Hashtbl.find_opt to_reverse_map sym_str with
-            | None -> ()
-            | Some registers ->
-                (* Get all possible source symbols for these registers *)
-                (* registers is a USet of strings (register names) *)
-                (* from_map maps register names to USets of exprs *)
-                let source_syms =
-                  USet.fold
-                    (fun (acc : expr USet.t) register ->
-                      match Hashtbl.find_opt from_map register with
-                      | Some syms -> USet.union acc syms
-                      | None -> acc
-                    )
-                    registers
-                    (USet.create () : expr USet.t)
-                in
-
-                (* Filter candidates: must have at least one matching symbol with same value *)
-                candidates :=
-                  List.filter
-                    (fun from_exec ->
-                      USet.exists
-                        (fun source_sym ->
-                          let source_sym_str = Expr.to_string source_sym in
-                            match
-                              Hashtbl.find_opt from_exec.fix_rf_map
-                                source_sym_str
-                            with
-                            | Some from_val -> Expr.equal from_val value
-                            | None -> false
-                        )
-                        source_syms
-                    )
-                    !candidates
+              exec.fix_rf_map
           )
-          to_exec.fix_rf_map;
+          executions;
+        map
+    in
 
-        (* At least one candidate should remain *)
-        List.length !candidates > 0
-      )
-      to_execs
-  in
+    (* Build reverse symbol map: symbol_string -> set of registers *)
+    let build_reverse_map executions =
+      let map = Hashtbl.create 32 in
+        List.iter
+          (fun (exec : symbolic_execution) ->
+            Hashtbl.iter
+              (fun register sym_expr ->
+                if not (Expr.is_number sym_expr) then (
+                  let sym_str = Expr.to_string sym_expr in
+                  let entry =
+                    match Hashtbl.find_opt map sym_str with
+                    | Some s -> s
+                    | None -> USet.create ()
+                  in
+                    USet.add entry register |> ignore;
+                    Hashtbl.replace map sym_str entry
+                )
+              )
+              exec.fix_rf_map
+          )
+          executions;
+        map
+    in
 
-  Lwt.return
-    {
-      structure = to_result.structure;
-      executions = to_result.executions;
-      events = to_result.events;
-      valid = refinement_holds;
-    }
+    let%lwt from_result = from_prog in
+    let%lwt to_result = to_prog in
 
-(** Perform refinement checking on AST
+    let from_execs = from_result.executions in
+    let to_execs = to_result.executions in
 
-    Chained assertion semantics (from JS implementation): 1. Extract chain of
-    programs via rest field 2. Collect all programs in list 3. Last program is
-    the "final" one 4. Each program gets dummy assertion (0=0) for execution
-    generation 5. Check refinement: each test vs final 6. Result is XORed with
-    outcome (forbid means refinement should NOT hold) *)
-let do_check_refinement ast =
-  (* Extract model and outcome from first assertion *)
-  let model, outcome =
-    match ast.assertions with
-    | [] -> (None, Forbid)
-    | Chained { model; outcome; _ } :: _ -> (Some model, outcome)
-    | _ -> (None, Allow)
-  in
+    let from_map = build_symbol_map from_execs in
+    let to_reverse_map = build_reverse_map to_execs in
 
-  (* Collect all programs in the chain *)
-  let rec collect_chain acc ast =
-    match ast.assertions with
-    | Chained { rest; _ } :: _ -> collect_chain (ast :: acc) rest
-    | _ -> List.rev (ast :: acc)
-  in
+    (* Check if every "to" execution can be matched with a "from" execution *)
+    let refinement_holds =
+      List.for_all
+        (fun to_exec ->
+          (* Start with all from executions as candidates *)
+          let candidates = ref from_execs in
 
-  let tests = collect_chain [] ast in
+          (* Filter candidates based on each symbol in to_exec *)
+          Hashtbl.iter
+            (fun sym_str value ->
+              match Hashtbl.find_opt to_reverse_map sym_str with
+              | None -> ()
+              | Some registers ->
+                  (* Get all possible source symbols for these registers *)
+                  (* registers is a USet of strings (register names) *)
+                  (* from_map maps register names to USets of exprs *)
+                  let source_syms =
+                    USet.fold
+                      (fun (acc : expr USet.t) register ->
+                        match Hashtbl.find_opt from_map register with
+                        | Some syms -> USet.union acc syms
+                        | None -> acc
+                      )
+                      registers
+                      (USet.create () : expr USet.t)
+                  in
 
-  (* Split into tests and final *)
-  let final = List.hd (List.rev tests) in
-  let test_progs = List.rev (List.tl (List.rev tests)) in
+                  (* Filter candidates: must have at least one matching symbol with same value *)
+                  candidates :=
+                    List.filter
+                      (fun from_exec ->
+                        USet.exists
+                          (fun source_sym ->
+                            let source_sym_str = Expr.to_string source_sym in
+                              match
+                                Hashtbl.find_opt from_exec.fix_rf_map
+                                  source_sym_str
+                              with
+                              | Some from_val -> Expr.equal from_val value
+                              | None -> false
+                          )
+                          source_syms
+                      )
+                      !candidates
+            )
+            to_exec.fix_rf_map;
 
-  (* Create dummy assertion (0 = 0) for execution generation *)
-  let dummy_assertion =
-    Outcome
-      {
-        outcome = Allow;
-        condition = Ir.CondExpr (EBinOp (ENum Z.zero, "=", ENum Z.zero));
-        model;
-      }
-  in
+          (* At least one candidate should remain *)
+          List.length !candidates > 0
+        )
+        to_execs
+    in
 
-  (* Replace assertions with dummy for all tests *)
-  let tests_with_dummy =
-    List.map
-      (fun litmus -> { litmus with assertions = [ dummy_assertion ] })
-      (test_progs @ [ final ])
-  in
-
-  (* Create symbolic event structures for all programs *)
-  (* This would need to call your symmrd.ml's create_symbolic_event_structure *)
-  (* For now, using a simplified structure *)
-
-  (* Assuming you have a function to create structures: *)
-  (* let create_structure = Symmrd.create_symbolic_event_structure *)
-
-  (* Check refinement between each test and final *)
-  let%lwt final_result =
-    (* You'd call: create_structure final { exhaustive = true; dependencies = true; refinement = true } *)
     Lwt.return
       {
-        structure =
-          {
-            e = USet.create ();
-            events = Hashtbl.create 256;
-            po = USet.create ();
-            po_iter = USet.create ();
-            rmw = USet.create ();
-            lo = USet.create ();
-            restrict = Hashtbl.create 0;
-            cas_groups = Hashtbl.create 0;
-            pwg = [];
-            fj = USet.create ();
-            p = Hashtbl.create 0;
-            constraint_ = [];
-            conflict = USet.create ();
-            origin = Hashtbl.create 256;
-            write_events = USet.create ();
-            read_events = USet.create ();
-            rlx_write_events = USet.create ();
-            rlx_read_events = USet.create ();
-            fence_events = USet.create ();
-            branch_events = USet.create ();
-            malloc_events = USet.create ();
-            free_events = USet.create ();
-          };
-        executions = [];
-        events = Hashtbl.create 0;
-        valid = false;
+        structure = to_result.structure;
+        executions = to_result.executions;
+        events = to_result.events;
+        valid = refinement_holds;
       }
-  in
 
-  (* Check refinement for each test *)
-  let refinement_result = ref final_result in
-  let%lwt all_pass =
-    lwt_pevery
-      (fun _test_litmus ->
-        (* You'd call: create_structure test_litmus options *)
-        let test_result_lwt = Lwt.return final_result in
-        let%lwt ref_result =
-          check_refinement test_result_lwt (Lwt.return final_result)
-        in
-          refinement_result := ref_result;
-          (* XOR with forbid: if outcome is Forbid, we expect refinement to fail *)
-          Lwt.return (ref_result.valid <> (outcome = Forbid))
-      )
-      test_progs
-  in
+  (** Perform refinement checking on AST
 
-  (* Final result XORed with outcome *)
-  let final_valid = all_pass in
+      Chained assertion semantics (from JS implementation): 1. Extract chain of
+      programs via rest field 2. Collect all programs in list 3. Last program is
+      the "final" one 4. Each program gets dummy assertion (0=0) for execution
+      generation 5. Check refinement: each test vs final 6. Result is XORed with
+      outcome (forbid means refinement should NOT hold) *)
+  let do_check_refinement ast =
+    (* Extract model and outcome from first assertion *)
+    let model, outcome =
+      match ast.assertions with
+      | [] -> (None, Forbid)
+      | Chained { model; outcome; _ } :: _ -> (Some model, outcome)
+      | _ -> (None, Allow)
+    in
 
-  Lwt.return { !refinement_result with valid = final_valid }
+    (* Collect all programs in the chain *)
+    let rec collect_chain acc ast =
+      match ast.assertions with
+      | Chained { rest; _ } :: _ -> collect_chain (ast :: acc) rest
+      | _ -> List.rev (ast :: acc)
+    in
+
+    let tests = collect_chain [] ast in
+
+    (* Split into tests and final *)
+    let final = List.hd (List.rev tests) in
+    let test_progs = List.rev (List.tl (List.rev tests)) in
+
+    (* Create dummy assertion (0 = 0) for execution generation *)
+    let dummy_assertion =
+      Outcome
+        {
+          outcome = Allow;
+          condition = Ir.CondExpr (EBinOp (ENum Z.zero, "=", ENum Z.zero));
+          model;
+        }
+    in
+
+    (* Replace assertions with dummy for all tests *)
+    let tests_with_dummy =
+      List.map
+        (fun litmus -> { litmus with assertions = [ dummy_assertion ] })
+        (test_progs @ [ final ])
+    in
+
+    (* Create symbolic event structures for all programs *)
+    (* This would need to call your symmrd.ml's create_symbolic_event_structure *)
+    (* For now, using a simplified structure *)
+
+    (* Assuming you have a function to create structures: *)
+    (* let create_structure = Symmrd.create_symbolic_event_structure *)
+
+    (* Check refinement between each test and final *)
+    let%lwt final_result =
+      (* You'd call: create_structure final { exhaustive = true; dependencies = true; refinement = true } *)
+      Lwt.return
+        {
+          structure =
+            {
+              e = USet.create ();
+              events = Hashtbl.create 256;
+              po = USet.create ();
+              po_iter = USet.create ();
+              rmw = USet.create ();
+              lo = USet.create ();
+              restrict = Hashtbl.create 0;
+              cas_groups = Hashtbl.create 0;
+              pwg = [];
+              fj = USet.create ();
+              p = Hashtbl.create 0;
+              constraint_ = [];
+              conflict = USet.create ();
+              origin = Hashtbl.create 256;
+              write_events = USet.create ();
+              read_events = USet.create ();
+              rlx_write_events = USet.create ();
+              rlx_read_events = USet.create ();
+              fence_events = USet.create ();
+              branch_events = USet.create ();
+              malloc_events = USet.create ();
+              free_events = USet.create ();
+            };
+          executions = [];
+          events = Hashtbl.create 0;
+          valid = false;
+        }
+    in
+
+    (* Check refinement for each test *)
+    let refinement_result = ref final_result in
+    let%lwt all_pass =
+      lwt_pevery
+        (fun _test_litmus ->
+          (* You'd call: create_structure test_litmus options *)
+          let test_result_lwt = Lwt.return final_result in
+          let%lwt ref_result =
+            check_refinement test_result_lwt (Lwt.return final_result)
+          in
+            refinement_result := ref_result;
+            (* XOR with forbid: if outcome is Forbid, we expect refinement to fail *)
+            Lwt.return (ref_result.valid <> (outcome = Forbid))
+        )
+        test_progs
+    in
+
+    (* Final result XORed with outcome *)
+    let final_valid = all_pass in
+
+    Lwt.return { !refinement_result with valid = final_valid }
+end
 
 let check_assertion_per_execution (assertion : ir_assertion) execution structure
     events curr ub_reasons ~exhaustive =
@@ -690,7 +670,7 @@ let check_assertion (assertion : ir_assertion) executions
       (* Chained assertions perform refinement checking *)
       Logs.info (fun m -> m "Performing refinement check for chained assertion");
       let%lwt result =
-        do_check_refinement
+        Refinement.do_check_refinement
           {
             config =
               {

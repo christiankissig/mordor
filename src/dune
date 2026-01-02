@@ -26,6 +26,7 @@
   ir
   justifications
   lexer
+  lwt_utils
   parse
   parser
   pretty
