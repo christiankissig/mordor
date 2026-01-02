@@ -41,32 +41,36 @@ module ModelUtils = struct
   let match_events (events : (int, event) Hashtbl.t) (e : int uset)
       (typ : event_type) (mode_opt : mode option) (op_opt : string option)
       (second_mode_opt : mode option) : (int * int) uset =
-    let result = USet.create () in
-      USet.iter
-        (fun ev_id ->
-          try
-            let event = Hashtbl.find events ev_id in
-            let type_match = event.typ = typ in
-            let mode_match =
-              match mode_opt with
-              | None -> true
-              | Some m -> event.rmod = m || event.wmod = m || event.fmod = m
-            in
-            let second_mode_match =
-              match second_mode_opt with
-              | None -> true
-              | Some m -> (
-                  match event.strong with
-                  | Some sm -> sm = m
-                  | None -> false
-                )
-            in
-              if type_match && mode_match && second_mode_match then
-                USet.add result ev_id |> ignore
-          with Not_found -> ()
-        )
-        e;
-      URelation.identity_relation result
+    let landmark = Landmark.register "ModelUtils.match_events" in
+      Landmark.enter landmark;
+      let result = USet.create () in
+        USet.iter
+          (fun ev_id ->
+            try
+              let event = Hashtbl.find events ev_id in
+              let type_match = event.typ = typ in
+              let mode_match =
+                match mode_opt with
+                | None -> true
+                | Some m -> event.rmod = m || event.wmod = m || event.fmod = m
+              in
+              let second_mode_match =
+                match second_mode_opt with
+                | None -> true
+                | Some m -> (
+                    match event.strong with
+                    | Some sm -> sm = m
+                    | None -> false
+                  )
+              in
+                if type_match && mode_match && second_mode_match then
+                  USet.add result ev_id |> ignore
+            with Not_found -> ()
+          )
+          e;
+        let result = URelation.identity_relation result in
+          Landmark.exit landmark;
+          result
 
   (** Thread-local restriction *)
   let thread_internal po x = USet.intersection x po
