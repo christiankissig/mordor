@@ -3,9 +3,9 @@ open Events
 open Expr
 open Ir
 open Lwt.Syntax
+open Lwt_utils
 open Types
 open Uset
-open Lwt_utils
 
 type ir_assertion = unit Ir.ir_assertion
 type ir_litmus = unit Ir.ir_litmus
@@ -524,70 +524,59 @@ let check_assertion_per_execution (assertion : ir_assertion) execution structure
               ub_reasons exec_idx pointer_map_of rhb all_alloc_read_writes;
 
             (* We'd need to track this properly *)
-            let*? () = (not !curr, "Condition not already satisfied") in
+
+            (* Check conditions if not already satisfied *)
+            let*? () = (not !curr, "Condition already satisfied") in
               let*? () =
-                ( is_ub_assertion,
-                  "Don't check condition satisfiability\n\
-                  \              for UB assertions"
-                )
+                (not is_ub_assertion, "UB assertion, skipping condition check")
               in
-
-              (* Extract the expression from the condition *)
-              match condition_expr_opt with
-              | None ->
-                  Lwt.return () (* Should not happen for non-UB assertions *)
-              | Some cond_expr ->
-                  let%lwt conds_satisfied =
-                    (* Check if condition contains set operations *)
-                    if has_set_operation cond_expr then (
-                      (* Evaluate set operations directly, don't use solver *)
-                      try
-                        let set_result =
-                          eval_set_expr cond_expr structure execution
-                        in
-                          (* Still check rf_conditions with solver if needed *)
-                          if List.length rf_conditions > 0 then
-                            let%lwt rf_ok = Solver.is_sat rf_conditions in
-                              Lwt.return (set_result && rf_ok)
-                          else Lwt.return set_result
-                      with Failure msg ->
-                        Logs.err (fun m ->
-                            m "Error evaluating set expression: %s" msg
-                        );
-                        Lwt.return false
-                    )
-                    else
-                      (* instantiate condition expression with final
+                (* Extract the expression from the condition *)
+                match condition_expr_opt with
+                | None ->
+                    Lwt.return () (* Should not happen for non-UB assertions *)
+                | Some cond_expr ->
+                    let%lwt conds_satisfied =
+                      (* Check if condition contains set operations *)
+                      if has_set_operation cond_expr then (
+                        (* Evaluate set operations directly, don't use solver *)
+                        try
+                          let set_result =
+                            eval_set_expr cond_expr structure execution
+                          in
+                            (* Still check rf_conditions with solver if needed *)
+                            if List.length rf_conditions > 0 then
+                              let%lwt rf_ok = Solver.is_sat rf_conditions in
+                                Lwt.return (set_result && rf_ok)
+                            else Lwt.return set_result
+                        with Failure msg ->
+                          Logs.err (fun m ->
+                              m "Error evaluating set expression: %s" msg
+                          );
+                          Lwt.return false
+                      )
+                      else
+                        (* instantiate condition expression with final
                                      register environment *)
-                      let inst_cond_expr =
-                        Expr.evaluate cond_expr (fun reg ->
-                            Hashtbl.find_opt execution.final_env reg
-                        )
-                      in
-                      let cond_expr_and_rf_conditions =
-                        inst_cond_expr :: rf_conditions
-                      in
-                        Logs.debug (fun m ->
-                            m "Checking condition with solver: %s"
-                              (String.concat ", "
-                                 (List.map Expr.to_string
-                                    cond_expr_and_rf_conditions
-                                 )
-                              )
-                        );
-                        (* No set operations, use solver as normal *)
-                        let* is_sat =
-                          Solver.is_sat cond_expr_and_rf_conditions
+                        let inst_cond_expr =
+                          Expr.evaluate cond_expr (fun reg ->
+                              Hashtbl.find_opt execution.final_env reg
+                          )
                         in
-                          Logs.debug (fun m -> m "Solver result: %b" is_sat);
-                          Lwt.return is_sat
-                  in
+                        let cond_expr_and_rf_conditions =
+                          inst_cond_expr :: rf_conditions
+                        in
+                          (* No set operations, use solver as normal *)
+                          let* is_sat =
+                            Solver.is_sat cond_expr_and_rf_conditions
+                          in
+                            Lwt.return is_sat
+                    in
 
-                  (* Check extended assertions *)
-                  let%lwt extended_ok = Lwt.return true in
+                    (* Check extended assertions *)
+                    let%lwt extended_ok = Lwt.return true in
 
-                  curr := conds_satisfied && extended_ok;
-                  Lwt.return ()
+                    curr := conds_satisfied && extended_ok;
+                    Lwt.return ()
     )
   | _ -> failwith "unexpected assertion to be checked per execution"
 
@@ -687,28 +676,10 @@ let check_assertion (assertion : ir_assertion) executions
         Lwt.return { valid = result.valid; ub = false; ub_reasons = [] }
 
 let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
-  Logs.debug (fun m -> m "Starting assertion checking step");
   let%lwt ctx = ctx in
     match (ctx.structure, ctx.executions, ctx.events) with
     | Some structure, Some executions, Some events ->
-        Logs.debug (fun m ->
-            m
-              "Event structure and executions available for assertion check:\n\
-               %s"
-              (show_symbolic_event_structure structure)
-        );
         let execution_list = USet.to_list executions in
-          Logs.debug (fun m ->
-              m "Checking assertions against %d executions:\n%s"
-                (List.length execution_list)
-                (String.concat "\n"
-                   (List.map
-                      (fun exec -> show_symbolic_execution exec)
-                      execution_list
-                   )
-                )
-          );
-
           let* assertion_result : assertion_result =
             match ctx.assertions with
             | None -> Lwt.return { valid = true; ub = false; ub_reasons = [] }
