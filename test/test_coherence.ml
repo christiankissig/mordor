@@ -64,6 +64,7 @@ let make_events_table events =
 (** Helper to create empty execution *)
 let make_empty_execution () =
   {
+    id = 0;
     ex_e = USet.create ();
     rf = USet.create ();
     ex_rmw = USet.create ();
@@ -238,6 +239,7 @@ let test_imm_coherent_simple () =
   in
   let (execution : symbolic_execution) =
     {
+      id = 0;
       ex_e;
       rf;
       ex_rmw = USet.create ();
@@ -297,6 +299,7 @@ let test_rc11_coherent_simple () =
   in
   let execution =
     {
+      id = 0;
       ex_e;
       rf;
       ex_rmw = USet.create ();
@@ -356,6 +359,7 @@ let test_rc11c_coherent_simple () =
   in
   let execution =
     {
+      id = 0;
       ex_e;
       rf;
       ex_rmw = USet.create ();
@@ -421,6 +425,7 @@ let test_imm_coherent_rmw () =
   in
   let execution =
     {
+      id = 0;
       ex_e;
       rf;
       ex_rmw = rmw;
@@ -476,6 +481,7 @@ let test_cache_types () =
   in
   let execution =
     {
+      id = 0;
       ex_e;
       rf;
       ex_rmw = USet.create ();

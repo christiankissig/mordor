@@ -876,6 +876,7 @@ let generate_executions (structure : symbolic_event_structure)
       in
 
       let stream_freeze_to_execution input_stream =
+        let id = ref 0 in
         let freeze_to_execution (freeze_res : FreezeResult.t) =
           let landmark = Landmark.register "freeze_to_execution" in
             Landmark.enter landmark;
@@ -948,6 +949,7 @@ let generate_executions (structure : symbolic_event_structure)
               (* Create execution *)
               let exec =
                 {
+                  id = !id;
                   ex_e = freeze_res.e;
                   rf = freeze_res.rf;
                   dp = freeze_res.dp;
@@ -959,6 +961,9 @@ let generate_executions (structure : symbolic_event_structure)
                   final_env;
                 }
               in
+
+              (* Increment executiion counter *)
+              id := !id + 1;
 
               Logs.info (fun m ->
                   m "Generated execution with %d events, %d RF edges"
