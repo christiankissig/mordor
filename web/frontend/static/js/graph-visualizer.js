@@ -28,6 +28,13 @@ class GraphVisualizer {
         this.graphs = [];  // Array to store all graphs
         this.currentIndex = 0;
         this.executionCount = 0;
+        this.lastProgram = null; // Store last program for regeneration
+        
+        // Settings
+        this.settings = {
+            showUAF: false,
+            showUnboundedDeref: false
+        };
 
         this.cy = cytoscape({
             container: document.getElementById('cy'),
@@ -85,6 +92,42 @@ class GraphVisualizer {
 
         this.setupEventListeners();
         this.setupResizer();
+        this.setupGraphInteractions();
+    }
+
+    setupGraphInteractions() {
+        // Log node label on hover
+        this.cy.on('mouseover', 'node', (event) => {
+            const node = event.target;
+            const label = node.data('label');
+            this.log('Node: ' + label, 'info');
+        });
+    }
+    
+    openSettingsModal() {
+        // Populate current settings
+        document.getElementById('show-uaf').checked = this.settings.showUAF;
+        document.getElementById('show-unbounded-deref').checked = this.settings.showUnboundedDeref;
+        document.getElementById('settings-modal').classList.add('show');
+    }
+    
+    closeSettingsModal() {
+        document.getElementById('settings-modal').classList.remove('show');
+    }
+    
+    applySettings() {
+        // Read settings from checkboxes
+        this.settings.showUAF = document.getElementById('show-uaf').checked;
+        this.settings.showUnboundedDeref = document.getElementById('show-unbounded-deref').checked;
+        
+        this.closeSettingsModal();
+        this.log('Settings updated', 'success');
+        
+        // Regenerate if we have a program
+        if (this.lastProgram) {
+            this.log('Regenerating graphs with new settings...', 'info');
+            this.visualize(this.lastProgram);
+        }
     }
 
     setupEventListeners() {
@@ -151,6 +194,30 @@ class GraphVisualizer {
         document.getElementById('next-btn').addEventListener('click', () => {
             this.navigateTo(this.currentIndex + 1);
         });
+        
+        // Settings modal
+        document.getElementById('settings-btn').addEventListener('click', () => {
+            this.openSettingsModal();
+        });
+        
+        document.getElementById('close-modal').addEventListener('click', () => {
+            this.closeSettingsModal();
+        });
+        
+        document.getElementById('cancel-settings').addEventListener('click', () => {
+            this.closeSettingsModal();
+        });
+        
+        document.getElementById('apply-settings').addEventListener('click', () => {
+            this.applySettings();
+        });
+        
+        // Close modal on outside click
+        document.getElementById('settings-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'settings-modal') {
+                this.closeSettingsModal();
+            }
+        });
     }
 
     setupResizer() {
@@ -187,11 +254,27 @@ class GraphVisualizer {
         });
     }
 
+    updateExecutionInfo(data) {
+        const preds = data.preds || "⊤";
+        document.getElementById('predicates').textContent = preds;
+     
+        if (data.undefined_behaviour !== undefined) {
+          const ub_reasons = data.undefined_behaviour;
+
+          const has_uaf = ub_reasons.has_uaf ? "Yes" : "No";
+          document.getElementById('has-uaf').textContent = has_uaf;
+
+          const has_unbounded_deref = ub_reasons.has_unbounded_deref ? "Yes" : "No";
+          document.getElementById('has-unbounded-deref').textContent = has_unbounded_deref;
+        }
+    }
+
     navigateTo(index) {
         if (index < 0 || index >= this.graphs.length) return;
         
         this.currentIndex = index;
         this.renderGraph(this.graphs[index]);
+        this.updateExecutionInfo(this.data[index]);
         this.updateCarouselUI();
     }
 
@@ -214,8 +297,12 @@ class GraphVisualizer {
         const steps = parseInt(document.getElementById('step-counter').value) || 5;
         this.log('Starting visualization with ' + steps + ' steps...');
         
+        // Store program for regeneration
+        this.lastProgram = program;
+        
         // Reset state
         this.graphs = [];
+        this.data = [];
         this.currentIndex = 0;
         this.executionCount = 0;
         
@@ -224,7 +311,9 @@ class GraphVisualizer {
 
         const params = new URLSearchParams({
             program: program,
-            steps: steps.toString()
+            steps: steps.toString(),
+            show_uaf: this.settings.showUAF.toString(),
+            show_unbounded_deref: this.settings.showUnboundedDeref.toString()
         });
 
         const es = new EventSource('/api/visualize/stream?' + params);
@@ -242,6 +331,7 @@ class GraphVisualizer {
                 } else if (data.type === 'event_structure') {
                     this.log('Received event structure');
                     this.graphs.push(data.graph);
+                    this.data.push(data);
                     if (this.graphs.length === 1) {
                         this.renderGraph(data.graph);
                         this.updateCarouselUI();
@@ -249,6 +339,7 @@ class GraphVisualizer {
                 } else if (data.type === 'execution') {
                     this.log('Received execution ' + data.index);
                     this.graphs.push(data.graph);
+                    this.data.push(data);
                 } else if (data.type === 'complete') {
                     this.executionCount = data.total_executions;
                     document.getElementById('execution-count').textContent = this.executionCount;
@@ -343,14 +434,13 @@ class GraphVisualizer {
             document.getElementById('graph-stats').style.display = 'block';
             document.getElementById('execution-info').style.display = 'block';
 
-            // Update predicates if available
-            if (graph.predicates) {
-                document.getElementById('predicates').textContent = graph.predicates;
-            } else {
-                document.getElementById('predicates').textContent = '⊤';
-            }
-
             this.applyLayout('breadthfirst');
+            
+            // Fit the first graph automatically
+            if (this.currentIndex === 0) {
+                this.cy.fit(null, 50);
+            }
+            
             this.log('Graph rendered successfully');
 
         } catch (error) {

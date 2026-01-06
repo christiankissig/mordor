@@ -12,9 +12,11 @@
     
     <!-- PrismJS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" data-manual></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -56,7 +58,7 @@
             bottom: 0;
             pointer-events: none;
             margin: 0 !important;
-            padding: 1rem !important;
+            padding: 1rem 1rem 1rem 5.5em !important;
             background: transparent !important;
             overflow: hidden;
             white-space: pre-wrap;
@@ -83,7 +85,7 @@
             width: 100%;
             height: 100%;
             margin: 0 !important;
-            padding: 1rem !important;
+            padding: 1rem 1rem 1rem 5.5em !important;
             background: transparent !important;
             font-family: 'Consolas', 'Courier New', monospace !important;
             font-size: 0.95rem !important;
@@ -140,6 +142,45 @@
         .token.punctuation { color: #d4d4d4; }
         .token.function { color: #dcdcaa; }
         
+        /* Line numbers styling */
+        pre.line-numbers {
+            position: relative;
+            padding-left: 0 !important;
+            counter-reset: linenumber;
+        }
+        
+        pre.line-numbers > code {
+            position: relative;
+            white-space: inherit;
+        }
+        
+        .line-numbers .line-numbers-rows {
+            position: absolute;
+            pointer-events: none;
+            top: 0;
+            font-size: 0.95rem;
+            left: -5em;
+            width: 4em;
+            letter-spacing: -1px;
+            border-right: 1px solid #3e3e42;
+            user-select: none;
+            padding-right: 0.5rem;
+            padding-left: 0.5rem;
+        }
+        
+        .line-numbers-rows > span {
+            display: block;
+            counter-increment: linenumber;
+            line-height: 1.5;
+        }
+        
+        .line-numbers-rows > span:before {
+            content: counter(linenumber);
+            color: #6a6a6a;
+            display: block;
+            text-align: right;
+        }
+        
         /* Carousel styles */
         .carousel-container { flex: 1; position: relative; display: none; }
         .carousel-container.active { display: flex; flex-direction: column; }
@@ -152,7 +193,7 @@
         
         .carousel-indicator { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 20px; padding: 0.5rem 1rem; font-size: 0.9rem; color: #cccccc; z-index: 100; }
         
-        .execution-info { position: absolute; top: 10px; left: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.85rem; z-index: 100; display: none; }
+        .execution-info { position: absolute; top: 60px; left: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.85rem; z-index: 100; display: none; }
         
         .graph-controls { position: absolute; top: 60px; right: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem; display: none; flex-direction: column; gap: 0.5rem; z-index: 100; }
         .graph-controls.active { display: flex; }
@@ -177,6 +218,123 @@
         .info { color: #4ec9b0; }
         .spinner { border: 3px solid #3c3c3c; border-top: 3px solid #0e639c; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.show {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #3e3e42;
+        }
+        
+        .modal-header h2 {
+            font-size: 1.2rem;
+            color: #cccccc;
+            margin: 0;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: #cccccc;
+            font-size: 2rem;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        
+        .modal-close:hover {
+            color: #ffffff;
+        }
+        
+        .modal-body {
+            padding: 1.5rem;
+        }
+        
+        .setting-item {
+            margin-bottom: 1rem;
+        }
+        
+        .setting-item label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            color: #d4d4d4;
+            font-size: 0.95rem;
+        }
+        
+        .setting-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 0.75rem;
+            cursor: pointer;
+            accent-color: #0e639c;
+        }
+        
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            border-top: 1px solid #3e3e42;
+        }
+        
+        .btn-secondary {
+            background: #3c3c3c;
+            color: #cccccc;
+        }
+        
+        .btn-secondary:hover {
+            background: #505050;
+        }
+        
+        .settings-icon {
+            background: none;
+            border: none;
+            color: #cccccc;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .settings-icon:hover {
+            color: #ffffff;
+        }
     </style>
 </head>
 <body>
@@ -184,6 +342,7 @@
         <header>
             <h1>🔮 MoRDor - Weak Memory Semantics</h1>
             <div class="header-controls">
+                <button id="settings-btn" class="settings-icon" title="Settings">⚙️</button>
                 <label>Steps: <input type="number" id="step-counter" value="5" min="1" max="100" style="width:70px; padding:0.3rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px;"></label>
                 <button id="visualize-btn" class="btn-primary">Visualize</button>
             </div>
@@ -201,7 +360,7 @@
                 </div>
                 <div class="editor-container">
                     <div class="editor-wrapper">
-                        <pre id="litmus-highlight" aria-hidden="true"><code class="language-smrd"></code></pre>
+                        <pre id="litmus-highlight" class="line-numbers" aria-hidden="true"><code class="language-smrd"></code></pre>
                         <textarea id="litmus-input" placeholder="Enter your litmus test here..." spellcheck="false"></textarea>
                     </div>
                 </div>
@@ -228,6 +387,10 @@
 
                 <div class="execution-info" id="execution-info">
                   <div><strong>Predicates:</strong> <span id="predicates">⊤</span></div>
+                  <div><strong>Use-after-free:</strong> <span
+                      id="has-uaf">N/A</span></div>
+                  <div><strong>Unbounded Deref:</strong> <span
+                      id="has-unbounded-deref">N/A</span></div>
                 </div>
                 
                 <div class="graph-controls" id="graph-controls">
@@ -249,6 +412,34 @@
             </div>
         </div>
         <div id="log"></div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="modal-close" id="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="show-uaf" />
+                        Show executions with use-after-free
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="show-unbounded-deref" />
+                        Show executions with unbounded pointer dereference
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="apply-settings" class="btn-primary">Apply & Regenerate</button>
+                <button id="cancel-settings" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <!-- Load Prism language definition for sMRD -->
