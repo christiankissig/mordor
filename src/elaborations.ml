@@ -124,6 +124,11 @@ let pre_justifications structure =
   let events = structure.events in
   let e_set = structure.e in
   let write_events = structure.write_events in
+  let alloc_events = structure.malloc_events in
+  let free_events = structure.free_events in
+  let prejustifiable_events =
+    USet.union write_events alloc_events |> USet.union free_events
+  in
     USet.map
       (fun w ->
         try
@@ -133,21 +138,24 @@ let pre_justifications structure =
                 Hashtbl.find_opt structure.restrict event.label
                 |> Option.value ~default:[];
               d =
-                USet.flatten
-                  (USet.map
-                     (fun (e_opt : expr option) : string uset ->
-                       match e_opt with
-                       | Some e -> USet.of_list (Expr.get_symbols e)
-                       | None -> USet.create ()
-                     )
-                     (USet.of_list
-                        [
-                          event.loc;
-                          Option.map Expr.of_value event.rval;
-                          event.wval;
-                        ]
-                     )
-                  );
+                ( if USet.mem structure.malloc_events w then USet.create ()
+                  else
+                    USet.flatten
+                      (USet.map
+                         (fun (e_opt : expr option) : string uset ->
+                           match e_opt with
+                           | Some e -> USet.of_list (Expr.get_symbols e)
+                           | None -> USet.create ()
+                         )
+                         (USet.of_list
+                            [
+                              event.loc;
+                              Option.map Expr.of_value event.rval;
+                              event.wval;
+                            ]
+                         )
+                      )
+                );
               fwd = USet.create ();
               we = USet.create ();
               w = event;
@@ -155,7 +163,7 @@ let pre_justifications structure =
             }
         with Not_found -> failwith "Event not found"
       )
-      write_events
+      prejustifiable_events
 
 let filter elab_ctx (justs : justification uset) =
   Logs.debug (fun m -> m "Filtering %d justifications..." (USet.size justs));

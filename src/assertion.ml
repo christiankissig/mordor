@@ -167,7 +167,7 @@ module UBValidation = struct
           )
           all_frees (USet.create ())
       in
-            if USet.size uaf > 0 then ub_reasons := UAF uaf :: !ub_reasons
+        if USet.size uaf > 0 then ub_reasons := UAF uaf :: !ub_reasons
   end
 
   (** Unbounded pointer dereference validation *)

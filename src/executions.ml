@@ -379,7 +379,24 @@ module JustValidation = struct
       |> Solver.is_sat_cached
     in
       let*? () = (satisfiable, "unsatisfiable path predicates") in
-        Lwt.return true
+
+      Logs.debug (fun m ->
+          m
+            "[JustValidation.check_final] Justification combination passed \
+             final checks:\n\
+            \ %s"
+            (String.concat "\n"
+               (List.map
+                  (fun just ->
+                    Printf.sprintf "- Justification for w=%d: %s" just.w.label
+                      (show_justification just)
+                  )
+                  combo
+               )
+            )
+      );
+
+      Lwt.return true
 end
 
 (** {1 Freezing} *)
@@ -391,11 +408,24 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
   let landmark = Landmark.register "instantiate_execution" in
     Landmark.enter landmark;
 
+    Logs.debug (fun m ->
+        m
+          "  [instantiate_execution] Starting validation for RF with %d edges: \
+           %s"
+          (USet.size rf)
+          (String.concat ", "
+             (List.map
+                (fun (w, r) -> Printf.sprintf "(%d->%d)" w r)
+                (USet.values rf)
+             )
+          )
+    );
+
     (* let* _ = Lwt.return_unit in *)
     let ( let*? ) (condition, msg) f =
       if condition then f ()
       else (
-        Logs.debug (fun m -> m "  Rejected: %s" msg);
+        Logs.debug (fun m -> m "  [instantiate_execution] Rejected: %s" msg);
         Landmark.exit landmark;
         Lwt.return_none
       )
@@ -407,6 +437,12 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
     let write_events = USet.intersection structure.write_events e in
 
     (* Check 3: All rf edges respect ppo_loc *)
+    Logs.debug (fun m ->
+        m
+          "  [instantiate_execution] Checking RF respects PPO (PPO has %d \
+           edges)"
+          (USet.size ppo)
+    );
     let*? () =
       (ReadFromValidation.rf_respects_ppo rf ppo, "RF edges do not respect PPO")
     in
@@ -429,104 +465,172 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
         )
     in
 
+    Logs.debug (fun m ->
+        m "  [instantiate_execution] Delta (fwd U we) has %d edges"
+          (USet.size delta)
+    );
+
     let*? () =
       (ReadFromValidation.check_rf_elided rf delta, "RF fails RF elided check")
     in
+      Logs.debug (fun m -> m "  [instantiate_execution] RF elided check passed");
       let*? () =
         ( ReadFromValidation.check_rf_total rf read_events delta,
           "RF fails RF total check"
         )
       in
+        Logs.debug (fun m ->
+            m
+              "  [instantiate_execution] RF total check passed (reads: %d, RF \
+               edges: %d)"
+              (USet.size read_events) (USet.size rf)
+        );
 
-      (* Check acyclicity of rhb = dp_ppo ∪ rf *)
-      let dp_ppo = USet.union dp ppo in
-      let rhb = USet.union dp_ppo rf in
-        (* TODO discern memory model *)
-        let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
+        (* Check acyclicity of rhb = dp_ppo ∪ rf *)
+        let dp_ppo = USet.union dp ppo in
+        let rhb = USet.union dp_ppo rf in
+          Logs.debug (fun m ->
+              m
+                "  [instantiate_execution] Checking RHB acyclicity (dp: %d, \
+                 ppo: %d, rf: %d, rhb: %d)"
+                (USet.size dp) (USet.size ppo) (USet.size rf) (USet.size rhb)
+          );
+          if not (URelation.acyclic rhb) then (
+            Logs.debug (fun m ->
+                m "dp = %s"
+                  (USet.to_string
+                     (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                     dp
+                  )
+            );
+            Logs.debug (fun m ->
+                m "ppo = %s"
+                  (USet.to_string
+                     (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                     ppo
+                  )
+            );
+            Logs.debug (fun m ->
+                m "rf = %s"
+                  (USet.to_string
+                     (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                     rf
+                  )
+            )
+          );
+          (* TODO discern memory model *)
+          let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
+            Logs.debug (fun m ->
+                m "  [instantiate_execution] RHB acyclicity check passed"
+            );
 
-        (* Create environment from RF *)
-        let env_rf = ReadFromValidation.env_rf structure rf in
-        let check_rf = ReadFromValidation.check_rf structure rf in
+            (* Create environment from RF *)
+            let env_rf = ReadFromValidation.env_rf structure rf in
+            let check_rf = ReadFromValidation.check_rf structure rf in
 
-        (* atomicity constraint *)
-        let* af =
-          ReadFromValidation.adjacent_same_location_allocation_events structure
-            path rhb (USet.values env_rf)
-        in
+            (* atomicity constraint *)
+            let* af =
+              ReadFromValidation.adjacent_same_location_allocation_events
+                structure path rhb (USet.values env_rf)
+            in
 
-        (* Create disjointness predicates *)
-        let disj =
-          USet.map
-            (fun (a, b) ->
-              match
-                ( Hashtbl.find_opt structure.events a,
-                  Hashtbl.find_opt structure.events b
-                )
-              with
-              | None, _ ->
-                  failwith
-                    ("Event " ^ string_of_int a ^ " not found in structure!")
-              | _, None ->
-                  failwith
-                    ("Event " ^ string_of_int b ^ " not found in structure!")
-              | Some ea, Some eb -> (
+            (* Create disjointness predicates *)
+            let disj =
+              USet.map
+                (fun (a, b) ->
                   match
-                    ( get_loc structure a,
-                      get_val structure a,
-                      get_loc structure b,
-                      get_val structure b
+                    ( Hashtbl.find_opt structure.events a,
+                      Hashtbl.find_opt structure.events b
                     )
                   with
-                  | None, _, _, _ ->
-                      failwith ("Event " ^ string_of_int a ^ " has no location!")
-                  | _, None, _, _ ->
-                      failwith ("Event " ^ string_of_int a ^ " has no value!")
-                  | _, _, None, _ ->
-                      failwith ("Event " ^ string_of_int b ^ " has no location!")
-                  | _, _, _, None ->
-                      failwith ("Event " ^ string_of_int b ^ " has no value!")
-                  | _ ->
-                      let loc_a = get_loc structure a |> Option.get in
-                      let val_a = get_val structure a |> Option.get in
-                      let loc_b = get_loc structure b |> Option.get in
-                      let val_b = get_val structure b |> Option.get in
-                        (* disjoint only uses location *)
-                        Expr.evaluate
-                          (disjoint (loc_a, val_a) (loc_b, val_b))
-                          (fun _ -> None)
+                  | None, _ ->
+                      failwith
+                        ("Event " ^ string_of_int a ^ " not found in structure!")
+                  | _, None ->
+                      failwith
+                        ("Event " ^ string_of_int b ^ " not found in structure!")
+                  | Some ea, Some eb -> (
+                      match
+                        ( get_loc structure a,
+                          get_val structure a,
+                          get_loc structure b,
+                          get_val structure b
+                        )
+                      with
+                      | None, _, _, _ ->
+                          failwith
+                            ("Event " ^ string_of_int a ^ " has no location!")
+                      | _, None, _, _ ->
+                          failwith
+                            ("Event " ^ string_of_int a ^ " has no value!")
+                      | _, _, None, _ ->
+                          failwith
+                            ("Event " ^ string_of_int b ^ " has no location!")
+                      | _, _, _, None ->
+                          failwith
+                            ("Event " ^ string_of_int b ^ " has no value!")
+                      | _ ->
+                          let loc_a = get_loc structure a |> Option.get in
+                          let val_a = get_val structure a |> Option.get in
+                          let loc_b = get_loc structure b |> Option.get in
+                          let val_b = get_val structure b |> Option.get in
+                            (* disjoint only uses location *)
+                            Expr.evaluate
+                              (disjoint (loc_a, val_a) (loc_b, val_b))
+                              (fun _ -> None)
+                    )
                 )
-            )
-            af
-        in
+                af
+            in
 
-        let execution_predicates =
-          USet.of_list p_combined
-          |> USet.inplace_union env_rf
-          |> USet.inplace_union check_rf
-          |> USet.inplace_union disj
-          |> USet.filter (fun e -> not (Expr.equal e (EBoolean true)))
-          |> USet.values
-          |> List.sort Expr.compare
-        in
+            let execution_predicates =
+              USet.of_list p_combined
+              |> USet.inplace_union env_rf
+              |> USet.inplace_union check_rf
+              |> USet.inplace_union disj
+              |> USet.filter (fun e -> not (Expr.equal e (EBoolean true)))
+              |> USet.values
+              |> List.sort Expr.compare
+            in
 
-        (* Check satisfiability of combined predicates *)
-        let* satisfiable = Solver.is_sat_cached execution_predicates in
-          let*? () = (satisfiable, "unsatisfiable combined predicates") in
+            Logs.debug (fun m ->
+                m
+                  "  [instantiate_execution] Checking satisfiability of %d \
+                   predicates (env_rf: %d, check_rf: %d, disj: %d, p_combined: \
+                   %d)"
+                  (List.length execution_predicates)
+                  (USet.size env_rf) (USet.size check_rf) (USet.size disj)
+                  (List.length p_combined)
+            );
 
-          (* Success! Return the freeze result *)
-          let freeze_result : FreezeResult.t =
-            {
-              e;
-              dp;
-              ppo;
-              rf;
-              rmw = rmw_filtered;
-              pp = execution_predicates;
-              conds = [ EBoolean true ];
-            }
-          in
-            Landmark.exit landmark;
-            Lwt.return_some freeze_result
+            (* Check satisfiability of combined predicates *)
+            let* satisfiable = Solver.is_sat_cached execution_predicates in
+              Logs.debug (fun m ->
+                  m "  [instantiate_execution] Satisfiability check result: %b"
+                    satisfiable
+              );
+              let*? () = (satisfiable, "unsatisfiable combined predicates") in
+
+              (* Success! Return the freeze result *)
+              let freeze_result : FreezeResult.t =
+                {
+                  e;
+                  dp;
+                  ppo;
+                  rf;
+                  rmw = rmw_filtered;
+                  pp = execution_predicates;
+                  conds = [ EBoolean true ];
+                }
+              in
+                Logs.debug (fun m ->
+                    m
+                      "  [instantiate_execution] SUCCESS! Created freeze \
+                       result with %d events, %d RF edges"
+                      (USet.size e) (USet.size rf)
+                );
+                Landmark.exit landmark;
+                Lwt.return_some freeze_result
 
 (** [structure path elided constraints statex ppo dp p_combined] Compute
     candidate read-from relations for given path.
@@ -553,6 +657,13 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
     let w_with_init = USet.union write_events (USet.singleton 0) in
     let w_cross_r = URelation.cross w_with_init read_events in
 
+    Logs.debug (fun m ->
+        m
+          "[compute_path_rf] Starting RF computation: %d writes (+ init), %d \
+           reads, %d potential edges"
+          (USet.size write_events) (USet.size read_events) (USet.size w_cross_r)
+    );
+
     let ( let*? ) (condition, msg) f =
       if condition then f () else Lwt.return false
     in
@@ -565,6 +676,13 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
     in
     let po_inv = URelation.inverse_relation po in
     let w_cross_r_minus_po = USet.set_minus w_cross_r po_inv in
+      Logs.debug (fun m ->
+          m
+            "[compute_path_rf] After PO filtering: %d edges (removed %d edges \
+             where w po-after r)"
+            (USet.size w_cross_r_minus_po)
+            (USet.size w_cross_r - USet.size w_cross_r_minus_po)
+      );
       let* all_rf =
         USet.async_filter
           (fun rf_edge ->
@@ -577,51 +695,171 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
                 match (get_loc structure w, get_loc structure r) with
                 | Some loc_w, Some loc_r ->
                     Solver.expoteq ~state:preds loc_w loc_r
-                | _ -> Lwt.return false
+                | _ ->
+                    Logs.debug (fun m ->
+                        m
+                          "[compute_path_rf] Edge (%d->%d) rejected: missing \
+                           location"
+                          w r
+                    );
+                    Lwt.return false
               in
-                let*? () = (loc_eq, "RF locs not equal") in
+                let*? () =
+                  if not loc_eq then
+                    Logs.debug (fun m ->
+                        m
+                          "[compute_path_rf] Edge (%d->%d) rejected: locations \
+                           not equal"
+                          w r
+                    );
+                  (loc_eq, "RF locs not equal")
+                in
                   (* Check that writes are not shadowed for read-from *)
                   let* has_dslwb = dslwb structure w r in
-                    let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
+                    let*? () =
+                      if has_dslwb then
+                        Logs.debug (fun m ->
+                            m
+                              "[compute_path_rf] Edge (%d->%d) rejected: \
+                               shadowed (dslwb)"
+                              w r
+                        );
+                      (not has_dslwb, "RF edge is shadowed (dslwb)")
+                    in
                       Lwt.return true
           )
           w_cross_r_minus_po
       in
+
+      Logs.debug (fun m ->
+          m "[compute_path_rf] After loc/shadow filtering: %d valid RF edges"
+            (USet.size all_rf)
+      );
 
       let dp_ppo = USet.union dp ppo in
       let dp_ppo_tc = URelation.transitive_closure dp_ppo in
 
       (* exclude rf edges that form immediate cycles with ppo and dp *)
       let all_rf_inv = URelation.inverse_relation all_rf in
+      let all_rf_inv_before_cycle = URelation.inverse_relation all_rf in
       let all_rf_inv =
         USet.filter (fun (r, w) -> not (USet.mem dp_ppo_tc (r, w))) all_rf_inv
       in
 
       Logs.debug (fun m ->
-          m "  Found %d initial RF edges for path" (USet.size all_rf_inv)
+          m
+            "[compute_path_rf] After cycle filtering: %d edges (removed %d \
+             that would create immediate cycles)"
+            (USet.size all_rf_inv)
+            (USet.size all_rf_inv_before_cycle - USet.size all_rf_inv)
+      );
+
+      Logs.debug (fun m ->
+          m "  Found %d initial RF edges for path: %s" (USet.size all_rf_inv)
+            (String.concat ", "
+               (List.map
+                  (fun (r, w) -> Printf.sprintf "(%d->%d)" r w)
+                  (USet.values all_rf_inv)
+               )
+            )
       );
 
       let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
-      let rf_candidates =
-        ListMapCombinationBuilder.build_combinations all_rf_inv_map
-          ~check_partial:(fun combo ?alternatives pair ->
-            let new_combo_inv =
-              URelation.inverse_relation (USet.of_list (pair :: combo))
-            in
-            let env_rf = ReadFromValidation.env_rf structure new_combo_inv in
-            let check_rf =
-              ReadFromValidation.check_rf structure new_combo_inv
-            in
-              USet.of_list p_combined
-              |> USet.inplace_union env_rf
-              |> USet.inplace_union check_rf
-              |> USet.values
-              |> Solver.is_sat_cached
-          )
-          (USet.values read_events) ()
-      in
-        Landmark.exit landmark;
-        rf_candidates
+        Logs.debug (fun m ->
+            m "[compute_path_rf] Building combinations for %d reads"
+              (Hashtbl.length all_rf_inv_map)
+        );
+        let* rf_candidates =
+          ListMapCombinationBuilder.build_combinations all_rf_inv_map
+            ~check_partial:(fun combo ?alternatives pair ->
+              let r, w = pair in
+                Logs.debug (fun m ->
+                    m
+                      "[compute_path_rf] Testing partial combo: edge (%d->%d), \
+                       combo size %d"
+                      r w (List.length combo)
+                );
+                let new_combo_inv =
+                  URelation.inverse_relation (USet.of_list (pair :: combo))
+                in
+                let env_rf =
+                  ReadFromValidation.env_rf structure new_combo_inv
+                in
+                let check_rf =
+                  ReadFromValidation.check_rf structure new_combo_inv
+                in
+                let combined_preds =
+                  USet.of_list p_combined
+                  |> USet.inplace_union env_rf
+                  |> USet.inplace_union check_rf
+                  |> USet.values
+                in
+                  let* result = Solver.is_sat_cached combined_preds in
+                    if not result then begin
+                      Logs.debug (fun m ->
+                          m
+                            "[compute_path_rf] Partial combo rejected (unsat): \
+                             edge (%d->%d), combo size %d"
+                            r w (List.length combo)
+                      );
+                      (* Log the problematic constraints *)
+                      let r_val = get_val structure r in
+                      let w_val = get_val structure w in
+                      let w_val_for_r = vale structure w r in
+                        Logs.debug (fun m ->
+                            m
+                              "  Read %d expects value: %s, Write %d has \
+                               value: %s, vale(w,r): %s"
+                              r
+                              ( match r_val with
+                              | Some v -> Expr.to_string v
+                              | None -> "None"
+                              )
+                              w
+                              ( match w_val with
+                              | Some v -> Expr.to_string v
+                              | None -> "None"
+                              )
+                              (Expr.to_string w_val_for_r)
+                        );
+                        Logs.debug (fun m ->
+                            m "  env_rf constraints: [%s]"
+                              (String.concat "; "
+                                 (List.map Expr.to_string (USet.values env_rf))
+                              )
+                        );
+                        let p_combined_sample =
+                          let rec take n lst =
+                            match (n, lst) with
+                            | 0, _ | _, [] -> []
+                            | n, x :: xs -> x :: take (n - 1) xs
+                          in
+                            take 5 p_combined
+                        in
+                          Logs.debug (fun m ->
+                              m "  p_combined constraints (first 5): [%s]"
+                                (String.concat "; "
+                                   (List.map Expr.to_string p_combined_sample)
+                                )
+                          )
+                    end;
+                    Logs.debug (fun m ->
+                        m
+                          "[compute_path_rf] Partial combo %s: edge (%d->%d), \
+                           combo size %d"
+                          (if result then "accepted" else "rejected")
+                          r w (List.length combo)
+                    );
+                    Lwt.return result
+            )
+            (USet.values read_events) ()
+        in
+          Logs.debug (fun m ->
+              m "[compute_path_rf] Generated %d RF combinations"
+                (List.length rf_candidates)
+          );
+          Landmark.exit landmark;
+          Lwt.return rf_candidates
 
 (** Creates executions from a list of justifications for a given path. *)
 let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
@@ -629,10 +867,18 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
   let landmark = Landmark.register "freeze" in
     Landmark.enter landmark;
 
+    Logs.debug (fun m ->
+        m
+          "[freeze] Starting freeze for path with %d events, %d \
+           justifications, %d elided events"
+          (USet.size path.path) (List.length j_list) (USet.size elided)
+    );
+
     (* let* _ = Lwt.return_unit in *)
     let ( let*? ) (condition, msg) f =
       if condition then f ()
       else (
+        Logs.debug (fun m -> m "[freeze] Early exit: %s" msg);
         Landmark.exit landmark;
         Lwt.return []
       )
@@ -644,12 +890,20 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
     let read_events = USet.intersection structure.read_events e in
     let write_events = USet.intersection structure.write_events e in
     let malloc_events = USet.intersection structure.malloc_events e in
+    let free_events = USet.intersection structure.free_events e in
 
     (* Compute dependency relation *)
     let dp =
       List.concat_map
         (fun just ->
-          let syms = USet.values just.d in
+          (* take symbols from the justifications predicate and the d set *)
+          let syms =
+            List.map Expr.get_symbols just.p
+            |> List.flatten
+            |> USet.of_list
+            |> USet.union just.d
+            |> USet.values
+          in
             List.concat_map
               (fun sym ->
                 match origin structure sym with
@@ -661,6 +915,12 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
         j_list
       |> USet.of_list
     in
+
+    Logs.debug (fun m ->
+        m "[freeze] Computed dependency relation dp with %d edges:\n %s"
+          (USet.size dp)
+          (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) dp)
+    );
 
     (* Compute combined fwd and we *)
     let f = List.map (fun j -> j.fwd) j_list |> USet.of_list |> USet.flatten in
@@ -680,8 +940,43 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
       |> List.sort Expr.compare
     in
 
+    (* Debug: Show all predicate sources *)
+    Logs.debug (fun m ->
+        m "[freeze] Path predicates (%d): [%s]" (List.length path.p)
+          (String.concat "; " (List.map Expr.to_string path.p))
+    );
+    List.iteri
+      (fun i j ->
+        Logs.debug (fun m ->
+            m "[freeze] Justification %d (event %d) predicates (%d): [%s]" i
+              j.w.label (List.length j.p)
+              (String.concat "; " (List.map Expr.to_string j.p))
+        )
+      )
+      j_list;
+    Logs.debug (fun m ->
+        m "[freeze] Forwarding context predicates (%d): [%s]"
+          (List.length con.psi)
+          (String.concat "; " (List.map Expr.to_string con.psi))
+    );
+    Logs.debug (fun m ->
+        m "[freeze] Statex predicates (%d): [%s]" (List.length statex)
+          (String.concat "; " (List.map Expr.to_string statex))
+    );
+    Logs.debug (fun m ->
+        m "[freeze] Combined p_combined (%d total predicates): [%s]"
+          (List.length p_combined)
+          (String.concat "; " (List.map Expr.to_string p_combined))
+    );
+
     (* Check if predicates are satisfiable *)
     let* combined_p_sat = Solver.is_sat_cached p_combined in
+      Logs.debug (fun m ->
+          m
+            "[freeze] Combined predicates satisfiable: %b (checked %d \
+             predicates)"
+            combined_p_sat (List.length p_combined)
+      );
       let*? () = (combined_p_sat, "predicates unsatisfiable") in
         (* Compute PPO for each justification *)
         let* ppos =
@@ -734,6 +1029,11 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
           |> URelation.transitive_closure
         in
 
+        Logs.debug (fun m ->
+            m "[freeze] Computed PPO: %d edges, PPO_loc: %d edges"
+              (USet.size ppo) (USet.size ppo_loc)
+        );
+
         let* all_fr =
           compute_path_rf structure path ~elided ~constraints statex ppo dp
             p_combined
@@ -744,7 +1044,12 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
             all_fr
         in
           Logs.debug (fun m ->
-              m "Computed %d RF combination for path" (List.length all_rf)
+              m "[freeze] Computed %d RF combination for path"
+                (List.length all_rf)
+          );
+          Logs.debug (fun m ->
+              m "[freeze] Starting instantiate_execution for %d RF combinations"
+                (List.length all_rf)
           );
           let all_validations =
             List.map
@@ -756,6 +1061,13 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
           in
             let* results = Lwt.all all_validations in
             let filtered_results = List.filter_map Fun.id results in
+              Logs.debug (fun m ->
+                  m
+                    "[freeze] instantiate_execution produced %d valid results \
+                     from %d RF combos"
+                    (List.length filtered_results)
+                    (List.length all_rf)
+              );
               Landmark.exit landmark;
               Lwt.return filtered_results
 
@@ -776,8 +1088,14 @@ let compute_justification_combinations structure paths init_ppo statex
             )
       );
 
+      let justifiable_events =
+        USet.union structure.write_events structure.malloc_events
+        |> USet.union structure.free_events
+        |> USet.intersection path.path
+      in
+
       let path_writes =
-        USet.intersection path.path structure.write_events |> USet.values
+        USet.intersection path.path justifiable_events |> USet.values
       in
 
       let%lwt js_combinations =
@@ -816,8 +1134,12 @@ let generate_executions (structure : symbolic_event_structure)
 
     (* let* _ = Lwt.return_unit in *)
     Logs.info (fun m ->
-        m "Generating executions for structure with %d events"
+        m "Generating executions for structure with %d events:\n%s"
           (USet.size structure.e)
+          (Hashtbl.fold
+             (fun _ evt acc -> acc ^ "  " ^ show_event evt ^ "\n")
+             structure.events ""
+          )
     );
 
     (* Generate all paths through the control flow *)
