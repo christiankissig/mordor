@@ -235,6 +235,7 @@ let test_imm_coherent_simple () =
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
+      terminal_events = USet.create ();
     }
   in
   let (execution : symbolic_execution) =
@@ -295,6 +296,7 @@ let test_rc11_coherent_simple () =
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
+      terminal_events = USet.create ();
     }
   in
   let execution =
@@ -355,6 +357,7 @@ let test_rc11c_coherent_simple () =
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
+      terminal_events = USet.create ();
     }
   in
   let execution =
@@ -421,6 +424,7 @@ let test_imm_coherent_rmw () =
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
+      terminal_events = USet.create ();
     }
   in
   let execution =
@@ -477,6 +481,7 @@ let test_cache_types () =
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
+      terminal_events = USet.create ();
     }
   in
   let execution =

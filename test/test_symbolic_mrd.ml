@@ -728,6 +728,7 @@ module TestSymbolicEventStructure = struct
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
+        terminal_events = USet.create ();
       }
     in
 
@@ -760,6 +761,7 @@ module TestSymbolicEventStructure = struct
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
+        terminal_events = USet.create ();
       }
     in
 
@@ -794,6 +796,7 @@ module TestSymbolicEventStructure = struct
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
+        terminal_events = USet.create ();
       }
     in
 
@@ -825,6 +828,7 @@ module TestSymbolicEventStructure = struct
         branch_events = USet.create ();
         malloc_events = USet.create ();
         free_events = USet.create ();
+        terminal_events = USet.create ();
       }
     in
 

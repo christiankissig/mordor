@@ -78,6 +78,7 @@ module TestData = struct
       branch_events;
       malloc_events;
       free_events = USet.create ();
+      terminal_events = USet.create ();
     }
 
   (* Mock context builder *)

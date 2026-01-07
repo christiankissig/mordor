@@ -229,6 +229,7 @@ type symbolic_event_structure = {
   branch_events : int uset; [@printer pp_int_uset]
   malloc_events : int uset; [@printer pp_int_uset]
   free_events : int uset; [@printer pp_int_uset]
+  terminal_events : int uset; [@printer pp_int_uset]
 }
 [@@deriving show]
 
@@ -256,6 +257,7 @@ let create_symbolic_event_structure () : symbolic_event_structure =
     branch_events = USet.create ();
     malloc_events = USet.create ();
     free_events = USet.create ();
+    terminal_events = USet.create ();
   }
 
 (** Justifications *)

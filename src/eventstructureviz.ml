@@ -332,7 +332,12 @@ module EventStructureViz = struct
         dp_reduced;
 
       (* Add PPO edges (transitive reduction) *)
-      let ppo_reduced = URelation.transitive_reduction exec.ppo in
+      let ppo_reduced =
+        URelation.transitive_reduction exec.ppo
+        |> USet.filter (fun (s, d) ->
+            s != 0 && not (USet.mem structure.terminal_events d)
+        )
+      in
         USet.iter
           (fun (src, dst) ->
             let v_src = Hashtbl.find vertex_map src in

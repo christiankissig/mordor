@@ -152,6 +152,7 @@ type symbolic_event_structure = {
   branch_events : int uset;
   malloc_events : int uset;
   free_events : int uset;
+  terminal_events : int uset;
 }
 [@@deriving show]
 

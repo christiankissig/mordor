@@ -114,6 +114,7 @@ module TestSetMembership = struct
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
+      terminal_events = USet.create ();
     }
 
   (** {2 has_set_operation Tests} *)

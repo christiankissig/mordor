@@ -138,6 +138,11 @@ let dot (event : event) structure phi : symbolic_event_structure =
           USet.union structure.free_events (USet.singleton event.label)
         else structure.free_events
       );
+    terminal_events =
+      ( if event.typ = Terminal then
+          USet.union structure.terminal_events (USet.singleton event.label)
+        else structure.terminal_events
+      );
   }
 
 let plus a b : symbolic_event_structure =
@@ -170,6 +175,7 @@ let plus a b : symbolic_event_structure =
       branch_events = USet.union a.branch_events b.branch_events;
       malloc_events = USet.union a.malloc_events b.malloc_events;
       free_events = USet.union a.free_events b.free_events;
+      terminal_events = USet.union a.terminal_events b.terminal_events;
     }
 
 let cross a b : symbolic_event_structure =
@@ -201,6 +207,7 @@ let cross a b : symbolic_event_structure =
       branch_events = USet.union a.branch_events b.branch_events;
       malloc_events = USet.union a.malloc_events b.malloc_events;
       free_events = USet.union a.free_events b.free_events;
+      terminal_events = USet.union a.terminal_events b.terminal_events;
     }
 
 (** Create empty structure *)
@@ -229,6 +236,7 @@ let empty_structure () : symbolic_event_structure =
     branch_events = USet.create ();
     malloc_events = USet.create ();
     free_events = USet.create ();
+    terminal_events = USet.create ();
   }
 
 let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr)

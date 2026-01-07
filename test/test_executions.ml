@@ -72,6 +72,7 @@ module TestData = struct
       branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
+      terminal_events = USet.create ();
     }
 
   let make_justification ?p ?d ?fwd ?we w_event =

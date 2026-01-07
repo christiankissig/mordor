@@ -546,6 +546,7 @@ module Refinement = struct
               branch_events = USet.create ();
               malloc_events = USet.create ();
               free_events = USet.create ();
+              terminal_events = USet.create ();
             };
           executions = [];
           events = Hashtbl.create 0;
