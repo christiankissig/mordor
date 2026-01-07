@@ -43,6 +43,21 @@ module Execution = struct
          )
 
   let to_string exec = show_symbolic_execution exec
+
+  (** Get relation by name from structure/execution *)
+  let get_relation name (structure : symbolic_event_structure)
+      (execution : symbolic_execution) =
+    match name with
+    | ".ppo" -> execution.ppo
+    | ".po" -> structure.po
+    | ".rf" -> execution.rf
+    | ".dp" -> execution.dp
+    | ".rmw" -> execution.ex_rmw
+    | _ ->
+        Logs.warn (fun m ->
+            m "Unknown or unsupported relation: %s, returning empty" name
+        );
+        USet.create ()
 end
 
 module ExecutionCacheKey = struct

@@ -48,8 +48,20 @@ let default_options =
     ubopt = false;
   }
 
-(** context for pipeline *)
+(** Types for checked executons *)
 
+type uaf_ub_reason = (int * int) uset
+type upd_ub_reason = (int * int) uset
+type ub_reason = UAF of uaf_ub_reason | UPD of upd_ub_reason
+type ub_reasons = (int * ub_reason) list
+
+type execution_info = {
+  exec_id : int;
+  satisfied : bool;
+  ub_reasons : ub_reason list;
+}
+
+(** context for pipeline *)
 type mordor_ctx = {
   (* pipeline config *)
   options : options;
@@ -78,6 +90,7 @@ type mordor_ctx = {
   (* verification results could be added here *)
   mutable valid : bool option;
   mutable undefined_behaviour : bool option;
+  mutable checked_executions : execution_info list option;
   (* episodicity checks *)
   mutable is_episodic : bool option;
 }
@@ -103,6 +116,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     output_file;
     valid = None;
     undefined_behaviour = None;
+    checked_executions = None;
     is_episodic = None;
   }
 

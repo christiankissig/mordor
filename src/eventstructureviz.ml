@@ -1,5 +1,6 @@
 (** Graph Visualization Module for Symbolic Event Structures using OCamlGraph *)
 
+open Assertion
 open Context
 open Graph
 open Expr
@@ -43,6 +44,40 @@ module EventStructureViz = struct
 
   (** Create the graph type *)
   module G = Imperative.Digraph.ConcreteLabeled (Vertex) (Edge)
+
+  (** JSON type definitions using ppx_deriving *)
+  type json_node = {
+    id : int;
+    type_ : string; [@key "type"]
+    label : int;
+    isRoot : bool;
+    location : string option; [@default None]
+    value : string option; [@default None]
+    constraints : string list; [@default []]
+  }
+  [@@deriving yojson]
+
+  type json_edge = { source : int; target : int; type_ : string [@key "type"] }
+  [@@deriving yojson]
+
+  type json_graph = { nodes : json_node list; edges : json_edge list }
+  [@@deriving yojson]
+
+  type graph_message = {
+    type_ : string; [@key "type"]
+    graph : json_graph;
+    index : int option; [@default None]
+    preds : string option; [@default None]
+    is_valid : bool option; [@default None]
+    undefined_behaviour : Yojson.Safe.t option; [@default None]
+  }
+  [@@deriving yojson]
+
+  type complete_message = {
+    type_ : string; [@key "type"]
+    total_executions : int;
+  }
+  [@@deriving yojson]
 
   (** [structure executions] Generate edges for relaxed dependencies in
       execution set for symbolic event structure.
@@ -410,32 +445,8 @@ module EventStructureViz = struct
       Format.pp_print_flush fmt ();
       Buffer.contents buf
 
-  (** Proper JSON string escaping *)
-  let json_escape s =
-    let buf = Buffer.create (String.length s * 2) in
-      String.iter
-        (fun c ->
-          match c with
-          | '"' -> Buffer.add_string buf "\\\""
-          | '\\' -> Buffer.add_string buf "\\\\"
-          | '\b' -> Buffer.add_string buf "\\b"
-          | '\012' -> Buffer.add_string buf "\\f"
-          | '\n' -> Buffer.add_string buf "\\n"
-          | '\r' -> Buffer.add_string buf "\\r"
-          | '\t' -> Buffer.add_string buf "\\t"
-          | c when int_of_char c < 0x20 ->
-              Buffer.add_string buf (Printf.sprintf "\\u%04x" (int_of_char c))
-          | c -> Buffer.add_char buf c
-        )
-        s;
-      Buffer.contents buf
-
-  (** Export to JSON format without color information - minified for SSE *)
+  (** Convert graph to JSON using Yojson and ppx_deriving *)
   let to_json (g : G.t) : string =
-    let buf = Buffer.create 1024 in
-
-    Buffer.add_string buf "{\"nodes\":[";
-
     (* Collect and sort vertices *)
     let vertices = ref [] in
       G.iter_vertex (fun v -> vertices := v :: !vertices) g;
@@ -443,65 +454,43 @@ module EventStructureViz = struct
         List.sort (fun v1 v2 -> compare v1.Vertex.id v2.Vertex.id) !vertices
       in
 
-      List.iteri
-        (fun i v ->
-          let evt = v.Vertex.event in
-          let is_last = i = List.length vertices - 1 in
+      let nodes =
+        List.map
+          (fun v ->
+            let evt = v.Vertex.event in
+            let location =
+              match evt.loc with
+              | Some loc -> Some (Expr.to_string loc)
+              | None -> None
+            in
+            let value =
+              match evt.rval with
+              | Some rval -> Some (Value.to_string rval)
+              | None -> (
+                  match evt.wval with
+                  | Some wval -> Some (Expr.to_string wval)
+                  | None -> None
+                )
+            in
+            let constraints =
+              if v.Vertex.constraints <> [] then
+                List.map Expr.to_string v.Vertex.constraints
+              else []
+            in
+              {
+                id = v.Vertex.id;
+                type_ = event_type_to_string evt.typ;
+                label = evt.label;
+                isRoot = v.Vertex.id = 0;
+                location;
+                value;
+                constraints;
+              }
+          )
+          vertices
+      in
 
-          Buffer.add_string buf "{";
-          Buffer.add_string buf (Printf.sprintf "\"id\":%d," v.Vertex.id);
-          Buffer.add_string buf
-            (Printf.sprintf "\"type\":\"%s\"," (event_type_to_string evt.typ));
-          Buffer.add_string buf (Printf.sprintf "\"label\":%d," evt.label);
-          Buffer.add_string buf
-            (Printf.sprintf "\"isRoot\":%b" (v.Vertex.id = 0));
-
-          (* Add location if present *)
-          ( match evt.loc with
-          | Some loc ->
-              let loc_str = json_escape (Expr.to_string loc) in
-                Buffer.add_string buf
-                  (Printf.sprintf ",\"location\":\"%s\"" loc_str)
-          | None -> ()
-          );
-
-          ( match evt.rval with
-          | Some rval ->
-              let rval_str = json_escape (Value.to_string rval) in
-                Buffer.add_string buf
-                  (Printf.sprintf ",\"value\":\"%s\"" rval_str)
-          | None -> (
-              match evt.wval with
-              | Some wval ->
-                  let wval_str = json_escape (Expr.to_string wval) in
-                    Buffer.add_string buf
-                      (Printf.sprintf ",\"value\":\"%s\"" wval_str)
-              | None -> ()
-            )
-          );
-
-          (* Add constraints if present *)
-          if v.Vertex.constraints <> [] then (
-            Buffer.add_string buf ",\"constraints\":[";
-            List.iteri
-              (fun j c ->
-                let c_str = json_escape (Expr.to_string c) in
-                  Buffer.add_string buf (Printf.sprintf "\"%s\"" c_str);
-                  if j < List.length v.Vertex.constraints - 1 then
-                    Buffer.add_string buf ","
-              )
-              v.Vertex.constraints;
-            Buffer.add_string buf "]"
-          );
-
-          Buffer.add_string buf
-            (Printf.sprintf "}%s" (if is_last then "" else ","))
-        )
-        vertices;
-
-      Buffer.add_string buf "],\"edges\":[";
-
-      (* Collect edges - NO COLOR INFO *)
+      (* Collect edges *)
       let edges = ref [] in
         G.iter_edges_e
           (fun e ->
@@ -518,11 +507,10 @@ module EventStructureViz = struct
               | PPO preds -> if preds = "" then "ppo" else "ppo - " ^ preds
               | RF preds -> if preds = "" then "rf" else "rf - " ^ preds
             in
-            (* Escape edge type string which may contain predicates *)
-            let edge_type_escaped = json_escape edge_type in
-              edges := (src, dst, edge_type_escaped, label) :: !edges
+              edges := (src, dst, edge_type, label) :: !edges
           )
           g;
+
         (* Sort edges to show PO edges first *)
         let edges =
           List.sort
@@ -535,25 +523,17 @@ module EventStructureViz = struct
             )
             !edges
         in
-        (* Remove label from tuples after sorting *)
-        let edges =
-          List.map (fun (src, dst, edge_type, _) -> (src, dst, edge_type)) edges
+
+        let json_edges =
+          List.map
+            (fun (src, dst, edge_type, _) ->
+              { source = src; target = dst; type_ = edge_type }
+            )
+            edges
         in
 
-        List.iteri
-          (fun i (src, dst, edge_type) ->
-            let is_last = i = List.length edges - 1 in
-              Buffer.add_string buf "{";
-              Buffer.add_string buf (Printf.sprintf "\"source\":%d," src);
-              Buffer.add_string buf (Printf.sprintf "\"target\":%d," dst);
-              Buffer.add_string buf (Printf.sprintf "\"type\":\"%s\"" edge_type);
-              Buffer.add_string buf
-                (Printf.sprintf "}%s" (if is_last then "" else ","))
-          )
-          edges;
-
-        Buffer.add_string buf "]}";
-        Buffer.contents buf
+        let graph = { nodes; edges = json_edges } in
+          Yojson.Safe.to_string (json_graph_to_yojson graph)
 
   (** Write visualization to file *)
   let write_to_file (filename : string) (format : output_mode)
@@ -625,9 +605,23 @@ let step_send_event_structure_graph (lwt_ctx : mordor_ctx Lwt.t)
       let es_graph = EventStructureViz.build_event_structure_graph structure in
       let es_json = EventStructureViz.to_json es_graph in
 
-      (* Wrap in graph message with type *)
+      (* Wrap in graph message with type using Yojson *)
+      let message =
+        EventStructureViz.
+          {
+            type_ = "event_structure";
+            graph =
+              Yojson.Safe.from_string es_json
+              |> json_graph_of_yojson
+              |> Result.get_ok;
+            index = None;
+            preds = None;
+            is_valid = None;
+            undefined_behaviour = None;
+          }
+      in
       let es_message =
-        Printf.sprintf "{\"type\": \"event_structure\", \"graph\": %s}" es_json
+        Yojson.Safe.to_string (EventStructureViz.graph_message_to_yojson message)
       in
         let* () = send_graph es_message in
 
@@ -656,44 +650,95 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
             let exec_list = USet.to_list execs in
             let exec_count = List.length exec_list in
 
-            (* Process each execution sequentially *)
-            let* () =
-              Lwt_list.iteri_s
-                (fun i exec ->
-                  let exec_graph =
-                    EventStructureViz.build_execution_graph structure exec
-                      po_reduced
-                  in
-                  let exec_json = EventStructureViz.to_json exec_graph in
-
-                  let exec_preds_string =
-                    String.concat ", " (List.map Expr.to_string exec.ex_p)
-                  in
-
-                  (* Wrap in graph message with type and index *)
-                  let exec_message =
-                    Printf.sprintf
-                      "{\"type\": \"execution\", \"index\": %d, \"preds\": \
-                       \"%s\", \"graph\": %s}"
-                      (i + 1) exec_preds_string exec_json
-                  in
-                    send_graph exec_message
+            let checked_executions =
+              Hashtbl.create
+                (ctx.checked_executions
+                |> Option.value ~default:[]
+                |> List.length
                 )
-                exec_list
             in
+              ( match ctx.checked_executions with
+              | Some exec_infos ->
+                  List.iter
+                    (fun info ->
+                      Hashtbl.add checked_executions info.exec_id info
+                    )
+                    exec_infos
+              | None -> ()
+              );
 
-            (* Send completion message with total count *)
-            let complete_message =
-              Printf.sprintf
-                "{\"type\": \"complete\", \"total_executions\": %d}" exec_count
-            in
-              send_graph complete_message
+              (* Process each execution sequentially *)
+              let* () =
+                Lwt_list.iteri_s
+                  (fun i exec ->
+                    let exec_graph =
+                      EventStructureViz.build_execution_graph structure exec
+                        po_reduced
+                    in
+                    let graph_json = EventStructureViz.to_json exec_graph in
+                    let graph_obj =
+                      Yojson.Safe.from_string graph_json
+                      |> EventStructureViz.json_graph_of_yojson
+                      |> Result.get_ok
+                    in
+                    let exec_info_opt =
+                      Hashtbl.find_opt checked_executions exec.id
+                    in
+
+                    let exec_preds_string =
+                      String.concat ", " (List.map Expr.to_string exec.ex_p)
+                    in
+
+                    let is_valid =
+                      Option.map (fun info -> info.satisfied) exec_info_opt
+                    in
+                    let undefined_behaviour =
+                      Option.map
+                        (fun info -> ub_reasons_to_yojson info.ub_reasons)
+                        exec_info_opt
+                    in
+
+                    (* Wrap in graph message with type and index using Yojson *)
+                    let message =
+                      EventStructureViz.
+                        {
+                          type_ = "execution";
+                          graph = graph_obj;
+                          index = Some (i + 1);
+                          preds = Some exec_preds_string;
+                          is_valid;
+                          undefined_behaviour;
+                        }
+                    in
+                    let exec_message =
+                      Yojson.Safe.to_string
+                        (EventStructureViz.graph_message_to_yojson message)
+                    in
+                      send_graph exec_message
+                  )
+                  exec_list
+              in
+
+              (* Send completion message with total count using Yojson *)
+              let complete_message =
+                EventStructureViz.
+                  { type_ = "complete"; total_executions = exec_count }
+              in
+              let complete_json =
+                Yojson.Safe.to_string
+                  (EventStructureViz.complete_message_to_yojson complete_message)
+              in
+                send_graph complete_json
         | None ->
             (* No executions, just send completion *)
             let complete_message =
-              "{\"type\": \"complete\", \"total_executions\": 0}"
+              EventStructureViz.{ type_ = "complete"; total_executions = 0 }
             in
-              send_graph complete_message
+            let complete_json =
+              Yojson.Safe.to_string
+                (EventStructureViz.complete_message_to_yojson complete_message)
+            in
+              send_graph complete_json
       in
 
       Logs.info (fun m -> m "Execution graphs sent after dependency calculation");

@@ -20,6 +20,7 @@ const EDGE_COLORS = {
     fr: '#f48771',    // Red
     lo: '#0e639c',    // Blue
     fj: '#89d185',    // Green
+    uaf: '#ff0000',   // Bright Red for use-after-free
     default: '#6a6a6a' 
 };
 
@@ -255,17 +256,83 @@ class GraphVisualizer {
     }
 
     updateExecutionInfo(data) {
+        // Handle case where data might be undefined (event structure)
+        if (!data) {
+            document.getElementById('predicates').textContent = '⊤';
+            document.getElementById('has-uaf').textContent = 'N/A';
+            document.getElementById('has-uaf').style.color = '#d4d4d4';
+            document.getElementById('has-unbounded-deref').textContent = 'N/A';
+            document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
+            return;
+        }
+        
+        console.log('updateExecutionInfo called with data:', data);
+        
+        // Always update predicates
         const preds = data.preds || "⊤";
         document.getElementById('predicates').textContent = preds;
      
-        if (data.undefined_behaviour !== undefined) {
-          const ub_reasons = data.undefined_behaviour;
+        // undefined_behaviour is an array, so we need to access the first element
+        if (data.undefined_behaviour !== undefined && data.undefined_behaviour.length > 0) {
+          const ub_reasons = data.undefined_behaviour[0]; // Get first element of array
+          console.log('undefined_behaviour:', ub_reasons);
 
-          const has_uaf = ub_reasons.has_uaf ? "Yes" : "No";
-          document.getElementById('has-uaf').textContent = has_uaf;
+          // Handle UAF with detailed pair information
+          const uafSpan = document.getElementById('has-uaf');
+          if (ub_reasons.uaf && ub_reasons.uaf.length > 0) {
+              console.log('UAF pairs found:', ub_reasons.uaf);
+              
+              // Get the graph - it should be in data.graph
+              const graph = data.graph || this.graphs[this.currentIndex];
+              console.log('Graph for UAF lookup:', graph);
+              
+              // Format UAF pairs as "4:D 三 -> 8:R 三 δ"
+              const uafPairs = ub_reasons.uaf.map(pair => {
+                  const sourceNode = graph.nodes.find(n => n.id === pair[0]);
+                  const targetNode = graph.nodes.find(n => n.id === pair[1]);
+                  
+                  console.log(`Looking for nodes ${pair[0]} and ${pair[1]}:`, sourceNode, targetNode);
+                  
+                  let sourceLabel = pair[0];
+                  let targetLabel = pair[1];
+                  
+                  if (sourceNode) {
+                      sourceLabel = `${sourceNode.label}:${sourceNode.type}${sourceNode.location ? ' ' + sourceNode.location : ''}`;
+                  }
+                  if (targetNode) {
+                      targetLabel = `${targetNode.label}:${targetNode.type}${targetNode.location ? ' ' + targetNode.location : ''}${targetNode.value ? ' ' + targetNode.value : ''}`;
+                  }
+                  
+                  return `${sourceLabel} → ${targetLabel}`;
+              }).join(', ');
+              
+              console.log('UAF pairs formatted:', uafPairs);
+              uafSpan.textContent = uafPairs;
+              uafSpan.style.color = '#ff6b6b';
+          } else {
+              // No UAF in this execution
+              uafSpan.textContent = 'No';
+              uafSpan.style.color = '#89d185';
+          }
 
-          const has_unbounded_deref = ub_reasons.has_unbounded_deref ? "Yes" : "No";
-          document.getElementById('has-unbounded-deref').textContent = has_unbounded_deref;
+          // Handle unbounded deref
+          const unboundedSpan = document.getElementById('has-unbounded-deref');
+          if (ub_reasons.unbounded_deref) {
+              unboundedSpan.textContent = 'Yes';
+              unboundedSpan.style.color = '#ff6b6b';
+          } else {
+              unboundedSpan.textContent = 'No';
+              unboundedSpan.style.color = '#89d185';
+          }
+        } else {
+            // No undefined behaviour data - reset to "No" for executions
+            const uafSpan = document.getElementById('has-uaf');
+            uafSpan.textContent = 'No';
+            uafSpan.style.color = '#89d185';
+            
+            const unboundedSpan = document.getElementById('has-unbounded-deref');
+            unboundedSpan.textContent = 'No';
+            unboundedSpan.style.color = '#89d185';
         }
     }
 
@@ -273,8 +340,25 @@ class GraphVisualizer {
         if (index < 0 || index >= this.graphs.length) return;
         
         this.currentIndex = index;
-        this.renderGraph(this.graphs[index]);
-        this.updateExecutionInfo(this.data[index]);
+        
+        // For event structure (index 0), don't pass undefined_behaviour
+        if (index === 0) {
+            this.renderGraph(this.graphs[index], null);
+            // Reset execution info for event structure
+            document.getElementById('predicates').textContent = '⊤';
+            document.getElementById('has-uaf').textContent = 'N/A';
+            document.getElementById('has-uaf').style.color = '#d4d4d4';
+            document.getElementById('has-unbounded-deref').textContent = 'N/A';
+            document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
+        } else {
+            // For executions, pass undefined_behaviour data if available (it's an array, so get first element)
+            const undefinedBehaviour = (this.data[index]?.undefined_behaviour && this.data[index].undefined_behaviour.length > 0) 
+                ? this.data[index].undefined_behaviour[0] 
+                : null;
+            this.renderGraph(this.graphs[index], undefinedBehaviour);
+            this.updateExecutionInfo(this.data[index]);
+        }
+        
         this.updateCarouselUI();
     }
 
@@ -305,6 +389,18 @@ class GraphVisualizer {
         this.data = [];
         this.currentIndex = 0;
         this.executionCount = 0;
+        
+        // Clear execution info fields
+        document.getElementById('predicates').textContent = '⊤';
+        document.getElementById('has-uaf').textContent = 'N/A';
+        document.getElementById('has-uaf').style.color = '#d4d4d4';
+        document.getElementById('has-unbounded-deref').textContent = 'N/A';
+        document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
+        
+        // Clear graph stats
+        document.getElementById('node-count').textContent = '0';
+        document.getElementById('edge-count').textContent = '0';
+        document.getElementById('execution-count').textContent = '0';
         
         document.getElementById('visualize-btn').disabled = true;
         document.getElementById('status').textContent = 'Processing...';
@@ -367,10 +463,8 @@ class GraphVisualizer {
         };
     }
 
-    renderGraph(data) {
+    renderGraph(graph, undefinedBehaviour = null) {
         try {
-            const graph = data;
-            
             this.log('Rendering graph with ' + graph.nodes.length + ' nodes...');
 
             if (!graph.nodes || graph.nodes.length === 0) {
@@ -423,9 +517,30 @@ class GraphVisualizer {
                 });
             });
 
-            // Update stats
+            // Add UAF edges if undefined_behaviour data is provided
+            let uafEdgeCount = 0;
+            if (undefinedBehaviour && undefinedBehaviour.uaf && undefinedBehaviour.uaf.length > 0) {
+                console.log('Adding UAF edges for pairs:', undefinedBehaviour.uaf);
+                undefinedBehaviour.uaf.forEach(pair => {
+                    console.log(`Adding UAF edge from ${pair[0]} to ${pair[1]}`);
+                    this.cy.add({
+                        data: {
+                            source: String(pair[0]),
+                            target: String(pair[1]),
+                            type: 'uaf',
+                            color: EDGE_COLORS.uaf
+                        }
+                    });
+                    uafEdgeCount++;
+                });
+                this.log(`Added ${uafEdgeCount} UAF edge(s)`, 'info');
+            } else {
+                console.log('No UAF edges to add. undefinedBehaviour:', undefinedBehaviour);
+            }
+
+            // Update stats (including UAF edges in edge count)
             document.getElementById('node-count').textContent = graph.nodes.length;
-            document.getElementById('edge-count').textContent = graph.edges.length;
+            document.getElementById('edge-count').textContent = graph.edges.length + uafEdgeCount;
 
             // Show graph container, hide empty state
             document.getElementById('empty-state').style.display = 'none';

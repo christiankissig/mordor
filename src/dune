@@ -50,7 +50,9 @@
   lwt_domain
   z3
   zarith
-  ppx_deriving.runtime)
+  yojson
+  ppx_deriving.runtime
+  ppx_deriving_yojson.runtime)
  (public_name mordor)
  (preprocess
-  (pps lwt_ppx ppx_deriving.show)))
+  (pps lwt_ppx ppx_deriving.show ppx_deriving_yojson)))

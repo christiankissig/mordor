@@ -25,6 +25,8 @@
   lwt_domain
   (ocamlgraph (>= 2.2.0))
   (ppx_deriving (>= 5.0))
+  (ppx_deriving_yojson (>= 3.7.0))
+  (yojson (>= 2.0.0))
   (z3 (>= 4.8.0))
   (zarith (>= 1.12)))
  )

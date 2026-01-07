@@ -8,6 +8,9 @@ module Execution : sig
   val equal : t -> t -> bool
   val contains : t -> t -> bool
   val to_string : t -> string
+
+  val get_relation :
+    string -> symbolic_event_structure -> symbolic_execution -> (int * int) uset
 end
 
 (** {1 Main Execution Generation} *)
