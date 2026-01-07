@@ -442,7 +442,8 @@ module TestJustifications = struct
 
   let test_forwarding_context () =
     let e =
-      make_write_event 3 (make_var "v") (Expr.of_value (make_symbol "β"))
+      make_write_event 3 (make_var "v")
+        (Expr.of_value (make_symbol "β"))
         Relaxed
     in
 
