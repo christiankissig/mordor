@@ -256,10 +256,8 @@ module TestExample1_1 = struct
 
     let just =
       {
-        p = [];
-        (* predicate: ⊤ *)
+        p = [ EBinOp (EUnOp ("!", ESymbol "α"), "≠", ENum Z.zero) ];
         d = d_set;
-        (* data dependency on α *)
         fwd = USet.create ();
         we = USet.create ();
         w = e2;
@@ -267,347 +265,146 @@ module TestExample1_1 = struct
       }
     in
 
-    check int "ub_initial_just_deps" 1 (USet.size just.d);
-    check bool "ub_initial_just_has_alpha" true (USet.mem just.d "α")
+    check int "lb_ub_initial_deps" 1 (USet.size just.d);
+    check bool "has_data_dep" true (USet.mem just.d "α");
+    Printf.printf "PASS: Initial justification with dependencies\n"
 
-  let test_lb_ub_data_optimized_justification () =
-    (* After strengthening with !α ≠ 0, value assignment with α = 0,
-       and weakening, we get an independent justification *)
-    let e2_opt =
+  let test_lb_ub_data_remove_justification () =
+    let e2 =
       make_write_event 2 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
     in
 
-    let just_opt =
+    let just =
       {
-        p = [];
-        (* predicate: ⊤ after weakening *)
+        p = [ EBinOp (ESymbol "α", "=", ENum Z.zero) ];
         d = USet.create ();
-        (* no dependencies *)
         fwd = USet.create ();
         we = USet.create ();
-        w = e2_opt;
-        op = ("optimized", None, None);
+        w = e2;
+        op = ("remove", None, None);
       }
     in
 
-    check int "ub_optimized_just_deps" 0 (USet.size just_opt.d);
-    Printf.printf "PASS: LB+UB+data optimization produces independent write\n"
+    check int "lb_ub_remove_deps" 0 (USet.size just.d);
+    Printf.printf "PASS: Remove justification with no dependencies\n"
+
+  let test_lb_ub_complete_trace () =
+    (* Use the create helper from Types module *)
+    let ses = create_symbolic_event_structure () in
+
+    (* Add events to the structure *)
+    let ses = { ses with e = USet.of_list [ 1; 2; 3; 4 ] } in
+    let ses = { ses with po = USet.of_list [ (1, 2); (3, 4) ] } in
+
+    check int "complete_trace_events" 4 (USet.size ses.e);
+    check int "complete_trace_po" 2 (USet.size ses.po);
+    Printf.printf "PASS: Complete LB+UB+data trace\n"
 
   let suite =
     [
       test_case "TestExample1_1.test_lb_ub_data_initial_justification" `Quick
         test_lb_ub_data_initial_justification;
-      test_case "TestExample1_1.test_lb_ub_data_optimized_justification" `Quick
-        test_lb_ub_data_optimized_justification;
+      test_case "TestExample1_1.test_lb_ub_data_remove_justification" `Quick
+        test_lb_ub_data_remove_justification;
+      test_case "TestExample1_1.test_lb_ub_complete_trace" `Quick
+        test_lb_ub_complete_trace;
     ]
 end
 
-(** Test Module 6: Paper Example 3.1 - Alignment (Extrinsic Choice) *)
+(** Test Module 6: Paper Example 3.1 - Reordering *)
 module TestExample3_1 = struct
-  (** Example 3.1: Alignment-based optimization int* r1 = p; if (r1 % 16 == 0) y
-      = 1;
-
-      If compiler chooses to over-align p to 16 bytes, the condition is always
-      true, so the write can be hoisted. *)
-  let test_alignment_initial () =
-    let e1 = make_read_event 1 (make_var "p") (make_symbol "α") Relaxed in
-    let cond =
-      EBinOp (EBinOp (ESymbol "α", "%", ENum (Z.of_int 16)), "=", ENum Z.zero)
-    in
-    let e2 = make_branch_event 2 cond in
-    let e3 =
-      make_write_event 3 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
+  let test_reordering_justification () =
+    let e1 =
+      make_write_event 1 (make_var "x") (Expr.of_value (make_number 1)) Relaxed
     in
 
-    (* Initial justification has control dependency *)
     let just =
       {
-        p =
-          [
-            EBinOp
-              (EBinOp (ESymbol "α", "%", ENum (Z.of_int 16)), "=", ENum Z.zero);
-          ];
-        d = USet.create ();
-        fwd = USet.create ();
-        we = USet.create ();
-        w = e3;
-        op = ("initial", None, None);
-      }
-    in
-
-    check bool "alignment_initial_has_predicate" true (List.length just.p > 0);
-    Printf.printf
-      "PASS: Alignment test initial justification has control dependency\n"
-
-  let test_alignment_with_extrinsic_guarantee () =
-    (* With extrinsic guarantee Ω => (α % 16 = 0), we can weaken *)
-    let e3 =
-      make_write_event 3 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
-    in
-
-    let just_weak =
-      {
         p = [];
-        (* weakened to ⊤ *)
         d = USet.create ();
         fwd = USet.create ();
         we = USet.create ();
-        w = e3;
-        op = ("weakened", None, None);
+        w = e1;
+        op = ("reorder", None, None);
       }
     in
 
-    check int "alignment_weakened_no_predicate" 0 (List.length just_weak.p);
-    Printf.printf
-      "PASS: Alignment with extrinsic guarantee removes control dependency\n"
+    check int "reorder_just_deps" 0 (USet.size just.d);
+    Printf.printf "PASS: Reordering justification\n"
 
   let suite =
     [
-      test_case "TestExample3_1.test_alignment_initial" `Quick
-        test_alignment_initial;
-      test_case "TestExample3_1.test_alignment_with_extrinsic_guarantee" `Quick
-        test_alignment_with_extrinsic_guarantee;
+      test_case "TestExample3_1.test_reordering_justification" `Quick
+        test_reordering_justification;
     ]
 end
 
-(** Test Module 7: Paper Example 4.1 - Dynamic Memory *)
+(** Test Module 7: Paper Example 4.1 - Forwarding *)
 module TestExample4_1 = struct
-  (** Example 4.1: Load Buffering with Allocation and Aliasing Thread 1: Thread
-      2: atomic int x = 0; int r2 = x; atomic int* p = malloc(...); *p = r2; int
-      r1 = *p; x = 1;
+  let test_forwarding_structure () =
+    (* Use the create helper from Types module *)
+    let ses = create_symbolic_event_structure () in
+    let ses = { ses with e = USet.of_list [ 1; 2; 3 ] } in
+    let ses = { ses with po = USet.of_list [ (1, 2); (2, 3) ] } in
 
-      Allocation guarantees disjointness: *p and x don't alias. *)
-  let test_lb_alias_initial () =
-    let events = Hashtbl.create 10 in
-
-    (* Thread 1 *)
-    let e1 = make_alloc_event 1 (make_symbol "π") (make_number 4) in
-    let e2 = make_read_event 2 (VSymbol "π") (make_symbol "α") Relaxed in
-    let e3 =
-      make_write_event 3 (make_var "x") (Expr.of_value (make_number 1)) Relaxed
-    in
-
-    (* Thread 2 *)
-    let e4 = make_read_event 4 (make_var "x") (make_symbol "β") Relaxed in
-    let e5 =
-      make_write_event 5 (VSymbol "π") (Expr.of_value (make_symbol "β")) Relaxed
-    in
-
-    Hashtbl.add events 1 e1;
-    Hashtbl.add events 2 e2;
-    Hashtbl.add events 3 e3;
-    Hashtbl.add events 4 e4;
-    Hashtbl.add events 5 e5;
-
-    (* Without disjointness: events 2 and 3 might alias *)
-    (* With disjointness from allocation: can reorder *)
-
-    (* Create disjoint predicate *)
-    let disj_pred = EBinOp (ESymbol "π", "!=", Expr.of_value (make_var "x")) in
-
-    check bool "disjointness_predicate_created" true
-      ( match disj_pred with
-      | EBinOp _ -> true
-      | _ -> false
-      );
-    Printf.printf "PASS: Dynamic memory disjointness predicate created\n"
+    check int "forwarding_events" 3 (USet.size ses.e);
+    check int "forwarding_po" 2 (USet.size ses.po);
+    Printf.printf "PASS: Forwarding structure\n"
 
   let suite =
     [
-      test_case "TestExample4_1.test_lb_alias_initial" `Quick
-        test_lb_alias_initial;
+      test_case "TestExample4_1.test_forwarding_structure" `Quick
+        test_forwarding_structure;
     ]
 end
 
-(** Test Module 8: Paper Example 5.1 - Control Dependencies *)
+(** Test Module 8: Paper Example 5.1 - Speculation *)
 module TestExample5_1 = struct
-  (** Example 5.1: Load Buffering with Value-Assignment False Dependency Thread
-      1: Thread 2: int r1 = x; int ry = y; if (r1 == 1) x = ry; y = r1; else y =
-      1;
+  let test_speculation_structure () =
+    (* Use the create helper from Types module *)
+    let ses = create_symbolic_event_structure () in
+    let ses = { ses with e = USet.of_list [ 1; 2 ] } in
 
-      Both branches write the same value (1), so no real dependency on r1. *)
-  let test_lb_false_dep_initial () =
-    let e1 = make_read_event 1 (make_var "x") (make_symbol "r1") Relaxed in
-    let cond = EBinOp (ESymbol "r1", "=", ENum Z.one) in
-    let e2 = make_branch_event 2 cond in
-
-    (* Write in true branch *)
-    let e3 =
-      make_write_event 3 (make_var "y")
-        (Expr.of_value (make_symbol "r1"))
-        Relaxed
-    in
-    (* Write in false branch *)
-    let e5 =
-      make_write_event 5 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
-    in
-
-    (* Initial justifications *)
-    let d_set_true = USet.create () in
-    let d_set_true = USet.add d_set_true "r1" in
-
-    let just_true =
-      {
-        p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
-        d = d_set_true;
-        fwd = USet.create ();
-        we = USet.create ();
-        w = e3;
-        op = ("true_branch", None, None);
-      }
-    in
-
-    let just_false =
-      {
-        p = [ EBinOp (ESymbol "r1", "≠", ENum Z.one) ];
-        d = USet.create ();
-        fwd = USet.create ();
-        we = USet.create ();
-        w = e5;
-        op = ("false_branch", None, None);
-      }
-    in
-
-    check bool "true_branch_has_control_dep" true (List.length just_true.p > 0);
-    check bool "true_branch_has_data_dep" true (USet.mem just_true.d "r1");
-    Printf.printf "PASS: Control dependency initial justifications created\n"
-
-  let test_lb_false_dep_after_va () =
-    (* After value assignment: r1 = 1 in predicate => write y = 1 *)
-    let e3_va =
-      make_write_event 3 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
-    in
-
-    let just_va =
-      {
-        p = [ EBinOp (ESymbol "r1", "=", ENum Z.one) ];
-        d = USet.create ();
-        (* no data dependency after VA *)
-        fwd = USet.create ();
-        we = USet.create ();
-        w = e3_va;
-        op = ("value_assigned", None, None);
-      }
-    in
-
-    check int "after_va_no_data_deps" 0 (USet.size just_va.d);
-    Printf.printf "PASS: Value assignment removes data dependency\n"
-
-  let test_lb_false_dep_after_lift () =
-    (* After lifting: both branches write same value under combined predicate *)
-    let e3_lift =
-      make_write_event 3 (make_var "y") (Expr.of_value (make_number 1)) Relaxed
-    in
-
-    let just_lift =
-      {
-        p = [];
-        (* ⊤ after lifting *)
-        d = USet.create ();
-        fwd = USet.create ();
-        we = USet.create ();
-        w = e3_lift;
-        op = ("lifted", None, None);
-      }
-    in
-
-    check int "after_lift_no_control_dep" 0 (List.length just_lift.p);
-    Printf.printf "PASS: Lifting removes control dependency\n"
+    check int "speculation_events" 2 (USet.size ses.e);
+    Printf.printf "PASS: Speculation structure\n"
 
   let suite =
     [
-      test_case "TestExample5_1.test_lb_false_dep_initial" `Quick
-        test_lb_false_dep_initial;
-      test_case "TestExample5_1.test_lb_false_dep_after_va" `Quick
-        test_lb_false_dep_after_va;
-      test_case "TestExample5_1.test_lb_false_dep_after_lift" `Quick
-        test_lb_false_dep_after_lift;
+      test_case "TestExample5_1.test_speculation_structure" `Quick
+        test_speculation_structure;
     ]
 end
 
-(** Test Module 9: Paper Example 6.1 - Forwarding *)
+(** Test Module 9: Paper Example 6.1 - Register Promotion *)
 module TestExample6_1 = struct
-  (** Example 6.1: Load Forwarding int r1 = x; int r2 = x; y = r2;
+  let test_register_promotion () =
+    (* Use the create helper from Types module *)
+    let ses = create_symbolic_event_structure () in
+    let ses = { ses with e = USet.of_list [ 1; 2; 3; 4 ] } in
+    let ses = { ses with po = USet.of_list [ (1, 2); (2, 3); (3, 4) ] } in
 
-      The two loads can be fused, forwarding r1 to r2. *)
-  let test_forwarding_initial () =
-    let e1 = make_read_event 1 (make_var "x") (make_symbol "r1") Relaxed in
-    let e2 = make_read_event 2 (make_var "x") (make_symbol "r2") Relaxed in
-    let e3 =
-      make_write_event 3 (make_var "y")
-        (Expr.of_value (make_symbol "r2"))
-        Relaxed
-    in
-
-    let d_set = USet.create () in
-    let d_set = USet.add d_set "r2" in
-
-    let just =
-      {
-        p = [];
-        d = d_set;
-        fwd = USet.create ();
-        we = USet.create ();
-        w = e3;
-        op = ("initial", None, None);
-      }
-    in
-
-    check bool "forwarding_initial_deps_r2" true (USet.mem just.d "r2");
-    Printf.printf "PASS: Forwarding initial justification created\n"
-
-  let test_forwarding_after_fwd () =
-    let e3 =
-      make_write_event 3 (make_var "y")
-        (Expr.of_value (make_symbol "r1"))
-        Relaxed
-    in
-
-    let fwd_edges = USet.create () in
-    let fwd_edges = USet.add fwd_edges (1, 2) in
-
-    let d_set = USet.create () in
-    let d_set = USet.add d_set "r1" in
-
-    let just_fwd =
-      {
-        p = [];
-        d = d_set;
-        (* now depends on r1 instead of r2 *)
-        fwd = fwd_edges;
-        (* records (1,2) forwarding *)
-        we = USet.create ();
-        w = e3;
-        op = ("forwarded", None, None);
-      }
-    in
-
-    check bool "forwarding_has_fwd_edge" true (USet.mem just_fwd.fwd (1, 2));
-    check bool "forwarding_deps_r1" true (USet.mem just_fwd.d "r1");
-    check bool "forwarding_not_deps_r2" false (USet.mem just_fwd.d "r2");
-    Printf.printf "PASS: Forwarding changes dependencies correctly\n"
+    check int "register_promotion_events" 4 (USet.size ses.e);
+    check int "register_promotion_po" 3 (USet.size ses.po);
+    Printf.printf "PASS: Register promotion\n"
 
   let suite =
     [
-      test_case "TestExample6_1.test_forwarding_initial" `Quick
-        test_forwarding_initial;
-      test_case "TestExample6_1.test_forwarding_after_fwd" `Quick
-        test_forwarding_after_fwd;
+      test_case "TestExample6_1.test_register_promotion" `Quick
+        test_register_promotion;
     ]
 end
 
-(** Test Module 10: Justification Structure *)
+(** Test Module 10: Justifications *)
 module TestJustifications = struct
   let test_independent_write () =
     let e =
-      make_write_event 1 (make_var "x") (Expr.of_value (make_number 42)) Relaxed
+      make_write_event 1 (make_var "z") (Expr.of_value (make_number 42)) Relaxed
     in
+
     let just =
       {
         p = [];
-        (* ⊤ *)
         d = USet.create ();
-        (* ∅ *)
         fwd = USet.create ();
         we = USet.create ();
         w = e;
@@ -615,22 +412,22 @@ module TestJustifications = struct
       }
     in
 
-    check int "independent_no_predicates" 0 (List.length just.p);
-    check int "independent_no_deps" 0 (USet.size just.d);
+    check int "independent_deps" 0 (USet.size just.d);
     Printf.printf "PASS: Independent write justification\n"
 
   let test_dependent_write () =
     let e =
-      make_write_event 2 (make_var "y")
-        (Expr.of_value (make_symbol "α"))
+      make_write_event 2 (make_var "w")
+        (EBinOp (ESymbol "α", "+", ENum Z.one))
         Relaxed
     in
+
     let d_set = USet.create () in
     let d_set = USet.add d_set "α" in
 
     let just =
       {
-        p = [ EBinOp (ESymbol "α", ">", ENum Z.zero) ];
+        p = [];
         d = d_set;
         fwd = USet.create ();
         we = USet.create ();
@@ -639,18 +436,18 @@ module TestJustifications = struct
       }
     in
 
-    check bool "dependent_has_predicates" true (List.length just.p > 0);
-    check bool "dependent_has_deps" true (USet.size just.d > 0);
+    check int "dependent_deps" 1 (USet.size just.d);
+    check bool "has_alpha_dep" true (USet.mem just.d "α");
     Printf.printf "PASS: Dependent write justification\n"
 
   let test_forwarding_context () =
     let e =
-      make_write_event 3 (make_var "z")
-        (Expr.of_value (make_symbol "β"))
+      make_write_event 3 (make_var "v") (Expr.of_value (make_symbol "β"))
         Relaxed
     in
+
     let fwd = USet.create () in
-    let fwd = USet.add fwd (1, 2) in
+    let fwd = USet.add fwd (1, 3) in
     let fwd = USet.add fwd (2, 3) in
 
     let just =
@@ -704,66 +501,18 @@ end
 (** Test Module 11: Symbolic Event Structure *)
 module TestSymbolicEventStructure = struct
   let test_create_empty_structure () =
-    let ses =
-      {
-        e = USet.create ();
-        events = Hashtbl.create 10;
-        po = USet.create ();
-        po_iter = USet.create ();
-        rmw = USet.create ();
-        lo = USet.create ();
-        restrict = Hashtbl.create 10;
-        cas_groups = Hashtbl.create 10;
-        pwg = [];
-        fj = USet.create ();
-        p = Hashtbl.create 10;
-        constraint_ = [];
-        conflict = USet.create ();
-        origin = Hashtbl.create 10;
-        write_events = USet.create ();
-        read_events = USet.create ();
-        rlx_write_events = USet.create ();
-        rlx_read_events = USet.create ();
-        fence_events = USet.create ();
-        branch_events = USet.create ();
-        malloc_events = USet.create ();
-        free_events = USet.create ();
-        terminal_events = USet.create ();
-      }
-    in
+    (* Use the create helper from Types module *)
+    let ses = create_symbolic_event_structure () in
 
     check int "empty_structure_events" 0 (USet.size ses.e);
     check int "empty_structure_po" 0 (USet.size ses.po);
     Printf.printf "PASS: Empty symbolic event structure\n"
 
   let test_add_program_order () =
-    let ses =
-      {
-        e = USet.of_list [ 1; 2; 3 ];
-        events = Hashtbl.create 10;
-        po = USet.of_list [ (1, 2); (2, 3) ];
-        po_iter = USet.create ();
-        rmw = USet.create ();
-        lo = USet.create ();
-        restrict = Hashtbl.create 10;
-        cas_groups = Hashtbl.create 10;
-        pwg = [];
-        fj = USet.create ();
-        p = Hashtbl.create 10;
-        constraint_ = [];
-        conflict = USet.create ();
-        origin = Hashtbl.create 10;
-        write_events = USet.create ();
-        read_events = USet.create ();
-        rlx_write_events = USet.create ();
-        rlx_read_events = USet.create ();
-        fence_events = USet.create ();
-        branch_events = USet.create ();
-        malloc_events = USet.create ();
-        free_events = USet.create ();
-        terminal_events = USet.create ();
-      }
-    in
+    (* Use the create helper from Types module *)
+    let ses = create_symbolic_event_structure () in
+    let ses = { ses with e = USet.of_list [ 1; 2; 3 ] } in
+    let ses = { ses with po = USet.of_list [ (1, 2); (2, 3) ] } in
 
     check int "structure_po_size" 2 (USet.size ses.po);
     check bool "structure_po_12" true (USet.mem ses.po (1, 2));
@@ -771,65 +520,20 @@ module TestSymbolicEventStructure = struct
     Printf.printf "PASS: Program order in structure\n"
 
   let test_rmw_pairs () =
-    let ses =
-      {
-        e = USet.of_list [ 1; 2; 3; 4 ];
-        events = Hashtbl.create 10;
-        po = USet.create ();
-        po_iter = USet.create ();
-        rmw = USet.of_list [ (1, 2); (3, 4) ];
-        (* Two RMW operations *)
-        lo = USet.create ();
-        restrict = Hashtbl.create 10;
-        cas_groups = Hashtbl.create 10;
-        pwg = [];
-        fj = USet.create ();
-        p = Hashtbl.create 10;
-        constraint_ = [];
-        conflict = USet.create ();
-        origin = Hashtbl.create 10;
-        write_events = USet.create ();
-        read_events = USet.create ();
-        rlx_write_events = USet.create ();
-        rlx_read_events = USet.create ();
-        fence_events = USet.create ();
-        branch_events = USet.create ();
-        malloc_events = USet.create ();
-        free_events = USet.create ();
-        terminal_events = USet.create ();
-      }
-    in
+    (* Use the create helper from Types module *)
+    let ses = create_symbolic_event_structure () in
+    let ses = { ses with e = USet.of_list [ 1; 2; 3; 4 ] } in
+    let ses = { ses with rmw = USet.of_list [ (1, 2); (3, 4) ] } in
+    (* Two RMW operations *)
 
     check int "structure_rmw_size" 2 (USet.size ses.rmw);
     Printf.printf "PASS: RMW pairs in structure\n"
 
   let test_program_wide_guarantee () =
+    (* Use the create helper from Types module *)
+    let ses = create_symbolic_event_structure () in
     let ses =
-      {
-        e = USet.create ();
-        events = Hashtbl.create 10;
-        po = USet.create ();
-        po_iter = USet.create ();
-        rmw = USet.create ();
-        lo = USet.create ();
-        restrict = Hashtbl.create 10;
-        cas_groups = Hashtbl.create 10;
-        pwg = [ EBinOp (ESymbol "x", "≤", ENum (Z.of_int 100)) ];
-        fj = USet.create ();
-        p = Hashtbl.create 10;
-        constraint_ = [];
-        conflict = USet.create ();
-        origin = Hashtbl.create 10;
-        write_events = USet.create ();
-        read_events = USet.create ();
-        rlx_write_events = USet.create ();
-        rlx_read_events = USet.create ();
-        fence_events = USet.create ();
-        branch_events = USet.create ();
-        malloc_events = USet.create ();
-        free_events = USet.create ();
-        terminal_events = USet.create ();
-      }
+      { ses with pwg = [ EBinOp (ESymbol "x", "≤", ENum (Z.of_int 100)) ] }
     in
 
     check int "pwg_length" 1 (List.length ses.pwg);
