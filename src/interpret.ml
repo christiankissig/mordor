@@ -779,6 +779,8 @@ let step_interpret lwt_ctx =
             else "generic"
           )
     );
+    greek_counter := 0;
+    zh_counter := 0;
     if ctx.options.use_finite_step_counter_semantics then
       StepCounterSemantics.step_interpret lwt_ctx
     else generic_step_interpret ~stmt_semantics:interpret_statements lwt_ctx

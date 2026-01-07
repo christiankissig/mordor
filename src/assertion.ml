@@ -142,33 +142,6 @@ module UBValidation = struct
   module UAF = struct
     let check structure execution ub_reasons pointer_map rhb
         all_alloc_read_writes =
-      Logs.debug (fun m -> m "Running UAF check");
-      Logs.debug (fun m ->
-          m "All alloc/read/write events: %s"
-            (String.concat ", "
-               (USet.to_list all_alloc_read_writes |> List.map string_of_int)
-            )
-      );
-      Logs.debug (fun m ->
-          m "Free events: %s"
-            (String.concat ", "
-               (USet.to_list
-                  (USet.intersection structure.free_events execution.ex_e)
-               |> List.map string_of_int
-               )
-            )
-      );
-      Logs.debug (fun m ->
-          m "Happens-before edges: %s"
-            (String.concat ", "
-               (USet.to_list rhb
-               |> List.map (fun (a, b) ->
-                   "(" ^ string_of_int a ^ ", " ^ string_of_int b ^ ")"
-               )
-               )
-            )
-      );
-
       let all_frees = USet.intersection structure.free_events execution.ex_e in
       let uaf =
         USet.fold
@@ -194,17 +167,7 @@ module UBValidation = struct
           )
           all_frees (USet.create ())
       in
-        Logs.debug (fun m ->
-            m "UAF pairs found: %s"
-              (String.concat ", "
-                 (USet.to_list uaf
-                 |> List.map (fun (a, b) ->
-                     "(" ^ string_of_int a ^ ", " ^ string_of_int b ^ ")"
-                 )
-                 )
-              )
-        );
-        if USet.size uaf > 0 then ub_reasons := UAF uaf :: !ub_reasons
+            if USet.size uaf > 0 then ub_reasons := UAF uaf :: !ub_reasons
   end
 
   (** Unbounded pointer dereference validation *)
