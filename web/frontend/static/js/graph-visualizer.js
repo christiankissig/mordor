@@ -419,6 +419,87 @@ class GraphVisualizer {
         });
     }
 
+    updateExecutionInfo(data) {
+        // Handle case where data might be undefined (event structure)
+        if (!data) {
+            document.getElementById('predicates').textContent = '⊤';
+            document.getElementById('has-uaf').textContent = 'N/A';
+            document.getElementById('has-uaf').style.color = '#d4d4d4';
+            document.getElementById('has-unbounded-deref').textContent = 'N/A';
+            document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
+            return;
+        }
+
+        console.log('updateExecutionInfo called with data:', data);
+
+        // Always update predicates
+        const preds = data.preds || "⊤";
+        document.getElementById('predicates').textContent = preds;
+
+        // undefined_behaviour is an array, so we need to access the first element
+        if (data.undefined_behaviour !== undefined && data.undefined_behaviour.length > 0) {
+          const ub_reasons = data.undefined_behaviour[0]; // Get first element of array
+          console.log('undefined_behaviour:', ub_reasons);
+
+          // Handle UAF with detailed pair information
+          const uafSpan = document.getElementById('has-uaf');
+          if (ub_reasons.uaf && ub_reasons.uaf.length > 0) {
+              console.log('UAF pairs found:', ub_reasons.uaf);
+
+              // Get the graph - it should be in data.graph
+              const graph = data.graph || this.graphs[this.currentIndex];
+              console.log('Graph for UAF lookup:', graph);
+
+              // Format UAF pairs as "4:D 三 -> 8:R 三 δ"
+             const uafPairs = ub_reasons.uaf.map(pair => {
+                  const sourceNode = graph.nodes.find(n => n.id === pair[0]);
+                  const targetNode = graph.nodes.find(n => n.id === pair[1]);
+
+                  console.log(`Looking for nodes ${pair[0]} and ${pair[1]}:`, sourceNode, targetNode);
+
+                  let sourceLabel = pair[0];
+                  let targetLabel = pair[1];
+
+                  if (sourceNode) {
+                      sourceLabel = `${sourceNode.label}:${sourceNode.type}${sourceNode.location ? ' ' + sourceNode.location : ''}`;
+                  }
+                  if (targetNode) {
+                      targetLabel = `${targetNode.label}:${targetNode.type}${targetNode.location ? ' ' + targetNode.location : ''}${targetNode.value ? ' ' + targetNode.value : ''}`;
+                  }
+
+                  return `${sourceLabel} → ${targetLabel}`;
+              }).join(', ');
+
+              console.log('UAF pairs formatted:', uafPairs);
+              uafSpan.textContent = uafPairs;
+              uafSpan.style.color = '#ff6b6b';
+          } else {
+              // No UAF in this execution
+              uafSpan.textContent = 'No';
+              uafSpan.style.color = '#89d185';
+          }
+
+          // Handle unbounded deref
+          const unboundedSpan = document.getElementById('has-unbounded-deref');
+          if (ub_reasons.unbounded_deref) {
+              unboundedSpan.textContent = 'Yes';
+              unboundedSpan.style.color = '#ff6b6b';
+          } else {
+              unboundedSpan.textContent = 'No';
+              unboundedSpan.style.color = '#89d185';
+          }
+        } else {
+            // No undefined behaviour data - reset to "No" for executions
+            const uafSpan = document.getElementById('has-uaf');
+            uafSpan.textContent = 'No';
+            uafSpan.style.color = '#89d185';
+
+            const unboundedSpan = document.getElementById('has-unbounded-deref');
+            unboundedSpan.textContent = 'No';
+            unboundedSpan.style.color = '#89d185';
+        }
+    }
+
     navigateTo(index) {
         if (index < 0 || index >= this.graphs.length) return;
 
@@ -426,7 +507,11 @@ class GraphVisualizer {
         const currentData = this.data[index];
         
         // Render the graph
-        this.renderGraph(currentData.graph, currentData.undefined_behaviour);
+        const undefined_behaviour =
+         currentData && currentData.undefined_behaviour && currentData.undefined_behaviour.length > 0 ?
+          currentData.undefined_behaviour[0] :
+          null;
+        this.renderGraph(currentData.graph, undefined_behaviour);
         
         // Update execution info
         this.updateExecutionInfo(currentData);
@@ -452,39 +537,10 @@ class GraphVisualizer {
         document.getElementById('carousel-container').classList.add('active');
     }
     
-    updateExecutionInfo(data) {
-        // Update predicates
-        const predicatesSpan = document.getElementById('predicates');
-        if (data.predicates && data.predicates.length > 0) {
-            predicatesSpan.textContent = data.predicates.join(' ∧ ');
-        } else {
-            predicatesSpan.textContent = '⊤';
-        }
-        
-        // Update UAF status
-        const uafSpan = document.getElementById('has-uaf');
-        if (data.undefined_behaviour && data.undefined_behaviour.uaf) {
-            const hasUAF = data.undefined_behaviour.uaf.length > 0;
-            uafSpan.textContent = hasUAF ? 'Yes' : 'No';
-            uafSpan.style.color = hasUAF ? '#f48771' : '#89d185';
-        } else {
-            uafSpan.textContent = 'N/A';
-            uafSpan.style.color = '#6a6a6a';
-        }
-        
-        // Update unbounded deref status
-        const unboundedDerefSpan = document.getElementById('has-unbounded-deref');
-        if (data.undefined_behaviour && data.undefined_behaviour.unbounded_deref !== undefined) {
-            const hasUnboundedDeref = data.undefined_behaviour.unbounded_deref;
-            unboundedDerefSpan.textContent = hasUnboundedDeref ? 'Yes' : 'No';
-            unboundedDerefSpan.style.color = hasUnboundedDeref ? '#f48771' : '#89d185';
-        } else {
-            unboundedDerefSpan.textContent = 'N/A';
-            unboundedDerefSpan.style.color = '#6a6a6a';
-        }
-    }
-
     async visualize(program) {
+        const steps = parseInt(document.getElementById('step-counter').value) || 5;
+        this.log('Starting visualization with ' + steps + ' steps...');
+
         // Store program for regeneration
         this.lastProgram = program;
         
@@ -503,10 +559,23 @@ class GraphVisualizer {
         document.getElementById('graph-stats').style.display = 'none';
         document.getElementById('execution-info').style.display = 'none';
 
+        // Clear execution info fields
+        document.getElementById('predicates').textContent = '⊤';
+        document.getElementById('has-uaf').textContent = 'N/A';
+        document.getElementById('has-uaf').style.color = '#d4d4d4';
+        document.getElementById('has-unbounded-deref').textContent = 'N/A';
+        document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
+
+        // Clear graph stats
+        document.getElementById('node-count').textContent = '0';
+        document.getElementById('edge-count').textContent = '0';
+        document.getElementById('execution-count').textContent = '0';
+
+        document.getElementById('visualize-btn').disabled = true;
+
         this.log('Sending request to backend...');
 
         // Prepare request with settings
-        const steps = parseInt(document.getElementById('step-counter').value);
         const payload = {
             program: program,
             steps: steps,
@@ -572,6 +641,7 @@ class GraphVisualizer {
     renderGraph(graph, undefinedBehaviour = null) {
         try {
             this.log('Rendering graph with ' + graph.nodes.length + ' nodes...');
+          this.log('undefined behaviour data: ' + JSON.stringify(undefinedBehaviour));
 
             if (!graph.nodes || graph.nodes.length === 0) {
                 this.log('No nodes in graph data', 'error');
@@ -628,6 +698,7 @@ class GraphVisualizer {
                 });
             });
 
+          console.log('Graph nodes and edges added. Now processing UAF edges if any.');
             // Add UAF edges if undefined_behaviour data is provided
             let uafEdgeCount = 0;
             if (undefinedBehaviour && undefinedBehaviour.uaf && undefinedBehaviour.uaf.length > 0) {
