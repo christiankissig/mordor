@@ -4,11 +4,6 @@ open Context
 open Ir
 open Lwt.Syntax
 
-type ir_stmt = unit Ir.ir_stmt
-type ir_node = unit Ir.ir_node
-type ir_assertion = unit Ir.ir_assertion
-type ir_litmus = unit Ir.ir_litmus
-
 (** Parse a litmus test from a string *)
 
 let parse prsr src =
@@ -47,10 +42,10 @@ let convert_expr_list exprs = List.map ast_expr_to_expr exprs
 
 (** Convert parsed AST statements to IR format *)
 
-let make_ir_node stmt = { stmt; annotations = () }
+let make_ir_node ~source_span stmt = { stmt; annotations = source_span }
 
 (* TODO rec to handle label case; use ctx annotation instead *)
-let rec convert_stmt_open ~recurse = function
+let rec convert_stmt_open ~recurse ~source_span = function
   | Ast.SThreads { threads } ->
       let ir_threads = List.map (List.map recurse) threads in
         Threads { threads = ir_threads }
@@ -94,8 +89,8 @@ let rec convert_stmt_open ~recurse = function
   | Ast.SUnlock { global } -> Unlock { global }
   | Ast.SFree { register } -> Free { register }
   | Ast.SLabeled { label; stmt } ->
-      let ir_stmt = convert_stmt_open ~recurse stmt in
-        Labeled { label; stmt = make_ir_node ir_stmt }
+      let ir_stmt = convert_stmt_open ~recurse ~source_span stmt in
+        Labeled { label; stmt = make_ir_node ~source_span ir_stmt }
   | Ast.SCAS { register; address; expected; desired; load_mode; assign_mode } ->
       let ir_address = ast_expr_to_expr address in
       let ir_expected = ast_expr_to_expr expected in
@@ -131,7 +126,9 @@ let rec convert_stmt_open ~recurse = function
   | Ast.SSkip -> Skip
 
 let rec convert_stmt ast_node =
-  convert_stmt_open ~recurse:convert_stmt ast_node.stmt |> make_ir_node
+  let source_span = ast_node.source_span in
+    convert_stmt_open ~recurse:convert_stmt ~source_span ast_node.stmt
+    |> make_ir_node ~source_span
 
 (** Convert parsed AST litmus test to IR format *)
 

@@ -104,6 +104,7 @@ and ast_node = {
   thread_ctx : thread_ctx option;
   src_ctx : src_ctx option;
   loop_ctx : loop_ctx option;
+  source_span : source_span option; (* NEW: source location information *)
 }
 
 (* Threads are lists of nodes wrapping statements *)
@@ -112,9 +113,9 @@ type ast_thread = ast_node list
 (** Accessor functions for AST nodes *)
 let get_ast_stmt (node : ast_node) : ast_stmt = node.stmt
 
-let make_ast_node ?(thread_ctx = None) ?(src_ctx = None) ?(loop_ctx = None) stmt
-    =
-  { stmt; thread_ctx; src_ctx; loop_ctx }
+let make_ast_node ?(thread_ctx = None) ?(src_ctx = None) ?(loop_ctx = None)
+    ?(source_span = None) stmt =
+  { stmt; thread_ctx; src_ctx; loop_ctx; source_span }
 
 (* AST for litmust test config *)
 type ast_config = {

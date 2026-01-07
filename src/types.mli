@@ -208,3 +208,16 @@ type future = (int * int) uset
 type future_set = (int * int) uset uset
 
 type history = int uset
+
+(** {1 Source Code Spans} *)
+
+(** Source code span representation *)
+type source_span = {
+  start_line : int;
+  start_col : int;
+  end_line : int;
+  end_col : int;
+}
+[@@deriving show]
+
+type event_source_code_span = (int, source_span) Hashtbl.t

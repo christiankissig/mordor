@@ -332,3 +332,14 @@ let func_get f key =
   match func_find f key with
   | Some v -> v
   | None -> f.default ()
+
+(** Source code connection *)
+type source_span = {
+  start_line : int;
+  start_col : int;
+  end_line : int;
+  end_col : int;
+}
+[@@deriving show]
+
+type event_source_code_span = (int, source_span) Hashtbl.t

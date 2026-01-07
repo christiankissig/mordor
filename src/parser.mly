@@ -2,10 +2,20 @@
 (** Parser for MoRDor litmus tests *)
 
 open Ast
+open Types
 
 let make_labeled labels stmt =
   if labels = [] then stmt
   else SLabeled { label = List.rev labels; stmt }
+
+(** Helper to create source_span from parser positions *)
+let make_source_span startpos endpos =
+  {
+    start_line = startpos.Lexing.pos_lnum;
+    start_col = startpos.Lexing.pos_cnum - startpos.Lexing.pos_bol;
+    end_line = endpos.Lexing.pos_lnum;
+    end_col = endpos.Lexing.pos_cnum - endpos.Lexing.pos_bol;
+  }
 
 (** Context stacks *)
 let thread_ctx_stack = ref [{tid = 0; path = []}]
@@ -201,18 +211,22 @@ statement:
   (* Statement with optional labels *)
 | labels=label_list s=stmt_base {
       inc_pc ();
+      let span = make_source_span $startpos $endpos in
       make_ast_node
         ~thread_ctx:(Some (current_thread_ctx()))
         ~src_ctx:(Some (current_src_ctx()))
         ~loop_ctx:(Some (current_loop_ctx()))
+        ~source_span:(Some span)
         (make_labeled labels s)
     }
   (* Parallel threads *)
   | threads=threads {
+      let span = make_source_span $startpos $endpos in
       make_ast_node
         ~thread_ctx:(Some (current_thread_ctx()))
         ~src_ctx:(Some (current_src_ctx()))
         ~loop_ctx:(Some (current_loop_ctx()))
+        ~source_span:(Some span)
         (SThreads { threads })
     }
   ;

@@ -3,11 +3,6 @@
 open Ast
 open Context
 
-type ir_stmt = unit Ir.ir_stmt
-type ir_assertion = unit Ir.ir_assertion
-type ir_node = unit Ir.ir_node
-type ir_litmus = unit Ir.ir_litmus
-
 (** Parse a complete litmus test from a string *)
 val parse_litmus : string -> ast_litmus
 

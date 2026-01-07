@@ -30,6 +30,7 @@ class GraphVisualizer {
         this.currentIndex = 0;
         this.executionCount = 0;
         this.lastProgram = null; // Store last program for regeneration
+        this.highlightMarker = null; // Store current highlight element
         
         // Settings
         this.settings = {
@@ -97,12 +98,178 @@ class GraphVisualizer {
     }
 
     setupGraphInteractions() {
-        // Log node label on hover
+        // Highlight source code on node hover
         this.cy.on('mouseover', 'node', (event) => {
             const node = event.target;
-            const label = node.data('label');
-            this.log('Node: ' + label, 'info');
+            const nodeData = node.data();
+            
+            // Log node label
+            this.log('Node: ' + nodeData.label, 'info');
+            
+            // Highlight corresponding source code if span information exists
+            if (nodeData.source_start_line !== undefined && 
+                nodeData.source_start_col !== undefined &&
+                nodeData.source_end_line !== undefined &&
+                nodeData.source_end_col !== undefined) {
+                this.highlightSourceSpan(
+                    nodeData.source_start_line,
+                    nodeData.source_start_col,
+                    nodeData.source_end_line,
+                    nodeData.source_end_col
+                );
+            }
         });
+        
+        // Remove highlight when mouse leaves node
+        this.cy.on('mouseout', 'node', () => {
+            this.clearSourceHighlight();
+        });
+    }
+    
+    highlightSourceSpan(startLine, startCol, endLine, endCol) {
+        // Clear any existing highlight
+        this.clearSourceHighlight();
+        
+        const textarea = document.getElementById('litmus-input');
+        const highlightPre = document.getElementById('litmus-highlight');
+        
+        if (!textarea || !highlightPre) return;
+        
+        const lines = textarea.value.split('\n');
+        
+        // Validate line numbers
+        if (startLine < 1 || startLine > lines.length || endLine < 1 || endLine > lines.length) {
+            console.warn('Invalid line numbers:', startLine, endLine);
+            return;
+        }
+        
+        // Create a container for highlight overlays
+        if (!this.highlightContainer) {
+            this.highlightContainer = document.createElement('div');
+            this.highlightContainer.id = 'source-highlight-overlay';
+            this.highlightContainer.style.cssText = `
+                position: absolute;
+                top: 1em;
+                left: 5.5em;
+                right: 0;
+                bottom: 0;
+                pointer-events: none;
+                z-index: 2;
+                margin: 0 !important;
+                padding: 1rem 1rem 1rem 5.5em !important;
+                font-family: 'Consolas', 'Courier New', monospace !important;
+                font-size: 0.95rem !important;
+                line-height: 1.5 !important;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                overflow: hidden;
+                background: transparent !important;
+            `;
+            document.querySelector('.editor-wrapper').appendChild(this.highlightContainer);
+        }
+        
+        // Calculate line height
+        const lineHeight = parseFloat(window.getComputedStyle(textarea).lineHeight) || 21.6; // 0.95rem * 1.5 * 16px
+        
+        // Handle single-line vs multi-line highlights
+        if (startLine === endLine) {
+            // Single line highlight
+            const marker = document.createElement('div');
+            marker.className = 'highlight-marker';
+            
+            const lineText = lines[startLine - 1];
+            const beforeText = lineText.substring(0, startCol);
+            const highlightText = lineText.substring(startCol, endCol);
+            
+            // Calculate character width (approximate for monospace)
+            const charWidth = 9.5 * 0.95; // Rough estimate for Consolas at 0.95rem
+            
+            const topPos = (startLine - 1) * lineHeight;
+            const leftPos = beforeText.length * charWidth;
+            const width = highlightText.length * charWidth;
+            
+            marker.style.cssText = `
+                position: absolute;
+                top: ${topPos}px;
+                left: ${leftPos}px;
+                width: ${width}px;
+                height: ${lineHeight}px;
+                background-color: rgba(255, 215, 0, 0.25);
+                border: 1px solid rgba(255, 215, 0, 0.5);
+                box-sizing: border-box;
+            `;
+            
+            this.highlightContainer.appendChild(marker);
+            this.highlightMarkers = [marker];
+        } else {
+            // Multi-line highlight
+            this.highlightMarkers = [];
+            
+            for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
+                const marker = document.createElement('div');
+                marker.className = 'highlight-marker';
+                
+                const lineText = lines[lineNum - 1];
+                let startColForLine, endColForLine;
+                
+                if (lineNum === startLine) {
+                    startColForLine = startCol;
+                    endColForLine = lineText.length;
+                } else if (lineNum === endLine) {
+                    startColForLine = 0;
+                    endColForLine = endCol;
+                } else {
+                    startColForLine = 0;
+                    endColForLine = lineText.length;
+                }
+                
+                const beforeText = lineText.substring(0, startColForLine);
+                const highlightText = lineText.substring(startColForLine, endColForLine);
+                
+                const charWidth = 9.5 * 0.95;
+                const topPos = (lineNum - 1) * lineHeight;
+                const leftPos = beforeText.length * charWidth;
+                const width = highlightText.length * charWidth;
+                
+                marker.style.cssText = `
+                    position: absolute;
+                    top: ${topPos}px;
+                    left: ${leftPos}px;
+                    width: ${width}px;
+                    height: ${lineHeight}px;
+                    background-color: rgba(255, 215, 0, 0.25);
+                    border: 1px solid rgba(255, 215, 0, 0.5);
+                    box-sizing: border-box;
+                `;
+                
+                this.highlightContainer.appendChild(marker);
+                this.highlightMarkers.push(marker);
+            }
+        }
+        
+        // Scroll the highlighted area into view
+        const topPos = (startLine - 1) * lineHeight;
+        const containerHeight = textarea.clientHeight;
+        const scrollTop = Math.max(0, topPos - containerHeight / 3);
+        
+        textarea.scrollTop = scrollTop;
+        highlightPre.scrollTop = scrollTop;
+        
+        this.log(`Highlighting lines ${startLine}:${startCol} to ${endLine}:${endCol}`, 'info');
+    }
+    
+    clearSourceHighlight() {
+        if (this.highlightMarkers) {
+            this.highlightMarkers.forEach(marker => {
+                if (marker.parentElement) {
+                    marker.parentElement.removeChild(marker);
+                }
+            });
+            this.highlightMarkers = null;
+        }
+        if (this.highlightContainer) {
+            this.highlightContainer.innerHTML = '';
+        }
     }
     
     openSettingsModal() {
@@ -224,28 +391,25 @@ class GraphVisualizer {
     setupResizer() {
         const resizer = document.getElementById('resizer');
         const leftPanel = document.getElementById('left-panel');
-        
         let isResizing = false;
-        
+
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
         });
-        
+
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            
-            const containerRect = leftPanel.parentElement.getBoundingClientRect();
-            const offsetLeft = e.clientX - containerRect.left;
-            const containerWidth = containerRect.width;
-            
-            let percentage = (offsetLeft / containerWidth) * 100;
-            percentage = Math.max(20, Math.min(80, percentage));
-            
-            leftPanel.style.flex = `0 0 ${percentage}%`;
+
+            const containerWidth = document.querySelector('.main-content').offsetWidth;
+            const newWidth = (e.clientX / containerWidth) * 100;
+
+            if (newWidth > 20 && newWidth < 80) {
+                leftPanel.style.flex = `0 0 ${newWidth}%`;
+            }
         });
-        
+
         document.addEventListener('mouseup', () => {
             if (isResizing) {
                 isResizing = false;
@@ -255,110 +419,19 @@ class GraphVisualizer {
         });
     }
 
-    updateExecutionInfo(data) {
-        // Handle case where data might be undefined (event structure)
-        if (!data) {
-            document.getElementById('predicates').textContent = '⊤';
-            document.getElementById('has-uaf').textContent = 'N/A';
-            document.getElementById('has-uaf').style.color = '#d4d4d4';
-            document.getElementById('has-unbounded-deref').textContent = 'N/A';
-            document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
-            return;
-        }
-        
-        console.log('updateExecutionInfo called with data:', data);
-        
-        // Always update predicates
-        const preds = data.preds || "⊤";
-        document.getElementById('predicates').textContent = preds;
-     
-        // undefined_behaviour is an array, so we need to access the first element
-        if (data.undefined_behaviour !== undefined && data.undefined_behaviour.length > 0) {
-          const ub_reasons = data.undefined_behaviour[0]; // Get first element of array
-          console.log('undefined_behaviour:', ub_reasons);
-
-          // Handle UAF with detailed pair information
-          const uafSpan = document.getElementById('has-uaf');
-          if (ub_reasons.uaf && ub_reasons.uaf.length > 0) {
-              console.log('UAF pairs found:', ub_reasons.uaf);
-              
-              // Get the graph - it should be in data.graph
-              const graph = data.graph || this.graphs[this.currentIndex];
-              console.log('Graph for UAF lookup:', graph);
-              
-              // Format UAF pairs as "4:D 三 -> 8:R 三 δ"
-              const uafPairs = ub_reasons.uaf.map(pair => {
-                  const sourceNode = graph.nodes.find(n => n.id === pair[0]);
-                  const targetNode = graph.nodes.find(n => n.id === pair[1]);
-                  
-                  console.log(`Looking for nodes ${pair[0]} and ${pair[1]}:`, sourceNode, targetNode);
-                  
-                  let sourceLabel = pair[0];
-                  let targetLabel = pair[1];
-                  
-                  if (sourceNode) {
-                      sourceLabel = `${sourceNode.label}:${sourceNode.type}${sourceNode.location ? ' ' + sourceNode.location : ''}`;
-                  }
-                  if (targetNode) {
-                      targetLabel = `${targetNode.label}:${targetNode.type}${targetNode.location ? ' ' + targetNode.location : ''}${targetNode.value ? ' ' + targetNode.value : ''}`;
-                  }
-                  
-                  return `${sourceLabel} → ${targetLabel}`;
-              }).join(', ');
-              
-              console.log('UAF pairs formatted:', uafPairs);
-              uafSpan.textContent = uafPairs;
-              uafSpan.style.color = '#ff6b6b';
-          } else {
-              // No UAF in this execution
-              uafSpan.textContent = 'No';
-              uafSpan.style.color = '#89d185';
-          }
-
-          // Handle unbounded deref
-          const unboundedSpan = document.getElementById('has-unbounded-deref');
-          if (ub_reasons.unbounded_deref) {
-              unboundedSpan.textContent = 'Yes';
-              unboundedSpan.style.color = '#ff6b6b';
-          } else {
-              unboundedSpan.textContent = 'No';
-              unboundedSpan.style.color = '#89d185';
-          }
-        } else {
-            // No undefined behaviour data - reset to "No" for executions
-            const uafSpan = document.getElementById('has-uaf');
-            uafSpan.textContent = 'No';
-            uafSpan.style.color = '#89d185';
-            
-            const unboundedSpan = document.getElementById('has-unbounded-deref');
-            unboundedSpan.textContent = 'No';
-            unboundedSpan.style.color = '#89d185';
-        }
-    }
-
     navigateTo(index) {
         if (index < 0 || index >= this.graphs.length) return;
-        
+
         this.currentIndex = index;
+        const currentData = this.data[index];
         
-        // For event structure (index 0), don't pass undefined_behaviour
-        if (index === 0) {
-            this.renderGraph(this.graphs[index], null);
-            // Reset execution info for event structure
-            document.getElementById('predicates').textContent = '⊤';
-            document.getElementById('has-uaf').textContent = 'N/A';
-            document.getElementById('has-uaf').style.color = '#d4d4d4';
-            document.getElementById('has-unbounded-deref').textContent = 'N/A';
-            document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
-        } else {
-            // For executions, pass undefined_behaviour data if available (it's an array, so get first element)
-            const undefinedBehaviour = (this.data[index]?.undefined_behaviour && this.data[index].undefined_behaviour.length > 0) 
-                ? this.data[index].undefined_behaviour[0] 
-                : null;
-            this.renderGraph(this.graphs[index], undefinedBehaviour);
-            this.updateExecutionInfo(this.data[index]);
-        }
+        // Render the graph
+        this.renderGraph(currentData.graph, currentData.undefined_behaviour);
         
+        // Update execution info
+        this.updateExecutionInfo(currentData);
+        
+        // Update carousel UI
         this.updateCarouselUI();
     }
 
@@ -373,14 +446,45 @@ class GraphVisualizer {
         if (this.currentIndex === 0) {
             indicator.textContent = 'Event Structure';
         } else {
-            indicator.textContent = `Execution ${this.currentIndex}/${this.executionCount}`;
+            indicator.textContent = `Execution ${this.currentIndex} of ${this.executionCount}`;
+        }
+        
+        document.getElementById('carousel-container').classList.add('active');
+    }
+    
+    updateExecutionInfo(data) {
+        // Update predicates
+        const predicatesSpan = document.getElementById('predicates');
+        if (data.predicates && data.predicates.length > 0) {
+            predicatesSpan.textContent = data.predicates.join(' ∧ ');
+        } else {
+            predicatesSpan.textContent = '⊤';
+        }
+        
+        // Update UAF status
+        const uafSpan = document.getElementById('has-uaf');
+        if (data.undefined_behaviour && data.undefined_behaviour.uaf) {
+            const hasUAF = data.undefined_behaviour.uaf.length > 0;
+            uafSpan.textContent = hasUAF ? 'Yes' : 'No';
+            uafSpan.style.color = hasUAF ? '#f48771' : '#89d185';
+        } else {
+            uafSpan.textContent = 'N/A';
+            uafSpan.style.color = '#6a6a6a';
+        }
+        
+        // Update unbounded deref status
+        const unboundedDerefSpan = document.getElementById('has-unbounded-deref');
+        if (data.undefined_behaviour && data.undefined_behaviour.unbounded_deref !== undefined) {
+            const hasUnboundedDeref = data.undefined_behaviour.unbounded_deref;
+            unboundedDerefSpan.textContent = hasUnboundedDeref ? 'Yes' : 'No';
+            unboundedDerefSpan.style.color = hasUnboundedDeref ? '#f48771' : '#89d185';
+        } else {
+            unboundedDerefSpan.textContent = 'N/A';
+            unboundedDerefSpan.style.color = '#6a6a6a';
         }
     }
 
-    visualize(program) {
-        const steps = parseInt(document.getElementById('step-counter').value) || 5;
-        this.log('Starting visualization with ' + steps + ' steps...');
-        
+    async visualize(program) {
         // Store program for regeneration
         this.lastProgram = program;
         
@@ -389,38 +493,40 @@ class GraphVisualizer {
         this.data = [];
         this.currentIndex = 0;
         this.executionCount = 0;
-        
-        // Clear execution info fields
-        document.getElementById('predicates').textContent = '⊤';
-        document.getElementById('has-uaf').textContent = 'N/A';
-        document.getElementById('has-uaf').style.color = '#d4d4d4';
-        document.getElementById('has-unbounded-deref').textContent = 'N/A';
-        document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
-        
-        // Clear graph stats
-        document.getElementById('node-count').textContent = '0';
-        document.getElementById('edge-count').textContent = '0';
-        document.getElementById('execution-count').textContent = '0';
-        
-        document.getElementById('visualize-btn').disabled = true;
-        document.getElementById('status').textContent = 'Processing...';
 
-        const params = new URLSearchParams({
+        // Update UI
+        document.getElementById('status').textContent = 'Processing...';
+        document.getElementById('visualize-btn').disabled = true;
+        document.getElementById('empty-state').style.display = 'none';
+        document.getElementById('carousel-container').style.display = 'none';
+        document.getElementById('graph-controls').style.display = 'none';
+        document.getElementById('graph-stats').style.display = 'none';
+        document.getElementById('execution-info').style.display = 'none';
+
+        this.log('Sending request to backend...');
+
+        // Prepare request with settings
+        const steps = parseInt(document.getElementById('step-counter').value);
+        const payload = {
+            program: program,
+            steps: steps,
+            allow_uaf: this.settings.showUAF,
+            allow_unbounded_deref: this.settings.showUnboundedDeref
+        };
+
+        // Use Server-Sent Events
+        const es = new EventSource('/api/visualize/stream?' + new URLSearchParams({
             program: program,
             steps: steps.toString(),
-            show_uaf: this.settings.showUAF.toString(),
-            show_unbounded_deref: this.settings.showUnboundedDeref.toString()
-        });
+            allow_uaf: this.settings.showUAF.toString(),
+            allow_unbounded_deref: this.settings.showUnboundedDeref.toString()
+        }));
 
-        const es = new EventSource('/api/visualize/stream?' + params);
-        
         es.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
                 
-                if (data.status === 'parsing') {
-                    this.log('Parsing litmus test...');
-                } else if (data.status === 'interpreting') {
+                if (data.status === 'interpreting') {
                     this.log('Interpreting program...');
                 } else if (data.status === 'visualizing') {
                     this.log('Generating visualizations...');
@@ -474,7 +580,7 @@ class GraphVisualizer {
 
             this.cy.elements().remove();
 
-            // Add nodes
+            // Add nodes with source span information
             graph.nodes.forEach(n => {
                 let label = '';
 
@@ -492,11 +598,16 @@ class GraphVisualizer {
                     label = String(n.id);
                 }
 
+                // Store source span information in node data
                 this.cy.add({
                     data: {
                         id: String(n.id),
                         label: label,
-                        isRoot: n.isRoot
+                        isRoot: n.isRoot,
+                        source_start_line: n.source_start_line,
+                        source_start_col: n.source_start_col,
+                        source_end_line: n.source_end_line,
+                        source_end_col: n.source_end_col
                     }
                 });
             });

@@ -335,6 +335,22 @@
         .settings-icon:hover {
             color: #ffffff;
         }
+        
+        /* Source code highlight overlay */
+        #source-highlight-overlay {
+            pointer-events: none;
+        }
+        
+        .highlight-marker {
+            transition: opacity 0.15s ease-in-out;
+            animation: highlightPulse 0.3s ease-in-out;
+        }
+        
+        @keyframes highlightPulse {
+            0% { opacity: 0; transform: scale(0.98); }
+            50% { opacity: 1; transform: scale(1.02); }
+            100% { opacity: 1; transform: scale(1); }
+        }
     </style>
 </head>
 <body>

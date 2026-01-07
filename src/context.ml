@@ -1,9 +1,10 @@
-open Ir
 open Types
 open Uset
 
-type ir_stmt = unit Ir.ir_stmt
-type ir_node = unit Ir.ir_node
+type ir_stmt = source_span option Ir.ir_stmt
+type ir_node = source_span option Ir.ir_node
+type ir_assertion = source_span option Ir.ir_assertion
+type ir_litmus = source_span option Ir.ir_litmus
 
 (** configuration options *)
 
@@ -72,11 +73,12 @@ type mordor_ctx = {
   (* parser *)
   mutable litmus_constraints : expr list option;
   mutable program_stmts : ir_node list option;
-  mutable assertions : unit ir_assertion option;
+  mutable assertions : ir_assertion option;
   (* event structures *)
   step_counter : int;
   mutable events : (int, event) Hashtbl.t option;
   mutable structure : symbolic_event_structure option;
+  mutable event_spans : event_source_code_span option;
   (* justifications *)
   mutable justifications : justification USet.t option;
   (* executions *)
@@ -108,6 +110,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     step_counter;
     events = None;
     structure = None;
+    event_spans = None;
     justifications = None;
     executions = None;
     futures = None;

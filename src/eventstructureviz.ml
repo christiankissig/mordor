@@ -11,7 +11,12 @@ open Lwt.Syntax
 module EventStructureViz = struct
   (** Vertex type with event information *)
   module Vertex = struct
-    type t = { id : int; event : event; constraints : expr list }
+    type t = {
+      id : int;
+      event : event;
+      constraints : expr list;
+      source_span : source_span option; [@default None]
+    }
 
     let compare v1 v2 = compare v1.id v2.id
     let hash v = Hashtbl.hash v.id
@@ -54,6 +59,11 @@ module EventStructureViz = struct
     location : string option; [@default None]
     value : string option; [@default None]
     constraints : string list; [@default []]
+    (* source hints *)
+    source_start_line : int option; [@default None]
+    source_start_col : int option; [@default None]
+    source_end_line : int option; [@default None]
+    source_end_col : int option; [@default None]
   }
   [@@deriving yojson]
 
@@ -159,7 +169,9 @@ module EventStructureViz = struct
       executions
     |> Option.value ~default:(USet.create ())
 
-  (** Build graph from event structure *)
+  (** Build graph from event structure.
+
+      This is used from the CLI. *)
   let build_graph (structure : symbolic_event_structure)
       (executions : symbolic_execution USet.t option) : G.t =
     let g = G.create () in
@@ -176,7 +188,14 @@ module EventStructureViz = struct
           let constraints =
             try Hashtbl.find structure.restrict event_id with Not_found -> []
           in
-          let v = { Vertex.id = event_id; event = evt; constraints } in
+          let v =
+            {
+              Vertex.id = event_id;
+              event = evt;
+              constraints;
+              source_span = None;
+            }
+          in
             G.add_vertex g v;
             Hashtbl.add vertex_map event_id v
         )
@@ -234,7 +253,8 @@ module EventStructureViz = struct
         g
 
   (** Build event structure graph with only PO edges *)
-  let build_event_structure_graph (structure : symbolic_event_structure) : G.t =
+  let build_event_structure_graph (structure : symbolic_event_structure)
+      (source_spans : (int, source_span) Hashtbl.t) : G.t =
     let g = G.create () in
     let events = structure.events in
     let vertex_map = Hashtbl.create 100 in
@@ -246,7 +266,10 @@ module EventStructureViz = struct
         let constraints =
           try Hashtbl.find structure.restrict event_id with Not_found -> []
         in
-        let v = { Vertex.id = event_id; event = evt; constraints } in
+        let source_span = Hashtbl.find_opt source_spans event_id in
+        let v =
+          { Vertex.id = event_id; event = evt; constraints; source_span }
+        in
           G.add_vertex g v;
           Hashtbl.add vertex_map event_id v
       )
@@ -268,7 +291,8 @@ module EventStructureViz = struct
 
   (** Build execution graph for a single execution *)
   let build_execution_graph (structure : symbolic_event_structure)
-      (exec : symbolic_execution) (po_relation : (int * int) USet.t) : G.t =
+      (exec : symbolic_execution) (source_spans : (int, source_span) Hashtbl.t)
+      (po_relation : (int * int) USet.t) : G.t =
     let g = G.create () in
     let events = structure.events in
     let vertex_map = Hashtbl.create 100 in
@@ -305,7 +329,10 @@ module EventStructureViz = struct
         let constraints =
           try Hashtbl.find structure.restrict event_id with Not_found -> []
         in
-        let v = { Vertex.id = event_id; event = evt; constraints } in
+        let source_span = Hashtbl.find_opt source_spans event_id in
+        let v =
+          { Vertex.id = event_id; event = evt; constraints; source_span }
+        in
           G.add_vertex g v;
           Hashtbl.add vertex_map event_id v
       )
@@ -482,6 +509,19 @@ module EventStructureViz = struct
                 List.map Expr.to_string v.Vertex.constraints
               else []
             in
+            let ( source_start_line,
+                  source_start_col,
+                  source_end_line,
+                  source_end_col ) =
+              match v.Vertex.source_span with
+              | Some span ->
+                  ( Some span.start_line,
+                    Some span.start_col,
+                    Some span.end_line,
+                    Some span.end_col
+                  )
+              | None -> (None, None, None, None)
+            in
               {
                 id = v.Vertex.id;
                 type_ = event_type_to_string evt.typ;
@@ -490,6 +530,10 @@ module EventStructureViz = struct
                 location;
                 value;
                 constraints;
+                source_start_line;
+                source_start_col;
+                source_end_line;
+                source_end_col;
               }
           )
           vertices
@@ -604,10 +648,14 @@ let step_send_event_structure_graph (lwt_ctx : mordor_ctx Lwt.t)
     (send_graph : string -> unit Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
 
+  let source_spans = Option.value ctx.event_spans ~default:(Hashtbl.create 0) in
+
   match ctx.structure with
   | Some structure ->
       (* Send the event structure graph with PO edges only *)
-      let es_graph = EventStructureViz.build_event_structure_graph structure in
+      let es_graph =
+        EventStructureViz.build_event_structure_graph structure source_spans
+      in
       let es_json = EventStructureViz.to_json es_graph in
 
       (* Wrap in graph message with type using Yojson *)
@@ -643,113 +691,118 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
     (send_graph : string -> unit Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
 
-  match ctx.structure with
-  | Some structure ->
-      (* Get PO relation for use in execution graphs *)
-      let po_reduced = URelation.transitive_reduction structure.po in
+  let source_spans = Option.value ctx.event_spans ~default:(Hashtbl.create 0) in
+    match ctx.structure with
+    | Some structure ->
+        (* Get PO relation for use in execution graphs *)
+        let po_reduced = URelation.transitive_reduction structure.po in
 
-      (* Send each execution as a separate graph *)
-      let* () =
-        match ctx.executions with
-        | Some execs ->
-            let exec_list = USet.to_list execs in
-            let exec_count = List.length exec_list in
+        (* Send each execution as a separate graph *)
+        let* () =
+          match ctx.executions with
+          | Some execs ->
+              let exec_list = USet.to_list execs in
+              let exec_count = List.length exec_list in
 
-            let checked_executions =
-              Hashtbl.create
-                (ctx.checked_executions
-                |> Option.value ~default:[]
-                |> List.length
-                )
-            in
-              ( match ctx.checked_executions with
-              | Some exec_infos ->
-                  List.iter
-                    (fun info ->
-                      Hashtbl.add checked_executions info.exec_id info
-                    )
-                    exec_infos
-              | None -> ()
-              );
-
-              (* Process each execution sequentially *)
-              let* () =
-                Lwt_list.iteri_s
-                  (fun i exec ->
-                    let exec_graph =
-                      EventStructureViz.build_execution_graph structure exec
-                        po_reduced
-                    in
-                    let graph_json = EventStructureViz.to_json exec_graph in
-                    let graph_obj =
-                      Yojson.Safe.from_string graph_json
-                      |> EventStructureViz.json_graph_of_yojson
-                      |> Result.get_ok
-                    in
-                    let exec_info_opt =
-                      Hashtbl.find_opt checked_executions exec.id
-                    in
-
-                    let exec_preds_string =
-                      String.concat ", " (List.map Expr.to_string exec.ex_p)
-                    in
-
-                    let is_valid =
-                      Option.map (fun info -> info.satisfied) exec_info_opt
-                    in
-                    let undefined_behaviour =
-                      Option.map
-                        (fun info -> ub_reasons_to_yojson info.ub_reasons)
-                        exec_info_opt
-                    in
-
-                    (* Wrap in graph message with type and index using Yojson *)
-                    let message =
-                      EventStructureViz.
-                        {
-                          type_ = "execution";
-                          graph = graph_obj;
-                          index = Some (i + 1);
-                          preds = Some exec_preds_string;
-                          is_valid;
-                          undefined_behaviour;
-                        }
-                    in
-                    let exec_message =
-                      Yojson.Safe.to_string
-                        (EventStructureViz.graph_message_to_yojson message)
-                    in
-                      send_graph exec_message
+              let checked_executions =
+                Hashtbl.create
+                  (ctx.checked_executions
+                  |> Option.value ~default:[]
+                  |> List.length
                   )
-                  exec_list
               in
+                ( match ctx.checked_executions with
+                | Some exec_infos ->
+                    List.iter
+                      (fun info ->
+                        Hashtbl.add checked_executions info.exec_id info
+                      )
+                      exec_infos
+                | None -> ()
+                );
 
-              (* Send completion message with total count using Yojson *)
+                (* Process each execution sequentially *)
+                let* () =
+                  Lwt_list.iteri_s
+                    (fun i exec ->
+                      let exec_graph =
+                        EventStructureViz.build_execution_graph structure exec
+                          source_spans po_reduced
+                      in
+                      let graph_json = EventStructureViz.to_json exec_graph in
+                      let graph_obj =
+                        Yojson.Safe.from_string graph_json
+                        |> EventStructureViz.json_graph_of_yojson
+                        |> Result.get_ok
+                      in
+                      let exec_info_opt =
+                        Hashtbl.find_opt checked_executions exec.id
+                      in
+
+                      let exec_preds_string =
+                        String.concat ", " (List.map Expr.to_string exec.ex_p)
+                      in
+
+                      let is_valid =
+                        Option.map (fun info -> info.satisfied) exec_info_opt
+                      in
+                      let undefined_behaviour =
+                        Option.map
+                          (fun info -> ub_reasons_to_yojson info.ub_reasons)
+                          exec_info_opt
+                      in
+
+                      (* Wrap in graph message with type and index using Yojson *)
+                      let message =
+                        EventStructureViz.
+                          {
+                            type_ = "execution";
+                            graph = graph_obj;
+                            index = Some (i + 1);
+                            preds = Some exec_preds_string;
+                            is_valid;
+                            undefined_behaviour;
+                          }
+                      in
+                      let exec_message =
+                        Yojson.Safe.to_string
+                          (EventStructureViz.graph_message_to_yojson message)
+                      in
+                        send_graph exec_message
+                    )
+                    exec_list
+                in
+
+                (* Send completion message with total count using Yojson *)
+                let complete_message =
+                  EventStructureViz.
+                    { type_ = "complete"; total_executions = exec_count }
+                in
+                let complete_json =
+                  Yojson.Safe.to_string
+                    (EventStructureViz.complete_message_to_yojson
+                       complete_message
+                    )
+                in
+                  send_graph complete_json
+          | None ->
+              (* No executions, just send completion *)
               let complete_message =
-                EventStructureViz.
-                  { type_ = "complete"; total_executions = exec_count }
+                EventStructureViz.{ type_ = "complete"; total_executions = 0 }
               in
               let complete_json =
                 Yojson.Safe.to_string
                   (EventStructureViz.complete_message_to_yojson complete_message)
               in
                 send_graph complete_json
-        | None ->
-            (* No executions, just send completion *)
-            let complete_message =
-              EventStructureViz.{ type_ = "complete"; total_executions = 0 }
-            in
-            let complete_json =
-              Yojson.Safe.to_string
-                (EventStructureViz.complete_message_to_yojson complete_message)
-            in
-              send_graph complete_json
-      in
+        in
 
-      Logs.info (fun m -> m "Execution graphs sent after dependency calculation");
-      Lwt.return ctx
-  | None ->
-      Logs.err (fun m ->
-          m "Event structure not available for execution graph streaming."
-      );
-      Lwt.return ctx
+        Logs.info (fun m ->
+            m "Execution graphs sent after dependency calculation"
+        );
+        Lwt.return ctx
+    | None ->
+        Logs.err (fun m ->
+            m "Event structure not available for execution graph streaming."
+        );
+        Lwt.return ctx
