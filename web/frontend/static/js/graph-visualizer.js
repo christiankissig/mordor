@@ -103,7 +103,6 @@ class GraphVisualizer {
             const node = event.target;
             const nodeData = node.data();
             
-            // Log node label
             this.log('Node: ' + nodeData.label, 'info');
             
             // Highlight corresponding source code if span information exists
@@ -254,8 +253,6 @@ class GraphVisualizer {
         
         textarea.scrollTop = scrollTop;
         highlightPre.scrollTop = scrollTop;
-        
-        this.log(`Highlighting lines ${startLine}:${startCol} to ${endLine}:${endCol}`, 'info');
     }
     
     clearSourceHighlight() {
@@ -641,7 +638,6 @@ class GraphVisualizer {
     renderGraph(graph, undefinedBehaviour = null) {
         try {
             this.log('Rendering graph with ' + graph.nodes.length + ' nodes...');
-          this.log('undefined behaviour data: ' + JSON.stringify(undefinedBehaviour));
 
             if (!graph.nodes || graph.nodes.length === 0) {
                 this.log('No nodes in graph data', 'error');
@@ -715,7 +711,6 @@ class GraphVisualizer {
                     });
                     uafEdgeCount++;
                 });
-                this.log(`Added ${uafEdgeCount} UAF edge(s)`, 'info');
             } else {
                 console.log('No UAF edges to add. undefinedBehaviour:', undefinedBehaviour);
             }
@@ -798,8 +793,6 @@ class GraphVisualizer {
         const config = layouts[layoutName] || layouts.breadthfirst;
         const layout = this.cy.layout(config);
         layout.run();
-
-        this.log('Applied ' + layoutName + ' layout');
     }
 
     log(message, type = 'info') {
