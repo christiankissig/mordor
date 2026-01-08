@@ -168,7 +168,7 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
                 Ir.extract_read_registers_from_stmt stmt |> USet.of_list
               in
               let must_not_write =
-                USet.intersection read_regs written_before_read
+                USet.set_minus read_regs written_before_read
                 |> USet.union must_not_write
               in
                 traverse_nodes (body @ rest) written_before_read must_not_write
@@ -178,7 +178,7 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
                 Ir.extract_read_registers_from_stmt stmt |> USet.of_list
               in
               let must_not_write =
-                USet.intersection read_regs written_before_read
+                USet.set_minus read_regs written_before_read
                 |> USet.union must_not_write
               in
                 traverse_nodes rest written_before_read must_not_write
@@ -187,25 +187,17 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
                 Ir.extract_read_registers_from_stmt stmt |> USet.of_list
               in
               let must_not_write =
-                USet.intersection read_regs written_before_read
+                USet.set_minus read_regs written_before_read
                 |> USet.union must_not_write
               in
-                List.iter
-                  (fun n ->
-                    traverse_nodes (then_body @ rest)
-                      (USet.clone written_before_read)
-                      (USet.clone must_not_write)
-                  )
-                  then_body;
+                traverse_nodes (then_body @ rest)
+                  (USet.clone written_before_read)
+                  (USet.clone must_not_write);
                 match else_body with
                 | Some else_stmts ->
-                    List.iter
-                      (fun n ->
-                        traverse_nodes (else_stmts @ rest)
-                          (USet.clone written_before_read)
-                          (USet.clone must_not_write)
-                      )
-                      else_stmts
+                    traverse_nodes (else_stmts @ rest)
+                      (USet.clone written_before_read)
+                      (USet.clone must_not_write)
                 | None -> ()
             )
           | Labeled { stmt; _ } ->
@@ -217,6 +209,11 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
               let read_regs =
                 Ir.extract_read_registers_from_stmt stmt |> USet.of_list
               in
+
+              (* Check reads against written_before_read *)
+              USet.iter
+                (fun reg -> USet.add must_not_write reg |> ignore)
+                (USet.set_minus read_regs written_before_read);
 
               let invalid_written_regs =
                 USet.intersection written_regs must_not_write
@@ -234,11 +231,6 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
                   satisfied := false
                 )
                 invalid_written_regs;
-
-              (* Check reads against written_before_read *)
-              USet.iter
-                (fun reg -> USet.add must_not_write reg |> ignore)
-                (USet.set_minus read_regs written_before_read);
 
               (* Update written_before_read with newly written registers *)
               USet.iter
