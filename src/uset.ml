@@ -14,6 +14,7 @@ module USet : sig
   val remove : 'a t -> 'a -> 'a t
   val values : 'a t -> 'a list
   val size : 'a t -> int
+  val is_empty : 'a t -> bool
   val clear : 'a t -> 'a t
   val clone : 'a t -> 'a t
   val union : 'a t -> 'a t -> 'a t
@@ -87,6 +88,9 @@ end = struct
 
   (** Size *)
   let size s = Hash_set.length s
+
+  (** Test if set is empty *)
+  let is_empty s = Hash_set.is_empty s
 
   (** Clear set (mutates and returns set for chaining) *)
   let clear s =

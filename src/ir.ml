@@ -1,6 +1,7 @@
-open Ast
 open Expr
 open Types
+
+(** {1 Types for IR Syntax Trees} *)
 
 type ir_assertion_outcome = Allow | Forbid
 type ir_assertion_check = { model : string; condition : ir_assertion_outcome }
@@ -26,10 +27,10 @@ and 'a ir_stmt =
   | Threads of { threads : 'a ir_node list list }
   | RegisterStore of { register : string; expr : expr }
   | RegisterRefAssign of { register : string; global : string }
-  | GlobalStore of { global : string; expr : expr; assign : assign_info }
-  | GlobalLoad of { register : string; global : string; load : assign_info }
-  | DerefStore of { address : expr; expr : expr; assign : assign_info }
-  | DerefLoad of { register : string; address : expr; load : assign_info }
+  | GlobalStore of { global : string; expr : expr; assign : Ast.assign_info }
+  | GlobalLoad of { register : string; global : string; load : Ast.assign_info }
+  | DerefStore of { address : expr; expr : expr; assign : Ast.assign_info }
+  | DerefLoad of { register : string; address : expr; load : Ast.assign_info }
   | If of {
       condition : expr;
       then_body : 'a ir_node list;
@@ -78,7 +79,39 @@ and 'a ir_assertion =
       rest : 'a ir_litmus;
     }
 
+(** {1 Accessor Functions} *)
+
 let get_stmt node = node.stmt
+
+(** {1 Utility Functions} *)
+
+(** Extract conditions from IR statements *)
+let rec extract_conditions_from_stmt (stmt : 'a ir_stmt) : expr list =
+  match stmt with
+  | If { condition; then_body; else_body; _ } ->
+      let nested_then = List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) then_body in
+      let nested_else =
+        match else_body with
+        | Some body -> List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) body
+        | None -> []
+      in
+      condition :: (nested_then @ nested_else)
+  | While { condition; body } ->
+      let nested = List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) body in
+      condition :: nested
+  | Do { body; condition } ->
+      let nested = List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) body in
+      condition :: nested
+  | Threads { threads } ->
+      List.concat_map
+        (fun thread -> List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) thread)
+        threads
+  | Labeled { stmt; _ } ->
+      extract_conditions_from_stmt stmt.stmt
+  | _ -> []
+
+
+(** {1 Pretty-printing IR} *)
 
 let rec to_string ~ann_to_string (node : 'a ir_node) : string =
   let to_string = to_string ~ann_to_string in

@@ -100,8 +100,8 @@ type mordor_ctx = {
   mutable valid : bool option;
   mutable undefined_behaviour : bool option;
   mutable checked_executions : execution_info list option;
-  (* episodicity checks *)
-  mutable is_episodic : bool option;
+  (* episodicity per loop index *)
+  mutable is_episodic : (int, bool) Hashtbl.t option;
 }
 
 let make_context options ?(output_mode = Json) ?(output_file = "stdout")
