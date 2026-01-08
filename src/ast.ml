@@ -104,7 +104,7 @@ and ast_node = {
   thread_ctx : thread_ctx option;
   src_ctx : src_ctx option;
   loop_ctx : loop_ctx option;
-  source_span : source_span option; (* NEW: source location information *)
+  source_span : source_span option; (* source location information *)
 }
 
 (* Threads are lists of nodes wrapping statements *)

@@ -648,7 +648,9 @@ let step_send_event_structure_graph (lwt_ctx : mordor_ctx Lwt.t)
     (send_graph : string -> unit Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
 
-  let source_spans = Option.value ctx.event_spans ~default:(Hashtbl.create 0) in
+  let source_spans =
+    Option.value ctx.source_spans ~default:(Hashtbl.create 0)
+  in
 
   match ctx.structure with
   | Some structure ->
@@ -691,7 +693,9 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
     (send_graph : string -> unit Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
 
-  let source_spans = Option.value ctx.event_spans ~default:(Hashtbl.create 0) in
+  let source_spans =
+    Option.value ctx.source_spans ~default:(Hashtbl.create 0)
+  in
     match ctx.structure with
     | Some structure ->
         (* Get PO relation for use in execution graphs *)

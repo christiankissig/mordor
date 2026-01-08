@@ -1,10 +1,17 @@
+open Ast
 open Types
 open Uset
 
-type ir_stmt = source_span option Ir.ir_stmt
-type ir_node = source_span option Ir.ir_node
-type ir_assertion = source_span option Ir.ir_assertion
-type ir_litmus = source_span option Ir.ir_litmus
+type ir_node_ann = {
+  source_span : source_span option;
+  thread_ctx : thread_ctx option;
+  loop_ctx : loop_ctx option;
+}
+
+type ir_stmt = ir_node_ann Ir.ir_stmt
+type ir_node = ir_node_ann Ir.ir_node
+type ir_assertion = ir_node_ann Ir.ir_assertion
+type ir_litmus = ir_node_ann Ir.ir_litmus
 
 (** configuration options *)
 
@@ -78,7 +85,7 @@ type mordor_ctx = {
   step_counter : int;
   mutable events : (int, event) Hashtbl.t option;
   mutable structure : symbolic_event_structure option;
-  mutable event_spans : event_source_code_span option;
+  mutable source_spans : event_source_code_span option;
   (* justifications *)
   mutable justifications : justification USet.t option;
   (* executions *)
@@ -110,7 +117,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     step_counter;
     events = None;
     structure = None;
-    event_spans = None;
+    source_spans = None;
     justifications = None;
     executions = None;
     futures = None;

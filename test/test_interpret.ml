@@ -1,3 +1,4 @@
+open Context
 open Events
 open Expr
 open Interpret
@@ -6,10 +7,11 @@ open Lwt.Syntax
 open Types
 open Uset
 
-type ir_stmt = source_span option Ir.ir_stmt
-type ir_node = source_span option Ir.ir_node
-
-let make_ir_node stmt = { stmt; annotations = None }
+let make_ir_node stmt =
+  {
+    stmt;
+    annotations = { source_span = None; thread_ctx = None; loop_ctx = None };
+  }
 
 (** Helper to run Lwt tests *)
 let run_lwt f () = Lwt_main.run (f ())
@@ -69,7 +71,10 @@ let test_add_event () =
   let events = create_events () in
   let evt = Event.create Read 0 () in
   let env = Hashtbl.create 16 in
-  let added_evt = add_event events evt env None in
+  let added_evt =
+    add_event events evt env
+      { source_span = None; thread_ctx = None; loop_ctx = None }
+  in
     Alcotest.(check int) "event label assigned" 0 added_evt.label;
     Alcotest.(check int) "label counter incremented" 1 events.label;
     Alcotest.(check int) "event added to table" 1 (Hashtbl.length events.events)
@@ -80,8 +85,14 @@ let test_add_multiple_events () =
   let evt1 = Event.create Read 0 () in
   let evt2 = Event.create Write 0 () in
   let env = Hashtbl.create 16 in
-  let _ = add_event events evt1 env None in
-  let added_evt2 = add_event events evt2 env None in
+  let _ =
+    add_event events evt1 env
+      { source_span = None; thread_ctx = None; loop_ctx = None }
+  in
+  let added_evt2 =
+    add_event events evt2 env
+      { source_span = None; thread_ctx = None; loop_ctx = None }
+  in
     Alcotest.(check int) "second event label" 1 added_evt2.label;
     Alcotest.(check int) "events in table" 2 (Hashtbl.length events.events)
 

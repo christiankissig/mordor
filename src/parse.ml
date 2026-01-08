@@ -42,10 +42,11 @@ let convert_expr_list exprs = List.map ast_expr_to_expr exprs
 
 (** Convert parsed AST statements to IR format *)
 
-let make_ir_node ~source_span stmt = { stmt; annotations = source_span }
+let make_ir_node ~source_span ~thread_ctx ~loop_ctx stmt =
+  { stmt; annotations = { source_span; thread_ctx; loop_ctx } }
 
 (* TODO rec to handle label case; use ctx annotation instead *)
-let rec convert_stmt_open ~recurse ~source_span = function
+let rec convert_stmt_open ~recurse ~source_span ~thread_ctx ~loop_ctx = function
   | Ast.SThreads { threads } ->
       let ir_threads = List.map (List.map recurse) threads in
         Threads { threads = ir_threads }
@@ -89,8 +90,14 @@ let rec convert_stmt_open ~recurse ~source_span = function
   | Ast.SUnlock { global } -> Unlock { global }
   | Ast.SFree { register } -> Free { register }
   | Ast.SLabeled { label; stmt } ->
-      let ir_stmt = convert_stmt_open ~recurse ~source_span stmt in
-        Labeled { label; stmt = make_ir_node ~source_span ir_stmt }
+      let ir_stmt =
+        convert_stmt_open ~recurse ~source_span ~thread_ctx ~loop_ctx stmt
+      in
+        Labeled
+          {
+            label;
+            stmt = make_ir_node ~source_span ~thread_ctx ~loop_ctx ir_stmt;
+          }
   | Ast.SCAS { register; address; expected; desired; load_mode; assign_mode } ->
       let ir_address = ast_expr_to_expr address in
       let ir_expected = ast_expr_to_expr expected in
@@ -125,10 +132,13 @@ let rec convert_stmt_open ~recurse ~source_span = function
         GlobalMalloc { global; size = ir_size }
   | Ast.SSkip -> Skip
 
-let rec convert_stmt ast_node =
+let rec convert_stmt (ast_node : ast_node) =
   let source_span = ast_node.source_span in
-    convert_stmt_open ~recurse:convert_stmt ~source_span ast_node.stmt
-    |> make_ir_node ~source_span
+  let thread_ctx = ast_node.thread_ctx in
+  let loop_ctx = ast_node.loop_ctx in
+    convert_stmt_open ~recurse:convert_stmt ~source_span ~thread_ctx ~loop_ctx
+      ast_node.stmt
+    |> make_ir_node ~source_span ~thread_ctx ~loop_ctx
 
 (** Convert parsed AST litmus test to IR format *)
 

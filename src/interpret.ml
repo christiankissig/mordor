@@ -3,13 +3,9 @@
 open Context
 open Events
 open Expr
-open Ir
 open Lwt.Syntax
 open Types
 open Uset
-
-type ir_stmt = source_span option Ir.ir_stmt
-type ir_node = source_span option Ir.ir_node
 
 let ir_node_to_string = Ir.to_string ~ann_to_string:(fun _ -> "")
 
@@ -56,8 +52,12 @@ type events_t = {
   origin : (string, int) Hashtbl.t;
   (* p tracks the register environment at each event label *)
   env_by_evt : (int, (string, expr) Hashtbl.t) Hashtbl.t;
+  (* mapping from event labels to thread indices *)
+  thread_index : (int, int) Hashtbl.t;
+  (* mapping from event labels to loop indices *)
+  loop_indices : (int, int list) Hashtbl.t;
   (* mapping from event labels to source spans *)
-  event_spans : (int, source_span) Hashtbl.t;
+  source_spans : (int, source_span) Hashtbl.t;
   mutable label : int;
 }
 
@@ -66,18 +66,29 @@ let create_events () =
     events = Hashtbl.create 256;
     origin = Hashtbl.create 256;
     env_by_evt = Hashtbl.create 256;
-    event_spans = Hashtbl.create 256;
+    source_spans = Hashtbl.create 256;
+    thread_index = Hashtbl.create 256;
+    loop_indices = Hashtbl.create 256;
     label = 0;
   }
 
-let add_event (events : events_t) event env source_span =
+let add_event (events : events_t) event env (annotation : ir_node_ann) =
   let lbl = events.label in
     events.label <- events.label + 1;
     let event' : event = { event with label = lbl } in
       Hashtbl.replace events.events lbl event';
       Hashtbl.replace events.env_by_evt lbl (Hashtbl.copy env);
-      ( match source_span with
-      | Some span -> Hashtbl.replace events.event_spans lbl span
+      ( match annotation.source_span with
+      | Some span -> Hashtbl.replace events.source_spans lbl span
+      | None -> ()
+      );
+      ( match annotation.thread_ctx with
+      | Some thread_ctx ->
+          Hashtbl.replace events.thread_index lbl thread_ctx.tid
+      | None -> ()
+      );
+      ( match annotation.loop_ctx with
+      | Some loop_ctx -> Hashtbl.replace events.loop_indices lbl loop_ctx.loops
       | None -> ()
       );
       event'
@@ -286,7 +297,10 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
   | [] ->
       let structure = empty_structure () in
       let terminal_evt = Event.create Terminal 0 () in
-      let terminal_evt : event = add_event events terminal_evt env None in
+      let terminal_evt : event =
+        add_event events terminal_evt env
+          { source_span = None; thread_ctx = None; loop_ctx = None }
+      in
       let cont =
         {
           structure with
@@ -298,7 +312,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
         Lwt.return (dot terminal_evt cont phi)
   | node :: rest ->
       let stmt = Ir.get_stmt node in
-      let source_span = node.annotations in
+      let annotation = node.annotations in
         let* structure =
           match stmt with
           | Threads { threads } ->
@@ -336,8 +350,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = assign.volatile;
                 }
               in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | DerefStore { address; expr; assign } ->
@@ -351,8 +364,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = assign.volatile;
                 }
               in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | DerefLoad { register; address; load } ->
@@ -368,8 +380,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = load.volatile;
                 }
               in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
@@ -389,8 +400,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   volatile = load.volatile;
                 }
               in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
@@ -412,7 +422,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 }
               in
               let event_load' : event =
-                add_event events evt_load env source_span
+                add_event events evt_load env annotation
               in
                 Hashtbl.replace events.origin symbol event_load'.label;
                 let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
@@ -432,7 +442,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   }
                 in
                 let event_store' : event =
-                  add_event events evt_store env source_span
+                  add_event events evt_store env annotation
                 in
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register result_expr;
@@ -457,7 +467,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 }
               in
               let event_load' : event =
-                add_event events evt_load env source_span
+                add_event events evt_load env annotation
               in
                 Hashtbl.replace events.origin symbol event_load'.label;
                 let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
@@ -477,7 +487,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                   }
                 in
                 let event_store' : event =
-                  add_event events evt_store env source_span
+                  add_event events evt_store env annotation
                 in
                 let phi_succ = cond_expr :: phi in
                 let phi_fail = Expr.unop "!" cond_expr :: phi in
@@ -542,8 +552,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
           | Fence { mode } ->
               let base_evt : event = Event.create Fence 0 () in
               let evt = { base_evt with fmod = mode } in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | Lock { global } ->
@@ -553,8 +562,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 | Some g -> { base_evt with id = Some (VVar g) }
                 | None -> base_evt
               in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | Unlock { global } ->
@@ -564,8 +572,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                 | Some g -> { base_evt with id = Some (VVar g) }
                 | None -> base_evt
               in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | RegMalloc { register; size } ->
@@ -574,8 +581,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               let loc = ESymbol symbol in
               let base_evt : event = Event.create Malloc 0 () in
               let evt = { base_evt with rval = Some rval; loc = Some loc } in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
@@ -587,8 +593,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               let loc = ESymbol symbol in
               let base_evt : event = Event.create Malloc 0 () in
               let evt = { base_evt with rval = Some rval; loc = Some loc } in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   let* cont = recurse rest env' phi events in
@@ -597,8 +602,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
               let base_evt : event = Event.create Free 0 () in
               let loc = Hashtbl.find_opt env register in
               let evt = { base_evt with loc } in
-              let source_span = node.annotations in
-              let event' : event = add_event events evt env source_span in
+              let event' : event = add_event events evt env annotation in
                 let* cont = recurse rest env phi events in
                   Lwt.return (dot event' cont phi)
           | Skip ->
@@ -627,7 +631,10 @@ let interpret_generic ~stmt_semantics stmts defacto restrictions constraint_ =
 
   let init_event = Event.create Init 0 () in
   let init_event' =
-    add_event events { (Event.create Init 4 ()) with label = 0 } env None
+    add_event events
+      { (Event.create Init 4 ()) with label = 0 }
+      env
+      { source_span = None; thread_ctx = None; loop_ctx = None }
   in
 
   let* structure = stmt_semantics stmts env [] events in
@@ -642,7 +649,7 @@ let interpret_generic ~stmt_semantics stmts defacto restrictions constraint_ =
     }
   in
 
-  Lwt.return (structure'', events.events, events.event_spans)
+  Lwt.return (structure'', events.events, events.source_spans)
 
 (** Default interpretation function **)
 
@@ -656,12 +663,12 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
   let* ctx = lwt_ctx in
     match (ctx.program_stmts, ctx.litmus_constraints) with
     | Some stmts, Some constraints ->
-        let* structure, events, event_spans =
+        let* structure, events, source_spans =
           interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
         in
           ctx.structure <- Some structure;
           ctx.events <- Some events;
-          ctx.event_spans <- Some event_spans;
+          ctx.source_spans <- Some source_spans;
           Lwt.return ctx
     | _ ->
         Logs.err (fun m ->
@@ -681,7 +688,12 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
 module StepCounterSemantics : sig
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
 end = struct
-  let make_ir_node stmt : ir_node = Ir.{ annotations = None; stmt }
+  let make_ir_node stmt : ir_node =
+    Ir.
+      {
+        annotations = { source_span = None; thread_ctx = None; loop_ctx = None };
+        stmt;
+      }
 
   (* one-step unrolling *)
 
@@ -750,7 +762,7 @@ end = struct
     else
       match nodes with
       | node :: rest -> (
-          match get_stmt node with
+          match Ir.get_stmt node with
           | Do { body; condition } ->
               if per_loop then
                 let unrolled = unrol_do_loop body condition step_counter in
