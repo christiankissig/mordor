@@ -85,31 +85,67 @@ let get_stmt node = node.stmt
 
 (** {1 Utility Functions} *)
 
+let extract_written_registers_from_stmt (stmt : 'a ir_stmt) : string list =
+  match stmt with
+  | RegisterStore { register; _ } -> [ register ]
+  | GlobalLoad { register; _ } -> [ register ]
+  | DerefLoad { register; _ } -> [ register ]
+  | Cas { register; _ } -> [ register ]
+  | Fadd { register; _ } -> [ register ]
+  | RegMalloc { register; _ } -> [ register ]
+  | _ -> []
+
+let extract_read_registers_from_stmt (stmt : 'a ir_stmt) : string list =
+  match stmt with
+  | RegisterStore { expr; _ } -> Expr.extract_registers expr
+  | GlobalStore { expr; _ } -> Expr.extract_registers expr
+  | DerefStore { address; expr; _ } ->
+      Expr.extract_registers address @ Expr.extract_registers expr
+  | If { condition; _ } -> Expr.extract_registers condition
+  | While { condition; _ } -> Expr.extract_registers condition
+  | Do { condition; _ } -> Expr.extract_registers condition
+  | Cas { address; expected; desired; _ } ->
+      Expr.extract_registers address
+      @ Expr.extract_registers expected
+      @ Expr.extract_registers desired
+  | Fadd { address; operand; _ } ->
+      Expr.extract_registers address @ Expr.extract_registers operand
+  | RegMalloc { size; _ } -> Expr.extract_registers size
+  | GlobalMalloc { size; _ } -> Expr.extract_registers size
+  | _ -> []
+
 (** Extract conditions from IR statements *)
 let rec extract_conditions_from_stmt (stmt : 'a ir_stmt) : expr list =
   match stmt with
   | If { condition; then_body; else_body; _ } ->
-      let nested_then = List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) then_body in
+      let nested_then =
+        List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) then_body
+      in
       let nested_else =
         match else_body with
-        | Some body -> List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) body
+        | Some body ->
+            List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) body
         | None -> []
       in
-      condition :: (nested_then @ nested_else)
+        condition :: (nested_then @ nested_else)
   | While { condition; body } ->
-      let nested = List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) body in
-      condition :: nested
+      let nested =
+        List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) body
+      in
+        condition :: nested
   | Do { body; condition } ->
-      let nested = List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) body in
-      condition :: nested
+      let nested =
+        List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) body
+      in
+        condition :: nested
   | Threads { threads } ->
       List.concat_map
-        (fun thread -> List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) thread)
+        (fun thread ->
+          List.concat_map (fun n -> extract_conditions_from_stmt n.stmt) thread
+        )
         threads
-  | Labeled { stmt; _ } ->
-      extract_conditions_from_stmt stmt.stmt
+  | Labeled { stmt; _ } -> extract_conditions_from_stmt stmt.stmt
   | _ -> []
-
 
 (** {1 Pretty-printing IR} *)
 

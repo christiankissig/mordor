@@ -7,6 +7,9 @@ let is_symbol s =
   String.length s > 0
   && (String.contains greek_alpha s.[0] || String.contains zh_alpha s.[0])
 
+let is_register_name s = String.length s > 0 && String.starts_with ~prefix:"r" s
+let is_global_name s = (not (is_symbol s)) && not (is_register_name s)
+
 (** Mutual recursion for Value and Expr *)
 module rec Value : sig
   type t = value_type
@@ -17,10 +20,10 @@ module rec Value : sig
   val boolean : bool -> value_type
   val equal : value_type -> value_type -> bool
   val get_symbols : value_type -> string list
-  val to_string : value_type -> string
   val subst : value_type -> value_type -> value_type -> value_type
   val is_number : value_type -> bool
   val is_not_var : value_type -> bool
+  val to_string : value_type -> string
 end = struct
   type t = value_type
 
@@ -71,6 +74,7 @@ and Expr : sig
   val num : Z.t -> t
   val equal : t -> t -> bool
   val get_symbols : t -> string list
+  val extract_registers : t -> string list
   val is_flat : t -> bool
   val inverse : t -> t
   val flipped : t -> t
@@ -81,6 +85,7 @@ and Expr : sig
   val is_contradiction : t -> bool
   val is_value : t -> bool
   val is_var : t -> bool
+  val is_register : t -> bool
   val is_expression : t -> bool
   val is_number : t -> bool
   val compare : t -> t -> int
@@ -120,6 +125,10 @@ end = struct
 
   let is_var = function
     | EVar _ -> true
+    | _ -> false
+
+  let is_register = function
+    | EVar v -> is_symbol v
     | _ -> false
 
   let is_expression e = not (is_value e)
@@ -202,6 +211,18 @@ end = struct
     | EOr clauses ->
         List.flatten
           (List.map (fun c -> List.flatten (List.map get_symbols c)) clauses)
+    | _ -> []
+
+  let rec extract_registers = function
+    | EVar v when is_register_name v -> [ v ]
+    | EBinOp (lhs, _, rhs) -> extract_registers lhs @ extract_registers rhs
+    | EUnOp (_, rhs) -> extract_registers rhs
+    | EOr clauses ->
+        List.flatten
+          (List.map
+             (fun c -> List.flatten (List.map extract_registers c))
+             clauses
+          )
     | _ -> []
 
   let is_flat = function

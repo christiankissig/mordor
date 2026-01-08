@@ -78,8 +78,7 @@ and 'a ir_assertion =
     }
 
 val get_stmt : 'a ir_node -> 'a ir_stmt
-
+val extract_read_registers_from_stmt : 'a ir_stmt -> string list
+val extract_written_registers_from_stmt : 'a ir_stmt -> string list
 val extract_conditions_from_stmt : 'a ir_stmt -> expr list
-
 val to_string : ann_to_string:('a -> string) -> 'a ir_node -> string
-

@@ -14,6 +14,7 @@
   test_coherence
   test_elaborations
   test_events
+  test_episodicity
   test_executions
   test_expr
   test_forwardingcontext
