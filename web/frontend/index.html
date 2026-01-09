@@ -18,340 +18,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
     
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1e1e1e; color: #d4d4d4; height: 100vh; overflow: hidden; }
-        .container { display: flex; flex-direction: column; height: 100vh; }
-        header { background: #252526; border-bottom: 1px solid #3e3e42; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
-        header h1 { font-size: 1.5rem; color: #cccccc; }
-        .header-controls { display: flex; gap: 1rem; align-items: center; }
-        .main-content { display: flex; flex: 1; overflow: hidden; }
-        .panel { display: flex; flex-direction: column; background: #1e1e1e; border: 1px solid #3e3e42; position: relative; }
-        .panel:first-child { flex: 0 0 50%; min-width: 200px; }
-        .panel:last-child { flex: 1; min-width: 200px; }
-        .resizer { width: 5px; background: #3e3e42; cursor: col-resize; flex-shrink: 0; position: relative; }
-        .resizer:hover { background: #0e639c; }
-        .resizer:active { background: #1177bb; }
-        .panel-header { background: #252526; border-bottom: 1px solid #3e3e42; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; }
-        .panel-header h2 { font-size: 1rem; color: #cccccc; }
-        
-        /* Editor container with overlay */
-        .editor-container { 
-            flex: 1; 
-            overflow: hidden; 
-            position: relative;
-            background: #1e1e1e;
-        }
-        
-        .editor-wrapper {
-            position: relative;
-            width: 100%;
-            height: 100%;
-        }
-        
-        /* Highlighted code overlay */
-        #litmus-highlight {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            pointer-events: none;
-            margin: 0 !important;
-            padding: 1rem 1rem 1rem 5.5em !important;
-            background: transparent !important;
-            overflow: hidden;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: 'Consolas', 'Courier New', monospace !important;
-            font-size: 0.95rem !important;
-            line-height: 1.5 !important;
-            border: none !important;
-        }
-        
-        #litmus-highlight code {
-            background: transparent !important;
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        
-        /* Textarea for input */
-        #litmus-input {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            width: 100%;
-            height: 100%;
-            margin: 0 !important;
-            padding: 1rem 1rem 1rem 5.5em !important;
-            background: transparent !important;
-            font-family: 'Consolas', 'Courier New', monospace !important;
-            font-size: 0.95rem !important;
-            line-height: 1.5 !important;
-            outline: none !important;
-            border: none !important;
-            resize: none;
-            color: transparent;
-            caret-color: #d4d4d4;
-            tab-size: 4;
-            z-index: 1;
-            overflow: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        
-        #litmus-input:focus {
-            outline: none;
-        }
-        
-        #litmus-input::selection {
-            background: rgba(14, 99, 156, 0.3);
-        }
-        
-        /* Override PrismJS colors for dark theme */
-        pre[class*="language-"] {
-            background: #1e1e1e !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            font-family: 'Consolas', 'Courier New', monospace !important;
-            font-size: 0.95rem !important;
-            line-height: 1.5 !important;
-            white-space: pre-wrap !important;
-            word-wrap: break-word !important;
-            tab-size: 4 !important;
-        }
-        
-        code[class*="language-"] {
-            background: transparent !important;
-            color: #d4d4d4 !important;
-            font-family: 'Consolas', 'Courier New', monospace !important;
-            font-size: 0.95rem !important;
-            line-height: 1.5 !important;
-            white-space: pre-wrap !important;
-            word-wrap: break-word !important;
-            tab-size: 4 !important;
-        }
-        
-        .token.comment { color: #6a9955; }
-        .token.keyword { color: #569cd6; }
-        .token.string { color: #ce9178; }
-        .token.number { color: #b5cea8; }
-        .token.operator { color: #d4d4d4; }
-        .token.punctuation { color: #d4d4d4; }
-        .token.function { color: #dcdcaa; }
-        
-        /* Line numbers styling */
-        pre.line-numbers {
-            position: relative;
-            padding-left: 0 !important;
-            counter-reset: linenumber;
-        }
-        
-        pre.line-numbers > code {
-            position: relative;
-            white-space: inherit;
-        }
-        
-        .line-numbers .line-numbers-rows {
-            position: absolute;
-            pointer-events: none;
-            top: 0;
-            font-size: 0.95rem;
-            left: -5em;
-            width: 4em;
-            letter-spacing: -1px;
-            border-right: 1px solid #3e3e42;
-            user-select: none;
-            padding-right: 0.5rem;
-            padding-left: 0.5rem;
-        }
-        
-        .line-numbers-rows > span {
-            display: block;
-            counter-increment: linenumber;
-            line-height: 1.5;
-        }
-        
-        .line-numbers-rows > span:before {
-            content: counter(linenumber);
-            color: #6a6a6a;
-            display: block;
-            text-align: right;
-        }
-        
-        /* Carousel styles */
-        .carousel-container { flex: 1; position: relative; display: none; }
-        .carousel-container.active { display: flex; flex-direction: column; }
-        #cy { flex: 1; background: #1e1e1e; }
-        
-        .carousel-controls { position: absolute; top: 50%; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; pointer-events: none; z-index: 200; transform: translateY(-50%); padding: 0 10px; }
-        .carousel-btn { pointer-events: all; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; color: #cccccc; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: all 0.2s; }
-        .carousel-btn:hover:not(:disabled) { background: #505050; transform: scale(1.1); }
-        .carousel-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-        
-        .carousel-indicator { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 20px; padding: 0.5rem 1rem; font-size: 0.9rem; color: #cccccc; z-index: 100; }
-        
-        .execution-info { position: absolute; top: 60px; left: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.85rem; z-index: 100; display: none; }
-        
-        .graph-controls { position: absolute; top: 60px; right: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem; display: none; flex-direction: column; gap: 0.5rem; z-index: 100; }
-        .graph-controls.active { display: flex; }
-        .graph-controls button { background: #3c3c3c; border: none; color: #cccccc; padding: 0.4rem 0.8rem; border-radius: 3px; cursor: pointer; font-size: 0.85rem; }
-        .graph-controls button:hover { background: #505050; }
-        .graph-controls select { background: #3c3c3c; border: 1px solid #555; color: #d4d4d4; padding: 0.4rem; border-radius: 3px; font-size: 0.85rem; }
-        
-        .graph-stats { position: absolute; bottom: 10px; left: 10px; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.85rem; z-index: 100; display: none; }
-        .graph-stats.active { display: block; }
-        
-        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #6a6a6a; position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
-        button { cursor: pointer; border: none; border-radius: 4px; padding: 0.5rem 1.5rem; font-size: 0.9rem; font-weight: 500; }
-        .btn-primary { background: #0e639c; color: white; }
-        .btn-primary:hover { background: #1177bb; }
-        .btn-primary:disabled { background: #555; cursor: not-allowed; }
-        .status { font-size: 0.85rem; color: #cccccc; }
-        #log { background: #252526; border-top: 1px solid #3e3e42; height: 150px; overflow-y: auto; padding: 0.5rem 1rem; font-family: 'Consolas', monospace; font-size: 0.85rem; }
-        .log-entry { padding: 0.25rem 0; }
-        .log-time { color: #6a6a6a; margin-right: 0.5rem; }
-        .error { color: #f48771; }
-        .success { color: #89d185; }
-        .info { color: #4ec9b0; }
-        .spinner { border: 3px solid #3c3c3c; border-top: 3px solid #0e639c; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        /* Modal styles */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal.show {
-            display: flex;
-        }
-        
-        .modal-content {
-            background: #252526;
-            border: 1px solid #3e3e42;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-        }
-        
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid #3e3e42;
-        }
-        
-        .modal-header h2 {
-            font-size: 1.2rem;
-            color: #cccccc;
-            margin: 0;
-        }
-        
-        .modal-close {
-            background: none;
-            border: none;
-            color: #cccccc;
-            font-size: 2rem;
-            cursor: pointer;
-            padding: 0;
-            width: 30px;
-            height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            line-height: 1;
-        }
-        
-        .modal-close:hover {
-            color: #ffffff;
-        }
-        
-        .modal-body {
-            padding: 1.5rem;
-        }
-        
-        .setting-item {
-            margin-bottom: 1rem;
-        }
-        
-        .setting-item label {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            color: #d4d4d4;
-            font-size: 0.95rem;
-        }
-        
-        .setting-item input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            margin-right: 0.75rem;
-            cursor: pointer;
-            accent-color: #0e639c;
-        }
-        
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.75rem;
-            padding: 1rem 1.5rem;
-            border-top: 1px solid #3e3e42;
-        }
-        
-        .btn-secondary {
-            background: #3c3c3c;
-            color: #cccccc;
-        }
-        
-        .btn-secondary:hover {
-            background: #505050;
-        }
-        
-        .settings-icon {
-            background: none;
-            border: none;
-            color: #cccccc;
-            font-size: 1.2rem;
-            cursor: pointer;
-            padding: 0.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .settings-icon:hover {
-            color: #ffffff;
-        }
-        
-        /* Source code highlight overlay */
-        #source-highlight-overlay {
-            pointer-events: none;
-        }
-        
-        .highlight-marker {
-            transition: opacity 0.15s ease-in-out;
-            animation: highlightPulse 0.3s ease-in-out;
-        }
-        
-        @keyframes highlightPulse {
-            0% { opacity: 0; transform: scale(0.98); }
-            50% { opacity: 1; transform: scale(1.02); }
-            100% { opacity: 1; transform: scale(1); }
-        }
-    </style>
+    <!-- Mordor CSS -->
+    <link rel="stylesheet" href="static/css/mordor.css">
 </head>
 <body>
     <div class="container">
@@ -426,6 +94,23 @@
                     <div><strong>Executions:</strong> <span id="execution-count">0</span></div>
                 </div>
             </div>
+            <div class="resizer" id="resizer-right"></div>
+            <div class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h2>Details</h2>
+                </div>
+                <div class="accordion">
+                    <div class="accordion-item">
+                        <button class="accordion-header" data-target="loops-content">
+                            <span>Loops</span>
+                            <span class="accordion-icon">▼</span>
+                        </button>
+                        <div class="accordion-content" id="loops-content">
+                            <p>Loop information will appear here.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         <div id="log"></div>
     </div>
@@ -467,6 +152,88 @@
     <!-- Initialize the application -->
     <script>
         new GraphVisualizer();
+        
+        // Accordion functionality
+        document.querySelectorAll('.accordion-header').forEach(header => {
+            header.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const content = document.getElementById(targetId);
+                
+                // Toggle active state
+                this.classList.toggle('active');
+                content.classList.toggle('active');
+            });
+        });
+        
+        // Left resizer functionality (existing)
+        const resizer = document.getElementById('resizer');
+        const leftPanel = document.getElementById('left-panel');
+        const rightPanel = document.getElementById('right-panel');
+        
+        let isResizing = false;
+        let startX = 0;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            const container = document.querySelector('.main-content');
+            const containerRect = container.getBoundingClientRect();
+            const newLeftWidth = e.clientX - containerRect.left;
+            const totalWidth = containerRect.width;
+            
+            if (newLeftWidth >= 200 && (totalWidth - newLeftWidth) >= 400) { // Ensure right side has room for both panels
+                const leftPercent = (newLeftWidth / totalWidth) * 100;
+                leftPanel.style.flex = `0 0 ${leftPercent}%`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+            }
+        });
+        
+        // Right resizer functionality
+        const resizerRight = document.getElementById('resizer-right');
+        const sidebar = document.getElementById('sidebar');
+        
+        let isResizingRight = false;
+        
+        resizerRight.addEventListener('mousedown', (e) => {
+            isResizingRight = true;
+            startX = e.clientX;
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizingRight) return;
+            
+            const container = document.querySelector('.main-content');
+            const containerRect = container.getBoundingClientRect();
+            const sidebarStart = sidebar.getBoundingClientRect().left - containerRect.left;
+            const newSidebarWidth = containerRect.width - (e.clientX - containerRect.left);
+            
+            if (newSidebarWidth >= 200 && (e.clientX - containerRect.left - leftPanel.offsetWidth) >= 200) {
+                const sidebarPercent = (newSidebarWidth / containerRect.width) * 100;
+                sidebar.style.flex = `0 0 ${sidebarPercent}%`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizingRight) {
+                isResizingRight = false;
+                document.body.style.cursor = '';
+            }
+        });
     </script>
 </body>
 </html>
