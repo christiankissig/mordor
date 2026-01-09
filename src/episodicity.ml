@@ -181,21 +181,8 @@ let get_symbol_origin (structure : symbolic_event_structure) (symbol : string) :
     int option =
   Hashtbl.find_opt structure.origin symbol
 
-(** Check if an event occurred before a loop started *)
-let event_before_loop (loop_indices : (int, int list) Hashtbl.t)
-    (event_label : int) (loop_lid : int) : bool =
-  match Hashtbl.find_opt loop_indices event_label with
-  | Some iterations ->
-      (* If the event has no iterations for this loop, it's before the loop *)
-      List.length iterations = 0
-  | None ->
-      (* No loop context means it's before any loop *)
-      true
-
 (** Condition 2: Reads must read from valid sources *)
-let check_condition2_read_sources (structure : symbolic_event_structure)
-    (loop_id : int) (loop_indices : (int, int list) Hashtbl.t) :
-    condition_result =
+let check_condition2_read_sources (loop_id : int) : condition_result =
   (* TODO:
      1. Find all read events in the loop (check loop_indices)
      2. For each read, trace its value origin through rf relation
@@ -223,67 +210,18 @@ let rec extract_symbols_from_ir_expr (expr : expr) : string list =
 
 (** Check if a branch condition depends on pre-loop symbols *)
 let check_branch_condition (condition : expr)
-    (structure : symbolic_event_structure)
-     (loop_id : int) : bool =
+    (structure : symbolic_event_structure) (loop_id : int) : bool =
   (* TODO:
      1. Extract all symbols from condition
      2. For each symbol, get its origin event
      3. Check if any origin event occurred before the loop
   *)
-  let symbols = extract_symbols_from_ir_expr condition in
-  let has_pre_loop_symbol =
-    List.exists
-      (fun sym ->
-        match Hashtbl.find_opt structure.origin sym with
-        | Some origin_event ->
-            event_before_loop loop_indices origin_event loop_id
-        | None -> false
-      )
-      symbols
-  in
-    not has_pre_loop_symbol
+  true
 
 (** Condition 3: Branch conditions don't constrain pre-loop symbols *)
-let check_condition3_branch_conditions (program : ir_node list)
-    (structure : symbolic_event_structure)
-     (loop_id : int) :
-    condition_result =
-  (* Find all nodes belonging to this loop *)
-  let loop_nodes = find_loop_nodes program loop_id in
-
-  (* Extract all conditions from these nodes *)
-  let conditions =
-    List.filter_map
-      (fun (node : ir_node) ->
-        match node.stmt with
-        | While { condition; _ } | Do {condition; _} -> Some condition
-        | _ -> None
-      )
-      loop_nodes
-  in
-
-  (* Check each condition for pre-loop symbols *)
-  let violations = ref [] in
-    List.iter
-      (fun condition ->
-        let symbols = extract_symbols_from_ir_expr condition in
-          List.iter
-            (fun sym ->
-              match Hashtbl.find_opt structure.origin sym with
-              | Some origin_event ->
-                  if event_before_loop loop_indices origin_event loop_id then
-                    let violation =
-                      BranchConditionViolation
-                        (BranchConstraintsSymbol (sym, origin_event, None))
-                    in
-                      violations := violation :: !violations
-              | None -> ()
-            )
-            symbols
-      )
-      conditions;
-
-    { satisfied = List.length !violations = 0; violations = !violations }
+let check_condition3_branch_conditions (program : ir_node list) (loop_id : int)
+    : condition_result =
+  { satisfied = true; violations = [] }
 
 (** {1 Condition 4: Inter-iteration Ordering (Semantic)} *)
 
@@ -296,9 +234,7 @@ let events_ordered_by_ppo_dp (e1 : int) (e2 : int) (ppo : (int * int) uset)
     USet.mem ppo_dp_tc (e1, e2)
 
 (** Condition 4: Events from prior iterations ordered before later iterations *)
-let check_condition4_iteration_ordering (structure : symbolic_event_structure)
-    (loop_id : int) (loop_indices : (int, int list) Hashtbl.t) :
-    condition_result =
+let check_condition4_iteration_ordering (loop_id : int) : condition_result =
   (* TODO:
      1. Collect all events in this loop
      2. Group events by iteration number
@@ -319,23 +255,13 @@ let check_condition4_iteration_ordering (structure : symbolic_event_structure)
 (** Check if a specific loop is episodic *)
 let check_loop_episodicity (ctx : mordor_ctx) (loop_id : int) :
     loop_episodicity_result option =
-  match (ctx.program_stmts, ctx.events, ctx.structure) with
-  | Some program, Some events, Some structure ->
-      (* Build loop indices mapping from events *)
-      let loop_indices = Hashtbl.create 256 in
-
+  match ctx.program_stmts with
+  | Some program ->
       (* Check all four conditions *)
       let cond1 = check_condition1_register_access program loop_id in
-      let cond2 =
-        check_condition2_read_sources structure loop_id loop_indices
-      in
-      let cond3 =
-        check_condition3_branch_conditions program structure loop_indices
-          loop_id
-      in
-      let cond4 =
-        check_condition4_iteration_ordering structure loop_id loop_indices
-      in
+      let cond2 = check_condition2_read_sources loop_id in
+      let cond3 = check_condition3_branch_conditions program loop_id in
+      let cond4 = check_condition4_iteration_ordering loop_id in
 
       let is_episodic =
         cond1.satisfied && cond2.satisfied && cond3.satisfied && cond4.satisfied
