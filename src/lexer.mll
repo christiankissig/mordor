@@ -14,7 +14,14 @@ let hex_digit = digit | ['a'-'f' 'A'-'F']
 
 (* Main lexer rule *)
 rule token = parse
-  | [' ' '\t' '\r']+      { token lexbuf }
+  | [' ' '\t' '\r']+ as ws {
+        (* Move position back by length of whitespace *)
+        lexbuf.Lexing.lex_curr_p <-
+          { lexbuf.Lexing.lex_curr_p with
+            Lexing.pos_cnum = lexbuf.Lexing.lex_curr_p.Lexing.pos_cnum - String.length ws
+          };
+        token lexbuf
+      }
   | '\n'                  { Lexing.new_line lexbuf; token lexbuf }
   | "//" [^ '\n']* '\n'   { Lexing.new_line lexbuf; token lexbuf }
   | "//" [^ '\n']* eof    { token lexbuf }
