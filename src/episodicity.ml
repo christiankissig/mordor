@@ -224,7 +224,7 @@ let rec extract_symbols_from_ir_expr (expr : expr) : string list =
 (** Check if a branch condition depends on pre-loop symbols *)
 let check_branch_condition (condition : expr)
     (structure : symbolic_event_structure)
-    (loop_indices : (int, int list) Hashtbl.t) (loop_id : int) : bool =
+     (loop_id : int) : bool =
   (* TODO:
      1. Extract all symbols from condition
      2. For each symbol, get its origin event
@@ -246,15 +246,19 @@ let check_branch_condition (condition : expr)
 (** Condition 3: Branch conditions don't constrain pre-loop symbols *)
 let check_condition3_branch_conditions (program : ir_node list)
     (structure : symbolic_event_structure)
-    (loop_indices : (int, int list) Hashtbl.t) (loop_id : int) :
+     (loop_id : int) :
     condition_result =
   (* Find all nodes belonging to this loop *)
   let loop_nodes = find_loop_nodes program loop_id in
 
   (* Extract all conditions from these nodes *)
   let conditions =
-    List.concat_map
-      (fun (node : ir_node) -> Ir.extract_conditions_from_stmt node.stmt)
+    List.filter_map
+      (fun (node : ir_node) ->
+        match node.stmt with
+        | While { condition; _ } | Do {condition; _} -> Some condition
+        | _ -> None
+      )
       loop_nodes
   in
 
