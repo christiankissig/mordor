@@ -116,6 +116,8 @@ let dot (event : event) structure phi : symbolic_event_structure =
     constraint_ = structure.constraint_;
     conflict = structure.conflict;
     origin = structure.origin;
+    loop_indices = structure.loop_indices;
+    thread_index = structure.thread_index;
     write_events =
       ( if event.typ = Write then
           USet.union structure.write_events (USet.singleton event.label)
@@ -185,6 +187,8 @@ let plus a b : symbolic_event_structure =
         USet.union (URelation.cross a.e b.e) (USet.union a.conflict b.conflict);
       (* a and b share the same origin table *)
       origin = a.origin;
+      loop_indices = a.loop_indices;
+      thread_index = a.thread_index;
       write_events = USet.union a.write_events b.write_events;
       read_events = USet.union a.read_events b.read_events;
       rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
@@ -217,6 +221,8 @@ let cross a b : symbolic_event_structure =
       conflict = USet.union a.conflict b.conflict;
       (* a and b share the same origin table *)
       origin = a.origin;
+      loop_indices = a.loop_indices;
+      thread_index = a.thread_index;
       write_events = USet.union a.write_events b.write_events;
       read_events = USet.union a.read_events b.read_events;
       rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
@@ -246,6 +252,8 @@ let empty_structure () : symbolic_event_structure =
     constraint_ = [];
     conflict = USet.create ();
     origin = Hashtbl.create 16;
+    loop_indices = Hashtbl.create 16;
+    thread_index = Hashtbl.create 16;
     write_events = USet.create ();
     read_events = USet.create ();
     rlx_write_events = USet.create ();
@@ -306,6 +314,8 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
           structure with
           events = events.events;
           origin = events.origin;
+          loop_indices = events.loop_indices;
+          thread_index = events.thread_index;
           p = events.env_by_evt;
         }
       in

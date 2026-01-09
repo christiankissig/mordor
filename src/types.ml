@@ -216,6 +216,10 @@ type symbolic_event_structure = {
   constraint_ : expr list; [@opaque] (* Constraints *)
   conflict : (int * int) uset; [@printer pp_int_urel] (* Conflict relation *)
   origin : (string, int) Hashtbl.t; [@opaque] (* Origin mapping for symbols *)
+  loop_indices : (int, int list) Hashtbl.t; [@opaque]
+      (* Mapping from events to their loop indices *)
+  thread_index : (int, int) Hashtbl.t; [@opaque]
+  (* Mapping from events to their thread indices *)
   (* cached event filters *)
   write_events : int uset; [@printer pp_int_uset]
   read_events : int uset; [@printer pp_int_uset]
@@ -245,6 +249,8 @@ let create_symbolic_event_structure () : symbolic_event_structure =
     constraint_ = [];
     conflict = USet.create ();
     origin = Hashtbl.create 16;
+    loop_indices = Hashtbl.create 16;
+    thread_index = Hashtbl.create 16;
     write_events = USet.create ();
     read_events = USet.create ();
     rlx_write_events = USet.create ();

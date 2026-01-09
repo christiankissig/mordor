@@ -31,6 +31,7 @@ class GraphVisualizer {
         this.executionCount = 0;
         this.lastProgram = null; // Store last program for regeneration
         this.highlightMarker = null; // Store current highlight element
+        this.loops = []; // Store loop information
         
         // Settings
         this.settings = {
@@ -125,7 +126,7 @@ class GraphVisualizer {
         });
     }
     
-    highlightSourceSpan(startLine, startCol, endLine, endCol) {
+    highlightSourceSpan(startLine, startCol, endLine, endCol, color = 'rgba(255, 215, 0, 0.25)', borderColor = 'rgba(255, 215, 0, 0.5)') {
         // Clear any existing highlight
         this.clearSourceHighlight();
         
@@ -193,8 +194,8 @@ class GraphVisualizer {
                 left: ${leftPos}px;
                 width: ${width}px;
                 height: ${lineHeight}px;
-                background-color: rgba(255, 215, 0, 0.25);
-                border: 1px solid rgba(255, 215, 0, 0.5);
+                background-color: ${color};
+                border: 1px solid ${borderColor};
                 box-sizing: border-box;
             `;
             
@@ -236,8 +237,8 @@ class GraphVisualizer {
                     left: ${leftPos}px;
                     width: ${width}px;
                     height: ${lineHeight}px;
-                    background-color: rgba(255, 215, 0, 0.25);
-                    border: 1px solid rgba(255, 215, 0, 0.5);
+                    background-color: ${color};
+                    border: 1px solid ${borderColor};
                     box-sizing: border-box;
                 `;
                 
@@ -267,6 +268,64 @@ class GraphVisualizer {
         if (this.highlightContainer) {
             this.highlightContainer.innerHTML = '';
         }
+    }
+    
+    renderLoops() {
+        const loopsContent = document.getElementById('loops-content');
+        
+        if (!this.loops || this.loops.length === 0) {
+            loopsContent.innerHTML = '<p style="padding: 1rem; color: #6a6a6a;">No loops detected</p>';
+            return;
+        }
+        
+        let html = '<div style="padding: 0.5rem;">';
+        this.loops.forEach(loop => {
+            html += `
+                <div class="loop-item" 
+                     data-start-line="${loop.start_line}" 
+                     data-start-col="${loop.start_col}"
+                     data-end-line="${loop.end_line}" 
+                     data-end-col="${loop.end_col}"
+                     style="padding: 0.75rem; margin: 0.5rem 0; background: #252526; border: 1px solid #3e3e42; border-radius: 4px; cursor: pointer; transition: background 0.2s;">
+                    <strong style="color: #4ec9b0;">Loop ${loop.id}</strong>
+                    <div style="font-size: 0.85rem; color: #6a6a6a; margin-top: 0.25rem;">
+                        Lines ${loop.start_line}:${loop.start_col} - ${loop.end_line}:${loop.end_col}
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        
+        loopsContent.innerHTML = html;
+        
+        // Add hover listeners to loop items
+        const loopItems = loopsContent.querySelectorAll('.loop-item');
+        loopItems.forEach(item => {
+            item.addEventListener('mouseenter', () => {
+                const startLine = parseInt(item.getAttribute('data-start-line'));
+                const startCol = parseInt(item.getAttribute('data-start-col'));
+                const endLine = parseInt(item.getAttribute('data-end-line'));
+                const endCol = parseInt(item.getAttribute('data-end-col'));
+                
+                // Highlight with green color
+                this.highlightSourceSpan(
+                    startLine, 
+                    startCol, 
+                    endLine, 
+                    endCol,
+                    'rgba(76, 201, 176, 0.25)',  // Green background
+                    'rgba(76, 201, 176, 0.5)'     // Green border
+                );
+                
+                // Visual feedback on the loop item
+                item.style.background = '#2d2d30';
+            });
+            
+            item.addEventListener('mouseleave', () => {
+                this.clearSourceHighlight();
+                item.style.background = '#252526';
+            });
+        });
     }
     
     openSettingsModal() {
@@ -546,6 +605,7 @@ class GraphVisualizer {
         this.data = [];
         this.currentIndex = 0;
         this.executionCount = 0;
+        this.loops = [];
 
         // Update UI
         document.getElementById('status').textContent = 'Processing...';
@@ -596,6 +656,10 @@ class GraphVisualizer {
                     this.log('Interpreting program...');
                 } else if (data.status === 'visualizing') {
                     this.log('Generating visualizations...');
+                } else if (data.type === 'loop-info') {
+                    this.log('Received loop information');
+                    this.loops = data.loops || [];
+                    this.renderLoops();
                 } else if (data.type === 'event_structure') {
                     this.log('Received event structure');
                     this.graphs.push(data.graph);

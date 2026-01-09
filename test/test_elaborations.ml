@@ -66,6 +66,8 @@ module TestData = struct
       constraint_ = [];
       conflict = USet.create ();
       origin = Hashtbl.create 10;
+      loop_indices = Hashtbl.create 10;
+      thread_index = Hashtbl.create 10;
       write_events;
       read_events;
       rlx_write_events = USet.create ();

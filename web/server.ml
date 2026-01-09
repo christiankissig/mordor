@@ -3,13 +3,14 @@
 open Lwt.Syntax
 open Context
 open Types
+open Source_info
 
 let visualize_to_stream program options step_counter stream =
   let context = make_context options ~output_mode:Json ~step_counter () in
     context.litmus <- Some program;
 
     (* Create a function to send graph data through SSE *)
-    let send_graph json_str =
+    let send_data json_str =
       let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
         Dream.flush stream
     in
@@ -17,14 +18,15 @@ let visualize_to_stream program options step_counter stream =
     let* ctx =
       Lwt.return context
       |> Parse.step_parse_litmus
+      |> LoopInformation.send_loop_information send_data
       |> Interpret.step_interpret
       (* Send event structure graph immediately after interpret *)
       |> (fun ctx ->
-      Eventstructureviz.step_send_event_structure_graph ctx send_graph
+      Eventstructureviz.step_send_event_structure_graph ctx send_data
       )
       |> Symmrd.step_calculate_dependencies
       |> Assertion.step_check_assertions
-      |> fun ctx -> Eventstructureviz.step_send_execution_graphs ctx send_graph
+      |> fun ctx -> Eventstructureviz.step_send_execution_graphs ctx send_data
     in
 
     Lwt.return ctx

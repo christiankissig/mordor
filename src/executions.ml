@@ -1135,8 +1135,7 @@ let compute_justification_combinations structure paths init_ppo statex
     @param init_ppo Initial preserved program order relation
     @param restrictions Restrictions on execution generation
     @param include_rf Whether to include read-from relations in the executions.
-
- *)
+*)
 let generate_executions ?(include_rf = true)
     (structure : symbolic_event_structure) (justs : justification uset) statex
     init_ppo ~restrictions =

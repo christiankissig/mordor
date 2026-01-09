@@ -922,8 +922,8 @@ let check_for_coherence structure execution restrictions =
             if not (M.check_thin_air execution cache) then (
               Landmark.exit landmark;
               Lwt.return false
-            ) else
-
+            )
+            else
               (* Try all coherence orders *)
               let result =
                 try_all_coherence_orders structure execution cache
