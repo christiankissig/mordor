@@ -869,7 +869,7 @@ let try_all_coherence_orders structure execution cache check_coherence eqlocs =
 
 (** {1 Coherence Checking Entry Point} *)
 
-let check_for_coherence structure execution restrictions include_dependencies =
+let check_for_coherence structure execution restrictions =
   let landmark = Landmark.register "check_for_coherence" in
     Landmark.enter landmark;
 
@@ -918,27 +918,12 @@ let check_for_coherence structure execution restrictions include_dependencies =
             (* Build cache *)
             let cache = M.build_cache execution structure events loc_restrict in
 
-            (* Compute deps if needed *)
-            let execution =
-              if not include_dependencies then
-                {
-                  execution with
-                  dp =
-                    M.compute_dependencies execution events structure.po
-                      structure.e structure.restrict;
-                }
-              else execution
-            in
-
             (* Check thin-air *)
-            if
-              (not include_dependencies)
-              && not (M.check_thin_air execution cache)
-            then (
+            if not (M.check_thin_air execution cache) then (
               Landmark.exit landmark;
               Lwt.return false
-            )
-            else
+            ) else
+
               (* Try all coherence orders *)
               let result =
                 try_all_coherence_orders structure execution cache

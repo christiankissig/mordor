@@ -863,7 +863,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
 
 (** Creates executions from a list of justifications for a given path. *)
 let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
-    ~elided ~constraints =
+    ~elided ~constraints ~include_rf =
   let landmark = Landmark.register "freeze" in
     Landmark.enter landmark;
 
@@ -1035,8 +1035,10 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
         );
 
         let* all_fr =
-          compute_path_rf structure path ~elided ~constraints statex ppo dp
-            p_combined
+          if include_rf then
+            compute_path_rf structure path ~elided ~constraints statex ppo dp
+              p_combined
+          else Lwt.return [ [] ]
         in
         let all_rf =
           List.map
@@ -1125,10 +1127,19 @@ let compute_justification_combinations structure paths init_ppo statex
 
 (** {1 Generate executions} *)
 
-(** Main execution generation - replaces the stub in calculate_dependencies *)
-let generate_executions (structure : symbolic_event_structure)
-    (justs : justification uset) statex init_ppo ~include_dependencies
-    ~restrictions =
+(** Main execution generation - replaces the stub in calculate_dependencies.
+
+    @param structure Symbolic Event Structure
+    @param justs Set of justifications
+    @param statex State expressions
+    @param init_ppo Initial preserved program order relation
+    @param restrictions Restrictions on execution generation
+    @param include_rf Whether to include read-from relations in the executions.
+
+ *)
+let generate_executions ?(include_rf = true)
+    (structure : symbolic_event_structure) (justs : justification uset) statex
+    init_ppo ~restrictions =
   let landmark = Landmark.register "generate_executions" in
     Landmark.enter landmark;
 
@@ -1196,7 +1207,7 @@ let generate_executions (structure : symbolic_event_structure)
 
           let* freeze_results =
             freeze structure path j_remapped init_ppo statex ~elided
-              ~constraints
+              ~constraints ~include_rf
           in
             Logs.info (fun m ->
                 m
@@ -1221,19 +1232,20 @@ let generate_executions (structure : symbolic_event_structure)
             let fix_rf_map = Hashtbl.create 16 in
 
             (* Build initial mapping from RF *)
-            USet.iter
-              (fun (w, r) ->
-                (* TODO look up logic is contrived *)
-                let w_val = vale structure w r in
-                  match get_val structure r with
-                  | None ->
-                      failwith
-                        ("Read event " ^ string_of_int r ^ " has no value!")
-                  | Some r_val ->
-                      (* Store mapping *)
-                      Hashtbl.replace fix_rf_map (Expr.to_string r_val) w_val
-              )
-              freeze_res.rf;
+            if include_rf then
+              USet.iter
+                (fun (w, r) ->
+                  (* TODO look up logic is contrived *)
+                  let w_val = vale structure w r in
+                    match get_val structure r with
+                    | None ->
+                        failwith
+                          ("Read event " ^ string_of_int r ^ " has no value!")
+                    | Some r_val ->
+                        (* Store mapping *)
+                        Hashtbl.replace fix_rf_map (Expr.to_string r_val) w_val
+                )
+                freeze_res.rf;
 
             (* Compute fixed point *)
             let rec compute_fixed_point map =
@@ -1316,9 +1328,7 @@ let generate_executions (structure : symbolic_event_structure)
 
       let stream_filter_coherent_executions input_stream =
         Lwt_stream.filter_s
-          (fun exec ->
-            check_for_coherence structure exec restrictions include_dependencies
-          )
+          (fun exec -> check_for_coherence structure exec restrictions)
           input_stream
       in
 

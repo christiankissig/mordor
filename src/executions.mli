@@ -33,10 +33,10 @@ end
     @param restrictions Coherence model restrictions
     @return [Lwt.t] of list of valid symbolic executions *)
 val generate_executions :
+  ?include_rf:bool ->
   symbolic_event_structure ->
   justification uset ->
   expr list ->
   (int * int) uset ->
-  include_dependencies:bool ->
   restrictions:Coherence.restrictions ->
   symbolic_execution list Lwt.t

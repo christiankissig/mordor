@@ -10,9 +10,9 @@ open Uset
 
 (** Calculate dependencies and justifications *)
 
-let calculate_dependencies ast (structure : symbolic_event_structure)
-    (events : (int, event) Hashtbl.t) ~exhaustive ~include_dependencies
-    ~restrictions =
+let calculate_dependencies ?(include_rf = true) ast
+    (structure : symbolic_event_structure) (events : (int, event) Hashtbl.t)
+    ~exhaustive ~restrictions =
   let e_set = structure.e in
   let restrict = structure.restrict in
   let rmw = structure.rmw in
@@ -116,42 +116,40 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
   Logs.debug (fun m -> m "Starting elaborations...");
 
   let* final_justs =
-    if include_dependencies then
-      let rec fixed_point (justs : justification uset) =
-        Logs.debug (fun m ->
-            m "Fixed-point iteration with %d justifications" (USet.size justs)
-        );
-        let* va = Elaborations.value_assign elab_ctx justs in
-          let* lift = Elaborations.lift elab_ctx va in
-            let* weak = Elaborations.weaken elab_ctx lift in
-              let* fwd = Elaborations.forward elab_ctx weak in
-                let* filtered =
-                  Elaborations.filter elab_ctx (USet.union justs fwd)
-                in
+    let rec fixed_point (justs : justification uset) =
+      Logs.debug (fun m ->
+          m "Fixed-point iteration with %d justifications" (USet.size justs)
+      );
+      let* va = Elaborations.value_assign elab_ctx justs in
+        let* lift = Elaborations.lift elab_ctx va in
+          let* weak = Elaborations.weaken elab_ctx lift in
+            let* fwd = Elaborations.forward elab_ctx weak in
+              let* filtered =
+                Elaborations.filter elab_ctx (USet.union justs fwd)
+              in
 
-                let justs_str =
-                  String.concat "\n\t"
-                    (USet.values (USet.map Justification.to_string filtered))
-                in
-                  if USet.equal filtered justs then (
-                    Logs.debug (fun m ->
-                        m "Fixed-point reached with %d justifications:\n\t%s"
-                          (USet.size filtered) justs_str
-                    );
-                    Lwt.return filtered
-                  )
-                  else (
-                    Logs.debug (fun m ->
-                        m "Continue elaborating with %d justifications:\n\t%s"
-                          (USet.size filtered) justs_str
-                    );
-                    fixed_point filtered
-                  )
-      in
+              let justs_str =
+                String.concat "\n\t"
+                  (USet.values (USet.map Justification.to_string filtered))
+              in
+                if USet.equal filtered justs then (
+                  Logs.debug (fun m ->
+                      m "Fixed-point reached with %d justifications:\n\t%s"
+                        (USet.size filtered) justs_str
+                  );
+                  Lwt.return filtered
+                )
+                else (
+                  Logs.debug (fun m ->
+                      m "Continue elaborating with %d justifications:\n\t%s"
+                        (USet.size filtered) justs_str
+                  );
+                  fixed_point filtered
+                )
+    in
 
-      let* filtered_init = Elaborations.filter elab_ctx pre_justs in
-        fixed_point filtered_init
-    else Lwt.return pre_justs
+    let* filtered_init = Elaborations.filter elab_ctx pre_justs in
+      fixed_point filtered_init
   in
 
   Logs.debug (fun m ->
@@ -213,8 +211,8 @@ let calculate_dependencies ast (structure : symbolic_event_structure)
 
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions structure final_justs statex init_ppo
-      ~include_dependencies ~restrictions
+    generate_executions ~include_rf structure final_justs statex init_ppo
+      ~restrictions
   in
 
   Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));
@@ -244,7 +242,6 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
         let* structure, justs, executions =
           calculate_dependencies constraints structure events
             ~exhaustive:(ctx.options.exhaustive || false)
-            ~include_dependencies:(ctx.options.dependencies || true)
             ~restrictions:coherence_restrictions
         in
           ctx.structure <- Some structure;
