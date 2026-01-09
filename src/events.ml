@@ -207,11 +207,7 @@ end = struct
         cond = None;
         volatile = false;
         strong = None;
-        lhs = None;
-        rhs = None;
-        pc = None;
-        hide = false;
-        quot = None;
+        is_rdmw = false;
       }
     in
       match typ with
@@ -228,9 +224,6 @@ end = struct
             cond;
             volatile;
             strong;
-            lhs;
-            rhs;
-            pc;
           }
       | Malloc ->
           {
@@ -245,9 +238,6 @@ end = struct
             cond;
             volatile;
             strong;
-            lhs;
-            rhs;
-            pc;
           }
       | _ ->
           {
@@ -262,9 +252,6 @@ end = struct
             cond;
             volatile;
             strong;
-            lhs;
-            rhs;
-            pc;
           }
 
   (** Clone an event *)

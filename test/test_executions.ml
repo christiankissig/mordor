@@ -26,11 +26,7 @@ module TestData = struct
       cond;
       volatile = false;
       strong = None;
-      lhs = None;
-      rhs = None;
-      pc = None;
-      hide = false;
-      quot = None;
+      is_rdmw = false;
     }
 
   let basic_events () =

@@ -48,11 +48,7 @@ let make_event _ typ rmod wmod fmod strong rval wval id_opt =
     label = 0;
     cond = None;
     volatile = false;
-    lhs = None;
-    rhs = None;
-    pc = None;
-    hide = false;
-    quot = None;
+    is_rdmw = false;
   }
 
 (** Test helper: create event hashtable *)

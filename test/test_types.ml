@@ -39,12 +39,7 @@ let test_make_event () =
     Alcotest.(check bool) "event wval is None" true (evt.wval = None);
     Alcotest.(check bool) "event cond is None" true (evt.cond = None);
     Alcotest.(check bool) "event volatile is false" false evt.volatile;
-    Alcotest.(check bool) "event strong is None" true (evt.strong = None);
-    Alcotest.(check bool) "event lhs is None" true (evt.lhs = None);
-    Alcotest.(check bool) "event rhs is None" true (evt.rhs = None);
-    Alcotest.(check bool) "event pc is None" true (evt.pc = None);
-    Alcotest.(check bool) "event hide is false" false evt.hide;
-    Alcotest.(check bool) "event quot is None" true (evt.quot = None)
+    Alcotest.(check bool) "event strong is None" true (evt.strong = None)
 
 let test_make_event_types () =
   let read_evt = Event.create Read 1 () in

@@ -432,6 +432,11 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                     (Hashtbl.find_opt env)
                 in
                 let base_evt_store : event = Event.create Write 0 () in
+                (* if the operand evaluates to zero, this is a read-don't
+                   modify-write *)
+                let is_rdmw =
+                  Expr.evaluate operand (Hashtbl.find_opt env) == ENum Z.zero
+                in
                 let evt_store =
                   {
                     base_evt_store with
@@ -439,6 +444,7 @@ let interpret_statements_open ~recurse ~add_event (nodes : ir_node list) env phi
                     wval = Some result_expr;
                     wmod = assign_mode;
                     volatile = false;
+                    is_rdmw;
                   }
                 in
                 let event_store' : event =

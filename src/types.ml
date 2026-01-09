@@ -174,11 +174,7 @@ type event = {
   cond : expr option;
   volatile : bool;
   strong : mode option;
-  lhs : int option;
-  rhs : int option;
-  pc : int option;
-  hide : bool;
-  quot : int option;
+  is_rdmw : bool;
 }
 [@@deriving show]
 

@@ -23,11 +23,7 @@ module TestUtil = struct
       cond = None;
       volatile = false;
       strong = None;
-      lhs = None;
-      rhs = None;
-      pc = None;
-      hide = false;
-      quot = None;
+      is_rdmw = false;
     }
 
   (** Create test events hashtable *)

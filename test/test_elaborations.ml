@@ -25,11 +25,7 @@ module TestData = struct
       rmod;
       fmod;
       strong = None;
-      lhs = None;
-      rhs = None;
-      pc = None;
-      hide = false;
-      quot = None;
+      is_rdmw = false;
     }
 
   (* Standard test events *)
