@@ -216,6 +216,8 @@ type source_span = {
   end_line : int;
   end_col : int;
 }
-[@@deriving show]
+[@@deriving show, yojson]
+
+(** Mapping from event IDs to source code spans *)
 
 type event_source_code_span = (int, source_span) Hashtbl.t

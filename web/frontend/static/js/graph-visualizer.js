@@ -32,6 +32,7 @@ class GraphVisualizer {
         this.lastProgram = null; // Store last program for regeneration
         this.highlightMarker = null; // Store current highlight element
         this.loops = []; // Store loop information
+        this.episodicityResults = {}; // Store episodicity results by loop_id
         
         // Settings
         this.settings = {
@@ -280,6 +281,8 @@ class GraphVisualizer {
         
         let html = '<div style="padding: 0.5rem;">';
         this.loops.forEach(loop => {
+            const episodicityData = this.episodicityResults[loop.id];
+            
             html += `
                 <div class="loop-item" 
                      data-start-line="${loop.start_line}" 
@@ -287,12 +290,70 @@ class GraphVisualizer {
                      data-end-line="${loop.end_line}" 
                      data-end-col="${loop.end_col}"
                      style="padding: 0.75rem; margin: 0.5rem 0; background: #252526; border: 1px solid #3e3e42; border-radius: 4px; cursor: pointer; transition: background 0.2s;">
-                    <strong style="color: #4ec9b0;">Loop ${loop.id}</strong>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <strong style="color: #4ec9b0;">Loop ${loop.id}</strong>
+                        ${episodicityData ? `<span style="font-size: 0.85rem; color: ${episodicityData.is_episodic ? '#89d185' : '#f48771'}; font-weight: bold;">${episodicityData.is_episodic ? '✓ Episodic' : '✗ Non-episodic'}</span>` : ''}
+                    </div>
                     <div style="font-size: 0.85rem; color: #6a6a6a; margin-top: 0.25rem;">
                         Lines ${loop.start_line}:${loop.start_col} - ${loop.end_line}:${loop.end_col}
                     </div>
-                </div>
             `;
+            
+            // Add episodicity conditions if available
+            if (episodicityData) {
+                html += '<div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #3e3e42;">';
+                html += '<div style="font-size: 0.85rem; color: #cccccc; margin-bottom: 0.5rem; font-weight: bold;">Episodicity Conditions:</div>';
+                
+                ['condition1', 'condition2', 'condition3', 'condition4'].forEach((condName, index) => {
+                    const cond = episodicityData[condName];
+                    if (cond) {
+                        const satisfied = cond.satisfied;
+                        const icon = satisfied ? '✓' : '✗';
+                        const color = satisfied ? '#89d185' : '#f48771';
+                        
+                        html += `
+                            <div style="margin: 0.4rem 0; padding: 0.4rem; background: #1e1e1e; border-radius: 3px;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="color: ${color}; font-weight: bold; min-width: 20px;">${icon}</span>
+                                    <span style="color: #d4d4d4; font-size: 0.85rem;">Condition ${index + 1}</span>
+                                </div>
+                        `;
+                        
+                        // Show violations if any
+                        if (!satisfied && cond.violations && cond.violations.length > 0) {
+                            html += '<div style="margin-left: 1.5rem; margin-top: 0.3rem;">';
+                            cond.violations.forEach(violation => {
+                                const violationType = violation[0];
+                                const violationDetails = violation[1];
+                                
+                                html += `<div style="font-size: 0.8rem; color: #f48771; margin: 0.2rem 0;">`;
+                                
+                                if (Array.isArray(violationDetails)) {
+                                    const [reason, register, span] = violationDetails;
+                                    html += `${this.formatViolationType(violationType)}: ${reason}`;
+                                    if (register) {
+                                        html += ` (${register})`;
+                                    }
+                                    if (span && span.start_line) {
+                                        html += ` at ${span.start_line}:${span.start_col}`;
+                                    }
+                                } else {
+                                    html += `${this.formatViolationType(violationType)}`;
+                                }
+                                
+                                html += '</div>';
+                            });
+                            html += '</div>';
+                        }
+                        
+                        html += '</div>';
+                    }
+                });
+                
+                html += '</div>';
+            }
+            
+            html += '</div>';
         });
         html += '</div>';
         
@@ -326,6 +387,11 @@ class GraphVisualizer {
                 item.style.background = '#252526';
             });
         });
+    }
+    
+    formatViolationType(type) {
+        // Convert camelCase/PascalCase to readable format
+        return type.replace(/([A-Z])/g, ' $1').trim();
     }
     
     openSettingsModal() {
@@ -606,6 +672,7 @@ class GraphVisualizer {
         this.currentIndex = 0;
         this.executionCount = 0;
         this.loops = [];
+        this.episodicityResults = {};
 
         // Update UI
         document.getElementById('status').textContent = 'Processing...';
@@ -659,6 +726,16 @@ class GraphVisualizer {
                 } else if (data.type === 'loop-info') {
                     this.log('Received loop information');
                     this.loops = data.loops || [];
+                    this.renderLoops();
+                } else if (data.type === 'episodicity-results') {
+                    this.log('Received episodicity results');
+                    // Store episodicity results indexed by loop_id
+                    if (data.loop_episodicity_results) {
+                        data.loop_episodicity_results.forEach(result => {
+                            this.episodicityResults[result.loop_id] = result;
+                        });
+                    }
+                    // Re-render loops to show episodicity information
                     this.renderLoops();
                 } else if (data.type === 'event_structure') {
                     this.log('Received event structure');

@@ -56,7 +56,7 @@ let default_options =
     ubopt = false;
   }
 
-(** Types for checked executons *)
+(** {1 Types for Checked Executions} *)
 
 type uaf_ub_reason = (int * int) uset
 type upd_ub_reason = (int * int) uset
@@ -68,6 +68,48 @@ type execution_info = {
   satisfied : bool;
   ub_reasons : ub_reason list;
 }
+
+(** {1 Types for Episodicity Tests} *)
+
+type register_condition_violation =
+  | RegisterReadBeforeWrite of string (* register name *) * source_span option
+[@@deriving show, yojson]
+
+type branch_condition_violation =
+  | BranchConstraintsSymbol of
+      string (* symbol name *) * int (* symbol origin
+  *) * source_span option
+[@@deriving show, yojson]
+
+(** Episodicity violation types *)
+type episodicity_violation =
+  | RegisterConditionViolation of register_condition_violation
+  | BranchConditionViolation of branch_condition_violation
+[@@deriving show, yojson]
+
+(** Result of episodicity check for a single condition *)
+type condition_result = {
+  satisfied : bool;
+  violations : episodicity_violation list;
+}
+[@@deriving show, yojson]
+
+(** Complete episodicity analysis result for a loop *)
+type loop_episodicity_result = {
+  loop_id : int;
+  condition1 : condition_result; (* Register access *)
+  condition2 : condition_result; (* Memory read sources *)
+  condition3 : condition_result; (* Branch conditions *)
+  condition4 : condition_result; (* Inter-iteration ordering *)
+  is_episodic : bool;
+}
+[@@deriving show, yojson]
+
+type loop_episodicity_result_summary = {
+  type_ : string; [@key "type"]
+  loop_episodicity_results : loop_episodicity_result list;
+}
+[@@deriving show, yojson]
 
 (** context for pipeline *)
 type mordor_ctx = {
@@ -102,6 +144,7 @@ type mordor_ctx = {
   mutable checked_executions : execution_info list option;
   (* episodicity per loop index *)
   mutable is_episodic : (int, bool) Hashtbl.t option;
+  mutable episodicity_results : loop_episodicity_result_summary option;
 }
 
 let make_context options ?(output_mode = Json) ?(output_file = "stdout")
@@ -128,6 +171,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     undefined_behaviour = None;
     checked_executions = None;
     is_episodic = None;
+    episodicity_results = None;
   }
 
 (** {1 Model Options} *)

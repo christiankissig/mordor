@@ -24,6 +24,8 @@ let visualize_to_stream program options step_counter stream =
       |> (fun ctx ->
       Eventstructureviz.step_send_event_structure_graph ctx send_data
       )
+      |> Episodicity.step_test_episodicity
+      |> Episodicity.send_episodicity_results send_data
       |> Symmrd.step_calculate_dependencies
       |> Assertion.step_check_assertions
       |> fun ctx -> Eventstructureviz.step_send_execution_graphs ctx send_data

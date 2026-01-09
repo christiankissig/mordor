@@ -342,6 +342,6 @@ type source_span = {
   end_line : int;
   end_col : int;
 }
-[@@deriving show]
+[@@deriving show, yojson]
 
 type event_source_code_span = (int, source_span) Hashtbl.t

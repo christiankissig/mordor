@@ -739,7 +739,7 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
                         |> EventStructureViz.json_graph_of_yojson
                         |> Result.get_ok
                       in
-                      let exec_info_opt =
+                      let (exec_info_opt : execution_info option) =
                         Hashtbl.find_opt checked_executions exec.id
                       in
 
@@ -748,7 +748,9 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
                       in
 
                       let is_valid =
-                        Option.map (fun info -> info.satisfied) exec_info_opt
+                        Option.map
+                          (fun (info : execution_info) -> info.satisfied)
+                          exec_info_opt
                       in
                       let undefined_behaviour =
                         Option.map

@@ -17,24 +17,14 @@ open Context
 open Ir_context_utils
 open Types
 open Uset
+open Lwt.Syntax
 
 (** Note: We work with ir_node (Context.ir_node) which is ir_node_ann Ir.ir_node
     The annotations contain loop_ctx, thread_ctx, etc. *)
 
-(** {1 Types} *)
+(** {1 Helper Functions} *)
 
-(** Result of episodicity check for a single condition *)
-type condition_result = { satisfied : bool; violations : string list }
-
-(** Complete episodicity analysis result for a loop *)
-type loop_episodicity_result = {
-  loop_id : int;
-  condition1 : condition_result; (* Register access *)
-  condition2 : condition_result; (* Memory read sources *)
-  condition3 : condition_result; (* Branch conditions *)
-  condition4 : condition_result; (* Inter-iteration ordering *)
-  is_episodic : bool;
-}
+(** Collect all loop IDs from the program *)
 
 (** {1 Event Structure Utilities} *)
 
@@ -132,13 +122,14 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
               (* Record violations for invalid writes *)
               USet.iter
                 (fun reg ->
-                  violations :=
-                    Printf.sprintf
-                      "Register '%s' written after being read without prior \
-                       write"
-                      reg
-                    :: !violations;
-                  satisfied := false
+                  let violation =
+                    RegisterConditionViolation
+                      (RegisterReadBeforeWrite
+                         (reg, node.annotations.source_span)
+                      )
+                  in
+                    violations := violation :: !violations;
+                    satisfied := false
                 )
                 invalid_written_regs;
 
@@ -157,15 +148,20 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
 (** Condition 1: Registers only accessed if written to ⊑-before *)
 let check_condition1_register_access (program : ir_node list) (loop_id : int) :
     condition_result =
-  (* TODO:
-     1. Find all nodes with annotations.loop_ctx.lid = loop_id
-     2. Collect register reads and writes in program order
-     3. Check that each read is preceded by a write in same iteration or before loop
-
-     Note: This requires deep traversal of IR statements, which may need
-     additional helper functions or access to the IR statement structure.
-  *)
-  { satisfied = true; violations = [] }
+  let violations = ref [] in
+  let satisfied = ref true in
+  let loop_nodes = find_loop_nodes program loop_id in
+    List.iter
+      (fun (node : ir_node) ->
+        match node.stmt with
+        | While { body; _ } | Do { body; _ } ->
+            let result = check_register_accesses_in_loop body in
+              satisfied := !satisfied && result.satisfied;
+              violations := result.violations @ !violations
+        | _ -> () (* should not happen *)
+      )
+      loop_nodes;
+    { satisfied = !satisfied; violations = !violations }
 
 (** {1 Condition 2: Memory Read Sources (Semantic)} *)
 
@@ -198,8 +194,8 @@ let event_before_loop (loop_indices : (int, int list) Hashtbl.t)
 
 (** Condition 2: Reads must read from valid sources *)
 let check_condition2_read_sources (structure : symbolic_event_structure)
-    (execution : symbolic_execution) (loop_id : int)
-    (loop_indices : (int, int list) Hashtbl.t) : condition_result =
+    (loop_id : int) (loop_indices : (int, int list) Hashtbl.t) :
+    condition_result =
   (* TODO:
      1. Find all read events in the loop (check loop_indices)
      2. For each read, trace its value origin through rf relation
@@ -272,12 +268,11 @@ let check_condition3_branch_conditions (program : ir_node list)
               match Hashtbl.find_opt structure.origin sym with
               | Some origin_event ->
                   if event_before_loop loop_indices origin_event loop_id then
-                    violations :=
-                      Printf.sprintf
-                        "Condition depends on pre-loop symbol '%s' (origin: \
-                         event %d)"
-                        sym origin_event
-                      :: !violations
+                    let violation =
+                      BranchConditionViolation
+                        (BranchConstraintsSymbol (sym, origin_event, None))
+                    in
+                      violations := violation :: !violations
               | None -> ()
             )
             symbols
@@ -298,8 +293,8 @@ let events_ordered_by_ppo_dp (e1 : int) (e2 : int) (ppo : (int * int) uset)
 
 (** Condition 4: Events from prior iterations ordered before later iterations *)
 let check_condition4_iteration_ordering (structure : symbolic_event_structure)
-    (execution : symbolic_execution) (loop_id : int)
-    (loop_indices : (int, int list) Hashtbl.t) : condition_result =
+    (loop_id : int) (loop_indices : (int, int list) Hashtbl.t) :
+    condition_result =
   (* TODO:
      1. Collect all events in this loop
      2. Group events by iteration number
@@ -309,16 +304,7 @@ let check_condition4_iteration_ordering (structure : symbolic_event_structure)
   *)
   let violations = ref [] in
 
-  (* Collect all events in the loop *)
-  let loop_events =
-    USet.filter
-      (fun evt_label ->
-        match get_iteration_for_loop loop_indices evt_label loop_id with
-        | Some _ -> true
-        | None -> false
-      )
-      execution.ex_e
-  in
+  (* TODO Collect all events in the loop *)
 
   (* Check ordering between iterations *)
   (* TODO: Implement full checking logic *)
@@ -329,117 +315,128 @@ let check_condition4_iteration_ordering (structure : symbolic_event_structure)
 (** Check if a specific loop is episodic *)
 let check_loop_episodicity (ctx : mordor_ctx) (loop_id : int) :
     loop_episodicity_result option =
-  match (ctx.program_stmts, ctx.events, ctx.structure, ctx.executions) with
-  | Some program, Some events, Some structure, Some executions ->
-      (* For now, check against the first execution
-         TODO: Should we check all executions? *)
-      if USet.is_empty executions then None
-      else
-        let execution =
-          match USet.values executions with
-          | [] -> failwith "Impossible: checked is_empty"
-          | exec :: _ -> exec
-        in
+  match (ctx.program_stmts, ctx.events, ctx.structure) with
+  | Some program, Some events, Some structure ->
+      (* Build loop indices mapping from events *)
+      let loop_indices = Hashtbl.create 256 in
 
-        (* Build loop indices mapping from events *)
-        let loop_indices = Hashtbl.create 256 in
-        (* TODO: Populate loop_indices from execution events *)
+      (* Check all four conditions *)
+      let cond1 = check_condition1_register_access program loop_id in
+      let cond2 =
+        check_condition2_read_sources structure loop_id loop_indices
+      in
+      let cond3 =
+        check_condition3_branch_conditions program structure loop_indices
+          loop_id
+      in
+      let cond4 =
+        check_condition4_iteration_ordering structure loop_id loop_indices
+      in
 
-        (* Check all four conditions *)
-        let cond1 = check_condition1_register_access program loop_id in
-        let cond2 =
-          check_condition2_read_sources structure execution loop_id loop_indices
-        in
-        let cond3 =
-          check_condition3_branch_conditions program structure loop_indices
-            loop_id
-        in
-        let cond4 =
-          check_condition4_iteration_ordering structure execution loop_id
-            loop_indices
-        in
+      let is_episodic =
+        cond1.satisfied && cond2.satisfied && cond3.satisfied && cond4.satisfied
+      in
 
-        let is_episodic =
-          cond1.satisfied
-          && cond2.satisfied
-          && cond3.satisfied
-          && cond4.satisfied
-        in
-
-        Some
-          {
-            loop_id;
-            condition1 = cond1;
-            condition2 = cond2;
-            condition3 = cond3;
-            condition4 = cond4;
-            is_episodic;
-          }
+      Some
+        {
+          loop_id;
+          condition1 = cond1;
+          condition2 = cond2;
+          condition3 = cond3;
+          condition4 = cond4;
+          is_episodic;
+        }
   | _ -> None
 
 (** Main episodicity testing function called from pipeline *)
-let step_test_episodicity (ctx : mordor_ctx) : unit =
-  match ctx.program_stmts with
-  | Some program ->
-      (* Collect all loop IDs from the program *)
-      let loop_ids = collect_loop_ids program in
+let step_test_episodicity (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  let* ctx = ctx in
+    match ctx.program_stmts with
+    | Some program ->
+        (* Collect all loop IDs from the program *)
+        let loop_ids = collect_loop_ids program in
 
-      Logs.info (fun m ->
-          m "Testing episodicity for %d loops: [%s]" (List.length loop_ids)
-            (String.concat ", " (List.map string_of_int loop_ids))
-      );
+        Logs.info (fun m ->
+            m "Testing episodicity for %d loops: [%s]" (List.length loop_ids)
+              (String.concat ", " (List.map string_of_int loop_ids))
+        );
 
-      (* Initialize episodicity table *)
-      let is_episodic_table = Hashtbl.create 10 in
+        let loop_episodicity_results = ref [] in
 
-      (* Check each loop *)
-      List.iter
-        (fun loop_id ->
-          match check_loop_episodicity ctx loop_id with
-          | Some result ->
-              Hashtbl.add is_episodic_table loop_id result.is_episodic;
+        (* Initialize episodicity table *)
+        let is_episodic_table = Hashtbl.create 10 in
 
-              Logs.info (fun m ->
-                  m "Loop %d: %s" loop_id
-                    (if result.is_episodic then "EPISODIC" else "NOT EPISODIC")
-              );
+        (* Check each loop *)
+        List.iter
+          (fun loop_id ->
+            Logs.info (fun m -> m "Analyzing Loop %d..." loop_id);
+            match check_loop_episodicity ctx loop_id with
+            | Some result ->
+                Hashtbl.add is_episodic_table loop_id result.is_episodic;
 
-              (* Log violations for each condition *)
-              if not result.condition1.satisfied then
-                Logs.warn (fun m ->
-                    m "  Condition 1 violations: %s"
-                      (String.concat "; " result.condition1.violations)
+                Logs.info (fun m ->
+                    m "Loop %d: %s" loop_id
+                      (if result.is_episodic then "EPISODIC" else "NOT EPISODIC")
                 );
-              if not result.condition2.satisfied then
-                Logs.warn (fun m ->
-                    m "  Condition 2 violations: %s"
-                      (String.concat "; " result.condition2.violations)
-                );
-              if not result.condition3.satisfied then
-                Logs.warn (fun m ->
-                    m "  Condition 3 violations: %s"
-                      (String.concat "; " result.condition3.violations)
-                );
-              if not result.condition4.satisfied then
-                Logs.warn (fun m ->
-                    m "  Condition 4 violations: %s"
-                      (String.concat "; " result.condition4.violations)
-                )
-          | None ->
-              Logs.warn (fun m ->
-                  m "Loop %d: Could not analyze (missing execution data)"
-                    loop_id
-              );
-              Hashtbl.add is_episodic_table loop_id false
-        )
-        loop_ids;
 
-      (* Store results in context *)
-      ctx.is_episodic <- Some is_episodic_table
-  | None ->
-      Logs.warn (fun m ->
-          m "No program statements available for episodicity analysis"
-      )
+                (* Log violations for each condition *)
+                if not result.condition1.satisfied then
+                  Logs.warn (fun m ->
+                      m "  Condition 1 violations: %s"
+                        (String.concat "; "
+                           (List.map show_episodicity_violation
+                              result.condition1.violations
+                           )
+                        )
+                  );
+                if not result.condition2.satisfied then
+                  Logs.warn (fun m ->
+                      m "  Condition 2 violations: %s"
+                        (String.concat "; "
+                           (List.map show_episodicity_violation
+                              result.condition2.violations
+                           )
+                        )
+                  );
+                if not result.condition3.satisfied then
+                  Logs.warn (fun m ->
+                      m "  Condition 3 violations: %s"
+                        (String.concat "; "
+                           (List.map show_episodicity_violation
+                              result.condition3.violations
+                           )
+                        )
+                  );
+                if not result.condition4.satisfied then
+                  Logs.warn (fun m ->
+                      m "  Condition 4 violations: %s"
+                        (String.concat "; "
+                           (List.map show_episodicity_violation
+                              result.condition4.violations
+                           )
+                        )
+                  );
+                loop_episodicity_results := result :: !loop_episodicity_results
+            | None ->
+                Logs.warn (fun m -> m "Loop %d: Could not analyze" loop_id);
+                Hashtbl.add is_episodic_table loop_id false
+          )
+          loop_ids;
+
+        (* Store results in context *)
+        ctx.is_episodic <- Some is_episodic_table;
+        ctx.episodicity_results <-
+          Some
+            {
+              type_ = "episodicity-results";
+              loop_episodicity_results = List.rev !loop_episodicity_results;
+            };
+        Lwt.return ctx
+    | None ->
+        Logs.warn (fun m ->
+            m "No program statements available for episodicity analysis"
+        );
+        Lwt.return ctx
 
 (** {1 Query Functions} *)
 
@@ -466,3 +463,14 @@ let get_non_episodic_loops (ctx : mordor_ctx) : int list =
         (fun lid is_episodic acc -> if not is_episodic then lid :: acc else acc)
         table []
   | None -> []
+
+let send_episodicity_results (send_func : string -> unit Lwt.t)
+    (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  let* ctx = ctx in
+    match ctx.episodicity_results with
+    | Some results ->
+        let json = loop_episodicity_result_summary_to_yojson results in
+        let json_str = Yojson.Safe.to_string json in
+          let* () = send_func json_str in
+            Lwt.return ctx
+    | None -> Lwt.return ctx

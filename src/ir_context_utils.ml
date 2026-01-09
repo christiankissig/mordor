@@ -72,9 +72,16 @@ let rec find_loop_nodes (program : ir_node list) (loop_id : int) : ir_node list
   List.concat_map (find_loop_nodes_in_node loop_id) program
 
 and find_loop_nodes_in_node (loop_id : int) (node : ir_node) : ir_node list =
-  let current_match = if node_in_loop node loop_id then [ node ] else [] in
-  let nested_matches = find_loop_nodes_in_stmt loop_id node.stmt in
-    current_match @ nested_matches
+  match node.stmt with
+  | While _ | Do _ -> (
+      match node.annotations.loop_ctx with
+      | Some loop_ctx when loop_ctx.lid = loop_id -> [ node ]
+      | _ -> find_loop_nodes_in_stmt loop_id node.stmt
+    )
+  | _ ->
+      let current_match = if node_in_loop node loop_id then [ node ] else [] in
+      let nested_matches = find_loop_nodes_in_stmt loop_id node.stmt in
+        current_match @ nested_matches
 
 and find_loop_nodes_in_stmt (loop_id : int) (stmt : ir_stmt) : ir_node list =
   match stmt with
