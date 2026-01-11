@@ -30,6 +30,7 @@
   lwt_utils
   parse
   parser
+  parser_state
   pretty
   rewrite
   solver

@@ -2,11 +2,13 @@ open Assertion
 open Ast
 open Context
 open Ir
+open Parser_state
 open Lwt.Syntax
 
 (** Parse a litmus test from a string *)
 
 let parse prsr src =
+  reset_parser_state ();
   let lexbuf = Lexing.from_string src in
     try prsr Lexer.token lexbuf with
     | Lexer.Lexer_error msg -> failwith (Printf.sprintf "Lexer error: %s" msg)
