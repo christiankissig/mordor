@@ -236,25 +236,24 @@ let specs =
       " Output file for visual-es, parse, or futures command (default: stdout \
        or auto-generated)"
     );
-    ( ( "--symbolic-loop-semantics",
-        Arg.Unit
-          (fun () ->
-            use_finite_step_counter_semantics := false;
-            use_symbolic_loop_semantics := true
-          ),
-        " Use symbolic loop semantics"
-      ),
-      (* loop semantics *)
-      ( "--step-counter",
-        Arg.Int
-          (fun n ->
-            use_finite_step_counter_semantics := true;
-            use_symbolic_loop_semantics := false;
-            use_step_counter_per_loop := false;
-            step_counter := Some n
-          ),
-        " Number of steps for interpretation (default: 5)"
-      )
+    ( "--symbolic-loop-semantics",
+      Arg.Unit
+        (fun () ->
+          use_finite_step_counter_semantics := false;
+          use_symbolic_loop_semantics := true
+        ),
+      " Use symbolic loop semantics"
+    );
+    (* loop semantics *)
+    ( "--step-counter",
+      Arg.Int
+        (fun n ->
+          use_finite_step_counter_semantics := true;
+          use_symbolic_loop_semantics := false;
+          use_step_counter_per_loop := false;
+          step_counter := Some n
+        ),
+      " Number of steps for interpretation (default: 5)"
     );
     ( "--step-counter-per-loop",
       Arg.Int
