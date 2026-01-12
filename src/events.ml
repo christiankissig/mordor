@@ -184,8 +184,8 @@ end = struct
     | Read -> e.rmod
     | Write -> e.wmod
     | Fence -> e.fmod
-    | Init -> e.wmod
-    | Terminal -> Relaxed (* TODO: is this correct? *)
+    | Init -> Acquire
+    | Terminal -> Release
     | Lock | Unlock -> Relaxed
     | Malloc | Branch | Loop | Free -> Relaxed
     | RMW | CRMW -> failwith "RMW/CRMW order not directly accessible"
@@ -214,16 +214,7 @@ end = struct
       | Fence ->
           {
             base with
-            rmod = ModeOps.read fmod;
-            wmod = ModeOps.write fmod;
             fmod;
-            id;
-            loc;
-            rval;
-            wval;
-            cond;
-            volatile;
-            strong;
           }
       | Malloc ->
           {
@@ -231,13 +222,11 @@ end = struct
             id = rval;
             loc;
             rval;
-            wval;
-            rmod;
-            wmod;
-            fmod;
-            cond;
-            volatile;
-            strong;
+          }
+      | Lock | Unlock ->
+          {
+            base with
+            id;
           }
       | _ ->
           {

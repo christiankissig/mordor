@@ -173,8 +173,6 @@ let test_event_creation () =
 
 let test_fence_creation () =
   let e = Event.create Fence 1 ~fmod:SC ~volatile:false () in
-    check bool "fence rmod adjusted" true (e.rmod = Acquire);
-    check bool "fence wmod adjusted" true (e.wmod = Release);
     check bool "fence fmod is sc" true (e.fmod = SC)
 
 let test_malloc_creation () =
