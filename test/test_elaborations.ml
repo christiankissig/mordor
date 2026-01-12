@@ -1,5 +1,6 @@
 open Alcotest
 open Elaborations
+open Eventstructures
 open Expr
 open Lwt.Syntax
 open Types
@@ -611,13 +612,13 @@ let test_strengthen_operations () =
 (** Pre-justification tests *)
 
 let test_pre_justifications_basic () =
-  let structure = Interpret.empty_structure () in
+  let structure = SymbolicEventStructure.create () in
   let result = pre_justifications structure in
     check int "empty structure" 0 (USet.size result)
 
 let test_pre_justifications_parameterized
     (name, events_list, e_set, write_events, read_events, expected_count) () =
-  let structure = Interpret.empty_structure () in
+  let structure = SymbolicEventStructure.create () in
   let events = Hashtbl.create 10 in
     List.iteri (fun i event -> Hashtbl.add events (i + 1) event) events_list;
     let structure =
@@ -627,7 +628,7 @@ let test_pre_justifications_parameterized
       check int name expected_count (USet.size result)
 
 let test_pre_justifications_structure_details () =
-  let structure = Interpret.empty_structure () in
+  let structure = SymbolicEventStructure.create () in
   let events = Hashtbl.create 10 in
   let write_event =
     TestData.make_event 1 ~loc:(Some (EVar "x")) ~wval:(Some (EVar "y"))
@@ -657,7 +658,7 @@ let test_pre_justifications_structure_details () =
           check bool "op e2 None" true (op_e2 = None)
 
 let test_pre_justifications_symbol_extraction (name, event, validator) () =
-  let structure = Interpret.empty_structure () in
+  let structure = SymbolicEventStructure.create () in
   let events = Hashtbl.create 10 in
     Hashtbl.add events 1 event;
     let structure =
@@ -676,7 +677,7 @@ let test_pre_justifications_symbol_extraction (name, event, validator) () =
 
 let test_pre_justifications_edge_cases () =
   (* Missing events *)
-  let structure1 = Interpret.empty_structure () in
+  let structure1 = SymbolicEventStructure.create () in
   let events1 = Hashtbl.create 10 in
   let structure1 =
     { structure1 with events = events1; e = USet.of_list [ 1 ] }
@@ -685,7 +686,7 @@ let test_pre_justifications_edge_cases () =
     check int "missing events filtered" 0 (USet.size result1);
 
     (* Multiple writes distinct *)
-    let structure2 = Interpret.empty_structure () in
+    let structure2 = SymbolicEventStructure.create () in
     let events2 = Hashtbl.create 10 in
     let write1 =
       TestData.make_event 1 ~loc:(Some (EVar "x")) ~wval:(Some (EVar "a"))

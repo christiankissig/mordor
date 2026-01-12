@@ -38,6 +38,7 @@ type options = {
   mutable coherent : string;
   mutable ubopt : bool;
   (* step counter semantics of loops *)
+  mutable use_symbolic_loop_semantics : bool;
   mutable use_finite_step_counter_semantics : bool;
   mutable use_step_counter_per_loop : bool;
 }
@@ -51,6 +52,7 @@ let default_options =
     forceimm = false;
     forcenocoh = false;
     coherent = "undefined";
+    use_symbolic_loop_semantics = false;
     use_finite_step_counter_semantics = false;
     use_step_counter_per_loop = true;
     ubopt = false;

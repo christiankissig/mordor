@@ -1,5 +1,27 @@
 open Types
 
+(** {1 Symbolic Event Structure} *)
+
+(** Symbolic event structure *)
+module SymbolicEventStructure : sig
+  (** Symbolic event structure type alias *)
+  type t = symbolic_event_structure
+
+  (** Create an empty symbolic event structure *)
+  val create : unit -> t
+
+  (** Prefix symbolic operation with event *)
+  val dot : event -> t -> expr list -> t
+
+  (** Disjoint union of two symbolic event structures; intended for branching.
+  *)
+  val plus : t -> t -> t
+
+  (** Cross product of two symbolic event structures; intended for parallel
+      composition. *)
+  val cross : t -> t -> t
+end
+
 (** {1 Types} *)
 
 (** Path information containing event sequence and predicates *)

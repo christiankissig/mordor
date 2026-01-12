@@ -211,23 +211,9 @@ end = struct
       }
     in
       match typ with
-      | Fence ->
-          {
-            base with
-            fmod;
-          }
-      | Malloc ->
-          {
-            base with
-            id = rval;
-            loc;
-            rval;
-          }
-      | Lock | Unlock ->
-          {
-            base with
-            id;
-          }
+      | Fence -> { base with fmod }
+      | Malloc -> { base with id = rval; loc; rval }
+      | Lock | Unlock -> { base with id }
       | _ ->
           {
             base with

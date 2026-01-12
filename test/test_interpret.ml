@@ -1,5 +1,6 @@
 open Context
 open Events
+open Eventstructures
 open Expr
 open Interpret
 open Ir
@@ -98,7 +99,7 @@ let test_add_multiple_events () =
 
 (** Test empty structure *)
 let test_empty_structure () =
-  let s = empty_structure () in
+  let s = SymbolicEventStructure.create () in
     Alcotest.(check int) "empty events" 0 (USet.size s.e);
     Alcotest.(check int) "empty po" 0 (USet.size s.po);
     Alcotest.(check int) "empty rmw" 0 (USet.size s.rmw);
@@ -108,12 +109,12 @@ let test_empty_structure () =
     Alcotest.(check int) "empty constraints" 0 (List.length s.constraint_);
     Alcotest.(check int) "empty pwg" 0 (List.length s.pwg)
 
-(** Test dot operation *)
+(** Test SymbolicEventStructure.dot operation *)
 let test_dot () =
-  let s = empty_structure () in
+  let s = SymbolicEventStructure.create () in
   let s' = { s with e = USet.of_list [ 2; 3 ] } in
   let evt = Event.create Read 1 () in
-  let result = dot evt s' [] in
+  let result = SymbolicEventStructure.dot evt s' [] in
     Alcotest.(check bool) "event 1 in result" true (USet.mem result.e 1);
     Alcotest.(check bool) "event 2 in result" true (USet.mem result.e 2);
     Alcotest.(check bool) "event 3 in result" true (USet.mem result.e 3);
@@ -122,11 +123,15 @@ let test_dot () =
     Alcotest.(check bool) "po (1,2) exists" true (USet.mem result.po (1, 2));
     Alcotest.(check bool) "po (1,3) exists" true (USet.mem result.po (1, 3))
 
-(** Test plus operation *)
+(** Test SymbolicEventStructure.plus operation *)
 let test_plus () =
-  let s1 = { (empty_structure ()) with e = USet.of_list [ 1; 2 ] } in
-  let s2 = { (empty_structure ()) with e = USet.of_list [ 3; 4 ] } in
-  let result = plus s1 s2 in
+  let s1 =
+    { (SymbolicEventStructure.create ()) with e = USet.of_list [ 1; 2 ] }
+  in
+  let s2 =
+    { (SymbolicEventStructure.create ()) with e = USet.of_list [ 3; 4 ] }
+  in
+  let result = SymbolicEventStructure.plus s1 s2 in
     Alcotest.(check int) "merged events" 4 (USet.size result.e);
     Alcotest.(check bool) "has event 1" true (USet.mem result.e 1);
     Alcotest.(check bool) "has event 2" true (USet.mem result.e 2);
@@ -136,7 +141,7 @@ let test_plus () =
 let test_plus_with_relations () =
   let s1 =
     {
-      (empty_structure ()) with
+      (SymbolicEventStructure.create ()) with
       e = USet.of_list [ 1 ];
       po = USet.of_list [ (1, 2) ];
       rmw = USet.of_list [ (1, 3) ];
@@ -144,21 +149,25 @@ let test_plus_with_relations () =
   in
   let s2 =
     {
-      (empty_structure ()) with
+      (SymbolicEventStructure.create ()) with
       e = USet.of_list [ 4 ];
       po = USet.of_list [ (4, 5) ];
       rmw = USet.of_list [ (4, 6) ];
     }
   in
-  let result = plus s1 s2 in
+  let result = SymbolicEventStructure.plus s1 s2 in
     Alcotest.(check int) "merged po relations" 2 (USet.size result.po);
     Alcotest.(check int) "merged rmw relations" 2 (USet.size result.rmw)
 
-(** Test cross operation *)
+(** Test SymbolicEventStructure.cross operation *)
 let test_cross () =
-  let s1 = { (empty_structure ()) with e = USet.of_list [ 1; 2 ] } in
-  let s2 = { (empty_structure ()) with e = USet.of_list [ 3; 4 ] } in
-  let result = cross s1 s2 in
+  let s1 =
+    { (SymbolicEventStructure.create ()) with e = USet.of_list [ 1; 2 ] }
+  in
+  let s2 =
+    { (SymbolicEventStructure.create ()) with e = USet.of_list [ 3; 4 ] }
+  in
+  let result = SymbolicEventStructure.cross s1 s2 in
     Alcotest.(check int) "crossed events" 4 (USet.size result.e);
     Alcotest.(check bool) "has event 1" true (USet.mem result.e 1);
     Alcotest.(check bool) "has event 4" true (USet.mem result.e 4)
@@ -226,7 +235,8 @@ let test_interpret_fence =
           interpret_statements [ make_ir_node stmt ] env [] events
         in
           Alcotest.(check int)
-            "one fence event plus terminal event" 2 (USet.size result.e);
+            "one fence event SymbolicEventStructure.plus terminal event" 2
+            (USet.size result.e);
           let evt = Hashtbl.find events.events 0 in
             Alcotest.(check bool) "is fence" true (evt.typ = Fence);
             Lwt.return_unit

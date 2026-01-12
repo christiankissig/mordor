@@ -2,6 +2,180 @@ open Events
 open Types
 open Uset
 
+module SymbolicEventStructure = struct
+  type t = symbolic_event_structure
+
+  let create () : t =
+    {
+      e = USet.create ();
+      events = Hashtbl.create 16;
+      po = USet.create ();
+      po_iter = USet.create ();
+      rmw = USet.create ();
+      lo = USet.create ();
+      restrict = Hashtbl.create 16;
+      cas_groups = Hashtbl.create 16;
+      pwg = [];
+      fj = USet.create ();
+      p = Hashtbl.create 16;
+      constraint_ = [];
+      conflict = USet.create ();
+      origin = Hashtbl.create 16;
+      loop_indices = Hashtbl.create 16;
+      thread_index = Hashtbl.create 16;
+      write_events = USet.create ();
+      read_events = USet.create ();
+      rlx_write_events = USet.create ();
+      rlx_read_events = USet.create ();
+      fence_events = USet.create ();
+      branch_events = USet.create ();
+      malloc_events = USet.create ();
+      free_events = USet.create ();
+      terminal_events = USet.create ();
+    }
+
+  let dot (event : event) structure phi : symbolic_event_structure =
+    if List.exists (fun p -> p = EBoolean false) phi then
+      Logs.warn (fun m ->
+          m "Adding event %d under unsatisfiable path condition.\n" event.label
+      );
+    Hashtbl.replace structure.restrict event.label phi;
+    {
+      e = USet.union structure.e (USet.singleton event.label);
+      events = structure.events;
+      po =
+        USet.union structure.po
+          (USet.map (fun e -> (event.label, e)) structure.e);
+      po_iter = USet.create ();
+      rmw = structure.rmw;
+      lo = structure.lo;
+      restrict = structure.restrict;
+      cas_groups = structure.cas_groups;
+      pwg = structure.pwg;
+      fj = structure.fj;
+      p = structure.p;
+      constraint_ = structure.constraint_;
+      conflict = structure.conflict;
+      origin = structure.origin;
+      loop_indices = structure.loop_indices;
+      thread_index = structure.thread_index;
+      write_events =
+        ( if event.typ = Write then
+            USet.union structure.write_events (USet.singleton event.label)
+          else structure.write_events
+        );
+      read_events =
+        ( if event.typ = Read then
+            USet.union structure.read_events (USet.singleton event.label)
+          else structure.read_events
+        );
+      rlx_write_events =
+        ( if event.typ = Write && event.wmod = Relaxed then
+            USet.union structure.rlx_write_events (USet.singleton event.label)
+          else structure.rlx_write_events
+        );
+      rlx_read_events =
+        ( if event.typ = Read && event.rmod = Relaxed then
+            USet.union structure.rlx_read_events (USet.singleton event.label)
+          else structure.rlx_read_events
+        );
+      fence_events =
+        ( if event.typ = Fence then
+            USet.union structure.fence_events (USet.singleton event.label)
+          else structure.fence_events
+        );
+      branch_events =
+        ( if event.typ = Branch then
+            USet.union structure.branch_events (USet.singleton event.label)
+          else structure.branch_events
+        );
+      malloc_events =
+        ( if event.typ = Malloc then
+            USet.union structure.malloc_events (USet.singleton event.label)
+          else structure.malloc_events
+        );
+      free_events =
+        ( if event.typ = Free then
+            USet.union structure.free_events (USet.singleton event.label)
+          else structure.free_events
+        );
+      terminal_events =
+        ( if event.typ = Terminal then
+            USet.union structure.terminal_events (USet.singleton event.label)
+          else structure.terminal_events
+        );
+    }
+
+  let plus a b : t =
+    let restrict = Hashtbl.copy a.restrict in
+      Hashtbl.iter (fun k v -> Hashtbl.replace restrict k v) b.restrict;
+      {
+        e = USet.union a.e b.e;
+        events = a.events;
+        (* a and b share the same events table *)
+        po = USet.union a.po b.po;
+        po_iter = USet.create ();
+        rmw = USet.union a.rmw b.rmw;
+        lo = USet.union a.lo b.lo;
+        restrict;
+        cas_groups = a.cas_groups;
+        pwg = a.pwg @ b.pwg;
+        fj = USet.union a.fj b.fj;
+        p = Hashtbl.create 0;
+        (* TODO value not needed here *)
+        constraint_ = a.constraint_ @ b.constraint_;
+        conflict =
+          USet.union (URelation.cross a.e b.e) (USet.union a.conflict b.conflict);
+        (* a and b share the same origin table *)
+        origin = a.origin;
+        loop_indices = a.loop_indices;
+        thread_index = a.thread_index;
+        write_events = USet.union a.write_events b.write_events;
+        read_events = USet.union a.read_events b.read_events;
+        rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
+        rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
+        fence_events = USet.union a.fence_events b.fence_events;
+        branch_events = USet.union a.branch_events b.branch_events;
+        malloc_events = USet.union a.malloc_events b.malloc_events;
+        free_events = USet.union a.free_events b.free_events;
+        terminal_events = USet.union a.terminal_events b.terminal_events;
+      }
+
+  let cross a b : t =
+    let restrict = Hashtbl.copy a.restrict in
+      Hashtbl.iter (fun k v -> Hashtbl.replace restrict k v) b.restrict;
+      {
+        e = USet.union a.e b.e;
+        events = a.events;
+        (* a and b share the same events table *)
+        po = USet.union a.po b.po;
+        po_iter = USet.create ();
+        rmw = USet.union a.rmw b.rmw;
+        lo = USet.union a.lo b.lo;
+        restrict;
+        cas_groups = a.cas_groups;
+        pwg = a.pwg @ b.pwg;
+        fj = USet.union a.fj b.fj;
+        p = Hashtbl.create 0;
+        (* TODO value not needed here *)
+        constraint_ = a.constraint_ @ b.constraint_;
+        conflict = USet.union a.conflict b.conflict;
+        (* a and b share the same origin table *)
+        origin = a.origin;
+        loop_indices = a.loop_indices;
+        thread_index = a.thread_index;
+        write_events = USet.union a.write_events b.write_events;
+        read_events = USet.union a.read_events b.read_events;
+        rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
+        rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
+        fence_events = USet.union a.fence_events b.fence_events;
+        branch_events = USet.union a.branch_events b.branch_events;
+        malloc_events = USet.union a.malloc_events b.malloc_events;
+        free_events = USet.union a.free_events b.free_events;
+        terminal_events = USet.union a.terminal_events b.terminal_events;
+      }
+end
+
 (* Find the origin of a symbol in a symbolic event structure *)
 let origin structure (s : string) = Hashtbl.find_opt structure.origin s
 
