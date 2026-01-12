@@ -661,7 +661,11 @@ end = struct
   let step_interpret lwt_ctx =
     let* ctx = lwt_ctx in
     let step_counter = ctx.step_counter in
-    let per_loop = ctx.options.use_step_counter_per_loop in
+    let per_loop =
+      match ctx.options.loop_semantics with
+      | StepCounterPerLoop -> true
+      | _ -> false
+    in
       generic_step_interpret
         ~stmt_semantics:(interpret_statements_step_counter step_counter per_loop)
         lwt_ctx
@@ -759,15 +763,18 @@ let step_interpret lwt_ctx =
   let* ctx = lwt_ctx in
     Logs.debug (fun m ->
         m "Interpreting program with %s loop semantics."
-          ( if ctx.options.use_finite_step_counter_semantics then
-              "finite step counter"
-            else "generic"
+          ( match ctx.options.loop_semantics with
+          | Symbolic -> "symbolic"
+          | StepCounterPerLoop -> "step counter per loop"
+          | FiniteStepCounter -> "finite step counter"
+          | Generic -> "generic"
           )
     );
     greek_counter := 0;
     zh_counter := 0;
-    if ctx.options.use_finite_step_counter_semantics then
-      StepCounterSemantics.step_interpret lwt_ctx
-    else if ctx.options.use_symbolic_loop_semantics then
-      SymbolicLoopSemantics.step_interpret lwt_ctx
-    else generic_step_interpret ~stmt_semantics:interpret_statements lwt_ctx
+    match ctx.options.loop_semantics with
+    | FiniteStepCounter | StepCounterPerLoop ->
+        StepCounterSemantics.step_interpret lwt_ctx
+    | Symbolic -> SymbolicLoopSemantics.step_interpret lwt_ctx
+    | Generic ->
+        generic_step_interpret ~stmt_semantics:interpret_statements lwt_ctx

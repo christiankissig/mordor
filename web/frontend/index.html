@@ -27,7 +27,6 @@
             <h1>🔮 MoRDor - Weak Memory Semantics</h1>
             <div class="header-controls">
                 <button id="settings-btn" class="settings-icon" title="Settings">⚙️</button>
-                <label>Steps: <input type="number" id="step-counter" value="5" min="1" max="100" style="width:70px; padding:0.3rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px;"></label>
                 <button id="visualize-btn" class="btn-primary">Visualize</button>
             </div>
         </header>
@@ -123,17 +122,42 @@
                 <button class="modal-close" id="close-modal">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="setting-item">
-                    <label>
-                        <input type="checkbox" id="show-uaf" />
-                        Show executions with use-after-free
-                    </label>
+                <div class="setting-group">
+                    <h3 style="color: #cccccc; font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #3e3e42; padding-bottom: 0.5rem;">Loop Semantics</h3>
+                    <div class="setting-item">
+                        <label>
+                            <input type="radio" name="loop-semantics" id="step-counter-semantics" value="step-counter" checked />
+                            Step-counter semantics
+                        </label>
+                    </div>
+                    <div class="setting-item" style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span>Loop unravellings:</span>
+                            <input type="number" id="step-counter" value="2" min="1" max="100" style="width: 70px; padding: 0.4rem; background: #3c3c3c; border: 1px solid #555; color: #d4d4d4; border-radius: 4px; font-size: 0.9rem;" />
+                        </label>
+                    </div>
+                    <div class="setting-item" style="margin-top: 0.75rem;">
+                        <label>
+                            <input type="radio" name="loop-semantics" id="symbolic-semantics" value="symbolic" />
+                            Symbolic loop semantics
+                        </label>
+                    </div>
                 </div>
-                <div class="setting-item">
-                    <label>
-                        <input type="checkbox" id="show-unbounded-deref" />
-                        Show executions with unbounded pointer dereference
-                    </label>
+                
+                <div class="setting-group" style="margin-top: 1.5rem;">
+                    <h3 style="color: #cccccc; font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #3e3e42; padding-bottom: 0.5rem;">Execution Filtering</h3>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="show-uaf" />
+                            Show executions with use-after-free
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="show-unbounded-deref" />
+                            Show executions with unbounded pointer dereference
+                        </label>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">

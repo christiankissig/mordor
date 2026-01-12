@@ -304,6 +304,26 @@ pre.line-numbers > code {
     accent-color: #0e639c;
 }
 
+.setting-item input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    margin-right: 0.75rem;
+    cursor: pointer;
+    accent-color: #0e639c;
+}
+
+.setting-group {
+    margin-bottom: 0;
+}
+
+.setting-group h3 {
+    color: #cccccc;
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #3e3e42;
+    padding-bottom: 0.5rem;
+}
+
 .modal-footer {
     display: flex;
     justify-content: flex-end;
@@ -315,6 +335,7 @@ pre.line-numbers > code {
 .btn-secondary {
     background: #3c3c3c;
     color: #cccccc;
+    padding: 0.5rem 1rem;
 }
 
 .btn-secondary:hover {

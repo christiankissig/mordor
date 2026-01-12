@@ -17,9 +17,7 @@ let single_file = ref None
 let output_file = ref None
 let recursive = ref false
 let step_counter = ref None
-let use_symbolic_loop_semantics = ref false
-let use_finite_step_counter_semantics = ref false
-let use_step_counter_per_loop = ref true
+let loop_semantics = ref Generic
 
 (* Example programs *)
 let example_programs =
@@ -237,20 +235,14 @@ let specs =
        or auto-generated)"
     );
     ( "--symbolic-loop-semantics",
-      Arg.Unit
-        (fun () ->
-          use_finite_step_counter_semantics := false;
-          use_symbolic_loop_semantics := true
-        ),
+      Arg.Unit (fun () -> loop_semantics := Symbolic),
       " Use symbolic loop semantics"
     );
     (* loop semantics *)
     ( "--step-counter",
       Arg.Int
         (fun n ->
-          use_finite_step_counter_semantics := true;
-          use_symbolic_loop_semantics := false;
-          use_step_counter_per_loop := false;
+          loop_semantics := FiniteStepCounter;
           step_counter := Some n
         ),
       " Number of steps for interpretation (default: 5)"
@@ -258,8 +250,7 @@ let specs =
     ( "--step-counter-per-loop",
       Arg.Int
         (fun n ->
-          use_finite_step_counter_semantics := true;
-          use_step_counter_per_loop := true;
+          loop_semantics := StepCounterPerLoop;
           step_counter := Some n
         ),
       " Number of steps for interpretation (default: 5)"
@@ -327,13 +318,7 @@ let main () =
       )
   in
 
-  let options =
-    {
-      default_options with
-      use_finite_step_counter_semantics = !use_finite_step_counter_semantics;
-      use_step_counter_per_loop = !use_step_counter_per_loop;
-    }
-  in
+  let options = { default_options with loop_semantics = Generic } in
 
   let assert_single_test =
     if List.length tests <> 1 then (
@@ -354,13 +339,13 @@ let main () =
       futures_single (List.hd tests) options
         (Option.value !output_mode ~default:Json)
         (Option.value !output_file ~default:"stdout")
-        (Option.value !step_counter ~default:5)
+        (Option.value !step_counter ~default:2)
   | VisualEs ->
       assert_single_test;
       visualize_es_single (List.hd tests) options
         (Option.value !output_mode ~default:Dot)
         (Option.value !output_file ~default:"stdout")
-        (Option.value !step_counter ~default:5)
+        (Option.value !step_counter ~default:2)
   | _ ->
       Printf.printf "TODO: not implemented yet\n";
       Lwt.return_unit

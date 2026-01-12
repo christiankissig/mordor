@@ -37,7 +37,9 @@ class GraphVisualizer {
         // Settings
         this.settings = {
             showUAF: false,
-            showUnboundedDeref: false
+            showUnboundedDeref: false,
+            loopSemantics: 'step-counter',  // 'step-counter' or 'symbolic'
+            stepCounter: 2
         };
 
         this.cy = cytoscape({
@@ -398,11 +400,23 @@ class GraphVisualizer {
         // Populate current settings
         document.getElementById('show-uaf').checked = this.settings.showUAF;
         document.getElementById('show-unbounded-deref').checked = this.settings.showUnboundedDeref;
-        document.getElementById('settings-modal').classList.add('show');
+        
+        // Populate loop semantics settings
+        if (this.settings.loopSemantics === 'step-counter') {
+            document.getElementById('step-counter-semantics').checked = true;
+        } else {
+            document.getElementById('symbolic-semantics').checked = true;
+        }
+        document.getElementById('step-counter').value = this.settings.stepCounter;
+        
+        // Enable/disable step counter input based on selection
+        this.updateStepCounterState();
+        
+        document.getElementById('settings-modal').classList.add('active');
     }
     
     closeSettingsModal() {
-        document.getElementById('settings-modal').classList.remove('show');
+        document.getElementById('settings-modal').classList.remove('active');
     }
     
     applySettings() {
@@ -410,14 +424,31 @@ class GraphVisualizer {
         this.settings.showUAF = document.getElementById('show-uaf').checked;
         this.settings.showUnboundedDeref = document.getElementById('show-unbounded-deref').checked;
         
+        // Read loop semantics settings
+        if (document.getElementById('step-counter-semantics').checked) {
+            this.settings.loopSemantics = 'step-counter';
+            this.settings.stepCounter = parseInt(document.getElementById('step-counter').value) || 2;
+        } else {
+            this.settings.loopSemantics = 'symbolic';
+        }
+        
         this.closeSettingsModal();
-        this.log('Settings updated', 'success');
+        this.log('Settings updated: ' + this.settings.loopSemantics + 
+                 (this.settings.loopSemantics === 'step-counter' ? ' (' + this.settings.stepCounter + ' steps)' : ''), 
+                 'success');
         
         // Regenerate if we have a program
         if (this.lastProgram) {
             this.log('Regenerating graphs with new settings...', 'info');
             this.visualize(this.lastProgram);
         }
+    }
+    
+    updateStepCounterState() {
+        const stepCounterInput = document.getElementById('step-counter');
+        const isStepCounterMode = document.getElementById('step-counter-semantics').checked;
+        stepCounterInput.disabled = !isStepCounterMode;
+        stepCounterInput.style.opacity = isStepCounterMode ? '1' : '0.5';
     }
 
     setupEventListeners() {
@@ -500,6 +531,15 @@ class GraphVisualizer {
         
         document.getElementById('apply-settings').addEventListener('click', () => {
             this.applySettings();
+        });
+        
+        // Add listeners for loop semantics radio buttons
+        document.getElementById('step-counter-semantics').addEventListener('change', () => {
+            this.updateStepCounterState();
+        });
+        
+        document.getElementById('symbolic-semantics').addEventListener('change', () => {
+            this.updateStepCounterState();
         });
         
         // Close modal on outside click
@@ -660,8 +700,7 @@ class GraphVisualizer {
     }
     
     async visualize(program) {
-        const steps = parseInt(document.getElementById('step-counter').value) || 5;
-        this.log('Starting visualization with ' + steps + ' steps...');
+        this.log('Starting visualization with ' + this.settings.loopSemantics + ' semantics...');
 
         // Store program for regeneration
         this.lastProgram = program;
@@ -699,21 +738,17 @@ class GraphVisualizer {
 
         this.log('Sending request to backend...');
 
-        // Prepare request with settings
-        const payload = {
+        // Prepare URL parameters with settings
+        const params = {
             program: program,
-            steps: steps,
-            allow_uaf: this.settings.showUAF,
-            allow_unbounded_deref: this.settings.showUnboundedDeref
-        };
-
-        // Use Server-Sent Events
-        const es = new EventSource('/api/visualize/stream?' + new URLSearchParams({
-            program: program,
-            steps: steps.toString(),
+            loop_semantics: this.settings.loopSemantics.toString(),
+            steps: this.settings.stepCounter.toString(),
             allow_uaf: this.settings.showUAF.toString(),
-            allow_unbounded_deref: this.settings.showUnboundedDeref.toString()
-        }));
+            allow_unbounded_deref: this.settings.showUnboundedDeref.toString(),
+        };
+        
+        // Use Server-Sent Events
+        const es = new EventSource('/api/visualize/stream?' + new URLSearchParams(params));
 
         es.onmessage = (event) => {
             try {

@@ -168,13 +168,7 @@ let check_condition1_register_access (program : ir_node list) (loop_id : int) :
 (** Check if an event is a read-don't-modify RMW *)
 let is_read_dont_modify_rmw (event : event)
     (structure : symbolic_event_structure) : bool =
-  match event.typ with
-  | RMW | CRMW ->
-      (* TODO: Check if the read value equals the write value
-         This requires comparing event.rval with event.wval
-      *)
-      false
-  | _ -> false
+  event.is_rdmw
 
 (** Get the origin event for a symbol *)
 let get_symbol_origin (structure : symbolic_event_structure) (symbol : string) :

@@ -20,15 +20,12 @@ let visualize_to_stream program options step_counter stream =
       |> Parse.step_parse_litmus
       |> LoopInformation.send_loop_information send_data
       |> Interpret.step_interpret
-      (* Send event structure graph immediately after interpret *)
-      |> (fun ctx ->
-      Eventstructureviz.step_send_event_structure_graph ctx send_data
-      )
+      |> Eventstructureviz.step_send_event_structure_graph ~send_data
       |> Episodicity.step_test_episodicity
       |> Episodicity.send_episodicity_results send_data
       |> Symmrd.step_calculate_dependencies
       |> Assertion.step_check_assertions
-      |> fun ctx -> Eventstructureviz.step_send_execution_graphs ctx send_data
+      |> Eventstructureviz.step_send_execution_graphs ~send_data
     in
 
     Lwt.return ctx
@@ -39,10 +36,26 @@ let sse_data json_obj =
 
 let visualize_sse_handler request =
   let program = Dream.query request "program" |> Option.value ~default:"" in
+
+  let loop_semantics =
+    Dream.query request "loop_semantics"
+    |> Option.value ~default:"finite-step-counter"
+  in
+
+  let loop_semantics =
+    match String.lowercase_ascii loop_semantics with
+    | "symbolic" -> Symbolic
+    | "step-counter" -> StepCounterPerLoop
+    | _ -> StepCounterPerLoop
+  in
+
   let step_counter =
-    Dream.query request "steps"
-    |> Option.map int_of_string
-    |> Option.value ~default:5
+    match loop_semantics with
+    | Generic | Symbolic -> 0
+    | StepCounterPerLoop | FiniteStepCounter ->
+        Dream.query request "steps"
+        |> Option.map int_of_string
+        |> Option.value ~default:2
   in
 
   Printf.printf "📥 SSE request: %d chars, %d steps\n%!" (String.length program)
@@ -65,13 +78,7 @@ let visualize_sse_handler request =
           in
             let* () = Dream.flush stream in
 
-            let options =
-              {
-                default_options with
-                use_finite_step_counter_semantics = true;
-                use_step_counter_per_loop = true;
-              }
-            in
+            let options = { default_options with loop_semantics } in
 
             let* () =
               Dream.write stream

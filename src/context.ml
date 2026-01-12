@@ -17,6 +17,12 @@ type ir_litmus = ir_node_ann Ir.ir_litmus
 
 type output_mode = Json | Html | Dot | Isa
 
+type loop_semantics =
+  | Symbolic
+  | FiniteStepCounter
+  | StepCounterPerLoop
+  | Generic
+
 let parse_output_mode s =
   match String.lowercase_ascii s with
   | "json" -> Json
@@ -37,10 +43,8 @@ type options = {
   mutable forcenocoh : bool;
   mutable coherent : string;
   mutable ubopt : bool;
-  (* step counter semantics of loops *)
-  mutable use_symbolic_loop_semantics : bool;
-  mutable use_finite_step_counter_semantics : bool;
-  mutable use_step_counter_per_loop : bool;
+  mutable loop_semantics : loop_semantics;
+  mutable step_counter : int;
 }
 
 let default_options =
@@ -52,9 +56,8 @@ let default_options =
     forceimm = false;
     forcenocoh = false;
     coherent = "undefined";
-    use_symbolic_loop_semantics = false;
-    use_finite_step_counter_semantics = false;
-    use_step_counter_per_loop = true;
+    loop_semantics = StepCounterPerLoop;
+    step_counter = 2;
     ubopt = false;
   }
 

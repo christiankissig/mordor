@@ -644,8 +644,8 @@ let step_visualize_event_structure (lwt_ctx : mordor_ctx Lwt.t) :
 
 (** Step function to send the event structure graph (PO edges only) after
     interpret *)
-let step_send_event_structure_graph (lwt_ctx : mordor_ctx Lwt.t)
-    (send_graph : string -> unit Lwt.t) : mordor_ctx Lwt.t =
+let step_send_event_structure_graph ~(send_data : string -> unit Lwt.t)
+    (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
 
   let source_spans =
@@ -678,7 +678,7 @@ let step_send_event_structure_graph (lwt_ctx : mordor_ctx Lwt.t)
       let es_message =
         Yojson.Safe.to_string (EventStructureViz.graph_message_to_yojson message)
       in
-        let* () = send_graph es_message in
+        let* () = send_data es_message in
 
         Logs.info (fun m -> m "Event structure graph sent after interpret");
         Lwt.return ctx
@@ -690,7 +690,7 @@ let step_send_event_structure_graph (lwt_ctx : mordor_ctx Lwt.t)
 
 (** Step function to send execution graphs after dependency calculation *)
 let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
-    (send_graph : string -> unit Lwt.t) : mordor_ctx Lwt.t =
+    ~(send_data : string -> unit Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
 
   let source_spans =
@@ -774,7 +774,7 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
                         Yojson.Safe.to_string
                           (EventStructureViz.graph_message_to_yojson message)
                       in
-                        send_graph exec_message
+                        send_data exec_message
                     )
                     exec_list
                 in
@@ -790,7 +790,7 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
                        complete_message
                     )
                 in
-                  send_graph complete_json
+                  send_data complete_json
           | None ->
               (* No executions, just send completion *)
               let complete_message =
@@ -800,7 +800,7 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
                 Yojson.Safe.to_string
                   (EventStructureViz.complete_message_to_yojson complete_message)
               in
-                send_graph complete_json
+                send_data complete_json
         in
 
         Logs.info (fun m ->
