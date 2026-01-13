@@ -193,11 +193,12 @@ let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
     let* () =
       USet.iter_async
         (fun read_event ->
-          let* writes_in_loop_before_read =
+          let* writes_in_loop_not_before_read =
             USet.async_filter
               (fun write_event ->
                 if USet.mem cache.symbolic_structure.po (write_event, read_event)
-                then
+                then Lwt.return false
+                else
                   match
                     ( Events.get_loc structure write_event,
                       Events.get_loc structure read_event
@@ -210,12 +211,9 @@ let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
                         let* same_loc = Solver.expoteq ?state wloc rloc in
                           if same_loc then
                             Lwt.return
-                              (USet.mem structure.po (write_event, read_event)
-                              || Events.is_rdmw structure write_event
-                              )
+                              (not (Events.is_rdmw structure write_event))
                           else Lwt.return false
                   | _ -> Lwt.return false
-                else Lwt.return false
               )
               writes_in_loop
           in
@@ -236,7 +234,7 @@ let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
                 in
                   violations := violation :: !violations
               )
-              writes_in_loop_before_read;
+              writes_in_loop_not_before_read;
             Lwt.return ()
         )
         reads_in_loop
@@ -447,11 +445,6 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                 three_executions;
               }
             in
-
-            Logs.info (fun m ->
-                m "Testing episodicity for %d loops: [%s]" (List.length loop_ids)
-                  (String.concat ", " (List.map string_of_int loop_ids))
-            );
 
             let loop_episodicity_results = ref [] in
 

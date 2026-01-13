@@ -1,7 +1,11 @@
 open Alcotest
 open Context
 open Episodicity
+open Events
+open Eventstructures
+open Lwt.Syntax
 open Types
+open Uset
 
 let make_ir_node stmt : ir_node =
   {
@@ -476,7 +480,102 @@ module TestRegisterCondition = struct
 
   (* Generate suite from test cases *)
   let suite =
-    List.map (fun tc -> (tc.name, `Quick, run_test_case tc)) test_cases
+    List.map (fun tc -> test_case tc.name `Quick (run_test_case tc)) test_cases
 end
 
-let suite = ("Episodicity", TestRegisterCondition.suite)
+module TestWriteCondition = struct
+  let test_mod_write_after_read () =
+    let init = Event.create Init 0 () in
+    let alloc = Event.create Malloc 1 ~rval:(VSymbol "一") () in
+    let init_write =
+      Event.create Write 2 ~loc:(ESymbol "一") ~wval:(ENum (Z.of_int 0)) ()
+    in
+    let read = Event.create Read 3 ~loc:(ESymbol "一") ~rval:(VSymbol "α") () in
+    let mod_write =
+      Event.create Write 4 ~loc:(ESymbol "一")
+        ~wval:(EBinOp (ESymbol "α", "+", ENum (Z.of_int 1)))
+        ~rmod:Relaxed ()
+    in
+    let po =
+      USet.of_list
+        [
+          (init.label, alloc.label);
+          (alloc.label, init_write.label);
+          (init_write.label, read.label);
+          (read.label, mod_write.label);
+        ]
+    in
+    let e_set =
+      USet.of_list
+        [
+          init.label; alloc.label; init_write.label; read.label; mod_write.label;
+        ]
+    in
+    let events = Hashtbl.create 5 in
+      List.iter
+        (fun e -> Hashtbl.add events e.label e)
+        [ init; alloc; init_write; read; mod_write ];
+      let loop_indices = Hashtbl.create 0 in
+        Hashtbl.add loop_indices read.label [ 0 ];
+        Hashtbl.add loop_indices mod_write.label [ 0 ];
+        let symbolic_structure =
+          {
+            e = e_set;
+            events;
+            po;
+            po_iter = USet.create ();
+            rmw = USet.create ();
+            lo = USet.create ();
+            restrict = Hashtbl.create 0;
+            cas_groups = Hashtbl.create 0;
+            pwg = [];
+            branch_events = USet.create ();
+            read_events = USet.of_list [ read.label ];
+            write_events = USet.of_list [ init_write.label; mod_write.label ];
+            rlx_read_events = USet.of_list [ read.label ];
+            rlx_write_events = USet.of_list [ mod_write.label ];
+            fence_events = USet.create ();
+            malloc_events = USet.of_list [ alloc.label ];
+            free_events = USet.create ();
+            terminal_events = USet.create ();
+            fj = USet.create ();
+            p = Hashtbl.create 0;
+            constraint_ = [];
+            conflict = USet.create ();
+            origin = Hashtbl.create 0;
+            loop_indices;
+            thread_index = Hashtbl.create 0;
+          }
+        in
+        let symbolic_source_spans = Hashtbl.create 0 in
+          Hashtbl.add symbolic_source_spans alloc.label
+            { start_line = 2; start_col = 1; end_line = 2; end_col = 10 };
+          Hashtbl.add symbolic_source_spans init_write.label
+            { start_line = 3; start_col = 1; end_line = 3; end_col = 10 };
+          Hashtbl.add symbolic_source_spans read.label
+            { start_line = 6; start_col = 1; end_line = 6; end_col = 10 };
+          Hashtbl.add symbolic_source_spans mod_write.label
+            { start_line = 7; start_col = 1; end_line = 7; end_col = 10 };
+          let cache =
+            {
+              symbolic_structure;
+              symbolic_source_spans;
+              three_structure = SymbolicEventStructure.create ();
+              three_source_spans = Hashtbl.create 0;
+              three_executions = [];
+            }
+          in
+            let* result = check_condition2_read_sources cache 0 in
+              check bool "modifying write after read" false result.satisfied;
+              Lwt.return_unit
+
+  let suite =
+    [
+      test_case "WriteCondition.modifying_write_after_read" `Quick (fun () ->
+          Lwt_main.run (test_mod_write_after_read ())
+      );
+    ]
+end
+
+let suite =
+  ("Episodicity", TestRegisterCondition.suite @ TestWriteCondition.suite)

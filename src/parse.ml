@@ -47,6 +47,53 @@ let convert_expr_list exprs = List.map ast_expr_to_expr exprs
 let make_ir_node ~source_span ~thread_ctx ~loop_ctx stmt =
   { stmt; annotations = { source_span; thread_ctx; loop_ctx } }
 
+let rec add_loop loop_id ir_node =
+  let stmt, ann = (ir_node.stmt, ir_node.annotations) in
+  let new_loop_ctx =
+    match ann.loop_ctx with
+    | Some ctx -> Some { ctx with loops = loop_id :: ctx.loops }
+    | None -> Some { lid = loop_id; loops = [ loop_id ] }
+  in
+    match stmt with
+    | While { condition; body } ->
+        let new_body = List.map (fun n -> add_loop loop_id n) body in
+          {
+            stmt = While { condition; body = new_body };
+            annotations = { ann with loop_ctx = new_loop_ctx };
+          }
+    | Do { body; condition } ->
+        let new_body = List.map (fun n -> add_loop loop_id n) body in
+          {
+            stmt = Do { body = new_body; condition };
+            annotations = { ann with loop_ctx = new_loop_ctx };
+          }
+    | If { condition; then_body; else_body } ->
+        let new_then_body = List.map (fun n -> add_loop loop_id n) then_body in
+        let new_else_body =
+          Option.map
+            (fun body -> List.map (fun n -> add_loop loop_id n) body)
+            else_body
+        in
+          {
+            stmt =
+              If
+                {
+                  condition;
+                  then_body = new_then_body;
+                  else_body = new_else_body;
+                };
+            annotations = { ann with loop_ctx = new_loop_ctx };
+          }
+    | Threads { threads } ->
+        let new_threads =
+          List.map (List.map (fun n -> add_loop loop_id n)) threads
+        in
+          {
+            stmt = Threads { threads = new_threads };
+            annotations = { ann with loop_ctx = new_loop_ctx };
+          }
+    | _ -> { stmt; annotations = { ann with loop_ctx = new_loop_ctx } }
+
 (* TODO rec to handle label case; use ctx annotation instead *)
 let rec convert_stmt_open ~recurse ~source_span ~thread_ctx ~loop_ctx = function
   | Ast.SThreads { threads } ->
@@ -138,9 +185,14 @@ let rec convert_stmt (ast_node : ast_node) =
   let source_span = ast_node.source_span in
   let thread_ctx = ast_node.thread_ctx in
   let loop_ctx = ast_node.loop_ctx in
+  let ir_node =
     convert_stmt_open ~recurse:convert_stmt ~source_span ~thread_ctx ~loop_ctx
       ast_node.stmt
     |> make_ir_node ~source_span ~thread_ctx ~loop_ctx
+  in
+    match loop_ctx with
+    | None -> ir_node
+    | Some loop_ctx -> add_loop loop_ctx.lid ir_node
 
 (** Convert parsed AST litmus test to IR format *)
 

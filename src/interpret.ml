@@ -509,6 +509,8 @@ let interpret_generic ~stmt_semantics stmts defacto restrictions constraint_ =
       structure' with
       events = events.events;
       origin = events.origin;
+      loop_indices = events.loop_indices;
+      thread_index = events.thread_index;
       p = events.env_by_evt;
     }
   in
@@ -677,15 +679,19 @@ end = struct
 
   let interpret ~step_counter lwt_ctx =
     let* ctx = lwt_ctx in
-    let stmt_semantics = interpret_statements_step_counter step_counter true in
+      greek_counter := 0;
+      zh_counter := 0;
+      let stmt_semantics =
+        interpret_statements_step_counter step_counter true
+      in
 
-    match (ctx.program_stmts, ctx.litmus_constraints) with
-    | Some stmts, Some constraints ->
-        let* structure, events, source_spans =
-          interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
-        in
-          Lwt.return (structure, source_spans)
-    | _ -> failwith "No program statements or constraints for interpretation."
+      match (ctx.program_stmts, ctx.litmus_constraints) with
+      | Some stmts, Some constraints ->
+          let* structure, events, source_spans =
+            interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
+          in
+            Lwt.return (structure, source_spans)
+      | _ -> failwith "No program statements or constraints for interpretation."
 end
 
 (** {1 Symbolic loop semantics} *)
@@ -780,18 +786,20 @@ end = struct
 
   let interpret lwt_ctx =
     let* ctx = lwt_ctx in
-    let stmt_semantics =
-      interpret_statements_symbolic_loop
-        ~final_structure:make_generic_terminal_structure ~add_event
-    in
+      greek_counter := 0;
+      zh_counter := 0;
+      let stmt_semantics =
+        interpret_statements_symbolic_loop
+          ~final_structure:make_generic_terminal_structure ~add_event
+      in
 
-    match (ctx.program_stmts, ctx.litmus_constraints) with
-    | Some stmts, Some constraints ->
-        let* structure, events, source_spans =
-          interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
-        in
-          Lwt.return (structure, source_spans)
-    | _ -> failwith "No program statements or constraints for interpretation."
+      match (ctx.program_stmts, ctx.litmus_constraints) with
+      | Some stmts, Some constraints ->
+          let* structure, events, source_spans =
+            interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
+          in
+            Lwt.return (structure, source_spans)
+      | _ -> failwith "No program statements or constraints for interpretation."
 end
 
 let step_interpret lwt_ctx =

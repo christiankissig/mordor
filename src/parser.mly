@@ -359,7 +359,8 @@ stmt_base:
   | IF LPAREN cond=expr RPAREN then_body=block_or_stmt else_part=else_clause?
     { SIf { condition = cond; then_body; else_body = else_part } }
 
-  | WHILE LPAREN cond=expr RPAREN body=block_or_stmt {
+  | WHILE LPAREN cond=expr RPAREN body=block_or_stmt
+    {
       inc_loop_id();
       push_loop();
       let result = SWhile { condition = cond; body } in
