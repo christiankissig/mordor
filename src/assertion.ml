@@ -1,5 +1,6 @@
 open Context
 open Events
+open Eventstructures
 open Executions
 open Expr
 open Ir
@@ -519,7 +520,7 @@ module Refinement = struct
     let%lwt final_result =
       Lwt.return
         {
-          structure = create_symbolic_event_structure ();
+          structure = SymbolicEventStructure.create ();
           executions = [];
           events = Hashtbl.create 0;
           valid = false;

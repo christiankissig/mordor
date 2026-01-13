@@ -1,16 +1,17 @@
 (** Forwarding Context for symbolic execution *)
 
+open Eventstructures
+open Expr
+open Lwt.Syntax
 open Types
 open Uset
-open Lwt.Syntax
-open Expr
 
 (** Global state - mutable references *)
 module State = struct
   let e : int uset ref = ref (USet.create ())
 
   let structure : symbolic_event_structure ref =
-    ref (create_symbolic_event_structure ())
+    ref (SymbolicEventStructure.create ())
 
   let val_fn : (int -> expr option) ref = ref (fun _ -> None)
   let ppo_loc_base : (int * int) uset ref = ref (USet.create ())

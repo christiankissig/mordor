@@ -174,6 +174,16 @@ module SymbolicEventStructure = struct
         free_events = USet.union a.free_events b.free_events;
         terminal_events = USet.union a.terminal_events b.terminal_events;
       }
+
+  let events_in_loop structure loop_id =
+    Hashtbl.fold
+      (fun event loop_indices acc ->
+        if List.mem loop_id loop_indices then USet.add acc event else acc
+      )
+      structure.loop_indices (USet.create ())
+
+  let events_po_before structure event =
+    USet.filter (fun (e1, e2) -> e2 = event) structure.po |> URelation.pi_1
 end
 
 (* Find the origin of a symbol in a symbolic event structure *)

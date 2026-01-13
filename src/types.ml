@@ -233,35 +233,6 @@ type symbolic_event_structure = {
 }
 [@@deriving show]
 
-let create_symbolic_event_structure () : symbolic_event_structure =
-  {
-    e = USet.create ();
-    events = Hashtbl.create 16;
-    po = USet.create ();
-    po_iter = USet.create ();
-    rmw = USet.create ();
-    lo = USet.create ();
-    restrict = Hashtbl.create 16;
-    cas_groups = Hashtbl.create 16;
-    pwg = [];
-    fj = USet.create ();
-    p = Hashtbl.create 16;
-    constraint_ = [];
-    conflict = USet.create ();
-    origin = Hashtbl.create 16;
-    loop_indices = Hashtbl.create 16;
-    thread_index = Hashtbl.create 16;
-    write_events = USet.create ();
-    read_events = USet.create ();
-    rlx_write_events = USet.create ();
-    rlx_read_events = USet.create ();
-    fence_events = USet.create ();
-    branch_events = USet.create ();
-    malloc_events = USet.create ();
-    free_events = USet.create ();
-    terminal_events = USet.create ();
-  }
-
 (** Justifications *)
 type justification = {
   p : expr list; [@opaque] (* Predicates/conditions *)

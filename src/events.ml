@@ -481,3 +481,8 @@ let filter_events structure e_set typ ?mode () =
         with Not_found -> false
       )
       e_set
+
+let is_rdmw structure e =
+  match Hashtbl.find_opt structure.events e with
+  | Some event -> event.is_rdmw
+  | None -> false

@@ -2,7 +2,7 @@ open Types
 
 (** {1 Symbolic Event Structure} *)
 
-(** Symbolic event structure *)
+(** Symbolic event structure: type and operations *)
 module SymbolicEventStructure : sig
   (** Symbolic event structure type alias *)
   type t = symbolic_event_structure
@@ -20,6 +20,12 @@ module SymbolicEventStructure : sig
   (** Cross product of two symbolic event structures; intended for parallel
       composition. *)
   val cross : t -> t -> t
+
+  (** Get events in a loop by loop ID *)
+  val events_in_loop : t -> int -> int uset
+
+  (** Get program order predecessors of an event *)
+  val events_po_before : t -> int -> int uset
 end
 
 (** {1 Types} *)

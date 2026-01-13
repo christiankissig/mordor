@@ -31,6 +31,7 @@ module USet : sig
   val async_map : ('a -> 'b Lwt.t) -> 'a t -> 'b t Lwt.t
   val async_filter : ('a -> bool Lwt.t) -> 'a t -> 'a t Lwt.t
   val iter : ('a -> unit) -> 'a t -> unit
+  val iter_async : ('a -> unit Lwt.t) -> 'a t -> unit Lwt.t
   val fold : ('b -> 'a -> 'b) -> 'a t -> 'b -> 'b
   val for_all : ('a -> bool) -> 'a t -> bool
   val exists : ('a -> bool) -> 'a t -> bool
@@ -169,6 +170,16 @@ end = struct
 
   (** Iter *)
   let iter f s = Hash_set.iter s ~f
+
+  (** Async iter *)
+  let iter_async f s =
+    let rec aux = function
+      | [] -> Lwt.return_unit
+      | v :: rest ->
+          let* () = f v in
+            aux rest
+    in
+      aux (Hash_set.to_list s)
 
   (** Fold *)
   let fold f s init = Hash_set.fold s ~init ~f:(fun acc v -> f acc v)

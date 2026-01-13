@@ -14,6 +14,8 @@
     - dp is semantic dependency (from justification freezing) *)
 
 open Context
+open Eventstructures
+open Interpret
 open Ir_context_utils
 open Types
 open Uset
@@ -22,9 +24,11 @@ open Lwt.Syntax
 (** Note: We work with ir_node (Context.ir_node) which is ir_node_ann Ir.ir_node
     The annotations contain loop_ctx, thread_ctx, etc. *)
 
-(** {1 Helper Functions} *)
-
-(** Collect all loop IDs from the program *)
+(** {1 Episodcity Cache} *)
+type episodicity_cache = {
+  mutable symbolic_structure : symbolic_event_structure;
+  mutable source_spans : (int, source_span) Hashtbl.t;
+}
 
 (** {1 Event Structure Utilities} *)
 
@@ -146,8 +150,8 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
     { satisfied = !satisfied; violations = !violations }
 
 (** Condition 1: Registers only accessed if written to ⊑-before *)
-let check_condition1_register_access (program : ir_node list) (loop_id : int) :
-    condition_result =
+let check_condition1_register_access (program : ir_node list) cache
+    (loop_id : int) : condition_result =
   let violations = ref [] in
   let satisfied = ref true in
   let loop_nodes = find_loop_nodes program loop_id in
@@ -158,17 +162,12 @@ let check_condition1_register_access (program : ir_node list) (loop_id : int) :
             let result = check_register_accesses_in_loop body in
               satisfied := !satisfied && result.satisfied;
               violations := result.violations @ !violations
-        | _ -> () (* should not happen *)
+        | _ -> failwith "Expected While or Do node in loop nodes"
       )
       loop_nodes;
     { satisfied = !satisfied; violations = !violations }
 
 (** {1 Condition 2: Memory Read Sources (Semantic)} *)
-
-(** Check if an event is a read-don't-modify RMW *)
-let is_read_dont_modify_rmw (event : event)
-    (structure : symbolic_event_structure) : bool =
-  event.is_rdmw
 
 (** Get the origin event for a symbol *)
 let get_symbol_origin (structure : symbolic_event_structure) (symbol : string) :
@@ -176,16 +175,70 @@ let get_symbol_origin (structure : symbolic_event_structure) (symbol : string) :
   Hashtbl.find_opt structure.origin symbol
 
 (** Condition 2: Reads must read from valid sources *)
-let check_condition2_read_sources (loop_id : int) : condition_result =
-  (* TODO:
-     1. Find all read events in the loop (check loop_indices)
-     2. For each read, trace its value origin through rf relation
-     3. Check that origin satisfies one of:
-        a. Write in same iteration before the read
-        b. Write from different thread
-        c. Read-don't-modify RMW derived from valid write
-  *)
-  { satisfied = true; violations = [] }
+let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
+    =
+  let structure = cache.symbolic_structure in
+  let events_in_loop =
+    SymbolicEventStructure.events_in_loop structure loop_id
+  in
+  let reads_in_loop = USet.intersection events_in_loop structure.read_events in
+  let writes_in_loop =
+    USet.intersection events_in_loop structure.write_events
+  in
+  let violations = ref [] in
+    let* () =
+      USet.iter_async
+        (fun read_event ->
+          let* writes_in_loop_before_read =
+            USet.async_filter
+              (fun write_event ->
+                if USet.mem cache.symbolic_structure.po (write_event, read_event)
+                then
+                  match
+                    ( Events.get_loc structure write_event,
+                      Events.get_loc structure read_event
+                    )
+                  with
+                  | Some wloc, Some rloc ->
+                      let state =
+                        Hashtbl.find_opt structure.restrict read_event
+                      in
+                        let* same_loc = Solver.expoteq ?state wloc rloc in
+                          if same_loc then
+                            Lwt.return
+                              (USet.mem structure.po (write_event, read_event)
+                              || Events.is_rdmw structure write_event
+                              )
+                          else Lwt.return false
+                  | _ -> Lwt.return false
+                else Lwt.return false
+              )
+              writes_in_loop
+          in
+            USet.iter
+              (fun write_event ->
+                (* Check if write_event is a valid source for read_event *)
+                let violation =
+                  WriteConditionViolation
+                    (WriteFromPreviousIteration
+                       ( Events.get_loc structure read_event
+                         |> Option.map show_expr
+                         |> Option.value ~default:"",
+                         Hashtbl.find_opt cache.source_spans read_event,
+                         Hashtbl.find_opt cache.source_spans write_event
+                       )
+                    )
+                in
+                  violations := violation :: !violations
+              )
+              writes_in_loop_before_read;
+            Lwt.return ()
+        )
+        reads_in_loop
+    in
+
+    Lwt.return
+      { satisfied = List.length !violations == 0; violations = !violations }
 
 (** {1 Condition 3: Branch Condition Symbols (Syntactic + Origin Tracking)} *)
 
@@ -213,8 +266,8 @@ let check_branch_condition (condition : expr)
   true
 
 (** Condition 3: Branch conditions don't constrain pre-loop symbols *)
-let check_condition3_branch_conditions (program : ir_node list) (loop_id : int)
-    : condition_result =
+let check_condition3_branch_conditions (program : ir_node list) cache
+    (loop_id : int) : condition_result =
   { satisfied = true; violations = [] }
 
 (** {1 Condition 4: Inter-iteration Ordering (Semantic)} *)
@@ -228,7 +281,8 @@ let events_ordered_by_ppo_dp (e1 : int) (e2 : int) (ppo : (int * int) uset)
     USet.mem ppo_dp_tc (e1, e2)
 
 (** Condition 4: Events from prior iterations ordered before later iterations *)
-let check_condition4_iteration_ordering (loop_id : int) : condition_result =
+let check_condition4_iteration_ordering cache (loop_id : int) : condition_result
+    =
   (* TODO:
      1. Collect all events in this loop
      2. Group events by iteration number
@@ -247,38 +301,47 @@ let check_condition4_iteration_ordering (loop_id : int) : condition_result =
 (** {1 Main Episodicity Check} *)
 
 (** Check if a specific loop is episodic *)
-let check_loop_episodicity (ctx : mordor_ctx) (loop_id : int) :
-    loop_episodicity_result option =
+let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
+    loop_episodicity_result option Lwt.t =
   match ctx.program_stmts with
   | Some program ->
       (* Check all four conditions *)
-      let cond1 = check_condition1_register_access program loop_id in
-      let cond2 = check_condition2_read_sources loop_id in
-      let cond3 = check_condition3_branch_conditions program loop_id in
-      let cond4 = check_condition4_iteration_ordering loop_id in
+      let cond1 = check_condition1_register_access program cache loop_id in
+        let* cond2 = check_condition2_read_sources cache loop_id in
+        let cond3 = check_condition3_branch_conditions program cache loop_id in
+        let cond4 = check_condition4_iteration_ordering cache loop_id in
 
-      let is_episodic =
-        cond1.satisfied && cond2.satisfied && cond3.satisfied && cond4.satisfied
-      in
+        let is_episodic =
+          cond1.satisfied
+          && cond2.satisfied
+          && cond3.satisfied
+          && cond4.satisfied
+        in
 
-      Some
-        {
-          loop_id;
-          condition1 = cond1;
-          condition2 = cond2;
-          condition3 = cond3;
-          condition4 = cond4;
-          is_episodic;
-        }
-  | _ -> None
+        Lwt.return_some
+          {
+            loop_id;
+            condition1 = cond1;
+            condition2 = cond2;
+            condition3 = cond3;
+            condition4 = cond4;
+            is_episodic;
+          }
+  | _ -> Lwt.return_none
 
 (** Main episodicity testing function called from pipeline *)
-let step_test_episodicity (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
-  let* ctx = ctx in
+let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  let* ctx = lwt_ctx in
     match ctx.program_stmts with
     | Some program ->
         (* Collect all loop IDs from the program *)
         let loop_ids = collect_loop_ids program in
+
+        let* symbolic_structure, source_spans =
+          SymbolicLoopSemantics.interpret lwt_ctx
+        in
+
+        let cache = { symbolic_structure; source_spans } in
 
         Logs.info (fun m ->
             m "Testing episodicity for %d loops: [%s]" (List.length loop_ids)
@@ -291,61 +354,69 @@ let step_test_episodicity (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
         let is_episodic_table = Hashtbl.create 10 in
 
         (* Check each loop *)
-        List.iter
-          (fun loop_id ->
-            Logs.info (fun m -> m "Analyzing Loop %d..." loop_id);
-            match check_loop_episodicity ctx loop_id with
-            | Some result ->
-                Hashtbl.add is_episodic_table loop_id result.is_episodic;
+        let* () =
+          Lwt_list.iter_s
+            (fun loop_id ->
+              Logs.info (fun m -> m "Analyzing Loop %d..." loop_id);
+              let* episodic_result = check_loop_episodicity ctx cache loop_id in
+                match episodic_result with
+                | Some result ->
+                    Hashtbl.add is_episodic_table loop_id result.is_episodic;
 
-                Logs.info (fun m ->
-                    m "Loop %d: %s" loop_id
-                      (if result.is_episodic then "EPISODIC" else "NOT EPISODIC")
-                );
+                    Logs.info (fun m ->
+                        m "Loop %d: %s" loop_id
+                          ( if result.is_episodic then "EPISODIC"
+                            else "NOT EPISODIC"
+                          )
+                    );
 
-                (* Log violations for each condition *)
-                if not result.condition1.satisfied then
-                  Logs.warn (fun m ->
-                      m "  Condition 1 violations: %s"
-                        (String.concat "; "
-                           (List.map show_episodicity_violation
-                              result.condition1.violations
-                           )
-                        )
-                  );
-                if not result.condition2.satisfied then
-                  Logs.warn (fun m ->
-                      m "  Condition 2 violations: %s"
-                        (String.concat "; "
-                           (List.map show_episodicity_violation
-                              result.condition2.violations
-                           )
-                        )
-                  );
-                if not result.condition3.satisfied then
-                  Logs.warn (fun m ->
-                      m "  Condition 3 violations: %s"
-                        (String.concat "; "
-                           (List.map show_episodicity_violation
-                              result.condition3.violations
-                           )
-                        )
-                  );
-                if not result.condition4.satisfied then
-                  Logs.warn (fun m ->
-                      m "  Condition 4 violations: %s"
-                        (String.concat "; "
-                           (List.map show_episodicity_violation
-                              result.condition4.violations
-                           )
-                        )
-                  );
-                loop_episodicity_results := result :: !loop_episodicity_results
-            | None ->
-                Logs.warn (fun m -> m "Loop %d: Could not analyze" loop_id);
-                Hashtbl.add is_episodic_table loop_id false
-          )
-          loop_ids;
+                    (* Log violations for each condition *)
+                    if not result.condition1.satisfied then
+                      Logs.warn (fun m ->
+                          m "  Condition 1 violations: %s"
+                            (String.concat "; "
+                               (List.map show_episodicity_violation
+                                  result.condition1.violations
+                               )
+                            )
+                      );
+                    if not result.condition2.satisfied then
+                      Logs.warn (fun m ->
+                          m "  Condition 2 violations: %s"
+                            (String.concat "; "
+                               (List.map show_episodicity_violation
+                                  result.condition2.violations
+                               )
+                            )
+                      );
+                    if not result.condition3.satisfied then
+                      Logs.warn (fun m ->
+                          m "  Condition 3 violations: %s"
+                            (String.concat "; "
+                               (List.map show_episodicity_violation
+                                  result.condition3.violations
+                               )
+                            )
+                      );
+                    if not result.condition4.satisfied then
+                      Logs.warn (fun m ->
+                          m "  Condition 4 violations: %s"
+                            (String.concat "; "
+                               (List.map show_episodicity_violation
+                                  result.condition4.violations
+                               )
+                            )
+                      );
+                    loop_episodicity_results :=
+                      result :: !loop_episodicity_results;
+                    Lwt.return_unit
+                | None ->
+                    Logs.warn (fun m -> m "Loop %d: Could not analyze" loop_id);
+                    Hashtbl.add is_episodic_table loop_id false;
+                    Lwt.return_unit
+            )
+            loop_ids
+        in
 
         (* Store results in context *)
         ctx.is_episodic <- Some is_episodic_table;

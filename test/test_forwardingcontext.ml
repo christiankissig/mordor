@@ -1,6 +1,7 @@
 (** Unit tests for ForwardingContext *)
 open Uset
 
+open Eventstructures
 open Expr
 open Forwardingcontext
 open Lwt.Syntax
@@ -58,7 +59,7 @@ module TestUtil = struct
   (** Create test structure *)
   let make_structure () =
     {
-      (create_symbolic_event_structure ()) with
+      (SymbolicEventStructure.create ()) with
       e = make_e_set ();
       events = make_events ();
       po = make_po ();

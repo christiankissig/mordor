@@ -681,6 +681,10 @@ end
 
 module SymbolicLoopSemantics : sig
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
+
+  val interpret :
+    mordor_ctx Lwt.t ->
+    (symbolic_event_structure * (int, source_span) Hashtbl.t) Lwt.t
 end = struct
   let rec interpret_statements_symbolic_loop ~final_structure ~add_event
       (nodes : ir_node list) env phi events =
@@ -751,12 +755,26 @@ end = struct
 
   let step_interpret lwt_ctx =
     let* ctx = lwt_ctx in
-      generic_step_interpret
-        ~stmt_semantics:
-          (interpret_statements_symbolic_loop
-             ~final_structure:make_generic_terminal_structure ~add_event
-          )
-        lwt_ctx
+    let stmt_semantics =
+      interpret_statements_symbolic_loop
+        ~final_structure:make_generic_terminal_structure ~add_event
+    in
+      generic_step_interpret ~stmt_semantics lwt_ctx
+
+  let interpret lwt_ctx =
+    let* ctx = lwt_ctx in
+    let stmt_semantics =
+      interpret_statements_symbolic_loop
+        ~final_structure:make_generic_terminal_structure ~add_event
+    in
+
+    match (ctx.program_stmts, ctx.litmus_constraints) with
+    | Some stmts, Some constraints ->
+        let* structure, events, source_spans =
+          interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
+        in
+          Lwt.return (structure, source_spans)
+    | _ -> failwith "No program statements or constraints for interpretation."
 end
 
 let step_interpret lwt_ctx =

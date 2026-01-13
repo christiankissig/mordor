@@ -80,6 +80,14 @@ type register_condition_violation =
   | RegisterReadBeforeWrite of string (* register name *) * source_span option
 [@@deriving show, yojson]
 
+type write_condition_violation =
+  | WriteFromPreviousIteration of
+      string (* location expression as string *)
+      * source_span option
+      (*read source span *)
+      * source_span option (* write source span *)
+[@@deriving show, yojson]
+
 type branch_condition_violation =
   | BranchConstraintsSymbol of
       string (* symbol name *) * int (* symbol origin
@@ -89,6 +97,7 @@ type branch_condition_violation =
 (** Episodicity violation types *)
 type episodicity_violation =
   | RegisterConditionViolation of register_condition_violation
+  | WriteConditionViolation of write_condition_violation
   | BranchConditionViolation of branch_condition_violation
 [@@deriving show, yojson]
 

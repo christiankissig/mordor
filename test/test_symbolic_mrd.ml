@@ -4,6 +4,7 @@
 open Alcotest
 open Coherence
 open Events
+open Eventstructures
 open Executions
 open Expr
 open Types
@@ -290,7 +291,7 @@ module TestExample1_1 = struct
 
   let test_lb_ub_complete_trace () =
     (* Use the create helper from Types module *)
-    let ses = create_symbolic_event_structure () in
+    let ses = SymbolicEventStructure.create () in
 
     (* Add events to the structure *)
     let ses = { ses with e = USet.of_list [ 1; 2; 3; 4 ] } in
@@ -343,7 +344,7 @@ end
 module TestExample4_1 = struct
   let test_forwarding_structure () =
     (* Use the create helper from Types module *)
-    let ses = create_symbolic_event_structure () in
+    let ses = SymbolicEventStructure.create () in
     let ses = { ses with e = USet.of_list [ 1; 2; 3 ] } in
     let ses = { ses with po = USet.of_list [ (1, 2); (2, 3) ] } in
 
@@ -362,7 +363,7 @@ end
 module TestExample5_1 = struct
   let test_speculation_structure () =
     (* Use the create helper from Types module *)
-    let ses = create_symbolic_event_structure () in
+    let ses = SymbolicEventStructure.create () in
     let ses = { ses with e = USet.of_list [ 1; 2 ] } in
 
     check int "speculation_events" 2 (USet.size ses.e);
@@ -379,7 +380,7 @@ end
 module TestExample6_1 = struct
   let test_register_promotion () =
     (* Use the create helper from Types module *)
-    let ses = create_symbolic_event_structure () in
+    let ses = SymbolicEventStructure.create () in
     let ses = { ses with e = USet.of_list [ 1; 2; 3; 4 ] } in
     let ses = { ses with po = USet.of_list [ (1, 2); (2, 3); (3, 4) ] } in
 
@@ -503,7 +504,7 @@ end
 module TestSymbolicEventStructure = struct
   let test_create_empty_structure () =
     (* Use the create helper from Types module *)
-    let ses = create_symbolic_event_structure () in
+    let ses = SymbolicEventStructure.create () in
 
     check int "empty_structure_events" 0 (USet.size ses.e);
     check int "empty_structure_po" 0 (USet.size ses.po);
@@ -511,7 +512,7 @@ module TestSymbolicEventStructure = struct
 
   let test_add_program_order () =
     (* Use the create helper from Types module *)
-    let ses = create_symbolic_event_structure () in
+    let ses = SymbolicEventStructure.create () in
     let ses = { ses with e = USet.of_list [ 1; 2; 3 ] } in
     let ses = { ses with po = USet.of_list [ (1, 2); (2, 3) ] } in
 
@@ -522,7 +523,7 @@ module TestSymbolicEventStructure = struct
 
   let test_rmw_pairs () =
     (* Use the create helper from Types module *)
-    let ses = create_symbolic_event_structure () in
+    let ses = SymbolicEventStructure.create () in
     let ses = { ses with e = USet.of_list [ 1; 2; 3; 4 ] } in
     let ses = { ses with rmw = USet.of_list [ (1, 2); (3, 4) ] } in
     (* Two RMW operations *)
@@ -532,7 +533,7 @@ module TestSymbolicEventStructure = struct
 
   let test_program_wide_guarantee () =
     (* Use the create helper from Types module *)
-    let ses = create_symbolic_event_structure () in
+    let ses = SymbolicEventStructure.create () in
     let ses =
       { ses with pwg = [ EBinOp (ESymbol "x", "≤", ENum (Z.of_int 100)) ] }
     in
