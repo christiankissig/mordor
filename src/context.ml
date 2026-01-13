@@ -94,11 +94,19 @@ type branch_condition_violation =
   *) * source_span option
 [@@deriving show, yojson]
 
+type loop_condition_violation =
+  | LoopIterationOrderingViolation of
+      int (* iteration *)
+      * source_span option (* from source span *)
+      * source_span option (* to source span *)
+[@@deriving show, yojson]
+
 (** Episodicity violation types *)
 type episodicity_violation =
   | RegisterConditionViolation of register_condition_violation
   | WriteConditionViolation of write_condition_violation
   | BranchConditionViolation of branch_condition_violation
+  | LoopConditionViolation of loop_condition_violation
 [@@deriving show, yojson]
 
 (** Result of episodicity check for a single condition *)

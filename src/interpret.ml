@@ -551,6 +551,11 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
 
 module StepCounterSemantics : sig
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
+
+  val interpret :
+    step_counter:int ->
+    mordor_ctx Lwt.t ->
+    (symbolic_event_structure * (int, source_span) Hashtbl.t) Lwt.t
 end = struct
   let make_ir_node stmt : ir_node =
     Ir.
@@ -669,6 +674,18 @@ end = struct
       generic_step_interpret
         ~stmt_semantics:(interpret_statements_step_counter step_counter per_loop)
         lwt_ctx
+
+  let interpret ~step_counter lwt_ctx =
+    let* ctx = lwt_ctx in
+    let stmt_semantics = interpret_statements_step_counter step_counter true in
+
+    match (ctx.program_stmts, ctx.litmus_constraints) with
+    | Some stmts, Some constraints ->
+        let* structure, events, source_spans =
+          interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
+        in
+          Lwt.return (structure, source_spans)
+    | _ -> failwith "No program statements or constraints for interpretation."
 end
 
 (** {1 Symbolic loop semantics} *)

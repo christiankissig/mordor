@@ -10,10 +10,10 @@ open Uset
 
 (** Calculate dependencies and justifications *)
 
-let calculate_dependencies ?(include_rf = true) ast
-    (structure : symbolic_event_structure) (events : (int, event) Hashtbl.t)
-    ~exhaustive ~restrictions =
+let calculate_dependencies ?(include_rf = true)
+    (structure : symbolic_event_structure) ~exhaustive ~restrictions =
   let e_set = structure.e in
+  let events = structure.events in
   let restrict = structure.restrict in
   let rmw = structure.rmw in
   let po = structure.po in
@@ -217,7 +217,7 @@ let calculate_dependencies ?(include_rf = true) ast
 
   Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));
 
-  Lwt.return (structure, final_justs, executions)
+  Lwt.return (final_justs, executions)
 
 let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
     =
@@ -235,16 +235,13 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
         (* default to IMM if not specified *);
     }
   in
-    match
-      (ctx.program_stmts, ctx.litmus_constraints, ctx.structure, ctx.events)
-    with
-    | Some stmts, Some constraints, Some structure, Some events ->
-        let* structure, justs, executions =
-          calculate_dependencies constraints structure events
+    match ctx.structure with
+    | Some structure ->
+        let* justs, executions =
+          calculate_dependencies structure
             ~exhaustive:(ctx.options.exhaustive || false)
             ~restrictions:coherence_restrictions
         in
-          ctx.structure <- Some structure;
           ctx.justifications <- Some justs;
           ctx.executions <- Some (USet.of_list executions);
           Lwt.return ctx
