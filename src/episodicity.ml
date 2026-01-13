@@ -15,6 +15,7 @@
 
 open Context
 open Eventstructures
+open Expr
 open Interpret
 open Ir_context_utils
 open Types
@@ -242,33 +243,69 @@ let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
 
 (** {1 Condition 3: Branch Condition Symbols (Syntactic + Origin Tracking)} *)
 
-(** Extract all symbols from IR expressions *)
-let rec extract_symbols_from_ir_expr (expr : expr) : string list =
-  match expr with
-  | ESymbol s -> [ s ]
-  | EBinOp (e1, _, e2) ->
-      extract_symbols_from_ir_expr e1 @ extract_symbols_from_ir_expr e2
-  | EUnOp (_, e) -> extract_symbols_from_ir_expr e
-  | EOr clauses ->
-      List.concat_map
-        (fun clause -> List.concat_map extract_symbols_from_ir_expr clause)
-        clauses
-  | _ -> []
-
-(** Check if a branch condition depends on pre-loop symbols *)
-let check_branch_condition (condition : expr)
-    (structure : symbolic_event_structure) (loop_id : int) : bool =
-  (* TODO:
-     1. Extract all symbols from condition
-     2. For each symbol, get its origin event
-     3. Check if any origin event occurred before the loop
-  *)
-  true
-
 (** Condition 3: Branch conditions don't constrain pre-loop symbols *)
 let check_condition3_branch_conditions (program : ir_node list) cache
     (loop_id : int) : condition_result =
-  { satisfied = true; violations = [] }
+  let structure = cache.symbolic_structure in
+  let violations = ref [] in
+  let events_in_loop =
+    SymbolicEventStructure.events_in_loop structure loop_id
+  in
+    USet.iter
+      (fun event ->
+        let event_preds =
+          Hashtbl.find_opt structure.restrict event
+          |> Option.value ~default:[]
+          |> USet.of_list
+        in
+        let events_before_loop =
+          USet.set_minus
+            (SymbolicEventStructure.events_po_before structure event)
+            events_in_loop
+        in
+        let preds =
+          USet.map
+            (fun e ->
+              Hashtbl.find_opt structure.restrict e |> Option.value ~default:[]
+            )
+            events_before_loop
+          |> USet.map USet.of_list
+          |> USet.flatten
+          |> USet.set_minus event_preds
+        in
+        let symbols =
+          USet.map Expr.get_symbols preds
+          |> USet.map USet.of_list
+          |> USet.flatten
+        in
+        let symbols_read_before_loop =
+          USet.filter
+            (fun sym ->
+              match Hashtbl.find_opt structure.origin sym with
+              | Some origin_event -> USet.mem events_before_loop origin_event
+              | None -> false
+            )
+            symbols
+        in
+          USet.iter
+            (fun sym ->
+              let violation =
+                BranchConditionViolation
+                  (BranchConstraintsSymbol
+                     ( sym,
+                       Hashtbl.find_opt structure.origin sym
+                       |> Option.value ~default:(-1),
+                       Hashtbl.find_opt cache.source_spans event
+                     )
+                  )
+              in
+                violations := violation :: !violations
+            )
+            symbols_read_before_loop
+      )
+      events_in_loop;
+
+    { satisfied = List.length !violations == 0; violations = !violations }
 
 (** {1 Condition 4: Inter-iteration Ordering (Semantic)} *)
 
