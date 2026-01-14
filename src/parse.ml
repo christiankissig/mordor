@@ -129,10 +129,28 @@ let rec convert_stmt_open ~recurse ~source_span ~thread_ctx ~loop_ctx = function
   | Ast.SWhile { condition; body } ->
       let ir_condition = ast_expr_to_expr condition in
       let ir_body = List.map recurse body in
+      let ir_body =
+        List.map
+          (fun ir_node ->
+            match loop_ctx with
+            | None -> ir_node
+            | Some loop_ctx -> add_loop loop_ctx.lid ir_node
+          )
+          ir_body
+      in
         While { condition = ir_condition; body = ir_body }
   | Ast.SDo { body; condition } ->
       let ir_condition = ast_expr_to_expr condition in
       let ir_body = List.map recurse body in
+      let ir_body =
+        List.map
+          (fun ir_node ->
+            match loop_ctx with
+            | None -> ir_node
+            | Some loop_ctx -> add_loop loop_ctx.lid ir_node
+          )
+          ir_body
+      in
         Do { body = ir_body; condition = ir_condition }
   | Ast.SFence { mode } -> Fence { mode }
   | Ast.SLock { global } -> Lock { global }
@@ -190,9 +208,7 @@ let rec convert_stmt (ast_node : ast_node) =
       ast_node.stmt
     |> make_ir_node ~source_span ~thread_ctx ~loop_ctx
   in
-    match loop_ctx with
-    | None -> ir_node
-    | Some loop_ctx -> add_loop loop_ctx.lid ir_node
+    ir_node
 
 (** Convert parsed AST litmus test to IR format *)
 

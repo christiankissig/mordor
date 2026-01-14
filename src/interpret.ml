@@ -720,59 +720,46 @@ end = struct
                   Hashtbl.find_opt env v
               )
             in
-            let get_after_structure ~add_event env phi _events =
-              interpret_statements_open
-                ~recurse:
-                  (interpret_statements_symbolic_loop ~final_structure
-                     ~add_event
-                  )
-                ~final_structure ~add_event rest env (after_val :: phi) events
+            let final_structure ~add_event env phi _events =
+              interpret_statements_symbolic_loop ~final_structure ~add_event
+                rest env (after_val :: phi) events
             in
-            let part_applied_interpret_statements nodes env phi events =
-              interpret_statements_symbolic_loop
-                ~final_structure:get_after_structure ~add_event nodes env phi
-                events
+            let recurse nodes env phi events =
+              interpret_statements_symbolic_loop ~final_structure ~add_event
+                nodes env phi events
             in
-              interpret_statements_open
-                ~recurse:part_applied_interpret_statements
-                ~final_structure:get_after_structure ~add_event body env phi
-                events
+              interpret_statements_open ~recurse ~final_structure ~add_event
+                body env phi events
         | While { condition; body } ->
             let after_val =
               Expr.evaluate (Expr.unop "!" condition) (fun v ->
                   Hashtbl.find_opt env v
               )
             in
-            let after_phi = after_val :: phi in
               let* after_structure =
                 interpret_statements_symbolic_loop ~final_structure ~add_event
-                  rest env after_phi events
+                  rest env (after_val :: phi) events
               in
-              let get_after_structure ~add_event:_ _env _phi _events =
+              let final_structure ~add_event:_ _env _phi _events =
                 Lwt.return after_structure
               in
-              let part_applied_interpret_statements nodes env phi events =
-                interpret_statements_symbolic_loop
-                  ~final_structure:get_after_structure ~add_event nodes env phi
-                  events
+              let recurse nodes env phi events =
+                interpret_statements_symbolic_loop ~final_structure ~add_event
+                  nodes env phi events
               in
-
-              let* loop_structure =
-                interpret_statements_open
-                  ~recurse:part_applied_interpret_statements
-                  ~final_structure:get_after_structure ~add_event body env phi
-                  events
-              in
-                Lwt.return
-                  (SymbolicEventStructure.plus loop_structure after_structure)
+                let* loop_structure =
+                  interpret_statements_open ~recurse ~final_structure ~add_event
+                    body env phi events
+                in
+                  Lwt.return
+                    (SymbolicEventStructure.plus loop_structure after_structure)
         | _ ->
-            let part_applied_interpret_statements nodes env phi events =
+            let recurse nodes env phi events =
               interpret_statements_symbolic_loop ~final_structure ~add_event
                 nodes env phi events
             in
-              interpret_statements_open
-                ~recurse:part_applied_interpret_statements ~final_structure
-                ~add_event nodes env phi events
+              interpret_statements_open ~recurse ~final_structure ~add_event
+                nodes env phi events
       )
     | [] -> final_structure ~add_event env phi events
 

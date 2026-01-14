@@ -166,7 +166,7 @@ let check_condition1_register_access (program : ir_node list) cache
             let result = check_register_accesses_in_loop body in
               satisfied := !satisfied && result.satisfied;
               violations := result.violations @ !violations
-        | _ -> failwith "Expected While or Do node in loop nodes"
+        | _ -> ()
       )
       loop_nodes;
     { satisfied = !satisfied; violations = !violations }
@@ -429,6 +429,17 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
         let* symbolic_structure, symbolic_source_spans =
           SymbolicLoopSemantics.interpret lwt_ctx
         in
+          Printf.printf "Symbolic event structure constructed.\n%s\n\n"
+            (show_symbolic_event_structure symbolic_structure);
+          Printf.printf "Loop indices:\n%s\n\n"
+            (Hashtbl.fold
+               (fun evt lbls acc ->
+                 acc
+                 ^ Printf.sprintf "Event %d: indices [%s]\n" evt
+                     (String.concat ", " (List.map string_of_int lbls))
+               )
+               symbolic_structure.loop_indices ""
+            );
           let* three_structure, three_source_spans =
             StepCounterSemantics.interpret ~step_counter:3 lwt_ctx
           in

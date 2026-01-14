@@ -466,7 +466,7 @@ pre.line-numbers > code {
 }
 
 .accordion-content.active {
-    max-height: 500px;
+    max-height: 100%;
     overflow-y: auto;
 }
 
