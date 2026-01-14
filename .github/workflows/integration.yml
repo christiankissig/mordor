@@ -52,6 +52,31 @@ jobs:
           opam install . --deps-only --with-test
           opam install menhir
           opam install logs fmt
+
+      - name: Fix Landmarks stubs library
+        run: |
+          opam exec -- bash -c '
+            LANDMARKS_DIR=$(opam var lib)/landmarks
+            echo "Landmarks directory: $LANDMARKS_DIR"
+            
+            if [ -d "$LANDMARKS_DIR" ]; then
+              cd "$LANDMARKS_DIR"
+              ls -la
+              
+              if [ -f "liblandmark_stubs.a" ]; then
+                ar x liblandmark_stubs.a 
+                ocamlmklib -o landmark_stubs *.o 
+                ls -lh liblandmark_stubs.a dlllandmark_stubs.so 
+                cp dlllandmark_stubs.so $(ocamlc -where)/stublibs/ 
+                rm *.o
+                echo "Successfully fixed landmarks stubs library"
+              else
+                echo "Warning: liblandmark_stubs.a not found in $LANDMARKS_DIR"
+              fi
+            else
+              echo "Warning: Landmarks directory not found at $LANDMARKS_DIR"
+            fi
+          '
       
       - name: Build project
         run: opam exec -- dune build
