@@ -2,7 +2,7 @@
  (name server) ; Internal name: server.ml
  (public_name mordor-web) ; CLI command name: "mordor-web"
  (package mordor-web) ; Package name
- (modules server) ; Compile server.ml
+ (modules server test_runner_api)
  (flags
   (:standard -g -w -32-33 -w -26))
  ; Debug symbols enabled, disable unused warnings

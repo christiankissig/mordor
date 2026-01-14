@@ -20,12 +20,15 @@
     
     <!-- Mordor CSS -->
     <link rel="stylesheet" href="static/css/mordor.css">
+    <!-- Test Runner CSS -->
+    <link rel="stylesheet" href="static/css/test-runner.css">
 </head>
 <body>
     <div class="container">
         <header>
             <h1>🔮 MoRDor - Weak Memory Semantics</h1>
             <div class="header-controls">
+                <button id="test-runner-btn" class="btn-secondary" title="Test Runner">🧪 Tests</button>
                 <button id="settings-btn" class="settings-icon" title="Settings">⚙️</button>
                 <button id="visualize-btn" class="btn-primary">Visualize</button>
             </div>
@@ -170,12 +173,23 @@
     <!-- Load Prism language definition for sMRD -->
     <script src="/static/js/prism-smrd.js"></script>
     
+    <!-- Load Test Runner -->
+    <script src="/static/js/test-runner.js"></script>
+    
     <!-- Load Graph Visualizer -->
     <script src="/static/js/graph-visualizer.js"></script>
     
     <!-- Initialize the application -->
     <script>
         new GraphVisualizer();
+        
+        // Initialize Test Runner
+        const testRunner = new TestRunner();
+        
+        // Test Runner button handler
+        document.getElementById('test-runner-btn').addEventListener('click', () => {
+            testRunner.toggle();
+        });
         
         // Accordion functionality
         document.querySelectorAll('.accordion-header').forEach(header => {
