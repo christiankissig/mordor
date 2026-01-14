@@ -2,7 +2,29 @@
 
 ## Quick Start
 
-### Option 1: Using Docker Compose (Recommended)
+### Option 1: Using Makefile
+
+```bash
+# Build the Docker image
+make build
+
+# Run the container
+make run
+
+# Perform health check
+make health
+
+# View logs
+make logs
+
+# Stop the container
+make stop
+
+# Clean up
+make clean
+```
+
+### Option 2: Using Docker Compose
 
 ```bash
 # Build and start the container
@@ -17,7 +39,7 @@ docker-compose down
 
 The application will be available at http://localhost:8080
 
-### Option 2: Using Docker directly
+### Option 3: Using Docker directly
 
 ```bash
 # Build the image
@@ -87,7 +109,7 @@ deploy:
   resources:
     limits:
       cpus: '4'      # Maximum 4 CPUs
-      memory: 4G     # Maximum 4GB RAM
+      memory: 4G     # Maximum 32GB RAM
 ```
 
 ## Building for Production

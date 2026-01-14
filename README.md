@@ -22,86 +22,60 @@ real-world concurrent algorithms, in addition to litmus tests.
 MoRDor analyzes weak memory models by calculating symbolic dependencies between
 memory operations.
 
-The tool provides a comprehensive command-line interface for:
-- Parsing and validating litmus tests
+The tool provides a comprehensive command-line interface and web UI for:
+- Parsing and validating programs and litmus tests
 - Running symbolic verification
-- Computing future sets for executions
+- Determine episodicity of unbounded loops
+- Computing executions and future sets
 - Visualizing event structures
-- Generating Isabelle/HOL theory files for formal verification
-- Batch processing with recursive directory scanning
 
 ## Project Structure
 
 ```
 mordor/
 ├── dune-project
-├── litmus-tests
-│   ├── ...
 ├── README.md
-├── smrd.opam
+├── Dockerfile
+├── docker-compose.yml
+├── Makefile
 ├── src
-│   ├── assertion.ml
-│   ├── ast.ml
-│   ├── coherence.ml
-│   ├── coherence.mli
-│   ├── dune
-│   ├── elaborations.ml
-│   ├── events.ml
-│   ├── eventstructureviz.ml
-│   ├── executions.ml
-│   ├── executions.mli
-│   ├── expr.ml
-│   ├── forwardingcontext.ml
-│   ├── futures.ml
-│   ├── interpret.ml
-│   ├── ir.ml
-│   ├── justifications.ml
-│   ├── lexer.mll
-│   ├── main.ml
-│   ├── parse.ml
-│   ├── parse.mli
-│   ├── parser.mly
-│   ├── rewrite.ml
-│   ├── solver.ml
-│   ├── solver.mli
-│   ├── symmrd.ml
-│   ├── types.ml
-│   ├── types.mli
-│   ├── uset.ml
-│   └── utils.ml
+│   ├── README.md # [See detailed module documentation](src/README.md)
+│   ├── ...
+├── cli
+│   ├── ...
+├── web
+│   ├── ...
 ├── test
 │   ├── ...
+├── litmus-tests
+│   ├── ...
+├── programs
+│   ├── ...
 ```
 
-## Key Modules
+with
 
-### Parser (`parse.ml`, `parser.mly`, `lexer.mll`)
-- Litmus test parsing
-- Syntax tree generation
+* `src/`: Core library modules
+* `cli/`: Command-line interface
+* `web/`: Web interface
+* `test/`: Unit and integration tests
+* `litmus-tests/`: Sample litmus tests
+* `programs/`: Sample concurrent programs
 
-### Interpreter (`interpret.ml`)
-- Interprets litmus tests into symbolic event structures
-
-### Elaboration (`elaborations.ml`)
-- Generate justification sets
-
-### Executions (`executions.ml`)
-- Generate symbolic executions
-
-### Symmrd (`symmrd.ml`)
-- Main dependency calculation algorithm
-
-### Solver (`solver.ml`)
-- Z3-based constraint solving
-
-## Dependencies
-
-```bash
-opam install . --deps-only
-opam install logs fmt
-```
+For more details about the core library modules, see the
+[src/README.md](src/README.md).
 
 ## Building
+
+It is recommended to build and run MoRDor in Docker using the Makefiles. See the
+[Docker Guide](DOCKER_GUIDE.md) for details.
+
+```bash
+make build
+make run
+make stop
+make clean
+```
 
 Build executables with
 
@@ -137,6 +111,13 @@ with stacktraces
 OCAMLRUNPARAM=b dune exec mordor
 ```
 
+It is recommended to run the Web interface in Docker as described in the
+[Docker Guide](DOCKER_GUIDE.md).
+
+```bash
+make run
+```
+
 Run the Web interface with
 
 ```bash
@@ -156,6 +137,14 @@ Run integration tests with
 ```bash
 dune exec test/test_integration.exe
 ```
+
+Run the litmus tests with
+
+```bash
+dune exec test/test_integration.exe
+```
+
+or through the Web interface, pressing the "🧪 Tests" button.
 
 ## Command Line Interface
 
@@ -272,12 +261,6 @@ MoRDor supports multiple output formats depending on the command:
 - Graph visualization format
 - Can be rendered with Graphviz tools
 - Visualizes event structure and dependencies
-
-### Isabelle/HOL Format
-- Used by: `parse`, `futures`
-- Generates `.thy` theory files
-- Suitable for formal verification in Isabelle
-- Includes metadata and placeholders for formalization
 
 ### Console Output
 - Default for most commands

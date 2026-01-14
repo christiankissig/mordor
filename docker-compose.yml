@@ -22,11 +22,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '4'
+          memory: 32G
         reservations:
           cpus: '1'
-          memory: 512M
+          memory: 2G
     # Logging
     logging:
       driver: "json-file"
