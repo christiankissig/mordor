@@ -348,12 +348,24 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               (* TODO prune semantically impossible branches against phi *)
               let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
               let new_then_phi =
-                if cond_val = EBoolean true then phi else cond_val :: phi
+                if cond_val = EBoolean true then phi else
+                  cond_val :: phi
               in
+              let* new_then_phi_sat = Solver.is_sat_cached new_then_phi in
+              let new_then_phi = if new_then_phi_sat then new_then_phi
+              else [EBoolean false] in
+              let cond_val = if new_then_phi_sat then cond_val
+                else EBoolean false in
+              let else_cond_val = Expr.unop "!" cond_val in
               let new_else_phi =
                 if cond_val = EBoolean false then phi
-                else Expr.unop "!" cond_val :: phi
+                else else_cond_val :: phi
               in
+              let* new_else_phi_sat = Solver.is_sat_cached new_else_phi in
+              let else_cond_val = if new_else_phi_sat then else_cond_val
+                else EBoolean false in
+              let new_else_phi = if new_else_phi_sat then new_else_phi
+              else [EBoolean false] in
 
               let then_structure events =
                 recurse (then_body @ rest) env new_then_phi events
