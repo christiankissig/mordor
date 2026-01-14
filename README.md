@@ -144,7 +144,7 @@ Run the litmus tests with
 dune exec test/test_integration.exe
 ```
 
-or through the Web interface, pressing the "🧪 Tests" button.
+or through the Web interface, pressing the "🧪 Litmus Tests" button.
 
 ## Command Line Interface
 
