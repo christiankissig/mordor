@@ -334,9 +334,7 @@ module ConditionChecker = struct
   let check_with_solver cond_expr rf_conditions execution =
     (* Instantiate condition expression with final register environment *)
     let inst_cond_expr =
-      Expr.evaluate cond_expr (fun reg ->
-          Hashtbl.find_opt execution.final_env reg
-      )
+      Expr.evaluate ~env:(Hashtbl.find_opt execution.final_env) cond_expr
     in
     let cond_expr_and_rf_conditions = inst_cond_expr :: rf_conditions in
       Solver.is_sat cond_expr_and_rf_conditions

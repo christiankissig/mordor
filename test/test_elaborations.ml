@@ -50,8 +50,8 @@ module TestData = struct
   let make_structure ?(events = standard_events ())
       ?(e = USet.of_list [ 0; 1; 2; 3 ]) ?(po = USet.of_list [ (1, 2) ])
       ?(write_events = USet.of_list [ 0; 1; 3 ])
-      ?(read_events = USet.of_list [ 2 ]) ?(branch_events = USet.create ())
-      ?(malloc_events = USet.create ()) ?(rmw = USet.create ()) () =
+      ?(read_events = USet.of_list [ 2 ]) ?(malloc_events = USet.create ())
+      ?(rmw = USet.create ()) () =
     {
       e;
       events;
@@ -74,7 +74,6 @@ module TestData = struct
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
       fence_events = USet.create ();
-      branch_events;
       malloc_events;
       free_events = USet.create ();
       terminal_events = USet.create ();
@@ -87,8 +86,8 @@ module TestData = struct
       | Some e -> e.wval
       | None -> None
     in
-    let conflicting_branch _e1 _e2 = 0 in
-      { structure; fj = USet.create (); val_fn; conflicting_branch }
+    let find_distinguishing_predicate _structure _e1 _e2 = None in
+      { structure; fj = USet.create (); val_fn; find_distinguishing_predicate }
 
   (* Mock justification builder *)
   let make_justification ?(predicates = []) ?(fwd = USet.create ())
@@ -498,48 +497,6 @@ let test_forward_operations () =
                Lwt.return_unit
     )
 
-(** Conflict tests *)
-
-let test_conflict_operations () =
-  let ctx = TestData.make_context () in
-
-  (* No branches *)
-  let result1 = conflict ctx in
-    check int "conflict no branches" 0 (USet.size result1);
-
-    (* With branches *)
-    let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
-    let branch =
-      TestData.make_event 10
-        ~id:(Some (VNumber (Z.of_int 10)))
-        ~loc:(Some (ENum (Z.of_int 10)))
-        ~cond:(Some pred)
-    in
-    let event_11 =
-      TestData.make_event 11
-        ~id:(Some (VNumber (Z.of_int 11)))
-        ~loc:(Some (ENum (Z.of_int 11)))
-    in
-    let event_12 =
-      TestData.make_event 12
-        ~id:(Some (VNumber (Z.of_int 12)))
-        ~loc:(Some (ENum (Z.of_int 12)))
-    in
-
-    Hashtbl.add ctx.structure.events 10 branch;
-    Hashtbl.add ctx.structure.events 11 event_11;
-    Hashtbl.add ctx.structure.events 12 event_12;
-
-    let e_set = USet.of_list [ 0; 1; 2; 3; 10; 11; 12 ] in
-    let po = USet.of_list [ (1, 2); (10, 11); (10, 12) ] in
-    let structure =
-      { ctx.structure with e = e_set; po; branch_events = USet.singleton 10 }
-    in
-    let ctx = { ctx with structure } in
-
-    let result2 = conflict ctx in
-      check bool "conflict with branches" true (USet.size result2 >= 0)
-
 (** Lift, weaken, strengthen tests *)
 
 let test_lift_and_weaken () =
@@ -741,8 +698,6 @@ let suite =
       test_case "fwd operations" `Quick test_fwd_operations;
       test_case "we operations" `Quick test_we_operations;
       test_case "forward operations" `Quick test_forward_operations;
-      (* Conflict *)
-      test_case "conflict operations" `Quick test_conflict_operations;
       (* Lift, weaken, strengthen *)
       test_case "lift and weaken" `Quick test_lift_and_weaken;
       test_case "strengthen operations" `Quick test_strengthen_operations;

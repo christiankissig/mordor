@@ -11,18 +11,18 @@ let read_litmus_files dir =
   let rec read_dir_recursive path =
     try
       let files = Sys.readdir path in
-      List.concat
-        (Array.to_list files
-        |> List.map (fun f ->
-            let full_path = Filename.concat path f in
-            if Sys.is_directory full_path then read_dir_recursive full_path
-            else if Filename.check_suffix f ".lit" then [ full_path ]
-            else []
+        List.concat
+          (Array.to_list files
+          |> List.map (fun f ->
+              let full_path = Filename.concat path f in
+                if Sys.is_directory full_path then read_dir_recursive full_path
+                else if Filename.check_suffix f ".lit" then [ full_path ]
+                else []
           )
-        )
+          )
     with Sys_error _ -> []
   in
-  read_dir_recursive dir
+    read_dir_recursive dir
 
 (* Parse verification results from CLI output *)
 type verification_result = {
@@ -51,10 +51,10 @@ let parse_verification_output output_lines =
           (String.length line - String.length prefix)
       in
       let trimmed = String.trim value_str in
-      match trimmed with
-      | "true" -> Some true
-      | "false" -> Some false
-      | _ -> None
+        match trimmed with
+        | "true" -> Some true
+        | "false" -> Some false
+        | _ -> None
     else None
   in
   let parse_int_line prefix line =
@@ -66,8 +66,8 @@ let parse_verification_output output_lines =
         String.sub line (String.length prefix)
           (String.length line - String.length prefix)
       in
-      try Some (int_of_string (String.trim value_str))
-      with Failure _ -> None
+        try Some (int_of_string (String.trim value_str))
+        with Failure _ -> None
     else None
   in
   let rec process_lines result = function
@@ -90,29 +90,31 @@ let parse_verification_output output_lines =
                 )
             )
         in
-        process_lines updated_result rest
+          process_lines updated_result rest
   in
-  process_lines result output_lines
+    process_lines result output_lines
 
 (* Execute CLI command and capture result *)
 let run_cli_on_file filepath =
-  let cmd = Printf.sprintf "%s run --single \"%s\" 2>&1" cli_executable filepath in
+  let cmd =
+    Printf.sprintf "%s run --single \"%s\" 2>&1" cli_executable filepath
+  in
   let ic = Unix.open_process_in cmd in
   let output = ref [] in
-  try
-    while true do
-      output := input_line ic :: !output
-    done;
-    (0, [])
-  with End_of_file ->
-    let exit_code = Unix.close_process_in ic in
-    let status =
-      match exit_code with
-      | Unix.WEXITED code -> code
-      | Unix.WSIGNALED _ -> -1
-      | Unix.WSTOPPED _ -> -1
-    in
-    (status, List.rev !output)
+    try
+      while true do
+        output := input_line ic :: !output
+      done;
+      (0, [])
+    with End_of_file ->
+      let exit_code = Unix.close_process_in ic in
+      let status =
+        match exit_code with
+        | Unix.WEXITED code -> code
+        | Unix.WSIGNALED _ -> -1
+        | Unix.WSTOPPED _ -> -1
+      in
+        (status, List.rev !output)
 
 (* API Handlers *)
 
@@ -123,83 +125,79 @@ let list_tests_handler _request =
     let json =
       `Assoc [ ("tests", `List (List.map (fun t -> `String t) tests)) ]
     in
-    Dream.json (Yojson.Basic.to_string json)
+      Dream.json (Yojson.Basic.to_string json)
   with exn ->
     let error = Printexc.to_string exn in
-    Dream.json
-      ~status:`Internal_Server_Error
-      (Yojson.Basic.to_string
-         (`Assoc [ ("error", `String error) ])
-      )
+      Dream.json ~status:`Internal_Server_Error
+        (Yojson.Basic.to_string (`Assoc [ ("error", `String error) ]))
 
 (* POST /api/tests/run - Run a specific litmus test *)
 let run_test_handler request =
   let* body = Dream.body request in
-  try
-    let json = Yojson.Basic.from_string body in
-    let test_path =
-      match json with
-      | `Assoc fields -> (
-          match List.assoc_opt "test" fields with
-          | Some (`String path) -> path
-          | _ -> raise (Failure "Missing 'test' field")
-        )
-      | _ -> raise (Failure "Invalid JSON")
-    in
+    try
+      let json = Yojson.Basic.from_string body in
+      let test_path =
+        match json with
+        | `Assoc fields -> (
+            match List.assoc_opt "test" fields with
+            | Some (`String path) -> path
+            | _ -> raise (Failure "Missing 'test' field")
+          )
+        | _ -> raise (Failure "Invalid JSON")
+      in
 
-    Printf.printf "Running test: %s\n%!" test_path;
+      Printf.printf "Running test: %s\n%!" test_path;
 
-    let exit_code, output = run_cli_on_file test_path in
-    let output_str = String.concat "\n" output in
-    let results = parse_verification_output output in
+      let exit_code, output = run_cli_on_file test_path in
+      let output_str = String.concat "\n" output in
+      let results = parse_verification_output output in
 
-    let success = exit_code = 0 && results.valid <> Some false in
+      let success = exit_code = 0 && results.valid <> Some false in
 
-    let response =
-      `Assoc
-        [
-          ("success", `Bool success);
-          ("exit_code", `Int exit_code);
-          ("output", `String output_str);
-          ("parsed", `Bool (results.valid <> None));
-          ( "valid",
-            match results.valid with
-            | Some v -> `Bool v
-            | None -> `Null
-          );
-          ( "undefined_behaviour",
-            match results.undefined_behaviour with
-            | Some v -> `Bool v
-            | None -> `Null
-          );
-          ( "executions",
-            match results.executions with
-            | Some n -> `Int n
-            | None -> `Null
-          );
-          ( "events",
-            match results.events with
-            | Some n -> `Int n
-            | None -> `Null
-          );
-        ]
-    in
+      let response =
+        `Assoc
+          [
+            ("success", `Bool success);
+            ("exit_code", `Int exit_code);
+            ("output", `String output_str);
+            ("parsed", `Bool (results.valid <> None));
+            ( "valid",
+              match results.valid with
+              | Some v -> `Bool v
+              | None -> `Null
+            );
+            ( "undefined_behaviour",
+              match results.undefined_behaviour with
+              | Some v -> `Bool v
+              | None -> `Null
+            );
+            ( "executions",
+              match results.executions with
+              | Some n -> `Int n
+              | None -> `Null
+            );
+            ( "events",
+              match results.events with
+              | Some n -> `Int n
+              | None -> `Null
+            );
+          ]
+      in
 
-    Dream.json (Yojson.Basic.to_string response)
-  with exn ->
-    let error = Printexc.to_string exn in
-    Printf.printf "Error running test: %s\n%!" error;
-    Dream.json
-      ~status:`Internal_Server_Error
-      (Yojson.Basic.to_string
-         (`Assoc
-           [
-             ("success", `Bool false);
-             ("error", `String error);
-             ("output", `String error);
-           ]
-         )
-      )
+      Dream.json (Yojson.Basic.to_string response)
+    with exn ->
+      let error = Printexc.to_string exn in
+        Printf.printf "Error running test: %s\n%!" error;
+        Dream.json ~status:`Internal_Server_Error
+          (Yojson.Basic.to_string
+             (`Assoc
+                [
+                  ("success", `Bool false);
+                  ("error", `String error);
+                  ("output", `String error);
+                ]
+             )
+          )
 
 (* GET /api/tests/source?test=<path> - Get source code of a test file *)
 let get_test_source_handler request =
@@ -207,34 +205,32 @@ let get_test_source_handler request =
     let test_path = Dream.query request "test" |> Option.value ~default:"" in
 
     if test_path = "" then
-      Dream.json
-        ~status:`Bad_Request
+      Dream.json ~status:`Bad_Request
         (Yojson.Basic.to_string
            (`Assoc [ ("error", `String "Missing 'test' parameter") ])
         )
     else
       let ic = open_in test_path in
       let source = ref [] in
-      (try
-         while true do
-           source := input_line ic :: !source
-         done
-       with End_of_file -> close_in ic);
+        ( try
+            while true do
+              source := input_line ic :: !source
+            done
+          with End_of_file -> close_in ic
+        );
 
-      let source_str = String.concat "\n" (List.rev !source) in
-      let response = `Assoc [ ("source", `String source_str) ] in
+        let source_str = String.concat "\n" (List.rev !source) in
+        let response = `Assoc [ ("source", `String source_str) ] in
 
-      Dream.json (Yojson.Basic.to_string response)
+        Dream.json (Yojson.Basic.to_string response)
   with
   | Sys_error msg ->
-      Dream.json
-        ~status:`Not_Found
+      Dream.json ~status:`Not_Found
         (Yojson.Basic.to_string (`Assoc [ ("error", `String msg) ]))
   | exn ->
       let error = Printexc.to_string exn in
-      Dream.json
-        ~status:`Internal_Server_Error
-        (Yojson.Basic.to_string (`Assoc [ ("error", `String error) ]))
+        Dream.json ~status:`Internal_Server_Error
+          (Yojson.Basic.to_string (`Assoc [ ("error", `String error) ]))
 
 (* Routes to add to main server *)
 let routes =

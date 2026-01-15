@@ -164,8 +164,7 @@ module ReadFromValidation = struct
         (* TODO this look-up logic is contrived *)
         let w_val = vale structure w r in
           match get_val structure r with
-          | Some r_val ->
-              Expr.evaluate (Expr.binop w_val "=" r_val) (fun _ -> None)
+          | Some r_val -> Expr.evaluate (Expr.binop w_val "=" r_val)
           | None -> failwith ("Read event " ^ string_of_int r ^ " has no value!")
       )
       rf
@@ -176,8 +175,7 @@ module ReadFromValidation = struct
         (* TODO this look-up logic is contrived *)
         let w_loc = loce structure w r in
           match get_loc structure r with
-          | Some r_loc ->
-              Expr.evaluate (Expr.binop w_loc "=" r_loc) (fun _ -> None)
+          | Some r_loc -> Expr.evaluate (Expr.binop w_loc "=" r_loc)
           | None ->
               failwith ("Read event " ^ string_of_int r ^ " has no location!")
       )
@@ -373,7 +371,7 @@ module JustValidation = struct
       List.map (fun (just : justification) -> just.p) combo
       |> List.flatten
       |> List.append path.p
-      |> List.map (fun expr -> Expr.evaluate expr (fun _ -> None))
+      |> List.map Expr.evaluate
       |> USet.of_list
       |> USet.values
       |> Solver.is_sat_cached
@@ -577,7 +575,6 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
                             (* disjoint only uses location *)
                             Expr.evaluate
                               (disjoint (loc_a, val_a) (loc_b, val_b))
-                              (fun _ -> None)
                     )
                 )
                 af

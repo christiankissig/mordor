@@ -28,7 +28,6 @@ module SymbolicEventStructure = struct
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
       fence_events = USet.create ();
-      branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
       terminal_events = USet.create ();
@@ -84,11 +83,6 @@ module SymbolicEventStructure = struct
             USet.union structure.fence_events (USet.singleton event.label)
           else structure.fence_events
         );
-      branch_events =
-        ( if event.typ = Branch then
-            USet.union structure.branch_events (USet.singleton event.label)
-          else structure.branch_events
-        );
       malloc_events =
         ( if event.typ = Malloc then
             USet.union structure.malloc_events (USet.singleton event.label)
@@ -125,7 +119,9 @@ module SymbolicEventStructure = struct
         (* TODO value not needed here *)
         constraint_ = a.constraint_ @ b.constraint_;
         conflict =
-          USet.union (URelation.cross a.e b.e) (USet.union a.conflict b.conflict);
+          USet.union a.conflict b.conflict
+          |> USet.inplace_union (URelation.cross a.e b.e)
+          |> USet.inplace_union (URelation.cross b.e a.e);
         (* a and b share the same origin table *)
         origin = a.origin;
         loop_indices = a.loop_indices;
@@ -135,7 +131,6 @@ module SymbolicEventStructure = struct
         rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
         rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
         fence_events = USet.union a.fence_events b.fence_events;
-        branch_events = USet.union a.branch_events b.branch_events;
         malloc_events = USet.union a.malloc_events b.malloc_events;
         free_events = USet.union a.free_events b.free_events;
         terminal_events = USet.union a.terminal_events b.terminal_events;
@@ -169,7 +164,6 @@ module SymbolicEventStructure = struct
         rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
         rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
         fence_events = USet.union a.fence_events b.fence_events;
-        branch_events = USet.union a.branch_events b.branch_events;
         malloc_events = USet.union a.malloc_events b.malloc_events;
         free_events = USet.union a.free_events b.free_events;
         terminal_events = USet.union a.terminal_events b.terminal_events;

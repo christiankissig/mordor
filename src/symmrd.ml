@@ -15,10 +15,8 @@ let calculate_dependencies ?(include_rf = true)
   let e_set = structure.e in
   let events = structure.events in
   let restrict = structure.restrict in
-  let rmw = structure.rmw in
   let po = structure.po in
 
-  let branch_events = structure.branch_events in
   let read_events = structure.read_events in
   let write_events = structure.write_events in
   let rlx_read_events = structure.rlx_read_events in
@@ -27,33 +25,43 @@ let calculate_dependencies ?(include_rf = true)
   let malloc_events = structure.malloc_events in
   let free_events = structure.free_events in
 
-  (* Build ebranch mapping *)
-  let ebranch =
-    let tbl = Hashtbl.create 16 in
-      USet.iter
-        (fun e ->
-          let branches =
-            USet.filter (fun (f, t) -> USet.mem branch_events f && t = e) po
-            |> USet.map (fun (f, _) -> f)
-          in
-            Hashtbl.add tbl e branches
-        )
-        e_set;
-      tbl
-  in
+  let find_distinguishing_predicate structure e_1 e_2 =
+    let p1 =
+      Hashtbl.find_opt structure.restrict e_1 |> Option.value ~default:[]
+    in
+    let p2 =
+      Hashtbl.find_opt structure.restrict e_2 |> Option.value ~default:[]
+    in
 
-  let conflicting_branch e1 e2 =
-    let branches1 =
-      try Hashtbl.find ebranch e1 with Not_found -> USet.create ()
+    (* Find predicates in p1 that have their inverse in p2 *)
+    let distinguishing =
+      List.find_opt
+        (fun pred1 ->
+          List.exists
+            (fun pred2 ->
+              (* Check if pred2 is the inverse of pred1 *)
+              Expr.inverse pred1 |> Expr.evaluate |> Expr.equal pred2
+            )
+            p2
+        )
+        p1
     in
-    let branches2 =
-      try Hashtbl.find ebranch e2 with Not_found -> USet.create ()
-    in
-    let common = USet.intersection branches1 branches2 in
-    let values = USet.values common in
-      match values with
-      | [] -> failwith "No conflicting branch found"
-      | hd :: tl -> List.fold_left max hd tl
+
+    match distinguishing with
+    | Some bp -> Some bp
+    | None ->
+        (* Try the other direction: find pred in p2 with inverse in p1 *)
+        List.find_opt
+          (fun pred2 ->
+            List.exists
+              (fun pred1 ->
+                Expr.inverse pred2 |> Expr.evaluate |> Expr.equal pred1
+              )
+              p1
+          )
+          p2
+        |> Option.map Expr.inverse
+        |> Option.map Expr.evaluate
   in
 
   (* Define the val function that extracts values from events *)
@@ -70,13 +78,7 @@ let calculate_dependencies ?(include_rf = true)
 
   (* Initialize ForwardingContext *)
   let* () =
-    Forwardingcontext.init
-      {
-        init_e = e_set;
-        init_structure = structure;
-        init_val = val_fn;
-        init_rmw = rmw;
-      }
+    Forwardingcontext.init { init_structure = structure; init_val = val_fn }
   in
 
   (* Initialize justifications for writes *)
@@ -110,8 +112,27 @@ let calculate_dependencies ?(include_rf = true)
 
   (* Build context for elaborations *)
   let elab_ctx : Elaborations.context =
-    { structure; fj; val_fn; conflicting_branch }
+    { structure; fj; val_fn; find_distinguishing_predicate }
   in
+
+  Printf.printf "Symbolic evnet structure:\n%s\n"
+    (Types.show_symbolic_event_structure structure);
+  Printf.printf "Events:\n%s\n"
+    (String.concat "\n"
+       (Hashtbl.fold
+          (fun eid evt acc ->
+            Printf.sprintf "E%d: %s" eid (Types.show_event evt) :: acc
+          )
+          structure.events []
+       )
+    );
+  Printf.printf "Symbol origins\n%s\n"
+    (String.concat "\n"
+       (Hashtbl.fold
+          (fun sym eid acc -> Printf.sprintf "%s -> E%d" sym eid :: acc)
+          structure.origin []
+       )
+    );
 
   Logs.debug (fun m -> m "Starting elaborations...");
 

@@ -529,7 +529,6 @@ module TestWriteCondition = struct
             restrict = Hashtbl.create 0;
             cas_groups = Hashtbl.create 0;
             pwg = [];
-            branch_events = USet.create ();
             read_events = USet.of_list [ read.label ];
             write_events = USet.of_list [ init_write.label; mod_write.label ];
             rlx_read_events = USet.of_list [ read.label ];

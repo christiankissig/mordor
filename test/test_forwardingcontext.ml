@@ -71,12 +71,7 @@ module TestUtil = struct
 
   (** Create init params *)
   let make_init_params () =
-    {
-      init_e = make_e_set ();
-      init_structure = make_structure ();
-      init_val = test_val_fn;
-      init_rmw = make_rmw ();
-    }
+    { init_structure = make_structure (); init_val = test_val_fn }
 end
 
 (** Alcotest testable types *)

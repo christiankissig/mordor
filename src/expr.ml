@@ -90,7 +90,7 @@ and Expr : sig
   val is_number : t -> bool
   val compare : t -> t -> int
   val sort_expr : t -> t
-  val evaluate : t -> (string -> t option) -> t
+  val evaluate : ?env:(string -> t option) -> t -> t
   val to_value : t -> value_type option
   val of_value : value_type -> t
   val simplify_dnf : expr list list -> expr list list
@@ -361,7 +361,7 @@ end = struct
     | _ -> false
 
   (** Evaluate expression with environment for variables *)
-  let rec evaluate expr env =
+  let rec evaluate ?(env = fun _ -> None) expr =
     match expr with
     | ENum _ -> expr
     | EBoolean _ -> expr
@@ -372,7 +372,7 @@ end = struct
         | None -> expr
       )
     | EUnOp (op, rhs) when op = "!" -> (
-        let r_val = evaluate rhs env in
+        let r_val = evaluate ~env rhs in
           match r_val with
           | EBoolean b -> EBoolean (not b)
           | EUnOp ("!", r_val) -> r_val
@@ -389,11 +389,11 @@ end = struct
           | _ -> EUnOp (op, r_val)
       )
     | EUnOp (op, rhs) ->
-        let r_val = evaluate rhs env in
+        let r_val = evaluate ~env rhs in
           EUnOp (op, r_val)
     | EBinOp (lhs, "+", rhs) -> (
-        let l_val = evaluate lhs env in
-        let r_val = evaluate rhs env in
+        let l_val = evaluate ~env lhs in
+        let r_val = evaluate ~env rhs in
           match (l_val, r_val) with
           | ENum n1, _ when Z.equal n1 Z.zero -> r_val
           | _, ENum n2 when Z.equal n2 Z.zero -> l_val
@@ -401,16 +401,16 @@ end = struct
           | _ -> EBinOp (l_val, "+", r_val)
       )
     | EBinOp (lhs, "-", rhs) -> (
-        let l_val = evaluate lhs env in
-        let r_val = evaluate rhs env in
+        let l_val = evaluate ~env lhs in
+        let r_val = evaluate ~env rhs in
           match (l_val, r_val) with
           | _, ENum n2 when Z.equal n2 Z.zero -> l_val
           | ENum n1, ENum n2 -> ENum (Z.sub n1 n2)
           | _ -> EBinOp (l_val, "-", r_val)
       )
     | EBinOp (lhs, "*", rhs) -> (
-        let l_val = evaluate lhs env in
-        let r_val = evaluate rhs env in
+        let l_val = evaluate ~env lhs in
+        let r_val = evaluate ~env rhs in
           match (l_val, r_val) with
           | _, ENum n when n = Z.zero -> ENum Z.zero
           | _, ENum n when n = Z.one -> l_val
@@ -420,8 +420,8 @@ end = struct
           | _ -> EBinOp (l_val, "*", r_val)
       )
     | EBinOp (lhs, "&&", rhs) -> (
-        let l_val = evaluate lhs env in
-        let r_val = evaluate rhs env in
+        let l_val = evaluate ~env lhs in
+        let r_val = evaluate ~env rhs in
           match (l_val, r_val) with
           | _, EBoolean false -> EBoolean false
           | EBoolean false, _ -> EBoolean false
@@ -430,8 +430,8 @@ end = struct
           | _ -> EBinOp (l_val, "&&", r_val)
       )
     | EBinOp (lhs, "||", rhs) -> (
-        let l_val = evaluate lhs env in
-        let r_val = evaluate rhs env in
+        let l_val = evaluate ~env lhs in
+        let r_val = evaluate ~env rhs in
           match (l_val, r_val) with
           | _, EBoolean true -> EBoolean true
           | EBoolean true, _ -> EBoolean true
@@ -440,8 +440,8 @@ end = struct
           | _ -> EBinOp (l_val, "||", r_val)
       )
     | EBinOp (lhs, op, rhs) -> (
-        let l_val = evaluate lhs env in
-        let r_val = evaluate rhs env in
+        let l_val = evaluate ~env lhs in
+        let r_val = evaluate ~env rhs in
           match (l_val, r_val) with
           | ENum n1, ENum n2 -> (
               match op with
@@ -495,7 +495,7 @@ end = struct
             )
       )
     | EOr clauses ->
-        let eval_clause clause = List.map (fun e -> evaluate e env) clause in
+        let eval_clause clause = List.map (fun e -> evaluate ~env e) clause in
           EOr (List.map eval_clause clauses)
 
   (** DNF Simplification *)

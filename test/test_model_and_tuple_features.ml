@@ -113,7 +113,6 @@ module TestSetMembership = struct
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
       fence_events = USet.create ();
-      branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
       terminal_events = USet.create ();

@@ -7,7 +7,8 @@ type context = {
   structure : symbolic_event_structure;
   fj : (int * int) USet.t;
   val_fn : int -> expr option;
-  conflicting_branch : int -> int -> int;
+  find_distinguishing_predicate :
+    symbolic_event_structure -> int -> int -> expr option;
 }
 
 let domain_pool = Lwt_domain.setup_pool 10
@@ -26,7 +27,9 @@ let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
   let immediate_ppo = URelation.transitive_reduction ppo_result in
   let inversed = URelation.inverse_relation immediate_ppo in
   let tree = URelation.adjacency_map inversed in
-    Lwt.return (fun e -> Hashtbl.find tree e)
+    Lwt.return (fun e ->
+        Hashtbl.find_opt tree e |> Option.value ~default:(USet.create ())
+    )
 
 (** Lifted cache for relations with forwarding context *)
 type lifted_cache = {
@@ -511,16 +514,7 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
   in
   let ness = USet.union ness_1 ness_2 in
 
-  (* Get branch predicate *)
-  let bp_event =
-    Hashtbl.find elab_ctx.structure.events (elab_ctx.conflicting_branch e_1 e_2)
-  in
-  let bp =
-    match bp_event.cond with
-    | Some e -> e
-    | _ -> failwith "Expected expression in cond"
-  in
-  let bpi = Expr.inverse bp in
+  let bpi = elab_ctx.find_distinguishing_predicate elab_ctx.structure e_1 e_2 in
 
   (* Compute uncommon predicates *)
   let uncommon = USet.difference p_1 p_2 in
@@ -623,78 +617,6 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
       m "Completed strengthening. Found %d results." (List.length out)
   );
   Lwt.return out
-
-let conflict (elab_ctx : context) =
-  let events = elab_ctx.structure.e in
-
-  Logs.debug (fun m ->
-      m "Computing conflicts among %d events..." (USet.size events)
-  );
-
-  (* Build po tree *)
-  let po_tree = URelation.adjacency_map elab_ctx.structure.po in
-
-  (* Semicolon composition *)
-  let semicolon r1 r2 =
-    let result = USet.create () in
-      USet.iter
-        (fun (a, b) ->
-          USet.iter
-            (fun (c, d) -> if b = c then USet.add result (a, d) |> ignore)
-            r2
-        )
-        r1;
-      result
-  in
-
-  (* Compute all successors of x in po (including x) *)
-  let it x =
-    let singleton = USet.singleton (x, x) in
-    let composed = semicolon singleton elab_ctx.structure.po in
-    let successors = USet.map (fun (_, y) -> y) composed in
-      USet.add successors x
-  in
-
-  (* Process each branch event. TODO we don't have branch events *)
-  let branch_results =
-    USet.map
-      (fun x ->
-        let successors =
-          try Hashtbl.find po_tree x with Not_found -> USet.create ()
-        in
-        let values = USet.values successors in
-          match values with
-          | [ a; b ] ->
-              let ita = it a in
-              let itb = it b in
-
-              (* Remove common elements *)
-              let ita_clone = USet.clone ita in
-                USet.iter
-                  (fun e ->
-                    if USet.mem itb e then (
-                      USet.remove ita e |> ignore;
-                      USet.remove itb e |> ignore
-                    )
-                  )
-                  ita_clone;
-
-                (* Cross product and inverse *)
-                let cross = URelation.cross ita itb in
-                let inverse = URelation.inverse_relation cross in
-                  USet.union cross inverse
-          | _ -> USet.create ()
-      )
-      elab_ctx.structure.branch_events
-  in
-
-  Logs.debug (fun m ->
-      m "Computed conflicts for %d branch events."
-        (USet.size elab_ctx.structure.branch_events)
-  );
-
-  (* Union all results *)
-  USet.fold (fun acc s -> USet.union acc s) branch_results (USet.create ())
 
 (** Helper: Parse dependency symbol to get origin event label *)
 let syntactic_origin s =
@@ -900,7 +822,7 @@ let lift elab_ctx justs =
     (* Compute liftpairs: conflicting write pairs *)
     let write_events = elab_ctx.structure.write_events in
     let w_cross_w = URelation.cross write_events write_events in
-    let conflict_set = conflict elab_ctx in
+    let conflict_set = elab_ctx.structure.conflict in
     let liftpairs = USet.intersection w_cross_w conflict_set in
 
     (* Create pairs of justifications from liftpairs *)
@@ -1029,17 +951,31 @@ let lift elab_ctx justs =
                             relabelPairs _pred just_1.w.label just_2.w.label
                         in
                           if not writes_eq then Lwt.return []
-                          else
+                          else (
                             (* Check if all dependencies have equivalent origins *)
+                            Printf.printf "Justifications to lift: %s and %s\n"
+                              (Types.show_justification just_1)
+                              (Types.show_justification just_2);
+                            flush stdout;
                             let* deps_eq =
                               USet.async_for_all
                                 (fun s_1 ->
                                   USet.async_exists
                                     (fun s_2 ->
+                                      Printf.printf
+                                        "Symbols for relable\n\
+                                        \                                      \
+                                         equivalence: %s vs %s\n"
+                                        s_1 s_2;
+                                      flush stdout;
                                       relabel_equivalent elab_ctx con statex p_1
                                         p_2 relabelPairs _pred
-                                        (syntactic_origin s_1)
-                                        (syntactic_origin s_2)
+                                        (Hashtbl.find elab_ctx.structure.origin
+                                           s_1
+                                        )
+                                        (Hashtbl.find elab_ctx.structure.origin
+                                           s_2
+                                        )
                                     )
                                     just_2.d
                                 )
@@ -1101,6 +1037,7 @@ let lift elab_ctx justs =
                                           |> List.concat
                                         in
                                           Lwt.return outputs
+                          )
                   )
                   str
               in

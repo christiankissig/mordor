@@ -14,7 +14,7 @@ let rules =
     (* a - a = 0 *) ]
 
 (** Main rewriting function *)
-let rewrite expr = Expr.evaluate expr (fun _ -> None) |> Expr.sort_expr
+let rewrite expr = Expr.evaluate expr |> Expr.sort_expr
 
 (** Rewrite predicate (list of expressions) *)
 let rewrite_pred_sync exprs = List.map rewrite exprs

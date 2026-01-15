@@ -226,7 +226,6 @@ type symbolic_event_structure = {
   rlx_write_events : int uset; [@printer pp_int_uset]
   rlx_read_events : int uset; [@printer pp_int_uset]
   fence_events : int uset; [@printer pp_int_uset]
-  branch_events : int uset; [@printer pp_int_uset]
   malloc_events : int uset; [@printer pp_int_uset]
   free_events : int uset; [@printer pp_int_uset]
   terminal_events : int uset; [@printer pp_int_uset]

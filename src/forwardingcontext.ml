@@ -134,28 +134,23 @@ let update_po po =
 
 (** Initialization parameters type *)
 type init_params = {
-  init_e : int uset;
   init_structure : symbolic_event_structure;
   init_val : int -> expr option;
-  init_rmw : (int * int) uset;
 }
 
 (** Initialize forwarding context state Usage:
     {[
       let* () = ForwardingContext.init {
-        init_e = structure.e;
-        init_po = structure.po;
-        init_events = events;
+        init_structure = structure;
         init_val = val_function;
-        init_rmw = structure.rmw;
       } in
       ...
     ]} *)
 let init params =
   let* _ = Lwt.return_unit in
 
-  State.e := params.init_e;
-  let rmw = params.init_rmw in
+  State.e := params.init_structure.e;
+  let rmw = params.init_structure.rmw in
     State.structure := params.init_structure;
     State.val_fn := params.init_val;
 
@@ -182,14 +177,12 @@ let init params =
     let is_read ev = ev.typ = Read in
     let is_write ev = ev.typ = Write in
     let is_fence ev = ev.typ = Fence in
-    let is_branch ev = ev.typ = Branch in
     let is_malloc ev = ev.typ = Malloc in
     let is_free ev = ev.typ = Free in
 
     let r = filter_by_mode !State.e is_read in
     let w = filter_by_mode !State.e is_write in
     let f = filter_by_mode !State.e is_fence in
-    let b = filter_by_mode !State.e is_branch in
 
     let e_vol =
       USet.filter
@@ -343,7 +336,7 @@ let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
   let psi =
     List.filter_map
       (fun (e1, e2) ->
-        let expr = Expr.evaluate (EBinOp (e1, "=", e2)) (fun _ -> None) in
+        let expr = Expr.evaluate (EBinOp (e1, "=", e2)) in
           match expr with
           | EBoolean true -> None
           | _ -> Some expr

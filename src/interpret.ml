@@ -96,7 +96,7 @@ let add_event (events : events_t) event env (annotation : ir_node_ann) =
 
 let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr)
     =
-  let regexpr : expr = Expr.evaluate expr (Hashtbl.find_opt env) in
+  let regexpr : expr = Expr.evaluate ~env:(Hashtbl.find_opt env) expr in
   let env' = Hashtbl.copy env in
     Hashtbl.replace env' register regexpr;
     env'
@@ -155,7 +155,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
           | RegisterStore { register; expr } ->
               let env' =
                 update_env env register
-                  (Expr.evaluate expr (Hashtbl.find_opt env))
+                  (Expr.evaluate ~env:(Hashtbl.find_opt env) expr)
               in
                 let* cont = recurse rest env' phi events in
                   Lwt.return cont
@@ -170,7 +170,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   base_evt with
                   id = Some (VVar global);
                   loc = Some (EVar global);
-                  wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
+                  wval = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) expr);
                   wmod = assign.mode;
                   volatile = assign.volatile;
                 }
@@ -183,8 +183,8 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let evt =
                 {
                   base_evt with
-                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
-                  wval = Some (Expr.evaluate expr (Hashtbl.find_opt env));
+                  loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
+                  wval = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) expr);
                   wmod = assign.mode;
                   volatile = assign.volatile;
                 }
@@ -199,7 +199,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let evt =
                 {
                   base_evt with
-                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                  loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
                   rval = Some rval;
                   rmod = load.mode;
                   volatile = load.volatile;
@@ -240,7 +240,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let evt_load =
                 {
                   base_evt_load with
-                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                  loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
                   rval = Some rval;
                   rmod = load_mode;
                   volatile = false;
@@ -252,20 +252,21 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Hashtbl.replace events.origin symbol event_load'.label;
                 let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
                 let result_expr =
-                  Expr.evaluate
+                  Expr.evaluate ~env:(Hashtbl.find_opt env)
                     (Expr.binop loaded_expr "+" operand)
-                    (Hashtbl.find_opt env)
                 in
                 let base_evt_store : event = Event.create Write 0 () in
                 (* if the operand evaluates to zero, this is a read-don't
                    modify-write *)
                 let is_rdmw =
-                  Expr.evaluate operand (Hashtbl.find_opt env) == ENum Z.zero
+                  Expr.evaluate ~env:(Hashtbl.find_opt env) operand
+                  == ENum Z.zero
                 in
                 let evt_store =
                   {
                     base_evt_store with
-                    loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                    loc =
+                      Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
                     wval = Some result_expr;
                     wmod = assign_mode;
                     volatile = false;
@@ -294,7 +295,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let evt_load =
                 {
                   base_evt_load with
-                  loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
+                  loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
                   rval = Some rval;
                   rmod = load_mode;
                   volatile = false;
@@ -306,15 +307,17 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Hashtbl.replace events.origin symbol event_load'.label;
                 let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
                 let expected_expr =
-                  Expr.evaluate expected (Hashtbl.find_opt env)
+                  Expr.evaluate ~env:(Hashtbl.find_opt env) expected
                 in
                 let cond_expr = Expr.binop loaded_expr "=" expected_expr in
                 let base_evt_store : event = Event.create Write 0 () in
                 let evt_store =
                   {
                     base_evt_store with
-                    loc = Some (Expr.evaluate address (Hashtbl.find_opt env));
-                    wval = Some (Expr.evaluate desired (Hashtbl.find_opt env));
+                    loc =
+                      Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
+                    wval =
+                      Some (Expr.evaluate ~env:(Hashtbl.find_opt env) desired);
                     wmod = assign_mode;
                     volatile = false;
                     cond = Some cond_expr;
@@ -346,62 +349,68 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                         )
           | If { condition; then_body; else_body } -> (
               (* TODO prune semantically impossible branches against phi *)
-              let cond_val = Expr.evaluate condition (Hashtbl.find_opt env) in
+              let cond_val =
+                Expr.evaluate ~env:(Hashtbl.find_opt env) condition
+              in
               let new_then_phi =
-                if cond_val = EBoolean true then phi else
-                  cond_val :: phi
+                if cond_val = EBoolean true then phi else cond_val :: phi
               in
-              let* new_then_phi_sat = Solver.is_sat_cached new_then_phi in
-              let new_then_phi = if new_then_phi_sat then new_then_phi
-              else [EBoolean false] in
-              let cond_val = if new_then_phi_sat then cond_val
-                else EBoolean false in
-              let else_cond_val = Expr.unop "!" cond_val in
-              let new_else_phi =
-                if cond_val = EBoolean false then phi
-                else else_cond_val :: phi
-              in
-              let* new_else_phi_sat = Solver.is_sat_cached new_else_phi in
-              let else_cond_val = if new_else_phi_sat then else_cond_val
-                else EBoolean false in
-              let new_else_phi = if new_else_phi_sat then new_else_phi
-              else [EBoolean false] in
-
-              let then_structure events =
-                recurse (then_body @ rest) env new_then_phi events
-              in
-
-              match else_body with
-              | Some eb -> (
-                  let else_structure events =
-                    recurse (eb @ rest) env new_else_phi events
+                let* new_then_phi_sat = Solver.is_sat_cached new_then_phi in
+                let new_then_phi =
+                  if new_then_phi_sat then new_then_phi else [ EBoolean false ]
+                in
+                let cond_val =
+                  if new_then_phi_sat then cond_val else EBoolean false
+                in
+                let else_cond_val = Expr.evaluate (Expr.inverse cond_val) in
+                let new_else_phi =
+                  if cond_val = EBoolean false then phi
+                  else else_cond_val :: phi
+                in
+                  let* new_else_phi_sat = Solver.is_sat_cached new_else_phi in
+                  let else_cond_val =
+                    if new_else_phi_sat then else_cond_val else EBoolean false
+                  in
+                  let new_else_phi =
+                    if new_else_phi_sat then new_else_phi
+                    else [ EBoolean false ]
                   in
 
-                  match cond_val with
-                  | EBoolean true -> then_structure events
-                  | EBoolean false -> else_structure events
-                  | _ ->
-                      let* then_structure = then_structure events in
-                        let* else_structure = else_structure events in
-                          Lwt.return
-                            (SymbolicEventStructure.plus then_structure
-                               else_structure
-                            )
-                )
-              | None -> (
-                  match cond_val with
-                  | EBoolean false -> recurse rest env phi events
-                  | EBoolean true -> then_structure events
-                  | _ ->
-                      let* then_structure = then_structure events in
-                        let* rest_structure =
-                          recurse rest env new_else_phi events
-                        in
-                          Lwt.return
-                            (SymbolicEventStructure.plus then_structure
-                               rest_structure
-                            )
-                )
+                  let then_structure events =
+                    recurse (then_body @ rest) env new_then_phi events
+                  in
+
+                  match else_body with
+                  | Some eb -> (
+                      let else_structure events =
+                        recurse (eb @ rest) env new_else_phi events
+                      in
+
+                      match cond_val with
+                      | EBoolean true -> then_structure events
+                      | EBoolean false -> else_structure events
+                      | _ ->
+                          let* then_structure = then_structure events in
+                            let* else_structure = else_structure events in
+                              Lwt.return
+                                (SymbolicEventStructure.plus then_structure
+                                   else_structure
+                                )
+                    )
+                  | None -> (
+                      match cond_val with
+                      | EBoolean false -> recurse rest env phi events
+                      | EBoolean true -> then_structure events
+                      | _ ->
+                          let* then_structure = then_structure events in
+                            let* rest_structure =
+                              recurse rest env new_else_phi events
+                            in
+                              Lwt.return
+                                (SymbolicEventStructure.plus then_structure
+                                   rest_structure
+                                )
+                    )
             )
           | Fence { mode } ->
               let base_evt : event = Event.create Fence 0 () in
@@ -728,9 +737,9 @@ end = struct
         match node.stmt with
         | Do { body; condition } ->
             let after_val =
-              Expr.evaluate (Expr.unop "!" condition) (fun v ->
-                  Hashtbl.find_opt env v
-              )
+              Expr.evaluate
+                ~env:(fun v -> Hashtbl.find_opt env v)
+                (Expr.inverse condition)
             in
             let final_structure ~add_event env phi _events =
               interpret_statements_symbolic_loop ~final_structure ~add_event
@@ -744,9 +753,9 @@ end = struct
                 body env phi events
         | While { condition; body } ->
             let after_val =
-              Expr.evaluate (Expr.unop "!" condition) (fun v ->
-                  Hashtbl.find_opt env v
-              )
+              Expr.evaluate
+                ~env:(fun v -> Hashtbl.find_opt env v)
+                (Expr.inverse condition)
             in
               let* after_structure =
                 interpret_statements_symbolic_loop ~final_structure ~add_event
