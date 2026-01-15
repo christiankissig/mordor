@@ -21,7 +21,6 @@ module TestUtil = struct
       rmod = Relaxed;
       wmod = Relaxed;
       fmod = Relaxed;
-      cond = None;
       volatile = false;
       strong = None;
       is_rdmw = false;

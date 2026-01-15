@@ -201,8 +201,6 @@ let init params =
             let to_ev = Hashtbl.find !State.structure.events to_ in
               from_ev.typ <> Fence
               && to_ev.typ <> Fence
-              && from_ev.typ <> Branch
-              && to_ev.typ <> Branch
           with Not_found -> false
         )
         po

@@ -320,14 +320,13 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                       Some (Expr.evaluate ~env:(Hashtbl.find_opt env) desired);
                     wmod = assign_mode;
                     volatile = false;
-                    cond = Some cond_expr;
                   }
                 in
                 let event_store' : event =
                   add_event events evt_store env annotation
                 in
                 let phi_succ = cond_expr :: phi in
-                let phi_fail = Expr.unop "!" cond_expr :: phi in
+                let phi_fail = (Expr.inverse cond_expr |> Expr.evaluate) :: phi in
                 let env_succ = Hashtbl.copy env in
                 let env_fail = Hashtbl.copy env in
                   Hashtbl.replace env_succ register (EBoolean true);

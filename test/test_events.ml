@@ -21,12 +21,6 @@ let make_write label (id : string) wval wmod =
 
 let make_fence label fmod = Event.create Fence label ~fmod ()
 
-let make_rmw label (id : string) rval wval rmod wmod =
-  let id_val = if is_symbol id then VSymbol id else VVar id in
-  let loc = if is_symbol id then ESymbol id else EVar id in
-    Event.create RMW label ~id:id_val ~loc ~rval:(VSymbol rval)
-      ~wval:(ESymbol wval) ~rmod ~wmod ()
-
 (** Test ModeOps *)
 let test_mode_to_string_or () =
   check string "relaxed is empty" "" (Events.ModeOps.to_string_or Relaxed);
@@ -74,7 +68,6 @@ let test_event_predicates () =
       ("is_unlock", true, Event.is_unlock, Unlock);
       ("is_malloc", true, Event.is_malloc, Malloc);
       ("is_free", true, Event.is_free, Free);
-      ("is_rmw", true, Event.is_rmw, RMW);
       ("is_read_write,read", true, Event.is_read_write, Read);
       ("is_read_write,write", true, Event.is_read_write, Write);
       ("not,is_read_write,fence", false, Event.is_read_write, Fence);
@@ -100,7 +93,6 @@ let test_has_fields () =
   let read_ev = make_test_event Read 1 in
   let write_ev = make_test_event Write 2 in
   let fence_ev = make_test_event Fence 3 in
-  let branch_ev = make_test_event Branch 4 in
   let malloc_ev = make_test_event Malloc 5 in
 
   check bool "read has_id" true (Event.has_id read_ev);
@@ -115,9 +107,6 @@ let test_has_fields () =
 
   check bool "write has_wval" true (Event.has_wval write_ev);
   check bool "read not has_wval" false (Event.has_wval read_ev);
-
-  check bool "branch has_cond" true (Event.has_cond branch_ev);
-  check bool "read not has_cond" false (Event.has_cond read_ev);
 
   check bool "malloc has_id" true (Event.has_id malloc_ev);
   check bool "malloc has_rval" true (Event.has_rval malloc_ev);
@@ -205,13 +194,6 @@ let test_event_to_string () =
 
   let volatile_read = { read_rlx with volatile = true } in
     check string "volatile read" "1: vR x v1" (Event.to_string volatile_read)
-
-let test_rmw_to_string () =
-  let rmw = make_rmw 1 "x" "v1" "v2" Acquire Release in
-  let s = Event.to_string rmw in
-    check bool "rmw contains id" true (String.contains s 'x');
-    check bool "rmw contains R" true (String.contains s 'R');
-    check bool "rmw contains W" true (String.contains s 'W')
 
 let test_event_equality () =
   let e1 = make_read 1 "x" "v" Relaxed in
@@ -339,7 +321,6 @@ let suite =
       test_case "malloc_creation" `Quick test_malloc_creation;
       test_case "clone_event" `Quick test_clone_event;
       test_case "event_to_string" `Quick test_event_to_string;
-      test_case "rmw_to_string" `Quick test_rmw_to_string;
       test_case "event_equality" `Quick test_event_equality;
       test_case "container_create" `Quick test_container_create;
       test_case "container_add" `Quick test_container_add;

@@ -41,12 +41,8 @@ type event_type =
   | Terminal
     (* Terminal events used to capture the terminal state of the
   program outside of memory-effectful events, e.g. register state *)
-  | Branch
-  | Loop
   | Malloc
   | Free
-  | RMW
-  | CRMW
 [@@deriving show]
 
 (** Unicode symbols *)
@@ -109,12 +105,8 @@ let event_type_to_string typ =
   | Fence -> "F"
   | Init -> "I"
   | Terminal -> "T"
-  | Branch -> "B"
-  | Loop -> "Loop"
   | Malloc -> "A"
   | Free -> "D"
-  | RMW -> "RMW"
-  | CRMW -> "CRMW"
 
 let pp_event_type fmt typ = Format.fprintf fmt "%s" (event_type_to_string typ)
 let mode_to_string m = show_mode m
@@ -153,7 +145,6 @@ type expr =
 (*   | Unlock -> "U" *)
 (*   | Fence -> "F" *)
 (*   | Init -> "I" *)
-(*   | Branch -> "B" *)
 (*   | Malloc -> "A" *)
 (*   | Free -> "D" *)
 (*   | RMW -> "RMW" *)
@@ -171,7 +162,6 @@ type event = {
   rmod : mode;
   wmod : mode;
   fmod : mode;
-  cond : expr option;
   volatile : bool;
   strong : mode option;
   is_rdmw : bool;

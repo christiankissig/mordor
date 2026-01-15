@@ -37,7 +37,6 @@ let test_make_event () =
     Alcotest.(check bool) "event id is None" true (evt.id = None);
     Alcotest.(check bool) "event rval is None" true (evt.rval = None);
     Alcotest.(check bool) "event wval is None" true (evt.wval = None);
-    Alcotest.(check bool) "event cond is None" true (evt.cond = None);
     Alcotest.(check bool) "event volatile is false" false evt.volatile;
     Alcotest.(check bool) "event strong is None" true (evt.strong = None)
 

@@ -38,11 +38,6 @@ module TestUtils = struct
         wmod = mode;
       }
 
-  (** Create a branch event *)
-  let make_branch_event label condition =
-    let ev = Event.create Branch label () in
-      { ev with cond = Some condition }
-
   (** Create an allocation event *)
   let make_alloc_event label symbol size =
     let ev = Event.create Malloc label () in
@@ -72,15 +67,6 @@ module TestEvents = struct
       check bool "write_event_type" true (ev.typ = Write);
       check bool "write_event_mode" true (ev.wmod = Release)
 
-  let test_create_branch () =
-    let cond =
-      EBinOp
-        (Expr.of_value (make_symbol "α"), "=", Expr.of_value (make_number 1))
-    in
-    let ev = make_branch_event 3 cond in
-      check int "branch_event_label" 3 ev.label;
-      check bool "branch_event_type" true (ev.typ = Branch)
-
   let test_create_alloc () =
     let ev = make_alloc_event 4 (make_symbol "β") (make_number 16) in
       check int "alloc_event_label" 4 ev.label;
@@ -90,7 +76,6 @@ module TestEvents = struct
     [
       test_case "TestEvents.test_create_read" `Quick test_create_read;
       test_case "TestEvents.test_create_write" `Quick test_create_write;
-      test_case "TestEvents.test_create_branch" `Quick test_create_branch;
       test_case "TestEvents.test_create_alloc" `Quick test_create_alloc;
     ]
 end

@@ -565,12 +565,6 @@ module TestDependencyCalculation = struct
   let test_dp_with_control_deps () =
     (* Control dependencies from predicates *)
     let e1 = { (Event.create Read 1 ()) with rval = Some (VSymbol "α") } in
-    let e2 =
-      {
-        (Event.create Branch 2 ()) with
-        cond = Some (EBinOp (ESymbol "α", "=", ENum Z.one));
-      }
-    in
     let e3 =
       { (Event.create Write 3 ()) with wval = Some (ENum (Z.of_int 42)) }
     in

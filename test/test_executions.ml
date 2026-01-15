@@ -12,7 +12,7 @@ let run_lwt f = Lwt_main.run (f ())
 (** Test data providers *)
 
 module TestData = struct
-  let create_event id typ ?id_val ?cond ?rval ?wval () =
+  let create_event id typ ?id_val ?rval ?wval () =
     {
       label = id;
       typ;
@@ -23,7 +23,6 @@ module TestData = struct
       rmod = Normal;
       wmod = Normal;
       fmod = Normal;
-      cond;
       volatile = false;
       strong = None;
       is_rdmw = false;

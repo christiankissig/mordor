@@ -24,12 +24,8 @@ type event_type =
   | Fence
   | Init
   | Terminal
-  | Branch
-  | Loop
   | Malloc
   | Free
-  | RMW
-  | CRMW
 [@@deriving show]
 
 (** {1 Conversion Functions} *)
@@ -114,7 +110,6 @@ type event = {
   rmod : mode;
   wmod : mode;
   fmod : mode;
-  cond : expr option;
   volatile : bool;
   strong : mode option;
   is_rdmw : bool;
