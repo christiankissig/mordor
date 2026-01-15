@@ -101,6 +101,11 @@ COPY --from=builder --chown=mordor:mordor /home/opam/web/frontend /home/mordor/w
 # Make sure executable is executable
 RUN chmod +x /usr/local/bin/mordor-web
 
+COPY --chown=mordor litmus-tests/ /home/mordor/litmus-tests/
+RUN mkdir -p /home/mordor/_build/default/cli/
+COPY --from=builder --chown=mordor /home/opam/install/bin/mordor \
+  /home/mordor/_build/default/cli/main.exe
+
 # Switch to app user
 USER mordor
 WORKDIR /home/mordor
