@@ -68,11 +68,17 @@ class TestRunner {
                             </div>
                             <div class="test-detail-content">
                                 <div class="test-output-section">
-                                    <h4>Test Output</h4>
+                                    <h4>
+                                        <span>Test Output</span>
+                                        <button class="btn-copy" id="copy-output-btn" title="Copy output">📋 Copy</button>
+                                    </h4>
                                     <pre id="test-output" class="test-output"></pre>
                                 </div>
                                 <div class="test-source-section">
-                                    <h4>Source Code</h4>
+                                    <h4>
+                                        <span>Source Code</span>
+                                        <button class="btn-copy" id="copy-source-btn" title="Copy source">📋 Copy</button>
+                                    </h4>
                                     <pre id="test-source" class="test-source"></pre>
                                 </div>
                             </div>
@@ -135,6 +141,16 @@ class TestRunner {
             if (this.selectedTest) {
                 this.loadTestInEditor(this.selectedTest);
             }
+        });
+
+        // Copy output button
+        document.getElementById('copy-output-btn').addEventListener('click', () => {
+            this.copyToClipboard('test-output', 'copy-output-btn');
+        });
+
+        // Copy source button
+        document.getElementById('copy-source-btn').addEventListener('click', () => {
+            this.copyToClipboard('test-source', 'copy-source-btn');
         });
     }
 
@@ -449,6 +465,31 @@ class TestRunner {
             }
         } catch (error) {
             alert(`Failed to load test: ${error.message}`);
+        }
+    }
+
+    async copyToClipboard(elementId, buttonId) {
+        const element = document.getElementById(elementId);
+        const button = document.getElementById(buttonId);
+        
+        if (!element || !button) return;
+        
+        try {
+            const text = element.textContent;
+            await navigator.clipboard.writeText(text);
+            
+            // Visual feedback
+            button.classList.add('copied');
+            const originalText = button.textContent;
+            button.textContent = 'Copied!';
+            
+            setTimeout(() => {
+                button.classList.remove('copied');
+                button.textContent = originalText;
+            }, 2000);
+        } catch (error) {
+            console.error('Failed to copy:', error);
+            alert('Failed to copy to clipboard');
         }
     }
 

@@ -329,6 +329,38 @@
     color: #cccccc;
     font-size: 1rem;
     margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.btn-copy {
+    background: #3c3c3c;
+    border: 1px solid #555;
+    color: #cccccc;
+    padding: 0.4rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.2s;
+}
+
+.btn-copy:hover {
+    background: #505050;
+    border-color: #0e639c;
+}
+
+.btn-copy.copied {
+    background: #4ec9b0;
+    border-color: #4ec9b0;
+    color: #1e1e1e;
+}
+
+.btn-copy.copied::before {
+    content: '✓ ';
 }
 
 .test-output,
