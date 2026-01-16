@@ -58,4 +58,9 @@
   ppx_deriving_yojson.runtime)
  (public_name mordor)
  (preprocess
-  (pps lwt_ppx ppx_deriving.show ppx_deriving_yojson)))
+  (pps
+   lwt_ppx
+   ppx_deriving_hash
+   lwt_ppx
+   ppx_deriving.show
+   ppx_deriving_yojson)))

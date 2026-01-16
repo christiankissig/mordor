@@ -12,7 +12,7 @@ module TestData = struct
   (* Event builder with sensible defaults *)
   let make_event ?(id = Some (VNumber Z.zero)) ?(loc = Some (ENum Z.zero))
       ?(typ = Write) ?(wval = None) ?(wmod = Relaxed) ?(volatile = false)
-       ?(rval = None) ?(rmod = Relaxed) ?(fmod = Relaxed) label =
+      ?(rval = None) ?(rmod = Relaxed) ?(fmod = Relaxed) label =
     {
       label;
       id;
@@ -31,8 +31,7 @@ module TestData = struct
   (* Standard test events *)
   let standard_events () =
     let events = Hashtbl.create 10 in
-      Hashtbl.add events 0
-        (make_event 0);
+      Hashtbl.add events 0 (make_event 0);
       Hashtbl.add events 1
         (make_event 1 ~loc:(Some (ENum Z.one)) ~wval:(Some (ENum Z.one)));
       Hashtbl.add events 2

@@ -133,8 +133,8 @@ type expr =
   | EVar of string
   | ESymbol of string [@printer pp_esymbol]
   | EBoolean of bool
-  | ENum of Z.t [@printer pp_z]
-[@@deriving show]
+  | ENum of Z.t [@printer pp_z] [@hash fun z -> Hashtbl.hash (Z.to_string z)]
+[@@deriving show, hash]
 
 (** Event types *)
 

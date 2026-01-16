@@ -1159,7 +1159,7 @@ let generate_executions ?(include_rf = true)
         paths
     in
 
-    Logs.info (fun m ->
+    Logs.debug (fun m ->
         m "Generated %d paths through the structure" (List.length paths)
     );
 
@@ -1175,8 +1175,6 @@ let generate_executions ?(include_rf = true)
             Hashtbl.replace justmap label (just :: existing)
         )
         justs;
-
-      Logs.info (fun m -> m "Built justification map");
 
       let stream_freeze input_stream =
         let freeze_just_combo (path, just_combo) =
@@ -1310,7 +1308,7 @@ let generate_executions ?(include_rf = true)
               (* Increment executiion counter *)
               id := !id + 1;
 
-              Logs.info (fun m ->
+              Logs.debug (fun m ->
                   m "Generated execution with %d events, %d RF edges"
                     (USet.size exec.ex_e) (USet.size exec.rf)
               );

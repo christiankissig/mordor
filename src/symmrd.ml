@@ -115,45 +115,35 @@ let calculate_dependencies ?(include_rf = true)
     { structure; fj; val_fn; find_distinguishing_predicate }
   in
 
-  Printf.printf "Symbolic evnet structure:\n%s\n"
-    (Types.show_symbolic_event_structure structure);
-  Printf.printf "Events:\n%s\n"
-    (String.concat "\n"
-       (Hashtbl.fold
-          (fun eid evt acc ->
-            Printf.sprintf "E%d: %s" eid (Types.show_event evt) :: acc
-          )
-          structure.events []
-       )
-    );
-  Printf.printf "Symbol origins\n%s\n"
-    (String.concat "\n"
-       (Hashtbl.fold
-          (fun sym eid acc -> Printf.sprintf "%s -> E%d" sym eid :: acc)
-          structure.origin []
-       )
-    );
-
   Logs.debug (fun m -> m "Starting elaborations...");
+
+  let justification_set_equal s1 s2 =
+    USet.size s1 = USet.size s2
+    && USet.for_all
+         (fun j1 -> USet.exists (fun j2 -> Justification.equal j1 j2) s2)
+         s1
+  in
 
   let* final_justs =
     let rec fixed_point (justs : justification uset) =
       Logs.debug (fun m ->
-          m "Fixed-point iteration with %d justifications" (USet.size justs)
+          m "Fixed-point iteration with %d justifications:\n%s\n"
+            (USet.size justs)
+            (String.concat "\n\t"
+               (USet.values (USet.map Justification.to_string justs))
+            )
       );
       let* va = Elaborations.value_assign elab_ctx justs in
         let* lift = Elaborations.lift elab_ctx va in
           let* weak = Elaborations.weaken elab_ctx lift in
             let* fwd = Elaborations.forward elab_ctx weak in
-              let* filtered =
-                Elaborations.filter elab_ctx (USet.union justs fwd)
-              in
+              let* filtered = Elaborations.filter elab_ctx fwd in
 
               let justs_str =
                 String.concat "\n\t"
-                  (USet.values (USet.map Justification.to_string filtered))
+                  (List.map Justification.to_string (USet.values filtered))
               in
-                if USet.equal filtered justs then (
+                if justification_set_equal filtered justs then (
                   Logs.debug (fun m ->
                       m "Fixed-point reached with %d justifications:\n\t%s"
                         (USet.size filtered) justs_str

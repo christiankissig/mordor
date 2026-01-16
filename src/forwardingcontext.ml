@@ -199,8 +199,7 @@ let init params =
           try
             let from_ev = Hashtbl.find !State.structure.events from in
             let to_ev = Hashtbl.find !State.structure.events to_ in
-              from_ev.typ <> Fence
-              && to_ev.typ <> Fence
+              from_ev.typ <> Fence && to_ev.typ <> Fence
           with Not_found -> false
         )
         po

@@ -7,4 +7,4 @@
   (:standard -g))
  (libraries mordor_lib landmarks lwt lwt.unix)
  (preprocess
-  (pps lwt_ppx ppx_deriving.show)))
+  (pps lwt_ppx lwt_ppx ppx_deriving.show)))

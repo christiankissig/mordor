@@ -2,6 +2,7 @@ open Expr
 open Lwt.Syntax
 open Types
 open Uset
+open Justifications
 
 type context = {
   structure : symbolic_event_structure;
@@ -119,8 +120,15 @@ let close_under_elab justs elab =
         )
         promises
   in
-  let flattened = List.concat results in
-    Lwt.return (USet.of_list flattened)
+  let new_justs =
+    List.concat results
+    |> deduplicate_justification_list
+    |> List.filter (fun just ->
+        not (USet.exists (fun j -> Justification.equal j just) justs)
+    )
+    |> USet.of_list
+  in
+    Lwt.return (USet.union justs new_justs)
 
 (* calculate pre-justifications for write events *)
 let pre_justifications structure =
@@ -172,22 +180,23 @@ let filter elab_ctx (justs : justification uset) =
   Logs.debug (fun m -> m "Filtering %d justifications..." (USet.size justs));
 
   (* First pass: rewrite predicates *)
-  let* justs' =
-    Lwt_list.map_p
+  let normalised =
+    List.map
       (fun just ->
-        let* p' = Rewrite.rewrite_pred just.p in
+        let p' = Rewrite.rewrite_pred just.p in
           match p' with
-          | Some p -> Lwt.return_some { just with p }
-          | None -> Lwt.return_none
+          | Some p -> Some { just with p }
+          | None -> None
       )
       (USet.values justs)
+    |> List.filter_map Fun.id
   in
 
-  let justs'' = List.filter_map Fun.id justs' in
+  let deduplicated = deduplicate_justification_list normalised in
 
   (* Sort by predicate length (like JS line 129) *)
   let sorted =
-    List.sort (fun a b -> List.length a.p - List.length b.p) justs''
+    List.sort (fun a b -> List.length a.p - List.length b.p) deduplicated
   in
 
   (* Compute ppo for each justification once *)
@@ -259,11 +268,16 @@ let value_assign elab_ctx justs =
   in
 
   let* results = Lwt_list.map_p elab (USet.values justs) in
+  let results =
+    List.filter
+      (fun just -> not (USet.exists (fun j -> Justification.equal j just) justs))
+      results
+  in
 
   Logs.debug (fun m ->
       m "Completed value assignment on %d justifications." (List.length results)
   );
-  Lwt.return (USet.of_list results)
+  Lwt.return (USet.of_list results |> USet.union justs)
 
 let fprime elab_ctx pred_fn ppo_loc just e1 e2 =
   if USet.mem ppo_loc (e1, e2) && USet.mem (pred_fn e2) e1 then
@@ -618,16 +632,6 @@ let strengthen elab_ctx (just_1 : justification) (just_2 : justification) ppo
   );
   Lwt.return out
 
-(** Helper: Parse dependency symbol to get origin event label *)
-let syntactic_origin s =
-  (* Dependency symbols are typically formatted as "symbol@label" *)
-  try
-    let parts = String.split_on_char '@' s in
-      match parts with
-      | [ _; label ] -> int_of_string label
-      | _ -> failwith ("Invalid dependency symbol: " ^ s)
-  with _ -> failwith ("Failed to parse origin: " ^ s)
-
 (** Helper: Check if justification is independent *)
 let independent just =
   USet.size just.fwd = 0 && USet.size just.we = 0 && USet.size just.d = 0
@@ -855,7 +859,10 @@ let lift elab_ctx justs =
       if
         (not (USet.equal just_1.fwd just_2.fwd))
         || (not (USet.equal just_1.we just_2.we))
-        || (independent just_1 && independent just_2)
+        || independent just_1
+           && independent just_2
+           && List.length just_1.p = 0
+           && List.length just_2.p = 0
       then Lwt.return []
       else
         (* Check lifted cache *)
@@ -951,23 +958,13 @@ let lift elab_ctx justs =
                             relabelPairs _pred just_1.w.label just_2.w.label
                         in
                           if not writes_eq then Lwt.return []
-                          else (
+                          else
                             (* Check if all dependencies have equivalent origins *)
-                            Printf.printf "Justifications to lift: %s and %s\n"
-                              (Types.show_justification just_1)
-                              (Types.show_justification just_2);
-                            flush stdout;
                             let* deps_eq =
                               USet.async_for_all
                                 (fun s_1 ->
                                   USet.async_exists
                                     (fun s_2 ->
-                                      Printf.printf
-                                        "Symbols for relable\n\
-                                        \                                      \
-                                         equivalence: %s vs %s\n"
-                                        s_1 s_2;
-                                      flush stdout;
                                       relabel_equivalent elab_ctx con statex p_1
                                         p_2 relabelPairs _pred
                                         (Hashtbl.find elab_ctx.structure.origin
@@ -1037,7 +1034,6 @@ let lift elab_ctx justs =
                                           |> List.concat
                                         in
                                           Lwt.return outputs
-                          )
                   )
                   str
               in
@@ -1058,7 +1054,15 @@ let lift elab_ctx justs =
           (USet.values pairs)
       in
 
-      let result = List.concat out |> USet.of_list in
+      let result =
+        List.concat out
+        |> deduplicate_justification_list
+        |> List.filter (fun just ->
+            not (USet.exists (fun j -> Justification.equal just j) justs)
+        )
+        |> USet.of_list
+        |> USet.union justs
+      in
         Logs.debug (fun m ->
             m "Completed lifting. Result size: %d" (USet.size result)
         );
@@ -1105,7 +1109,11 @@ let weaken elab_ctx (justs : justification uset) : justification uset Lwt.t =
     in
 
     let* out = Lwt_list.map_p elab (USet.values justs) in
+    let out =
+      deduplicate_justification_list out
+      |> List.filter (fun just ->
+          not (USet.exists (fun j -> Justification.equal just j) justs)
+      )
+    in
 
-    Logs.debug (fun m -> m "Filtered predicates based on PWG.");
-    flush stdout;
-    Lwt.return (USet.of_list out)
+    Lwt.return (USet.of_list out |> USet.union justs)

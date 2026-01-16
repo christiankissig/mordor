@@ -190,18 +190,7 @@ end = struct
       | Malloc -> { base with id = rval; loc; rval }
       | Lock | Unlock -> { base with id }
       | _ ->
-          {
-            base with
-            id;
-            loc;
-            rval;
-            wval;
-            rmod;
-            wmod;
-            fmod;
-            volatile;
-            strong;
-          }
+          { base with id; loc; rval; wval; rmod; wmod; fmod; volatile; strong }
 
   (** Clone an event *)
   let clone e = { e with label = e.label }

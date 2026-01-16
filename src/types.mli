@@ -94,8 +94,8 @@ type expr =
   | EVar of string
   | ESymbol of string
   | EBoolean of bool
-  | ENum of Z.t [@opaque]
-[@@deriving show]
+  | ENum of Z.t [@printer pp_z] [@hash fun z -> Hashtbl.hash (Z.to_string z)]
+[@@deriving show, hash]
 
 (** {1 Events} *)
 
