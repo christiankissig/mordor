@@ -1,6 +1,7 @@
 (** Expression and Value module *)
 
 open Types
+open Uset
 
 (** Check if string is a symbol *)
 let is_symbol s =
@@ -24,6 +25,7 @@ module rec Value : sig
   val is_number : value_type -> bool
   val is_not_var : value_type -> bool
   val to_string : value_type -> string
+  val relabel : relab:(string -> string option) -> value_type -> value_type
 end = struct
   type t = value_type
 
@@ -62,6 +64,15 @@ end = struct
   let is_not_var = function
     | VVar _ -> false
     | _ -> true
+
+  let relabel ~relab v =
+    match v with
+    | VSymbol s -> (
+        match relab s with
+        | Some s' -> VSymbol s'
+        | None -> v
+      )
+    | _ -> v
 end
 
 and Expr : sig
@@ -69,7 +80,6 @@ and Expr : sig
 
   val binop : t -> string -> t -> t
   val unop : string -> t -> t
-  val or_ : t list list -> t
   val var : string -> t
   val num : Z.t -> t
   val equal : t -> t -> bool
@@ -91,15 +101,17 @@ and Expr : sig
   val compare : t -> t -> int
   val sort_expr : t -> t
   val evaluate : ?env:(string -> t option) -> t -> t
+  val evaluate_conjunction : ?env:(string -> t option) -> t list -> t list
   val to_value : t -> value_type option
   val of_value : value_type -> t
   val simplify_dnf : expr list list -> expr list list
+  val relabel : ?relab:(string -> string option) -> expr -> expr
+  val simplify_disjunction : expr list -> expr list -> expr list
 end = struct
   type t = expr
 
   let binop lhs op rhs = EBinOp (lhs, op, rhs)
   let unop op rhs = EUnOp (op, rhs)
-  let or_ clauses = EOr clauses
   let var v = EVar v
   let num n = ENum n
 
@@ -148,34 +160,15 @@ end = struct
     | EUnOp (op1, r1), EUnOp (op2, r2) ->
         let c = String.compare op1 op2 in
           if c <> 0 then c else compare r1 r2
-    | EOr clauses_1, EOr clauses_2 ->
-        let rec compare_clauses (clauses_1, clauses_2) =
-          match (clauses_1, clauses_2) with
-          | [], [] -> 0
-          | [], _ -> -1
-          | _, [] -> 1
-          | c1 :: rest1, c2 :: rest2 ->
-              let rec compare_clause c1 c2 =
-                match (c1, c2) with
-                | [], [] -> 0
-                | [], _ -> -1
-                | _, [] -> 1
-                | e1 :: r1, e2 :: r2 ->
-                    let c = compare e1 e2 in
-                      if c <> 0 then c else compare_clause r1 r2
-              in
-              let c = compare_clause c1 c2 in
-                if c <> 0 then c else compare_clauses (rest1, rest2)
-        in
-          compare_clauses (clauses_1, clauses_2)
-    | ENum _, _ -> -1
-    | _, ENum _ -> 1
-    | EBoolean _, _ -> -1
-    | _, EBoolean _ -> 1
+    | EOr clauses_1, EOr clauses_2 -> List.compare compare clauses_1 clauses_2
     | ESymbol _, _ -> -1
     | _, ESymbol _ -> 1
     | EVar _, _ -> -1
     | _, EVar _ -> 1
+    | ENum _, _ -> -1
+    | _, ENum _ -> 1
+    | EBoolean _, _ -> -1
+    | _, EBoolean _ -> 1
     | EBinOp _, _ -> -1
     | _, EBinOp _ -> 1
     | EUnOp _, _ -> -1
@@ -209,8 +202,9 @@ end = struct
     | EBinOp (lhs, _, rhs) -> get_symbols lhs @ get_symbols rhs
     | EUnOp (_, rhs) -> get_symbols rhs
     | EOr clauses ->
-        List.flatten
-          (List.map (fun c -> List.flatten (List.map get_symbols c)) clauses)
+        List.map get_symbols clauses
+        |> List.flatten
+        |> List.sort_uniq String.compare
     | _ -> []
 
   let rec extract_registers = function
@@ -218,11 +212,9 @@ end = struct
     | EBinOp (lhs, _, rhs) -> extract_registers lhs @ extract_registers rhs
     | EUnOp (_, rhs) -> extract_registers rhs
     | EOr clauses ->
-        List.flatten
-          (List.map
-             (fun c -> List.flatten (List.map extract_registers c))
-             clauses
-          )
+        List.map extract_registers clauses
+        |> List.flatten
+        |> List.sort_uniq String.compare
     | _ -> []
 
   let is_flat = function
@@ -296,11 +288,7 @@ end = struct
     | EBinOp (lhs, op, rhs) ->
         Printf.sprintf "(%s %s %s)" (to_string lhs) op (to_string rhs)
     | EUnOp (op, rhs) -> Printf.sprintf "%s(%s)" op (to_string rhs)
-    | EOr clauses ->
-        let clause_str =
-          List.map (fun c -> String.concat " ∧ " (List.map to_string c)) clauses
-        in
-          String.concat " ∨ " clause_str
+    | EOr clauses -> List.map to_string clauses |> String.concat " ∨ "
 
   let rec flatten = function
     | EBinOp (lhs, "&&", rhs) ->
@@ -422,22 +410,46 @@ end = struct
     | EBinOp (lhs, "&&", rhs) -> (
         let l_val = evaluate ~env lhs in
         let r_val = evaluate ~env rhs in
-          match (l_val, r_val) with
-          | _, EBoolean false -> EBoolean false
-          | EBoolean false, _ -> EBoolean false
-          | _, EBoolean true -> l_val
-          | EBoolean true, _ -> r_val
-          | _ -> EBinOp (l_val, "&&", r_val)
+          if Expr.equal l_val r_val then l_val
+          else
+            match (l_val, r_val) with
+            | _, EBoolean false -> EBoolean false
+            | EBoolean false, _ -> EBoolean false
+            | _, EBoolean true -> l_val
+            | EBoolean true, _ -> r_val
+            | _ -> EBinOp (l_val, "&&", r_val)
       )
     | EBinOp (lhs, "||", rhs) -> (
         let l_val = evaluate ~env lhs in
         let r_val = evaluate ~env rhs in
-          match (l_val, r_val) with
-          | _, EBoolean true -> EBoolean true
-          | EBoolean true, _ -> EBoolean true
-          | _, EBoolean false -> l_val
-          | EBoolean false, _ -> r_val
-          | _ -> EBinOp (l_val, "||", r_val)
+          if Expr.equal l_val r_val then l_val
+          else
+            match (l_val, r_val) with
+            | l_val, EBinOp (r1, "||", r2) when Expr.equal l_val r1 ->
+                EBinOp (l_val, "||", r2) |> Expr.evaluate
+            | l_val, EBinOp (r1, "||", r2) when Expr.equal l_val r2 ->
+                EBinOp (l_val, "||", r1) |> Expr.evaluate
+            | EBinOp (l1, "||", r1), r2 when Expr.equal r2 l1 ->
+                EBinOp (r2, "||", r1) |> Expr.evaluate
+            | EBinOp (l1, "||", r1), r2 when Expr.equal r2 r1 ->
+                EBinOp (r2, "||", l1) |> Expr.evaluate
+            | EBinOp (l1, "<", r1), EBinOp (l2, ">=", r2)
+              when equal l1 l2 && equal r1 r2 -> EBoolean true
+            | EBinOp (l1, ">=", r1), EBinOp (l2, "<", r2)
+              when equal l1 l2 && equal r1 r2 -> EBoolean true
+            | EBinOp (l1, "<", r1), EBinOp (l2, "=", r2)
+              when equal l1 l2 && equal r1 r2 -> EBinOp (l1, "<=", r1)
+            | EBinOp (l1, "=", r1), EBinOp (l2, "<", r2)
+              when equal l1 l2 && equal r1 r2 -> EBinOp (l1, "<=", r1)
+            | EBinOp (l1, ">", r1), EBinOp (l2, "=", r2)
+              when equal l1 l2 && equal r1 r2 -> EBinOp (l1, ">=", r1)
+            | EBinOp (l1, "=", r1), EBinOp (l2, ">", r2)
+              when equal l1 l2 && equal r1 r2 -> EBinOp (l1, ">=", r1)
+            | _, EBoolean true -> EBoolean true
+            | EBoolean true, _ -> EBoolean true
+            | _, EBoolean false -> l_val
+            | EBoolean false, _ -> r_val
+            | _ -> EBinOp (l_val, "||", r_val)
       )
     | EBinOp (lhs, op, rhs) -> (
         let l_val = evaluate ~env lhs in
@@ -495,8 +507,59 @@ end = struct
             )
       )
     | EOr clauses ->
-        let eval_clause clause = List.map (fun e -> evaluate ~env e) clause in
-          EOr (List.map eval_clause clauses)
+        (* evaluate each clause in the OR *)
+        let normalised_clauses =
+          List.map (evaluate ~env) clauses
+          (* flatten nested ORs *)
+          |> List.map (fun (clause : t) ->
+              match clause with
+              | EOr clauses -> clauses
+              | _ -> [ clause ]
+          )
+          |> List.flatten
+          (* sort and remove duplicates *)
+          |> List.sort_uniq compare
+        in
+          if
+            List.exists
+              (fun e1 ->
+                List.exists
+                  (fun e2 -> equal e2 (inverse e1 |> evaluate ~env))
+                  normalised_clauses
+              )
+              normalised_clauses
+          then EBoolean true
+          else EOr normalised_clauses
+
+  let evaluate_conjunction ?(env = fun _ -> None) exprs =
+    List.map (evaluate ~env) exprs
+    (* flatten nested conjunctions *)
+    |> List.map (fun expr ->
+        match expr with
+        | EBinOp (lhs, "&&", rhs) -> [ lhs; rhs ]
+        | _ -> [ expr ]
+    )
+    |> List.flatten
+    (* sort and remove duplicates *)
+    |> List.filter (fun e -> not (equal e (EBoolean true)))
+    |> List.sort_uniq compare
+
+  (** Relabel symbols in an expression using a relabelling function *)
+
+  let relabel ?(relab = fun s -> None) expr =
+    let rec aux e =
+      match e with
+      | ESymbol v -> (
+          match relab v with
+          | Some v' -> ESymbol v'
+          | None -> e
+        )
+      | EBinOp (lhs, op, rhs) -> EBinOp (aux lhs, op, aux rhs)
+      | EUnOp (op, rhs) -> EUnOp (op, aux rhs)
+      | EOr clauses -> EOr (List.map aux clauses)
+      | _ -> e
+    in
+      aux expr |> evaluate
 
   (** DNF Simplification *)
 
@@ -669,4 +732,75 @@ end = struct
         (* Step 5: Handle empty DNF *)
         if List.length minimal_clauses = 0 then [ [ EBoolean false ] ]
         else minimal_clauses
+
+  (** Simplifies the disjunction of two conjunctions of expressions *)
+  let simplify_disjunction exprs1 exprs2 =
+    let exprs1 = evaluate_conjunction exprs1 |> USet.of_list in
+    let exprs2 = evaluate_conjunction exprs2 |> USet.of_list in
+    (* common conjuncts in both disjuncts *)
+    let common_exprs =
+      USet.filter
+        (fun e -> USet.exists (fun e2 -> Expr.equal e e2) exprs2)
+        exprs1
+    in
+    (* conjuncts which are only in one disjunct *)
+    let only_exprs1 =
+      USet.filter
+        (fun e -> not (USet.exists (fun e2 -> Expr.equal e e2) exprs2))
+        exprs1
+    in
+    let only_exprs2 =
+      USet.filter
+        (fun e -> not (USet.exists (fun e1 -> Expr.equal e e1) exprs1))
+        exprs2
+    in
+    (* conjuncts which have a complementary in the other disjunct *)
+    (* TODO check that inverse of disjunction is subset of top-level conjunction
+       *)
+    let compl_exprs1 =
+      USet.filter
+        (fun e1 ->
+          USet.exists
+            (fun e2 -> Expr.equal (Expr.inverse e1 |> Expr.evaluate) e2)
+            only_exprs2
+        )
+        only_exprs1
+    in
+    let compl_exprs2 =
+      USet.filter
+        (fun e2 ->
+          USet.exists
+            (fun e1 -> Expr.equal (Expr.inverse e2 |> Expr.evaluate) e1)
+            only_exprs1
+        )
+        only_exprs2
+    in
+    (* distribute cross product of remaining conjuncts *)
+    let make_cross_conjuction exprs1 exprs2 =
+      URelation.cross exprs1 exprs2
+      |> USet.map (fun (e1, e2) ->
+          if Expr.equal e1 e2 then e1 else Expr.evaluate (EOr [ e1; e2 ])
+      )
+    in
+    let cross_exprs =
+      make_cross_conjuction
+        (USet.set_minus only_exprs1 compl_exprs1)
+        (USet.set_minus only_exprs2 compl_exprs2)
+    in
+    let compl1_only2 =
+      make_cross_conjuction compl_exprs1
+        (USet.set_minus only_exprs2 compl_exprs2)
+    in
+    let only1_compl2 =
+      make_cross_conjuction
+        (USet.set_minus only_exprs1 compl_exprs1)
+        compl_exprs2
+    in
+      (* final disjunction in conjunctive normal form *)
+      USet.inplace_union common_exprs cross_exprs
+      |> USet.inplace_union compl1_only2
+      |> USet.inplace_union only1_compl2
+      |> USet.to_list
+      |> List.sort_uniq compare
+      |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))
 end

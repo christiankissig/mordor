@@ -1,3 +1,12 @@
+(** Assertion checking and refinement for symbolic memory model checking.
+
+    This module implements validation of litmus test assertions against
+    generated executions. It supports checking outcome assertions (allow/forbid
+    with conditions), undefined behavior detection (use-after-free, unbounded
+    pointer dereference), and refinement checking between programs. The module
+    validates that executions satisfy specified conditions and memory model
+    constraints. *)
+
 open Context
 open Events
 open Eventstructures
@@ -9,47 +18,85 @@ open Lwt_utils
 open Types
 open Uset
 
-(** Assertion checking and refinement for symbolic memory model checking *)
-
 (** {1 Assertion Result Type} *)
 
+(** Result of checking an assertion against executions.
+
+    Contains validity status, undefined behavior information, and per-execution
+    results for detailed analysis. *)
 type assertion_result = {
-  valid : bool;
-  ub : bool;
+  valid : bool;  (** Whether the assertion holds for all checked executions. *)
+  ub : bool;  (** Whether any undefined behavior was detected. *)
   ub_reasons : ub_reason list;
+      (** List of all undefined behavior instances found. *)
   checked_executions : execution_info list option;
+      (** Per-execution results with satisfaction and UB status. *)
 }
 
 (** {1 Outcome Conversions} *)
 
+(** [outcome_of_string s] converts string to outcome.
+
+    @param s String representation ("allow" or "forbid").
+    @return Corresponding outcome value.
+    @raise Failure if string is invalid. *)
 let outcome_of_string = function
   | "allow" -> Allow
   | "forbid" -> Forbid
   | s -> failwith ("Invalid outcome: " ^ s)
 
+(** [string_of_outcome o] converts outcome to string.
+
+    @param o The outcome.
+    @return String representation. *)
 let string_of_outcome = function
   | Allow -> "allow"
   | Forbid -> "forbid"
 
 (** {1 Set Operations} *)
 
+(** Set membership operations for assertions.
+
+    Handles evaluation of assertions containing set membership tests like
+    [(e1, e2) in .rf] which check if a pair exists in a relation. *)
 module SetOperations = struct
-  (** Check if expression contains set membership operations *)
+  (** [has_set_operation expr] checks if expression uses set operations.
+
+      Recursively searches for ["in"] or ["notin"] operators.
+
+      @param expr The expression to check.
+      @return [true] if expression contains set membership tests. *)
   let rec has_set_operation expr =
     match expr with
     | EBinOp (_, "in", _) | EBinOp (_, "notin", _) -> true
     | EBinOp (e1, _, e2) -> has_set_operation e1 || has_set_operation e2
     | EUnOp (_, e) -> has_set_operation e
-    | EOr lst -> List.exists (List.exists has_set_operation) lst
+    | EOr lst -> List.exists has_set_operation lst
     | _ -> false
 
-  (** Evaluate tuple to pair of integers *)
+  (** [eval_tuple expr] evaluates tuple expression to event pair.
+
+      Expects expression of form [(a, b)] where [a] and [b] are integers.
+
+      @param expr Tuple expression.
+      @return Pair of event IDs.
+      @raise Failure if expression is not a valid tuple. *)
   let eval_tuple expr =
     match expr with
     | EBinOp (ENum a, ",", ENum b) -> (Z.to_int a, Z.to_int b)
     | _ -> failwith "Invalid tuple in set membership: expected (int, int)"
 
-  (** Evaluate set membership expression directly *)
+  (** [eval_set_expr expr structure execution] evaluates set membership
+      directly.
+
+      Handles expressions like [(w,r) in .rf] by looking up the relation and
+      checking membership. Supports boolean combinations.
+
+      @param expr The set membership expression.
+      @param structure The event structure.
+      @param execution The execution.
+      @return [true] if expression evaluates to true.
+      @raise Failure if expression cannot be evaluated. *)
   let rec eval_set_expr expr structure execution =
     match expr with
     | EBinOp (tuple_expr, "in", EVar set_name) ->
@@ -75,14 +122,27 @@ end
 
 (** {1 JSON Serialization} *)
 
+(** JSON serialization for undefined behavior reasons.
+
+    Converts UB reasons to JSON format for reporting and analysis. *)
 module JSONSerialization = struct
+  (** Event pair type for JSON serialization. *)
   type event_pair = int * int [@@deriving yojson]
+
+  (** JSON format for use-after-free violations. *)
   type uaf_json = { uaf : event_pair list } [@@deriving yojson]
+
+  (** JSON format for unbounded pointer dereference violations. *)
   type upd_json = { upd : event_pair list } [@@deriving yojson]
 
+  (** JSON union type for UB reasons. *)
   type ub_reason_json = UAF_json of uaf_json | UPD_json of upd_json
   [@@deriving yojson]
 
+  (** [ub_reason_to_yojson ub_reason] converts UB reason to Yojson.
+
+      @param ub_reason The UB reason to convert.
+      @return Yojson representation. *)
   let ub_reason_to_yojson (ub_reason : ub_reason) : Yojson.Safe.t =
     match ub_reason with
     | UAF uaf_reasons ->
@@ -92,19 +152,40 @@ module JSONSerialization = struct
         let pairs = USet.fold (fun acc pair -> pair :: acc) upd_reasons [] in
           upd_json_to_yojson { upd = pairs }
 
+  (** [ub_reason_to_json ub_reason] converts UB reason to JSON string.
+
+      @param ub_reason The UB reason.
+      @return JSON string. *)
   let ub_reason_to_json (ub_reason : ub_reason) : string =
     Yojson.Safe.to_string (ub_reason_to_yojson ub_reason)
 
+  (** [ub_reasons_to_yojson ub_reasons] converts list to Yojson.
+
+      @param ub_reasons List of UB reasons.
+      @return Yojson list. *)
   let ub_reasons_to_yojson (ub_reasons : ub_reason list) : Yojson.Safe.t =
     `List (List.map ub_reason_to_yojson ub_reasons)
 
+  (** [ub_reasons_to_json ub_reasons] converts list to JSON string.
+
+      @param ub_reasons List of UB reasons.
+      @return JSON string. *)
   let ub_reasons_to_json (ub_reasons : ub_reason list) : string =
     Yojson.Safe.to_string (ub_reasons_to_yojson ub_reasons)
 end
 
 (** {1 Event Location Helper} *)
 
-(** Get location of an event as a symbol string *)
+(** [get_event_location structure execution event_label] extracts location
+    symbol.
+
+    Gets the location expression for an event, applies RF substitutions, and
+    extracts the resulting symbol if unique.
+
+    @param structure The event structure.
+    @param execution The execution.
+    @param event_label Event ID.
+    @return [Some symbol] if location is a single symbol, [None] otherwise. *)
 let get_event_location structure execution event_label =
   match get_loc structure event_label with
   | None -> None
@@ -119,8 +200,23 @@ let get_event_location structure execution event_label =
 
 (** {1 Undefined Behavior Validation} *)
 
+(** Undefined behavior detection.
+
+    Checks for memory safety violations including use-after-free (UAF) and
+    unbounded pointer dereference (UPD). Uses happens-before relation to
+    determine if accesses are properly ordered relative to allocations/frees. *)
 module UBValidation = struct
-  (** Find events using the same location as a given pointer symbol *)
+  (** [find_related_events pointer_symbol structure execution all_events] finds
+      events using a pointer.
+
+      Returns all events that access the same memory location as the given
+      pointer symbol.
+
+      @param pointer_symbol The pointer symbol to match.
+      @param structure The event structure.
+      @param execution The execution.
+      @param all_events Set of events to search.
+      @return Set of events accessing the pointer location. *)
   let find_related_events pointer_symbol structure execution all_events =
     USet.filter
       (fun e ->
@@ -130,14 +226,36 @@ module UBValidation = struct
       )
       all_events
 
-  (** Find events that don't happen before a given event *)
+  (** [find_events_not_before target_event happens_before events] finds
+      unordered events.
+
+      Returns events that don't happen-before the target event, meaning they
+      could execute concurrently or after it.
+
+      @param target_event The reference event.
+      @param happens_before The happens-before relation.
+      @param events Set of candidate events.
+      @return Events not ordered before target. *)
   let find_events_not_before target_event happens_before events =
     USet.filter
       (fun e -> not (USet.mem happens_before (e, target_event)))
       events
 
-  (** Use-after-free validation *)
+  (** Use-after-free detection. *)
   module UAF = struct
+    (** [check structure execution ub_reasons pointer_map rhb
+         all_alloc_read_writes] detects use-after-free violations.
+
+        For each free event, finds all accesses to the same location that don't
+        happen-before the free. These represent potential use-after-free. UAF is
+        admitted when: (use, free) NOT in happens-before.
+
+        @param structure The event structure.
+        @param execution The execution.
+        @param ub_reasons Mutable reference to accumulate UB instances.
+        @param pointer_map Map from malloc events to symbols.
+        @param rhb Happens-before relation.
+        @param all_alloc_read_writes All pointer-related events. *)
     let check structure execution ub_reasons pointer_map rhb
         all_alloc_read_writes =
       let all_frees = USet.intersection structure.free_events execution.ex_e in
@@ -168,8 +286,22 @@ module UBValidation = struct
         if USet.size uaf > 0 then ub_reasons := UAF uaf :: !ub_reasons
   end
 
-  (** Unbounded pointer dereference validation *)
+  (** Unbounded pointer dereference detection. *)
   module UPD = struct
+    (** [check structure execution ub_reasons pointer_map rhb
+         all_alloc_read_writes] detects unbounded pointer dereferences.
+
+        For each allocation, finds all dereferences of the same pointer that
+        don't happen-after the allocation. These represent potential access to
+        uninitialized or deallocated memory. UPD is admitted when: (alloc, use)
+        NOT in happens-before.
+
+        @param structure The event structure.
+        @param execution The execution.
+        @param ub_reasons Mutable reference to accumulate UB instances.
+        @param pointer_map Map from malloc events to symbols.
+        @param rhb Happens-before relation.
+        @param all_alloc_read_writes All pointer-related events. *)
     let check structure execution ub_reasons pointer_map rhb
         all_alloc_read_writes =
       let all_alloc =
@@ -207,7 +339,18 @@ module UBValidation = struct
         if USet.size upd > 0 then ub_reasons := UPD upd :: !ub_reasons
   end
 
-  (** Run all UB checks on an execution *)
+  (** [check_all structure execution ub_reasons pointer_map rhb
+       all_alloc_read_writes] runs all UB checks.
+
+      Executes both UAF and UPD detection on the execution, accumulating all
+      violations in [ub_reasons].
+
+      @param structure The event structure.
+      @param execution The execution.
+      @param ub_reasons Mutable reference to accumulate all UB instances.
+      @param pointer_map Map from malloc events to symbols.
+      @param rhb Happens-before relation.
+      @param all_alloc_read_writes All pointer-related events. *)
   let check_all structure execution ub_reasons pointer_map rhb
       all_alloc_read_writes =
     UAF.check structure execution ub_reasons pointer_map rhb
@@ -218,9 +361,20 @@ end
 
 (** {1 Execution Analysis} *)
 
+(** Analysis utilities for executions.
+
+    Builds derived relations and extracts information needed for assertion
+    checking and UB detection. *)
 module ExecutionAnalysis = struct
-  (** Build happens-before relation (rhb) for an execution rhb = (ppo ∪ fj ∪ dp
-      ∪ rf)+ ∩ (E × E) *)
+  (** [build_happens_before structure execution] constructs happens-before
+      relation.
+
+      Computes: rhb = (ppo ∪ fj ∪ dp ∪ rf)+ ∩ (E × E) Also adds reflexive edges
+      for all events.
+
+      @param structure The event structure.
+      @param execution The execution.
+      @return The reflexive, transitive happens-before relation. *)
   let build_happens_before structure execution =
     let rhb_base =
       USet.union
@@ -234,7 +388,13 @@ module ExecutionAnalysis = struct
       USet.iter (fun edge -> USet.add rhb edge |> ignore) rhb_trans;
       rhb
 
-  (** Extract pointer information from malloc events *)
+  (** [extract_pointers structure execution] gets pointer info from mallocs.
+
+      Extracts the location values from all malloc events in the execution.
+
+      @param structure The event structure.
+      @param execution The execution.
+      @return Set of [(event_id, location_value)] pairs. *)
   let extract_pointers structure execution =
     USet.map
       (fun label ->
@@ -247,7 +407,14 @@ module ExecutionAnalysis = struct
       )
       (USet.intersection structure.malloc_events execution.ex_e)
 
-  (** Build pointer map with substitutions from fix_rf_map *)
+  (** [build_pointer_map pointers fix_rf_map] creates pointer symbol map.
+
+      Builds a map from malloc event IDs to their symbolic location names after
+      applying RF substitutions.
+
+      @param pointers Set of [(event_id, value)] pairs from mallocs.
+      @param fix_rf_map RF value substitution map.
+      @return Hash table mapping event IDs to location symbols. *)
   let build_pointer_map pointers fix_rf_map =
     let pointer_map = Hashtbl.create (USet.size pointers) in
       USet.iter
@@ -265,8 +432,16 @@ module ExecutionAnalysis = struct
         pointers;
       pointer_map
 
-  (** Get all events that use pointers - includes malloc events AND read/write
-      events accessing those locations *)
+  (** [get_alloc_read_write_events structure execution pointer_map] finds
+      pointer accesses.
+
+      Returns all events (malloc, read, write) that access the locations
+      identified by pointer symbols from malloc events.
+
+      @param structure The event structure.
+      @param execution The execution.
+      @param pointer_map Map from malloc events to symbols.
+      @return Set of all events accessing pointer locations. *)
   let get_alloc_read_write_events structure execution pointer_map =
     (* Get all pointer symbols from malloc events *)
     let pointer_symbols =
@@ -283,7 +458,14 @@ module ExecutionAnalysis = struct
       )
       execution.ex_e
 
-  (** Build rf (reads-from) conditions to be checked by solver *)
+  (** [build_rf_conditions structure execution] creates RF equality constraints.
+
+      For each read-from edge, creates constraints that the read value equals
+      the written value, including any restrictions on the write.
+
+      @param structure The event structure.
+      @param execution The execution.
+      @return List of RF-related constraints. *)
   let build_rf_conditions structure execution =
     let rf_conditions = ref [] in
       USet.iter
@@ -314,8 +496,22 @@ end
 
 (** {1 Condition Checking} *)
 
+(** Condition evaluation for assertions.
+
+    Handles both set membership expressions and regular boolean conditions,
+    using appropriate evaluation strategies for each. *)
 module ConditionChecker = struct
-  (** Check condition expression with set operations *)
+  (** [check_with_set_operations cond_expr rf_conditions structure execution]
+      evaluates set membership conditions.
+
+      Directly evaluates expressions like [(w,r) in .rf] by checking relation
+      membership, then validates RF constraints with solver.
+
+      @param cond_expr The condition expression.
+      @param rf_conditions RF equality constraints.
+      @param structure The event structure.
+      @param execution The execution.
+      @return Promise of [true] if condition holds. *)
   let check_with_set_operations cond_expr rf_conditions structure execution =
     try
       let set_result =
@@ -330,7 +526,15 @@ module ConditionChecker = struct
       Logs.err (fun m -> m "Error evaluating set expression: %s" msg);
       Lwt.return false
 
-  (** Check condition expression using solver *)
+  (** [check_with_solver cond_expr rf_conditions execution] uses SMT solver.
+
+      Evaluates condition by substituting final register values and checking
+      satisfiability with RF constraints.
+
+      @param cond_expr The condition expression.
+      @param rf_conditions RF equality constraints.
+      @param execution The execution.
+      @return Promise of [true] if satisfiable. *)
   let check_with_solver cond_expr rf_conditions execution =
     (* Instantiate condition expression with final register environment *)
     let inst_cond_expr =
@@ -339,7 +543,14 @@ module ConditionChecker = struct
     let cond_expr_and_rf_conditions = inst_cond_expr :: rf_conditions in
       Solver.is_sat cond_expr_and_rf_conditions
 
-  (** Check if condition is satisfied *)
+  (** [check_condition cond_expr structure execution] checks if condition holds.
+
+      Dispatches to appropriate checker based on expression type.
+
+      @param cond_expr The condition to check.
+      @param structure The event structure.
+      @param execution The execution.
+      @return Promise of [true] if condition is satisfied. *)
   let check_condition cond_expr structure execution =
     let rf_conditions =
       ExecutionAnalysis.build_rf_conditions structure execution
@@ -351,15 +562,28 @@ end
 
 (** {1 Refinement Checking} *)
 
+(** Refinement checking between programs.
+
+    Verifies that one program refines another by checking that every execution
+    of the refined program can be matched with an execution of the original. *)
 module Refinement = struct
+  (** Result of refinement checking. *)
   type refinement_result = {
     structure : symbolic_event_structure;
+        (** The refined program's structure. *)
     executions : symbolic_execution list;
-    events : (int, event) Hashtbl.t;
-    valid : bool;
+        (** The refined program's executions. *)
+    events : (int, event) Hashtbl.t;  (** Event table. *)
+    valid : bool;  (** Whether refinement holds. *)
   }
 
-  (** Build symbol map: register -> set of symbolic expressions *)
+  (** [build_symbol_map executions] creates register to symbols mapping.
+
+      Maps each register to the set of all symbolic expressions it takes across
+      all executions.
+
+      @param executions List of executions.
+      @return Hash table mapping registers to symbol sets. *)
   let build_symbol_map executions =
     let map = Hashtbl.create 32 in
       List.iter
@@ -381,7 +605,13 @@ module Refinement = struct
         executions;
       map
 
-  (** Build reverse symbol map: symbol_string -> set of registers *)
+  (** [build_reverse_map executions] creates symbol to registers mapping.
+
+      Maps each symbolic expression (as string) to the set of registers that can
+      hold it across all executions.
+
+      @param executions List of executions.
+      @return Hash table mapping symbol strings to register sets. *)
   let build_reverse_map executions =
     let map = Hashtbl.create 32 in
       List.iter
@@ -404,7 +634,18 @@ module Refinement = struct
         executions;
       map
 
-  (** Check if a to_exec can be matched with any from_exec *)
+  (** [can_match_execution to_exec from_execs from_map to_reverse_map] checks if
+      execution can be matched.
+
+      Determines if [to_exec] (from refined program) can be matched with any
+      execution in [from_execs] (from original program) based on symbolic value
+      correspondence.
+
+      @param to_exec Execution from refined program.
+      @param from_execs Executions from original program.
+      @param from_map Symbol map for original program.
+      @param to_reverse_map Reverse symbol map for refined program.
+      @return [true] if a matching execution exists. *)
   let can_match_execution to_exec from_execs from_map to_reverse_map =
     (* Start with all from executions as candidates *)
     let candidates = ref from_execs in
@@ -448,7 +689,14 @@ module Refinement = struct
     (* At least one candidate should remain *)
     List.length !candidates > 0
 
-  (** Check refinement between two programs *)
+  (** [check_refinement from_prog to_prog] checks refinement relation.
+
+      Verifies that every execution of [to_prog] can be matched with an
+      execution of [from_prog], meaning the transformation preserves behaviors.
+
+      @param from_prog Original program (as promise).
+      @param to_prog Refined program (as promise).
+      @return Promise of refinement result. *)
   let check_refinement from_prog to_prog =
     let%lwt from_result = from_prog in
     let%lwt to_result = to_prog in
@@ -476,13 +724,25 @@ module Refinement = struct
         valid = refinement_holds;
       }
 
-  (** Collect all programs in a chained assertion *)
+  (** [collect_chain acc ast] collects programs in chained assertion.
+
+      Recursively extracts all programs from a chained refinement assertion.
+
+      @param acc Accumulator for collected ASTs.
+      @param ast Current AST.
+      @return List of all ASTs in refinement chain. *)
   let rec collect_chain acc ast =
     match ast.assertions with
     | Chained { rest; _ } :: _ -> collect_chain (ast :: acc) rest
     | _ -> List.rev (ast :: acc)
 
-  (** Create dummy assertion for execution generation *)
+  (** [create_dummy_assertion model] creates assertion for execution generation.
+
+      Creates a trivially true assertion to generate executions without
+      filtering by outcome.
+
+      @param model Optional memory model.
+      @return Dummy outcome assertion. *)
   let create_dummy_assertion model =
     Outcome
       {
@@ -491,7 +751,13 @@ module Refinement = struct
         model;
       }
 
-  (** Perform refinement checking on AST *)
+  (** [do_check_refinement ast] performs refinement check on AST.
+
+      Main refinement checking function that processes chained assertions and
+      validates refinement across the chain.
+
+      @param ast The litmus test AST with chained assertions.
+      @return Promise of refinement result. *)
   let do_check_refinement ast =
     (* Extract model and outcome from first assertion *)
     let model, outcome =
@@ -546,12 +812,31 @@ end
 
 (** {1 Per-Execution Assertion Checking} *)
 
+(** Checking assertions against individual executions.
+
+    Evaluates conditions and detects UB for a single execution. *)
 module PerExecutionChecker = struct
-  (** Check if we should skip condition checking *)
+  (** [should_skip_condition already_satisfied is_ub_assertion] checks if skip.
+
+      Skips condition checking if already satisfied or for UB-only assertions.
+
+      @param already_satisfied Whether condition already holds.
+      @param is_ub_assertion Whether this is a UB assertion.
+      @return [true] if condition checking should be skipped. *)
   let should_skip_condition already_satisfied is_ub_assertion =
     already_satisfied || is_ub_assertion
 
-  (** Check assertion for a single execution *)
+  (** [check_outcome_assertion outcome condition structure execution
+       already_satisfied] checks assertion on execution.
+
+      Evaluates both the condition and runs UB detection for an execution.
+
+      @param outcome Expected outcome (Allow/Forbid).
+      @param condition Condition to check.
+      @param structure The event structure.
+      @param execution The execution.
+      @param already_satisfied Mutable reference tracking satisfaction.
+      @return Promise of [(satisfied, ub_reasons)] pair. *)
   let check_outcome_assertion outcome condition structure execution
       already_satisfied =
     (* Determine if this is a UB assertion *)
@@ -599,7 +884,16 @@ module PerExecutionChecker = struct
               already_satisfied := conds_satisfied && extended_ok;
               Lwt.return (!already_satisfied, !ub_reasons)
 
-  (** Check assertion for a single execution *)
+  (** [check assertion execution structure already_satisfied ~exhaustive] checks
+      single execution.
+
+      @param assertion The assertion to check.
+      @param execution The execution.
+      @param structure The event structure.
+      @param already_satisfied Mutable reference for satisfaction tracking.
+      @param exhaustive Whether checking exhaustively.
+      @return Promise of [(satisfied, ub_reasons)] pair.
+      @raise Failure if assertion type is unexpected. *)
   let check assertion execution structure already_satisfied ~exhaustive =
     let%lwt () = Lwt.return () in
       match assertion with
@@ -611,12 +905,24 @@ end
 
 (** {1 Main Assertion Checking} *)
 
+(** Main assertion checking logic.
+
+    Coordinates checking assertions across all executions, combining results and
+    determining overall validity. *)
 module AssertionChecker = struct
-  (** Create empty assertion result *)
+  (** [empty_result ?valid ()] creates empty assertion result.
+
+      @param valid Optional validity value (default: true).
+      @return Empty assertion result. *)
   let empty_result ?(valid = true) () =
     { valid; ub = false; ub_reasons = []; checked_executions = None }
 
-  (** Run UB validation on a single execution *)
+  (** [run_ub_validation_on_execution structure execution] validates one
+      execution.
+
+      @param structure The event structure.
+      @param execution The execution.
+      @return List of UB reasons found. *)
   let run_ub_validation_on_execution structure execution =
     let rhb = ExecutionAnalysis.build_happens_before structure execution in
     let pointers = ExecutionAnalysis.extract_pointers structure execution in
@@ -632,7 +938,11 @@ module AssertionChecker = struct
         all_alloc_read_writes;
       !ub_reasons
 
-  (** Run UB validation on all executions *)
+  (** [run_ub_validation_all executions structure] validates all executions.
+
+      @param executions List of executions.
+      @param structure The event structure.
+      @return Promise of [(all_ub_reasons, execution_results)] pair. *)
   let run_ub_validation_all executions structure =
     let all_ub_reasons = ref [] in
     let execution_results = ref [] in
@@ -650,7 +960,14 @@ module AssertionChecker = struct
     in
       Lwt.return (!all_ub_reasons, !execution_results)
 
-  (** Check model assertion *)
+  (** [check_model_assertion model executions structure] checks model assertion.
+
+      For model-only assertions, just runs UB validation.
+
+      @param model The memory model name.
+      @param executions List of executions.
+      @param structure The event structure.
+      @return Promise of assertion result. *)
   let check_model_assertion model executions structure =
     Logs.info (fun m -> m "Using memory model: %s" model);
     (* Run UB validation even for model assertions *)
@@ -666,13 +983,23 @@ module AssertionChecker = struct
           checked_executions = Some execution_results;
         }
 
-  (** Handle non-exhaustive forbid case with no executions *)
+  (** [handle_no_executions exhaustive outcome] handles empty execution list.
+
+      @param exhaustive Whether checking exhaustively.
+      @param outcome Expected outcome.
+      @return [Some result] if handled, [None] to continue.
+      @raise Failure if exhaustive and no executions. *)
   let handle_no_executions exhaustive outcome =
     if exhaustive then Lwt.fail_with "No executions"
     else if outcome = Forbid then Lwt.return (Some (empty_result ()))
     else Lwt.return None
 
-  (** Process all executions and collect results *)
+  (** [process_executions assertion executions structure] checks all executions.
+
+      @param assertion The assertion to check.
+      @param executions List of executions.
+      @param structure The event structure.
+      @return Promise of [(satisfied, ub_reasons, results)] triple. *)
   let process_executions assertion executions structure =
     let ub_reasons = ref [] in
     let satisfied = ref false in
@@ -700,7 +1027,15 @@ module AssertionChecker = struct
 
     Lwt.return (!satisfied, !ub_reasons, !execution_results)
 
-  (** Compute final validity based on outcome and results *)
+  (** [compute_validity outcome is_ub_assertion satisfied expected ub]
+      determines final validity.
+
+      @param outcome Expected outcome.
+      @param is_ub_assertion Whether UB assertion.
+      @param satisfied Whether condition satisfied.
+      @param expected Expected satisfaction value.
+      @param ub Whether UB detected.
+      @return Final validity result. *)
   let compute_validity outcome is_ub_assertion satisfied expected ub =
     if is_ub_assertion then
       (* For "allow (ub)", valid if UB found; for "forbid (ub)", valid if no UB *)
@@ -709,7 +1044,16 @@ module AssertionChecker = struct
       (* For regular assertions, check if condition was satisfied *)
       satisfied = expected
 
-  (** Check outcome assertion *)
+  (** [check_outcome_assertion outcome condition model executions structure
+       ~exhaustive] checks outcome assertion.
+
+      @param outcome Expected outcome (Allow/Forbid).
+      @param condition Condition to check.
+      @param model Optional memory model.
+      @param executions List of executions.
+      @param structure The event structure.
+      @param exhaustive Whether checking exhaustively.
+      @return Promise of assertion result. *)
   let check_outcome_assertion outcome condition model executions structure
       ~exhaustive =
     Logs.info (fun m ->
@@ -758,7 +1102,15 @@ module AssertionChecker = struct
             checked_executions = Some execution_results;
           }
 
-  (** Check chained assertion *)
+  (** [check_chained_assertion model outcome rest executions structure] checks
+      chained refinement.
+
+      @param model Optional memory model.
+      @param outcome Expected outcome.
+      @param rest Rest of refinement chain.
+      @param executions List of executions.
+      @param structure The event structure.
+      @return Promise of assertion result. *)
   let check_chained_assertion model outcome rest executions structure =
     Logs.info (fun m -> m "Performing refinement check for chained assertion");
 
@@ -791,7 +1143,15 @@ module AssertionChecker = struct
           checked_executions = Some execution_results;
         }
 
-  (** Main assertion checking function *)
+  (** [check assertion executions structure ~exhaustive] main checking function.
+
+      Dispatches to appropriate checker based on assertion type.
+
+      @param assertion The assertion to check.
+      @param executions List of executions.
+      @param structure The event structure.
+      @param exhaustive Whether to check exhaustively.
+      @return Promise of assertion result. *)
   let check assertion executions structure ~exhaustive =
     match assertion with
     | Model { model } -> check_model_assertion model executions structure
@@ -804,17 +1164,39 @@ end
 
 (** {1 Public API} *)
 
-(** Main assertion checking function *)
+(** [check_assertion assertion executions structure ~exhaustive] checks
+    assertion.
+
+    Main entry point for assertion checking.
+
+    @param assertion The assertion to validate.
+    @param executions List of symbolic executions.
+    @param structure The symbolic event structure.
+    @param exhaustive Whether to check exhaustively.
+    @return Promise of assertion result. *)
 let check_assertion = AssertionChecker.check
 
-(** JSON serialization functions *)
+(** JSON serialization functions for UB reasons. *)
+
+(** [ub_reason_to_yojson ub] converts UB reason to Yojson. *)
 let ub_reason_to_yojson = JSONSerialization.ub_reason_to_yojson
 
+(** [ub_reason_to_json ub] converts UB reason to JSON string. *)
 let ub_reason_to_json = JSONSerialization.ub_reason_to_json
+
+(** [ub_reasons_to_yojson ubs] converts UB reason list to Yojson. *)
 let ub_reasons_to_yojson = JSONSerialization.ub_reasons_to_yojson
+
+(** [ub_reasons_to_json ubs] converts UB reason list to JSON string. *)
 let ub_reasons_to_json = JSONSerialization.ub_reasons_to_json
 
-(** Step function for checking assertions in context *)
+(** [step_check_assertions ctx] checks assertions in verification context.
+
+    Pipeline step that validates assertions against generated executions. Always
+    runs UB detection, even without explicit assertions.
+
+    @param ctx The verification context (as promise).
+    @return Updated context with assertion results. *)
 let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let%lwt ctx = ctx in
     match (ctx.structure, ctx.executions) with

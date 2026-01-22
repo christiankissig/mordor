@@ -539,7 +539,7 @@ module TestWriteCondition = struct
             terminal_events = USet.create ();
             fj = USet.create ();
             p = Hashtbl.create 0;
-            constraint_ = [];
+            constraints = [];
             conflict = USet.create ();
             origin = Hashtbl.create 0;
             loop_indices;

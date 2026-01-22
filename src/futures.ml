@@ -10,7 +10,7 @@ let calculate_future_set (execs : symbolic_execution uset) : future_set =
   USet.map
     (fun exec ->
       USet.union
-        (URelation.identity_relation exec.ex_e)
+        (URelation.identity exec.ex_e)
         (USet.intersection
            (USet.union exec.dp exec.ppo)
            (URelation.cross exec.ex_e exec.ex_e)

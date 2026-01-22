@@ -473,25 +473,6 @@ let test_evaluate_unop () =
         | _ -> false
         )
 
-let test_evaluate_eor_clauses () =
-  let env v = if v = "x" then Some (e_num 5) else None in
-  (* EOr with simple clauses *)
-  let clause1 = [ e_var "x"; e_num 1 ] in
-  let clause2 = [ e_num 2; e_num 3 ] in
-  let eor = EOr [ clause1; clause2 ] in
-  let result = Expr.evaluate ~env eor in
-    (* Variables should be substituted *)
-    Alcotest.(check bool)
-      "EOr evaluates clauses" true
-      ( match result with
-      | EOr [ [ ENum n1; ENum n2 ]; [ ENum n3; ENum n4 ] ] ->
-          Z.equal n1 (Z.of_int 5)
-          && Z.equal n2 (Z.of_int 1)
-          && Z.equal n3 (Z.of_int 2)
-          && Z.equal n4 (Z.of_int 3)
-      | _ -> false
-      )
-
 let test_evaluate_partial () =
   (* When operands can't be fully evaluated, return binop with evaluated operands *)
   let expr = e_binop (e_var "x") "+" (e_num 5) in
@@ -590,7 +571,6 @@ let suite =
       Alcotest.test_case "Evaluate nested expressions" `Quick
         test_evaluate_nested_expressions;
       Alcotest.test_case "Evaluate unary operations" `Quick test_evaluate_unop;
-      Alcotest.test_case "Evaluate EOr clauses" `Quick test_evaluate_eor_clauses;
       Alcotest.test_case "Evaluate partial evaluation" `Quick
         test_evaluate_partial;
       Alcotest.test_case "Evaluate complex with environment" `Quick

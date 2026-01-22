@@ -32,7 +32,6 @@
   parser
   parser_state
   pretty
-  rewrite
   solver
   solver_threadsafe
   solver_threadsafe_local

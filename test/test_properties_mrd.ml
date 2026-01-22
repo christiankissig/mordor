@@ -123,11 +123,7 @@ module PropertyElaborationSoundness = struct
 
     (* The strengthened predicate is more restrictive *)
     let stronger_implies_weaker =
-      List.concat
-        [
-          p_strengthened;
-          [ EOr [ List.map (fun e -> [ e ]) p_original |> List.flatten ] ];
-        ]
+      List.concat [ p_strengthened; [ EOr p_original ] ]
     in
 
     Solver.is_sat stronger_implies_weaker >>= fun result ->
@@ -141,10 +137,7 @@ module PropertyElaborationSoundness = struct
     let p = [ EBinOp (ESymbol "x", ">=", ENum Z.zero) ] in
 
     (* Ω should imply P *)
-    let implication =
-      List.concat
-        [ omega; [ EOr [ List.map (fun e -> [ e ]) p |> List.flatten ] ] ]
-    in
+    let implication = List.concat [ omega; [ EOr p ] ] in
 
     Solver.is_sat implication >>= fun result ->
     check bool "weak_soundness" true result;
@@ -154,8 +147,8 @@ module PropertyElaborationSoundness = struct
     let open Lwt.Infix in
     (* Lifting: if two writes are equivalent under complementary predicates,
        they can be merged *)
-    let p1 = [ EBinOp (ESymbol "c", "=", ENum Z.one) ] in
-    let p2 = [ EBinOp (ESymbol "c", "!=", ENum Z.one) ] in
+    let p1 = EBinOp (ESymbol "c", "=", ENum Z.one) in
+    let p2 = EBinOp (ESymbol "c", "!=", ENum Z.one) in
 
     (* P1 ∨ P2 should be ⊤ *)
     let disjunction = EOr [ p1; p2 ] in
@@ -267,7 +260,6 @@ module PropertyJustificationMonotonicity = struct
         fwd = USet.create ();
         we = USet.create ();
         w = e;
-        op = ("initial", None, None);
       }
     in
 
@@ -287,7 +279,6 @@ module PropertyJustificationMonotonicity = struct
         fwd = USet.create ();
         we = USet.create ();
         w = { (Event.create Write 1 ()) with wval = Some (ENum Z.zero) };
-        op = ("before", None, None);
       }
     in
 
@@ -299,7 +290,6 @@ module PropertyJustificationMonotonicity = struct
         fwd = USet.create ();
         we = USet.create ();
         w = { (Event.create Write 1 ()) with wval = Some (ENum Z.zero) };
-        op = ("weakened", None, None);
       }
     in
 

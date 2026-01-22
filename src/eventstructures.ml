@@ -18,7 +18,7 @@ module SymbolicEventStructure = struct
       pwg = [];
       fj = USet.create ();
       p = Hashtbl.create 16;
-      constraint_ = [];
+      constraints = [];
       conflict = USet.create ();
       origin = Hashtbl.create 16;
       loop_indices = Hashtbl.create 16;
@@ -53,7 +53,7 @@ module SymbolicEventStructure = struct
       pwg = structure.pwg;
       fj = structure.fj;
       p = structure.p;
-      constraint_ = structure.constraint_;
+      constraints = structure.constraints;
       conflict = structure.conflict;
       origin = structure.origin;
       loop_indices = structure.loop_indices;
@@ -117,7 +117,7 @@ module SymbolicEventStructure = struct
         fj = USet.union a.fj b.fj;
         p = Hashtbl.create 0;
         (* TODO value not needed here *)
-        constraint_ = a.constraint_ @ b.constraint_;
+        constraints = a.constraints @ b.constraints;
         conflict =
           USet.union a.conflict b.conflict
           |> USet.inplace_union (URelation.cross a.e b.e)
@@ -153,7 +153,7 @@ module SymbolicEventStructure = struct
         fj = USet.union a.fj b.fj;
         p = Hashtbl.create 0;
         (* TODO value not needed here *)
-        constraint_ = a.constraint_ @ b.constraint_;
+        constraints = a.constraints @ b.constraints;
         conflict = USet.union a.conflict b.conflict;
         (* a and b share the same origin table *)
         origin = a.origin;
@@ -255,7 +255,7 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
         USet.subset
           (USet.set_minus
              (URelation.cross neighbours neighbours)
-             (URelation.identity_relation neighbours)
+             (URelation.identity neighbours)
           )
           structure.conflict
       then

@@ -129,7 +129,7 @@ let pp_esymbol fmt sym = Format.fprintf fmt "%s" sym
 type expr =
   | EBinOp of expr * string * expr
   | EUnOp of string * expr
-  | EOr of expr list list
+  | EOr of expr list
   | EVar of string
   | ESymbol of string [@printer pp_esymbol]
   | EBoolean of bool
@@ -203,7 +203,7 @@ type symbolic_event_structure = {
   p : (int, (string, expr) Hashtbl.t) Hashtbl.t; [@printer pp_structure_p]
       (* Register state per event
   *)
-  constraint_ : expr list; [@opaque] (* Constraints *)
+  constraints : expr list; (* Constraints *)
   conflict : (int * int) uset; [@printer pp_int_urel] (* Conflict relation *)
   origin : (string, int) Hashtbl.t; [@opaque] (* Origin mapping for symbols *)
   loop_indices : (int, int list) Hashtbl.t; [@opaque]
@@ -231,7 +231,6 @@ type justification = {
   we : (int * int) uset; [@printer pp_int_urel]
       (* Write-elision edges (event pairs) *)
   w : event; (* The write event being justified *)
-  op : string * justification option * expr option; [@opaque] (* Operation tag *)
 }
 [@@deriving show]
 

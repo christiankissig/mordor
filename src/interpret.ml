@@ -59,6 +59,8 @@ type events_t = {
   loop_indices : (int, int list) Hashtbl.t;
   (* mapping from event labels to source spans *)
   source_spans : (int, source_span) Hashtbl.t;
+  (* set of globals *)
+  globals : string USet.t;
   mutable label : int;
 }
 
@@ -70,6 +72,7 @@ let create_events () =
     source_spans = Hashtbl.create 256;
     thread_index = Hashtbl.create 256;
     loop_indices = Hashtbl.create 256;
+    globals = USet.create ();
     label = 0;
   }
 
@@ -175,9 +178,10 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   volatile = assign.volatile;
                 }
               in
-              let event' : event = add_event events evt env annotation in
-                let* cont = recurse rest env phi events in
-                  Lwt.return (SymbolicEventStructure.dot event' cont phi)
+                USet.add events.globals global |> ignore;
+                let event' : event = add_event events evt env annotation in
+                  let* cont = recurse rest env phi events in
+                    Lwt.return (SymbolicEventStructure.dot event' cont phi)
           | DerefStore { address; expr; assign } ->
               let base_evt : event = Event.create Write 0 () in
               let evt =
@@ -225,12 +229,13 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   volatile = load.volatile;
                 }
               in
-              let event' : event = add_event events evt env annotation in
-                Hashtbl.replace events.origin symbol event'.label;
-                let env' = Hashtbl.copy env in
-                  Hashtbl.replace env' register (Expr.of_value rval);
-                  let* cont = recurse rest env' phi events in
-                    Lwt.return (SymbolicEventStructure.dot event' cont phi)
+                USet.add events.globals global |> ignore;
+                let event' : event = add_event events evt env annotation in
+                  Hashtbl.replace events.origin symbol event'.label;
+                  let env' = Hashtbl.copy env in
+                    Hashtbl.replace env' register (Expr.of_value rval);
+                    let* cont = recurse rest env' phi events in
+                      Lwt.return (SymbolicEventStructure.dot event' cont phi)
           | Fadd
               { register; address; operand; rmw_mode; load_mode; assign_mode }
             ->
@@ -423,7 +428,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let base_evt : event = Event.create Lock 0 () in
               let evt =
                 match global with
-                | Some g -> { base_evt with id = Some (VVar g) }
+                | Some g ->
+                    USet.add events.globals g |> ignore;
+                    { base_evt with id = Some (VVar g) }
                 | None -> base_evt
               in
               let event' : event = add_event events evt env annotation in
@@ -433,7 +440,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let base_evt : event = Event.create Unlock 0 () in
               let evt =
                 match global with
-                | Some g -> { base_evt with id = Some (VVar g) }
+                | Some g ->
+                    USet.add events.globals g |> ignore;
+                    { base_evt with id = Some (VVar g) }
                 | None -> base_evt
               in
               let event' : event = add_event events evt env annotation in
@@ -458,6 +467,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let base_evt : event = Event.create Malloc 0 () in
               let evt = { base_evt with rval = Some rval; loc = Some loc } in
               let event' : event = add_event events evt env annotation in
+                USet.add events.globals global |> ignore;
                 Hashtbl.replace events.origin symbol event'.label;
                 let env' = Hashtbl.copy env in
                   let* cont = recurse rest env' phi events in
@@ -490,6 +500,17 @@ let make_generic_terminal_structure ~add_event env phi events =
     add_event events terminal_evt env
       { source_span = None; thread_ctx = None; loop_ctx = None }
   in
+  let constraints =
+    URelation.cross events.globals events.globals
+    |> (fun rel -> USet.set_minus rel (URelation.identity events.globals))
+    |> USet.values
+    |> List.map (fun (g1, g2) -> if g1 < g2 then (g1, g2) else (g2, g1))
+    |> List.sort_uniq (fun (a1, b1) (a2, b2) ->
+        let c = compare a1 a2 in
+          if c <> 0 then c else compare b1 b2
+    )
+    |> List.map (fun (v1, v2) -> Expr.binop (EVar v1) "!=" (EVar v2))
+  in
   let cont =
     {
       structure with
@@ -498,6 +519,7 @@ let make_generic_terminal_structure ~add_event env phi events =
       loop_indices = events.loop_indices;
       thread_index = events.thread_index;
       p = events.env_by_evt;
+      constraints;
     }
   in
     Lwt.return (SymbolicEventStructure.dot terminal_evt cont phi)
@@ -554,6 +576,23 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
         let* structure, events, source_spans =
           interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
         in
+          Logs.debug (fun m ->
+              m
+                "Completed program interpretation with symbolic\n\
+                \        event structure: \n\
+                 %s\n\
+                 and events\n\
+                 %s"
+                (show_symbolic_event_structure structure)
+                (Hashtbl.fold
+                   (fun label evt acc ->
+                     acc
+                     ^ Printf.sprintf "Event %d: %s\n" label
+                         (Event.to_string evt)
+                   )
+                   events ""
+                )
+          );
           ctx.structure <- Some structure;
           ctx.events <- Some events;
           ctx.source_spans <- Some source_spans;

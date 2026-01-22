@@ -95,6 +95,8 @@ module Event : sig
   val has_wval : event -> bool
   val has_rval : event -> bool
   val event_order : event -> mode
+  val get_symbols : event -> string USet.t
+  val relabel : relab:(string -> string option) -> event -> event
 end = struct
   type t = event
 
@@ -250,6 +252,36 @@ end = struct
     | None, None -> true
     | Some v1, Some v2 -> Expr.equal v1 v2
     | _ -> false
+
+  let get_symbols e =
+    let symbols = USet.create () in
+      ( match e.loc with
+      | Some v ->
+          USet.inplace_union symbols (Expr.get_symbols v |> USet.of_list)
+          |> ignore
+      | None -> ()
+      );
+      ( match e.rval with
+      | Some v ->
+          USet.inplace_union symbols (Value.get_symbols v |> USet.of_list)
+          |> ignore
+      | None -> ()
+      );
+      ( match e.wval with
+      | Some v ->
+          USet.inplace_union symbols (Expr.get_symbols v |> USet.of_list)
+          |> ignore
+      | None -> ()
+      );
+      symbols
+
+  let relabel ~relab e =
+    {
+      e with
+      loc = Option.map (Expr.relabel ~relab) e.loc;
+      rval = Option.map (Value.relabel ~relab) e.rval;
+      wval = Option.map (Expr.relabel ~relab) e.wval;
+    }
 end
 
 (** Events container/manager *)

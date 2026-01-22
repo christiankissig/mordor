@@ -43,7 +43,6 @@ module TestExample9_1 = struct
             wval = Some (EBinOp (ENum Z.one, "/", EUnOp ("!", ESymbol "r1")));
             wmod = Relaxed;
           };
-        op = ("initial_write_y", None, None);
       }
     in
 
@@ -61,7 +60,6 @@ module TestExample9_1 = struct
             wval = Some (ESymbol "r1");
             wmod = Relaxed;
           };
-        op = ("initial_write_z", None, None);
       }
     in
 
@@ -81,7 +79,6 @@ module TestExample9_1 = struct
             wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
-        op = ("optimized_write_y", None, None);
       }
     in
 
@@ -99,7 +96,6 @@ module TestExample9_1 = struct
             wval = Some (ENum Z.zero);
             wmod = Relaxed;
           };
-        op = ("optimized_write_z", None, None);
       }
     in
 
@@ -132,7 +128,6 @@ module TestExample10_1 = struct
             wval = Some (ENum Z.zero);
             wmod = Relaxed;
           };
-        op = ("write_via_pointer", None, None);
       }
     in
 
@@ -150,7 +145,6 @@ module TestExample10_1 = struct
             rval = Some (VSymbol "r2");
             rmod = Relaxed;
           };
-        op = ("read_from_rp", None, None);
       }
     in
 
@@ -174,7 +168,6 @@ module TestExample10_1 = struct
             wval = Some (ENum Z.zero);
             wmod = Relaxed;
           };
-        op = ("write_no_alias", None, None);
       }
     in
 
@@ -206,7 +199,6 @@ module TestExample12_1 = struct
             wval = Some (ESymbol "r2");
             wmod = Relaxed;
           };
-        op = ("initial_cond_write", None, None);
       }
     in
 
@@ -226,7 +218,6 @@ module TestExample12_1 = struct
             wval = Some (ESymbol "r1");
             wmod = Relaxed;
           };
-        op = ("forwarded_cond_write", None, None);
       }
     in
 
@@ -269,7 +260,6 @@ module TestExample13_1 = struct
             wval = Some (ESymbol "rw1");
             wmod = Relaxed;
           };
-        op = ("true_branch_write", None, None);
       }
     in
 
@@ -288,7 +278,6 @@ module TestExample13_1 = struct
             wval = Some (ESymbol "rw2");
             wmod = Relaxed;
           };
-        op = ("false_branch_write", None, None);
       }
     in
 
@@ -309,7 +298,6 @@ module TestExample13_1 = struct
             wval = Some (ESymbol "rw1");
             wmod = Relaxed;
           };
-        op = ("lifted_write", None, None);
       }
     in
 
@@ -355,7 +343,6 @@ module TestStoreStoreForwarding = struct
             wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
-        op = ("true_branch", None, None);
       }
     in
 
@@ -379,7 +366,6 @@ module TestStoreStoreForwarding = struct
             wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
-        op = ("store_forwarded", None, None);
       }
     in
 
@@ -428,7 +414,6 @@ module TestElaborationSequences = struct
             wval = Some (ESymbol "r1");
             wmod = Relaxed;
           };
-        op = ("after_fwd", None, None);
       }
     in
 
@@ -446,7 +431,6 @@ module TestElaborationSequences = struct
             wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
-        op = ("after_fwd_else", None, None);
       }
     in
 
@@ -466,7 +450,6 @@ module TestElaborationSequences = struct
             wval = Some (ENum Z.one);
             wmod = Relaxed;
           };
-        op = ("after_lift", None, None);
       }
     in
 
@@ -552,7 +535,6 @@ module TestDependencyCalculation = struct
         fwd = USet.create ();
         we = USet.create ();
         w = e3;
-        op = ("test", None, None);
       }
     in
 
@@ -576,7 +558,6 @@ module TestDependencyCalculation = struct
         fwd = USet.create ();
         we = USet.create ();
         w = e3;
-        op = ("test_ctrl", None, None);
       }
     in
 

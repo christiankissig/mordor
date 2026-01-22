@@ -170,7 +170,7 @@ type mordor_ctx = {
 }
 
 let make_context options ?(output_mode = Json) ?(output_file = "stdout")
-    ?(step_counter = 5) () =
+    ?(step_counter = 2) () =
   {
     options;
     litmus_name = "";

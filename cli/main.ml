@@ -27,7 +27,7 @@ let example_programs =
 name = SB
 %%
 { x := 1 } ||| { y := 1 }
-%% allow (x = 0 && y = 0) [rc11]
+%% allow (x = 0 && y = 0) []
   |}
     );
     ( "Message Passing",
@@ -35,7 +35,7 @@ name = SB
 name = MP
 %%
 { x := 1; y := 1 } ||| { r1 := y; r2 := x }
-%% forbid (r1 = 1 && r2 = 0) [rc11]
+%% forbid (r1 = 1 && r2 = 0) []
   |}
     );
     ( "Load Buffering",
@@ -43,7 +43,7 @@ name = MP
 name = LB
 %%
 { r1 := x; y := 1 } ||| { r2 := y; x := 1 }
-%% forbid (r1 = 1 && r2 = 1) [rc11]
+%% forbid (r1 = 1 && r2 = 1) []
   |}
     );
   ]
@@ -245,7 +245,7 @@ let specs =
           loop_semantics := FiniteStepCounter;
           step_counter := Some n
         ),
-      " Number of steps for interpretation (default: 5)"
+      " Number of steps for interpretation (default: 2)"
     );
     ( "--step-counter-per-loop",
       Arg.Int
@@ -253,7 +253,7 @@ let specs =
           loop_semantics := StepCounterPerLoop;
           step_counter := Some n
         ),
-      " Number of steps for interpretation (default: 5)"
+      " Number of steps for interpretation (default: 2)"
     );
   ]
 
@@ -333,7 +333,7 @@ let main () =
   | Run -> run_tests tests
   | Parse -> parse_tests tests options
   | Interpret ->
-      interpret_tests tests options (Option.value !step_counter ~default:5)
+      interpret_tests tests options (Option.value !step_counter ~default:2)
   | Futures ->
       assert_single_test;
       futures_single (List.hd tests) options

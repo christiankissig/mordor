@@ -1,7 +1,9 @@
 open Alcotest
 open Elaborations
+open Events
 open Eventstructures
 open Expr
+open Justifications
 open Lwt.Syntax
 open Types
 open Uset
@@ -62,7 +64,7 @@ module TestData = struct
       pwg = [];
       fj = USet.create ();
       p = Hashtbl.create 10;
-      constraint_ = [];
+      constraints = [];
       conflict = USet.create ();
       origin = Hashtbl.create 10;
       loop_indices = Hashtbl.create 10;
@@ -79,40 +81,19 @@ module TestData = struct
 
   (* Mock context builder *)
   let make_context ?(structure = make_structure ()) () =
-    let val_fn i =
-      match Hashtbl.find_opt structure.events i with
-      | Some e -> e.wval
-      | None -> None
-    in
-    let find_distinguishing_predicate _structure _e1 _e2 = None in
-      { structure; fj = USet.create (); val_fn; find_distinguishing_predicate }
+    {
+      structure;
+      fj = USet.create ();
+      lifted_cache = LiftedCache.create ();
+      forwarding_seen = JustificationCache.create 0;
+    }
 
   (* Mock justification builder *)
   let make_justification ?(predicates = []) ?(fwd = USet.create ())
       ?(we = USet.create ()) ?(d = USet.create ())
       ?(wval = Some (ENum (Z.of_int 42))) label =
     let w = make_event label ~wval in
-      { w; p = predicates; fwd; we; d; op = ("init", None, None) }
-
-  (* Test cases for lifted cache operations *)
-  let cache_test_cases =
-    [
-      ( "empty",
-        fun cache ->
-          check int "cache t is empty" 0 (USet.size cache.t);
-          check int "cache to_ is empty" 0 (USet.size cache.to_)
-      );
-      ( "add_and_check",
-        fun cache ->
-          let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
-          let just1 = make_justification 1 ~predicates:[ pred ] in
-          let just2 = make_justification 2 ~predicates:[ pred ] in
-            lifted_add cache (just1, just2);
-            check int "cache t has entry" 1 (USet.size cache.t);
-            check bool "cache contains pair" true
-              (USet.mem cache.t (just1, just2))
-      );
-    ]
+      { w; p = predicates; fwd; we; d }
 
   (* Pre-justification test cases - varying event fields *)
   let pre_just_event_cases =
@@ -179,16 +160,8 @@ end
 
 (** Lifted cache tests *)
 
-let test_lifted_cache_basic () =
-  List.iter
-    (fun (_, test_fn) ->
-      let cache = create_lifted_cache () in
-        test_fn cache
-    )
-    TestData.cache_test_cases
-
 let test_lifted_cache_has_operations () =
-  let cache = create_lifted_cache () in
+  let cache = LiftedCache.create () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
   let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
@@ -197,25 +170,25 @@ let test_lifted_cache_has_operations () =
   check
     (option (list reject))
     "has returns None for missing" None
-    (lifted_has cache (just1, just2));
+    (LiftedCache.has_lifted cache (just1, just2));
 
   (* Empty result after add *)
-  lifted_add cache (just1, just2);
+  LiftedCache.add_lifted cache (just1, just2) [];
   check
     (option (list reject))
     "has returns Some [] after add" (Some [])
-    (lifted_has cache (just1, just2))
+    (LiftedCache.has_lifted cache (just1, just2))
 
 let test_lifted_cache_to_retrieval () =
-  let cache = create_lifted_cache () in
+  let cache = LiftedCache.create () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
   let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
   let result_just = TestData.make_justification 3 ~predicates:[ pred ] in
 
-  lifted_to cache (just1, just2) [ result_just ];
+  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
 
-  match lifted_has cache (just1, just2) with
+  match LiftedCache.has_lifted cache (just1, just2) with
   | Some results ->
       check int "retrieved correct count" 1 (List.length results);
       let r = List.hd results in
@@ -226,7 +199,7 @@ let test_lifted_cache_to_retrieval () =
   | None -> fail "Expected Some results"
 
 let test_lifted_cache_predicate_matching () =
-  let cache = create_lifted_cache () in
+  let cache = LiftedCache.create () in
   let pred1 = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let pred2 = EBinOp (ENum (Z.of_int 2), "=", ENum (Z.of_int 2)) in
   let pred3 = EBinOp (ENum (Z.of_int 3), "=", ENum (Z.of_int 3)) in
@@ -235,22 +208,22 @@ let test_lifted_cache_predicate_matching () =
   let just2 = TestData.make_justification 2 ~predicates:[ pred2 ] in
   let result_just = TestData.make_justification 3 ~predicates:[ pred1 ] in
 
-  lifted_to cache (just1, just2) [ result_just ];
+  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
 
   (* Matching predicates *)
   let just1_match = TestData.make_justification 1 ~predicates:[ pred1 ] in
   let just2_match = TestData.make_justification 2 ~predicates:[ pred2 ] in
     check bool "matches by predicates" true
-      (Option.is_some (lifted_has cache (just1_match, just2_match)));
+      (Option.is_some (LiftedCache.has_lifted cache (just1_match, just2_match)));
 
     (* Different predicates *)
     let just1_diff = TestData.make_justification 1 ~predicates:[ pred3 ] in
     let just2_diff = TestData.make_justification 2 ~predicates:[ pred2 ] in
       check bool "no match with different predicates" true
-        (Option.is_none (lifted_has cache (just1_diff, just2_diff)))
+        (Option.is_none (LiftedCache.has cache (just1_diff, just2_diff)))
 
 let test_lifted_cache_fwd_we_matching () =
-  let cache = create_lifted_cache () in
+  let cache = LiftedCache.create () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let fwd_set = USet.of_list [ (1, 2); (2, 3) ] in
   let we_set = USet.of_list [ (3, 4) ] in
@@ -261,7 +234,7 @@ let test_lifted_cache_fwd_we_matching () =
   let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
   let result_just = TestData.make_justification 3 ~predicates:[ pred ] in
 
-  lifted_to cache (just1, just2) [ result_just ];
+  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
 
   let just1_match =
     TestData.make_justification 1 ~predicates:[ pred ] ~fwd:fwd_set ~we:we_set
@@ -269,32 +242,26 @@ let test_lifted_cache_fwd_we_matching () =
   let just2_match = TestData.make_justification 2 ~predicates:[ pred ] in
 
   check bool "matches by fwd and we" true
-    (Option.is_some (lifted_has cache (just1_match, just2_match)))
+    (Option.is_some (LiftedCache.has_lifted cache (just1_match, just2_match)))
 
 let test_lifted_cache_returns_modified () =
-  let cache = create_lifted_cache () in
+  let cache = LiftedCache.create () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
   let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
   let result_just = TestData.make_justification 3 ~predicates:[ pred ] in
 
-  lifted_to cache (just1, just2) [ result_just ];
+  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
 
   let just1_query = TestData.make_justification 1 ~predicates:[ pred ] in
   let just2_query = TestData.make_justification 2 ~predicates:[ pred ] in
 
-  match lifted_has cache (just1_query, just2_query) with
-  | Some results ->
-      check int "returns results" 1 (List.length results);
-      let r = List.hd results in
-      let op_name, op_just, _ = r.op in
-        check string "operation is lifted" "lifted" op_name;
-        check bool "includes justification" true (Option.is_some op_just);
-        check int "write from result" 3 r.w.label
+  match LiftedCache.has_lifted cache (just1_query, just2_query) with
+  | Some results -> check int "returns results" 1 (List.length results)
   | None -> fail "Expected Some results"
 
 let test_lifted_cache_multiple_and_clear () =
-  let cache = create_lifted_cache () in
+  let cache = LiftedCache.create () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
   let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
@@ -305,33 +272,27 @@ let test_lifted_cache_multiple_and_clear () =
     ]
   in
 
-  lifted_to cache (just1, just2) results;
+  LiftedCache.add_lifted cache (just1, just2) results;
 
   (* Multiple results *)
-  ( match lifted_has cache (just1, just2) with
+  match LiftedCache.has_lifted cache (just1, just2) with
   | Some res -> check int "multiple results" 2 (List.length res)
   | None -> fail "Expected results"
-  );
-
-  (* Clear *)
-  lifted_clear cache;
-  check int "cache t empty after clear" 0 (USet.size cache.t);
-  check int "cache to_ empty after clear" 0 (USet.size cache.to_)
 
 let test_lifted_cache_no_match_different_labels () =
-  let cache = create_lifted_cache () in
+  let cache = LiftedCache.create () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
   let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
   let result_just = TestData.make_justification 3 ~predicates:[ pred ] in
 
-  lifted_to cache (just1, just2) [ result_just ];
+  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
 
   let just1_diff = TestData.make_justification 99 ~predicates:[ pred ] in
   let just2_diff = TestData.make_justification 2 ~predicates:[ pred ] in
 
   check bool "no match with different labels" true
-    (Option.is_none (lifted_has cache (just1_diff, just2_diff)))
+    (Option.is_none (LiftedCache.has cache (just1_diff, just2_diff)))
 
 (** Filter and value_assign tests *)
 
@@ -380,7 +341,6 @@ let test_value_assign_operations () =
              fwd = USet.create ();
              we = USet.create ();
              d = USet.create ();
-             op = ("init", None, None);
            }
          in
            let* result2 = value_assign ctx (USet.singleton just_var) in
@@ -540,30 +500,6 @@ let test_lift_and_weaken () =
                      Lwt.return_unit
     )
 
-let test_strengthen_operations () =
-  let ctx = TestData.make_context () in
-  let pred1 = EBinOp (ENum Z.one, "=", ENum Z.one) in
-  let pred2 = EBinOp (EVar "x", "=", ENum Z.one) in
-  let pred3 = EBinOp (EVar "y", "=", ENum (Z.of_int 2)) in
-  let ppo = USet.create () in
-  let con = Forwardingcontext.create () in
-
-  Lwt_main.run
-    ((* Basic *)
-     let just1 = TestData.make_justification 1 ~predicates:[ pred1 ] in
-     let just2 = TestData.make_justification 2 ~predicates:[ pred1 ] in
-       let* result1 = strengthen ctx just1 just2 ppo con in
-         check bool "strengthen returns results" true (List.length result1 >= 0);
-
-         (* Disjoint predicates *)
-         let just3 = TestData.make_justification 1 ~predicates:[ pred2 ] in
-         let just4 = TestData.make_justification 2 ~predicates:[ pred3 ] in
-           let* result2 = strengthen ctx just3 just4 ppo con in
-             check bool "strengthen disjoint" true (List.length result2 >= 0);
-
-             Lwt.return_unit
-    )
-
 (** Pre-justification tests *)
 
 let test_pre_justifications_basic () =
@@ -606,11 +542,7 @@ let test_pre_justifications_structure_details () =
         check int "p empty" 0 (List.length just.p);
         check int "fwd empty" 0 (USet.size just.fwd);
         check int "we empty" 0 (USet.size just.we);
-        check int "correct label" 1 just.w.label;
-        let op_name, op_e1, op_e2 = just.op in
-          check string "op is init" "init" op_name;
-          check bool "op e1 None" true (op_e1 = None);
-          check bool "op e2 None" true (op_e2 = None)
+        check int "correct label" 1 just.w.label
 
 let test_pre_justifications_symbol_extraction (name, event, validator) () =
   let structure = SymbolicEventStructure.create () in
@@ -667,13 +599,376 @@ let test_pre_justifications_edge_cases () =
         let labels_set = List.sort_uniq compare labels in
           check int "distinct writes" 2 (List.length labels_set)
 
+module LiftingTests = struct
+  (* ============================================================
+     Test Data Providers
+     ============================================================ *)
+
+  module TestData = struct
+    (* Create a basic event structure with common events *)
+    let create_basic_structure () =
+      let events = Hashtbl.create 10 in
+      let read_alpha = Event.create Read 1 ~rval:(VSymbol "α") () in
+        Hashtbl.add events 1 read_alpha;
+        let read_beta = Event.create Read 2 ~rval:(VSymbol "β") () in
+          Hashtbl.add events 2 read_beta;
+          let read_gamma = Event.create Read 3 ~rval:(VSymbol "γ") () in
+            Hashtbl.add events 3 read_gamma;
+            let write_1 = Event.create Write 4 ~wval:(ENum Z.zero) () in
+              Hashtbl.add events 4 write_1;
+              let write_2 = Event.create Write 5 ~wval:(ENum Z.zero) () in
+                Hashtbl.add events 5 write_2;
+
+                let origin = Hashtbl.create 10 in
+                  Hashtbl.add origin "α" read_alpha.label;
+                  Hashtbl.add origin "β" read_beta.label;
+                  Hashtbl.add origin "γ" read_gamma.label;
+
+                  let read_events =
+                    USet.of_list
+                      [ read_alpha.label; read_beta.label; read_gamma.label ]
+                  in
+                  let write_events =
+                    USet.of_list [ write_1.label; write_2.label ]
+                  in
+                  let e = USet.union read_events write_events in
+                  let po =
+                    USet.of_list [ (1, 2); (1, 3); (2, 4); (3, 5) ]
+                    |> URelation.transitive_closure
+                  in
+                  let conflict =
+                    USet.of_list [ (2, 3); (2, 5); (3, 4); (4, 5) ]
+                    |> URelation.symmetric_closure
+                  in
+
+                  let structure =
+                    {
+                      (SymbolicEventStructure.create ()) with
+                      e;
+                      events;
+                      po;
+                      origin;
+                      conflict;
+                      read_events;
+                      write_events;
+                    }
+                  in
+
+                  (structure, events)
+
+    (* Create an elaboration context from a structure *)
+    let create_elab_ctx structure =
+      {
+        structure;
+        fj = USet.create ();
+        lifted_cache = LiftedCache.create ();
+        forwarding_seen = JustificationCache.create 0;
+      }
+
+    (* Predicate test cases *)
+    type predicate_test_case = {
+      name : string;
+      p1 : Expr.t list;
+      p2 : Expr.t list;
+      expected_dist_pred : Expr.t list option;
+      expected_disjunction : Expr.t list option;
+    }
+
+    let predicate_test_cases =
+      [
+        {
+          name = "basic_distinguishing_predicates";
+          p1 =
+            [
+              EBinOp (ESymbol "δ", "=", ENum Z.zero);
+              EBinOp (ESymbol "α", "!=", ENum Z.zero);
+            ];
+          p2 =
+            [
+              EBinOp (ESymbol "δ", "=", ENum Z.zero);
+              EBinOp (ESymbol "α", "=", ENum Z.zero);
+            ];
+          expected_dist_pred =
+            Some
+              ([ EBinOp (ESymbol "α", "!=", ENum Z.zero) ]
+              |> Expr.evaluate_conjunction
+              );
+          expected_disjunction =
+            Some
+              ([ EBinOp (ESymbol "δ", "=", ENum Z.zero) ]
+              |> Expr.evaluate_conjunction
+              );
+        };
+      ]
+
+    (* Justification builder *)
+    type justification_spec = {
+      predicates : Expr.t list;
+      dependencies : string list;
+      write_label : int;
+    }
+
+    let create_justification events spec =
+      let write_event = Hashtbl.find events spec.write_label in
+        {
+          p = spec.predicates;
+          d = USet.of_list spec.dependencies;
+          fwd = USet.create ();
+          we = USet.create ();
+          w = write_event;
+        }
+
+    (* Relabeling test cases *)
+    type relabeling_test_case = {
+      name : string;
+      just_1_spec : justification_spec;
+      just_2_spec : justification_spec;
+      expected_relabeling_count : int;
+      expected_mappings : (string * string) list;
+    }
+
+    let relabeling_test_cases =
+      [
+        {
+          name = "basic_relabeling";
+          just_1_spec =
+            {
+              predicates =
+                [
+                  EBinOp (ESymbol "α", "!=", ENum Z.zero);
+                  EBinOp (ESymbol "β", "!=", ENum Z.zero);
+                ];
+              dependencies = [ "α"; "β" ];
+              write_label = 4;
+            };
+          just_2_spec =
+            {
+              predicates =
+                [
+                  EBinOp (ESymbol "α", "=", ENum Z.zero);
+                  EBinOp (ESymbol "γ", "!=", ENum Z.zero);
+                ];
+              dependencies = [ "α"; "γ" ];
+              write_label = 5;
+            };
+          expected_relabeling_count = 1;
+          expected_mappings = [ ("β", "γ") ];
+        };
+      ]
+
+    (* Elaboration test cases *)
+    type elaboration_test_case = {
+      name : string;
+      just_1_spec : justification_spec;
+      just_2_spec : justification_spec;
+      expected_lifting_count : int;
+      expected_predicates : Expr.t list;
+      expected_dependencies : string list;
+      expected_write_label : int;
+    }
+
+    let elaboration_test_cases =
+      [
+        {
+          name = "basic_elaboration";
+          just_1_spec =
+            {
+              predicates =
+                [
+                  EBinOp (ESymbol "α", "!=", ENum Z.zero);
+                  EBinOp (ESymbol "β", "!=", ENum Z.zero);
+                ];
+              dependencies = [ "α"; "β" ];
+              write_label = 4;
+            };
+          just_2_spec =
+            {
+              predicates =
+                [
+                  EBinOp (ESymbol "α", "=", ENum Z.zero);
+                  EBinOp (ESymbol "γ", "!=", ENum Z.zero);
+                ];
+              dependencies = [ "α"; "γ" ];
+              write_label = 5;
+            };
+          expected_lifting_count = 1;
+          expected_predicates = [ EBinOp (ESymbol "γ", "!=", ENum Z.zero) ];
+          expected_dependencies = [ "α"; "γ" ];
+          expected_write_label = 5;
+        };
+      ]
+  end
+
+  (* ============================================================
+     Test Implementations
+     ============================================================ *)
+
+  let test_find_distinguishing_predicate_with_case test_case =
+   fun () ->
+    let diff =
+      Lifting.find_distinguishing_predicate test_case.TestData.p1 test_case.p2
+    in
+      match
+        (diff, test_case.expected_dist_pred, test_case.expected_disjunction)
+      with
+      | Some (pred, disjunction), Some dist_pred, Some dist_disjunction ->
+          let matched =
+            List.equal Expr.equal pred dist_pred
+            && List.equal Expr.equal disjunction dist_disjunction
+          in
+            check bool
+              (Printf.sprintf "%s: distinguishing predicate matched"
+                 test_case.name
+              )
+              true matched
+      | None, None, None ->
+          check bool
+            (Printf.sprintf "%s: no distinguishing predicate expected"
+               test_case.name
+            )
+            true true
+      | _ ->
+          check bool
+            (Printf.sprintf "%s: unexpected result" test_case.name)
+            false true
+
+  let test_generate_relabelings_with_case
+      (test_case : TestData.relabeling_test_case) =
+   fun () ->
+    let structure, events = TestData.create_basic_structure () in
+    let elab_ctx = TestData.create_elab_ctx structure in
+    let just_1 =
+      TestData.create_justification events test_case.TestData.just_1_spec
+    in
+    let just_2 = TestData.create_justification events test_case.just_2_spec in
+    let ppo_1 = USet.of_list [] in
+    let ppo_2 = USet.of_list [] in
+    let con_1 = Forwardingcontext.create () in
+    let con_2 = Forwardingcontext.create () in
+
+    Lwt_main.run
+      (let* relabelings =
+         Lifting.generate_relabelings elab_ctx just_1 just_2 ppo_1 ppo_2 con_1
+           con_2
+       in
+       let relabeling = USet.values relabelings |> List.hd in
+         check int
+           (Printf.sprintf "%s: relabeling size" test_case.name)
+           (List.length test_case.expected_mappings)
+           (Hashtbl.length relabeling);
+
+         List.iter
+           (fun (from_sym, to_sym) ->
+             let mapped = Hashtbl.find_opt relabeling from_sym in
+             let matched =
+               match mapped with
+               | Some s -> s = to_sym
+               | None -> false
+             in
+               check bool
+                 (Printf.sprintf "%s: %s mapped to %s" test_case.name from_sym
+                    to_sym
+                 )
+                 true matched
+           )
+           test_case.expected_mappings;
+         Lwt.return_unit
+      )
+
+  let test_elab_with_case test_case =
+   fun () ->
+    let structure, events = TestData.create_basic_structure () in
+    let elab_ctx = TestData.create_elab_ctx structure in
+    let just_1 =
+      TestData.create_justification events test_case.TestData.just_1_spec
+    in
+    let just_2 = TestData.create_justification events test_case.just_2_spec in
+
+    Lwt_main.run
+      (let* liftings = Lifting.elab elab_ctx just_1 just_2 in
+         check int
+           (Printf.sprintf "%s: number of liftings" test_case.name)
+           test_case.expected_lifting_count (List.length liftings);
+
+         if test_case.expected_lifting_count > 0 then (
+           let just = List.hd liftings in
+             check bool
+               (Printf.sprintf "%s: lifting has correct predicates"
+                  test_case.name
+               )
+               true
+               (List.equal Expr.equal just.p test_case.expected_predicates);
+             check bool
+               (Printf.sprintf "%s: lifting has correct dependency set"
+                  test_case.name
+               )
+               true
+               (USet.equal just.d (USet.of_list test_case.expected_dependencies));
+             check bool
+               (Printf.sprintf "%s: lifting has correct write event"
+                  test_case.name
+               )
+               true
+               (just.w.label = test_case.expected_write_label);
+             check bool
+               (Printf.sprintf "%s: lifting has empty fwd" test_case.name)
+               true
+               (USet.size just.fwd = 0);
+             check bool
+               (Printf.sprintf "%s: lifting has empty we" test_case.name)
+               true
+               (USet.size just.we = 0)
+         );
+         Lwt.return_unit
+      )
+
+  (* ============================================================
+     Test Suite Generation
+     ============================================================ *)
+
+  let generate_predicate_tests () =
+    List.map
+      (fun (test_case : TestData.predicate_test_case) ->
+        Alcotest.test_case
+          ("find_distinguishing_predicate_" ^ test_case.name)
+          `Quick
+          (test_find_distinguishing_predicate_with_case test_case)
+      )
+      TestData.predicate_test_cases
+
+  let generate_relabeling_tests () =
+    List.map
+      (fun (test_case : TestData.relabeling_test_case) ->
+        Alcotest.test_case
+          ("generate_relabelings_" ^ test_case.name)
+          `Quick
+          (test_generate_relabelings_with_case test_case)
+      )
+      TestData.relabeling_test_cases
+
+  let generate_elaboration_tests () =
+    List.map
+      (fun (test_case : TestData.elaboration_test_case) ->
+        Alcotest.test_case ("elab_" ^ test_case.name) `Quick
+          (test_elab_with_case test_case)
+      )
+      TestData.elaboration_test_cases
+
+  let suite =
+    List.concat
+      [
+        generate_predicate_tests ();
+        generate_relabeling_tests ();
+        generate_elaboration_tests ();
+      ]
+end
+
 (** Test suite *)
 
 let suite =
   ( "Elaborations",
     [
       (* Lifted cache tests *)
-      test_case "lifted_cache basic operations" `Quick test_lifted_cache_basic;
       test_case "lifted_cache has operations" `Quick
         test_lifted_cache_has_operations;
       test_case "lifted_cache to retrieval" `Quick
@@ -698,7 +993,6 @@ let suite =
       test_case "forward operations" `Quick test_forward_operations;
       (* Lift, weaken, strengthen *)
       test_case "lift and weaken" `Quick test_lift_and_weaken;
-      test_case "strengthen operations" `Quick test_strengthen_operations;
       (* Pre-justifications - basic *)
       test_case "pre_justifications basic" `Quick test_pre_justifications_basic;
       test_case "pre_justifications structure" `Quick
@@ -715,14 +1009,14 @@ let suite =
             (test_pre_justifications_parameterized case)
         )
         TestData.pre_just_event_cases
-    @
     (* Parameterized symbol extraction tests *)
-    List.map
-      (fun ((name, _, _) as case) ->
-        test_case
-          ("pre_justifications symbols " ^ name)
-          `Quick
-          (test_pre_justifications_symbol_extraction case)
-      )
-      TestData.symbol_extraction_cases
+    @ List.map
+        (fun ((name, _, _) as case) ->
+          test_case
+            ("pre_justifications symbols " ^ name)
+            `Quick
+            (test_pre_justifications_symbol_extraction case)
+        )
+        TestData.symbol_extraction_cases
+    @ LiftingTests.suite
   )

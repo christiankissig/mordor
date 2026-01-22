@@ -121,16 +121,6 @@ module TestExpressions = struct
         | _ -> false
         )
 
-  let test_disjunction () =
-    let clause1 = [ EBinOp (ESymbol "α", "=", ENum Z.one) ] in
-    let clause2 = [ EBinOp (ESymbol "α", "=", ENum Z.zero) ] in
-    let disj = EOr [ clause1; clause2 ] in
-      check bool "disjunction_created" true
-        ( match disj with
-        | EOr _ -> true
-        | _ -> false
-        )
-
   let suite =
     [
       test_case "TestExpressions.test_value_types" `Quick test_value_types;
@@ -138,7 +128,6 @@ module TestExpressions = struct
         test_binary_expressions;
       test_case "TestExpressions.test_unary_expressions" `Quick
         test_unary_expressions;
-      test_case "TestExpressions.test_disjunction" `Quick test_disjunction;
     ]
 end
 
@@ -247,7 +236,6 @@ module TestExample1_1 = struct
         fwd = USet.create ();
         we = USet.create ();
         w = e2;
-        op = ("initial", None, None);
       }
     in
 
@@ -267,7 +255,6 @@ module TestExample1_1 = struct
         fwd = USet.create ();
         we = USet.create ();
         w = e2;
-        op = ("remove", None, None);
       }
     in
 
@@ -311,7 +298,6 @@ module TestExample3_1 = struct
         fwd = USet.create ();
         we = USet.create ();
         w = e1;
-        op = ("reorder", None, None);
       }
     in
 
@@ -394,7 +380,6 @@ module TestJustifications = struct
         fwd = USet.create ();
         we = USet.create ();
         w = e;
-        op = ("independent", None, None);
       }
     in
 
@@ -412,14 +397,7 @@ module TestJustifications = struct
     let d_set = USet.add d_set "α" in
 
     let just =
-      {
-        p = [];
-        d = d_set;
-        fwd = USet.create ();
-        we = USet.create ();
-        w = e;
-        op = ("dependent", None, None);
-      }
+      { p = []; d = d_set; fwd = USet.create (); we = USet.create (); w = e }
     in
 
     check int "dependent_deps" 1 (USet.size just.d);
@@ -438,14 +416,7 @@ module TestJustifications = struct
     let fwd = USet.add fwd (2, 3) in
 
     let just =
-      {
-        p = [];
-        d = USet.create ();
-        fwd;
-        we = USet.create ();
-        w = e;
-        op = ("with_forwarding", None, None);
-      }
+      { p = []; d = USet.create (); fwd; we = USet.create (); w = e }
     in
 
     check int "forwarding_context_size" 2 (USet.size just.fwd);
@@ -459,14 +430,7 @@ module TestJustifications = struct
     let we = USet.add we (3, 4) in
 
     let just =
-      {
-        p = [];
-        d = USet.create ();
-        fwd = USet.create ();
-        we;
-        w = e;
-        op = ("with_elision", None, None);
-      }
+      { p = []; d = USet.create (); fwd = USet.create (); we; w = e }
     in
 
     check int "write_elision_size" 1 (USet.size just.we);

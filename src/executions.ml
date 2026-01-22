@@ -1,23 +1,59 @@
+(** Execution generation from symbolic event structures.
+
+    This module implements the core algorithm for generating concrete executions
+    from symbolic event structures. It combines justifications for write events,
+    computes read-from relations, validates consistency constraints, and filters
+    executions for coherence. The process involves:
+
+    1. Computing all control-flow paths through the event structure 2. Combining
+    justifications for write events on each path 3. Computing valid read-from
+    relations 4. Instantiating and validating executions 5. Filtering for memory
+    model coherence
+
+    The implementation uses streaming processing to handle large numbers of
+    candidate executions efficiently. *)
+
 open Algorithms
 open Coherence
 open Events
 open Eventstructures
 open Expr
+open Justifications
 open Lwt.Syntax
 open Types
 open Uset
 
 (** {1 Basic Types} *)
 
+(** Operations on symbolic executions.
+
+    Provides comparison, hashing, and subsumption checking for executions.
+    Executions that are subsumed by others can be filtered out to reduce
+    redundancy in the final result set. *)
 module Execution = struct
+  (** The execution type. *)
   type t = symbolic_execution
 
+  (** [equal ex1 ex2] tests execution equality.
+
+      Two executions are equal if they have the same events and relations (event
+      set, dependencies, PPO, and read-from).
+
+      @param ex1 First execution.
+      @param ex2 Second execution.
+      @return [true] if executions are equal. *)
   let equal ex1 ex2 =
     USet.equal ex1.ex_e ex2.ex_e
     && USet.equal ex1.dp ex2.dp
     && USet.equal ex1.ppo ex2.ppo
     && USet.equal ex1.rf ex2.rf
 
+  (** [hash ex] computes hash value for execution.
+
+      Hash is based on the event set and all relations for use in hash tables.
+
+      @param ex The execution to hash.
+      @return Hash value. *)
   let hash ex =
     let hash_list lst =
       List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
@@ -26,11 +62,15 @@ module Execution = struct
       Hashtbl.hash
         (hash_uset ex.ex_e, hash_uset ex.dp, hash_uset ex.ppo, hash_uset ex.rf)
 
-  (** [exec1 exec2] Check whether exec1 subsumes exec2.
+  (** [contains exec1 exec2] checks if [exec1] subsumes [exec2].
 
-      @param exec1 First symbolic execution
-      @param exec2 Second symbolic execution
-      @return true if exec1 contains exec2, false otherwise *)
+      Execution [exec1] contains [exec2] if they have the same events but
+      [exec1] has strictly more edges in its relations. Subsumed executions are
+      redundant and can be filtered out.
+
+      @param exec1 Potentially containing execution.
+      @param exec2 Potentially contained execution.
+      @return [true] if [exec1] contains [exec2]. *)
   let contains exec1 exec2 =
     USet.equal exec2.ex_e exec1.ex_e
     && USet.subset exec2.dp exec1.dp
@@ -42,9 +82,21 @@ module Execution = struct
          && USet.equal exec1.dp exec2.dp
          )
 
+  (** [to_string exec] converts execution to string representation.
+
+      @param exec The execution.
+      @return String representation. *)
   let to_string exec = show_symbolic_execution exec
 
-  (** Get relation by name from structure/execution *)
+  (** [get_relation name structure execution] retrieves a relation by name.
+
+      Looks up relations from either the event structure or execution. Supported
+      names: [".ppo"], [".po"], [".rf"], [".dp"], [".rmw"].
+
+      @param name The relation name (must include leading dot).
+      @param structure The event structure.
+      @param execution The execution.
+      @return The requested relation, or empty set if unknown. *)
   let get_relation name (structure : symbolic_event_structure)
       (execution : symbolic_execution) =
     match name with
@@ -60,6 +112,7 @@ module Execution = struct
         USet.create ()
 end
 
+(** Cache key type for executions. *)
 module ExecutionCacheKey = struct
   type t = symbolic_execution
 
@@ -67,21 +120,31 @@ module ExecutionCacheKey = struct
   let hash = Execution.hash
 end
 
+(** Hash table keyed by executions for deduplication. *)
 module ExecutionCache = Hashtbl.Make (ExecutionCacheKey)
 
+(** Intermediate results from freezing justification combinations.
+
+    A freeze result represents a partially validated execution before final
+    coherence checking. It includes the execution relations and the predicates
+    that must be satisfied. *)
 module FreezeResult = struct
-  (** Type for a freeze function - validates an RF set for a justification
-      combination *)
+  (** Freeze result type containing execution relations and constraints. *)
   type t = {
-    e : int uset;
-    dp : (int * int) uset;
-    ppo : (int * int) uset;
-    rf : (int * int) uset;
-    rmw : (int * int) uset;
-    pp : expr list;
-    conds : expr list;
+    e : int uset;  (** Event set. *)
+    dp : (int * int) uset;  (** Dependency relation. *)
+    ppo : (int * int) uset;  (** Preserved program order. *)
+    rf : (int * int) uset;  (** Read-from relation. *)
+    rmw : (int * int) uset;  (** Read-modify-write pairs. *)
+    pp : expr list;  (** Path predicates that must be satisfied. *)
+    conds : expr list;  (** Additional conditions. *)
   }
 
+  (** [equal fr1 fr2] tests freeze result equality.
+
+      @param fr1 First freeze result.
+      @param fr2 Second freeze result.
+      @return [true] if results are equal. *)
   let equal fr1 fr2 =
     USet.equal fr1.e fr2.e
     && USet.equal fr1.dp fr2.dp
@@ -91,6 +154,10 @@ module FreezeResult = struct
     && List.equal Expr.equal fr1.pp fr2.pp
     && List.equal Expr.equal fr1.conds fr2.conds
 
+  (** [hash fr] computes hash for freeze result.
+
+      @param fr The freeze result.
+      @return Hash value. *)
   let hash fr =
     let hash_list lst =
       List.fold_left (fun acc e -> Hashtbl.hash (acc, e)) 0 lst
@@ -104,7 +171,14 @@ module FreezeResult = struct
           hash_uset fr.rmw
         )
 
-  (** [fr1 fr2] Check whether fr1 subsumes fr2. *)
+  (** [contains fr1 fr2] checks if [fr1] subsumes [fr2].
+
+      Similar to execution containment, checks if [fr1] has strictly more edges
+      than [fr2] for the same event set.
+
+      @param fr1 Potentially containing result.
+      @param fr2 Potentially contained result.
+      @return [true] if [fr1] contains [fr2]. *)
   let contains fr1 fr2 =
     USet.equal fr2.e fr1.e
     && USet.subset fr2.dp fr1.dp
@@ -117,6 +191,7 @@ module FreezeResult = struct
          )
 end
 
+(** Cache key type for freeze results. *)
 module FreezeResultCacheKey = struct
   type t = FreezeResult.t
 
@@ -124,18 +199,40 @@ module FreezeResultCacheKey = struct
   let hash = FreezeResult.hash
 end
 
+(** Hash table keyed by freeze results for deduplication. *)
 module FreezeResultCache = Hashtbl.Make (FreezeResultCacheKey)
 
 (** {1 Utilities} *)
 
-(** Create disjoint predicate for two (location, value) pairs *)
+(** [disjoint (loc1, val1) (loc2, val2)] creates disjointness predicate.
+
+    Two memory accesses are disjoint if their locations differ. This is used to
+    ensure atomicity of allocation operations.
+
+    @param loc1 First location.
+    @param val1 First value (unused, kept for symmetry).
+    @param loc2 Second location.
+    @param val2 Second value (unused, kept for symmetry).
+    @return Expression asserting locations are unequal. *)
 let disjoint (loc1, val1) (loc2, val2) =
   (* Two memory accesses are disjoint if their locations differ *)
   EBinOp (loc1, "!=", loc2)
 
 (** {1 RF Validation} *)
 
+(** Read-from relation validation.
+
+    Validates that read-from relations satisfy various consistency requirements
+    including PPO respect, totality, and semantic correctness. *)
 module ReadFromValidation = struct
+  (** [rf_respects_ppo rf ppo_loc] checks RF respects preserved program order.
+
+      For each RF edge [(w,r)], if [(w,r)] is in [ppo_loc], then [r] must be
+      reachable from [w] in the PPO relation (i.e., the edge must be direct).
+
+      @param rf Read-from relation.
+      @param ppo_loc Location-based PPO.
+      @return [true] if all RF edges respect PPO. *)
   let rf_respects_ppo rf ppo_loc =
     let ppo_loc_tree = URelation.adjacency_map ppo_loc in
       USet.for_all
@@ -150,14 +247,38 @@ module ReadFromValidation = struct
         )
         rf
 
+  (** [check_rf_elided rf delta] checks reads don't observe elided writes.
+
+      Verifies that no read in RF reads from a write that has been elided
+      (overwritten) by write-exclusion edges in delta.
+
+      @param rf Read-from relation.
+      @param delta Combined forwarding and write-exclusion edges.
+      @return [true] if no elided writes are read. *)
   let check_rf_elided rf delta =
     USet.size (USet.intersection (URelation.pi_2 delta) (URelation.pi_1 rf)) = 0
 
+  (** [check_rf_total rf read_events delta] checks RF is total.
+
+      Verifies that every non-elided read has a read-from edge.
+
+      @param rf Read-from relation.
+      @param read_events Set of all read events.
+      @param delta Combined forwarding and write-exclusion edges.
+      @return [true] if RF covers all non-elided reads. *)
   let check_rf_total rf read_events delta =
     USet.subset
       (USet.set_minus read_events (URelation.pi_2 delta))
       (URelation.pi_2 rf)
 
+  (** [env_rf structure rf] computes value equality constraints from RF.
+
+      For each RF edge [(w,r)], creates constraint that the value read equals
+      the value written (after accounting for forwarding).
+
+      @param structure The event structure.
+      @param rf Read-from relation.
+      @return Set of value equality expressions. *)
   let env_rf structure rf =
     USet.map
       (fun (w, r) ->
@@ -169,6 +290,13 @@ module ReadFromValidation = struct
       )
       rf
 
+  (** [check_rf structure rf] computes location equality constraints.
+
+      For each RF edge [(w,r)], creates constraint that locations match.
+
+      @param structure The event structure.
+      @param rf Read-from relation.
+      @return Set of location equality expressions. *)
   let check_rf structure rf =
     USet.map
       (fun (w, r) ->
@@ -181,8 +309,17 @@ module ReadFromValidation = struct
       )
       rf
 
-  (** Compute pairs of allocation events at same location without intermediate
-      free events given read-from environment *)
+  (** [adjacent_same_location_allocation_events structure path rhb p] finds
+      adjacent allocations at same location.
+
+      Computes pairs of allocation events at the same location without
+      intermediate free events. Used to generate atomicity constraints.
+
+      @param structure The event structure.
+      @param path Current path information.
+      @param rhb The "reads-happen-before" relation (dp ∪ ppo ∪ rf).
+      @param p Predicates for semantic equality checking.
+      @return Promise of allocation event pairs requiring disjointness. *)
   let adjacent_same_location_allocation_events structure path rhb p =
     let e_set = path.path in
     let malloc_events = USet.intersection structure.malloc_events e_set in
@@ -217,10 +354,20 @@ end
 
 (** {1 Justification Validation} *)
 
+(** Validation for justification combinations.
+
+    Checks that combinations of justifications are consistent and satisfy
+    necessary constraints for valid executions. *)
 module JustValidation = struct
-  (** Check if any origins of symbols in justification D are elided by fwd
-      edges. Consider fwd edges, and not we edges, as origins are read events.
-  *)
+  (** [check_origins_elided structure just fwd_elided] checks symbol origins.
+
+      Verifies that symbols used in the justification don't originate from reads
+      that have been elided by forwarding.
+
+      @param structure The event structure.
+      @param just The justification to check.
+      @param fwd_elided Set of events elided by forwarding.
+      @return [true] if no symbol origins are elided. *)
   let check_origins_elided structure just fwd_elided =
     let d_origins =
       USet.map (fun symbol -> origin structure symbol |> Option.get) just.d
@@ -235,7 +382,14 @@ module JustValidation = struct
     let origin_elided = USet.intersection origins fwd_elided in
       USet.size origin_elided = 0
 
-  (** Whether if any edges in delta are not on the path *)
+  (** [check_delta_not_on_path just path] verifies delta events are on path.
+
+      Checks that all events in the justification's forwarding and
+      write-exclusion edges are present on the current path.
+
+      @param just The justification.
+      @param path Path information.
+      @return [true] if all delta events are on the path. *)
   let check_delta_not_on_path just path =
     let just_delta = USet.union just.fwd just.we in
     let just_delta_events =
@@ -243,8 +397,19 @@ module JustValidation = struct
     in
       USet.subset just_delta_events path.path
 
-  (** Check partial combination of justifications for early pruning. Used in
-      Algorithms.ListMapCombinationBuilder. *)
+  (** [check_partial structure path combo ?alternatives pair] validates partial
+      combination.
+
+      Called during combination building to prune invalid partial combinations
+      early. Checks symbol origins, delta constraints, and supersession.
+
+      @param structure The event structure.
+      @param path Current path.
+      @param combo Current partial combination.
+      @param alternatives
+        Optional list of alternative justifications for same write.
+      @param pair The [(write, justification)] pair being added.
+      @return Promise of [true] if combination is valid. *)
   let check_partial structure (path : path_info)
       (combo : (int * justification) list) ?(alternatives = [])
       (pair : int * justification) =
@@ -342,8 +507,15 @@ module JustValidation = struct
 
           Lwt.return true
 
-  (** Check final combination of justifications. Used in
-      ListMapCombinationBuilder. *)
+  (** [check_final structure path combo] validates complete combination.
+
+      Called after a combination is complete to verify final constraints:
+      acyclicity, functionality, and satisfiability.
+
+      @param structure The event structure.
+      @param path Current path.
+      @param combo Complete combination of [(write, justification)] pairs.
+      @return Promise of [true] if combination is valid. *)
   let check_final structure (path : path_info)
       (combo : (int * justification) list) =
     (* conduit code between pair-based and tuple output *)
@@ -387,7 +559,7 @@ module JustValidation = struct
                (List.map
                   (fun just ->
                     Printf.sprintf "- Justification for w=%d: %s" just.w.label
-                      (show_justification just)
+                      (Justification.to_string just)
                   )
                   combo
                )
@@ -399,8 +571,26 @@ end
 
 (** {1 Freezing} *)
 
-(** Instantiate execution from justification list and read-from relation. If
-    successful returns optional freeze result. *)
+(** [instantiate_execution structure path dp ppo j_list pp p_combined rf]
+    creates execution from justifications and RF.
+
+    Validates all consistency constraints and creates a freeze result if
+    successful. This is the core validation step that checks:
+    - RF respects PPO
+    - RF is total and doesn't read elided writes
+    - RHB (reads-happen-before) is acyclic
+    - Atomicity of allocations
+    - Satisfiability of all predicates
+
+    @param structure The event structure.
+    @param path Current path.
+    @param dp Dependency relation.
+    @param ppo Preserved program order.
+    @param j_list List of justifications.
+    @param pp Path predicates.
+    @param p_combined All combined predicates.
+    @param rf Read-from relation to validate.
+    @return Promise of [Some freeze_result] if valid, [None] otherwise. *)
 let instantiate_execution (structure : symbolic_event_structure) path dp ppo
     j_list (pp : expr list) p_combined rf =
   let landmark = Landmark.register "instantiate_execution" in
@@ -629,18 +819,24 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
                 Landmark.exit landmark;
                 Lwt.return_some freeze_result
 
-(** [structure path elided constraints statex ppo dp p_combined] Compute
-    candidate read-from relations for given path.
+(** [compute_path_rf structure path ~elided ~constraints statex ppo dp
+     p_combined] computes candidate read-from relations.
 
-    @param structure Symbolic Event Structure
-    @param path Path information
-    @param elided Set of elided events
-    @param constraints Additional constraints
-    @param statex State expressions
-    @param ppo
-      Preserved program order relation implied by justifications on path
-    @param dp Dependency relation implied by justifications on path
-    @param p_combined Combined predicates from justifications on path *)
+    Generates all valid read-from combinations for the given path by: 1.
+    Filtering potential RF edges by location equality 2. Checking edges don't
+    violate program order 3. Verifying writes aren't shadowed 4. Building
+    combinations incrementally with satisfiability checking
+
+    @param structure The event structure.
+    @param path Current path.
+    @param elided Set of elided events.
+    @param constraints Additional constraints.
+    @param statex Static constraints.
+    @param ppo Preserved program order.
+    @param dp Dependency relation.
+    @param p_combined Combined predicates.
+    @return
+      Promise of list of RF combinations (as lists of [(read, write)] pairs). *)
 let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
     =
   let landmark = Landmark.register "compute_path_rf" in
@@ -671,7 +867,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
     let po =
       USet.intersection structure.po (URelation.cross path.path path.path)
     in
-    let po_inv = URelation.inverse_relation po in
+    let po_inv = URelation.inverse po in
     let w_cross_r_minus_po = USet.set_minus w_cross_r po_inv in
       Logs.debug (fun m ->
           m
@@ -737,8 +933,8 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
       let dp_ppo_tc = URelation.transitive_closure dp_ppo in
 
       (* exclude rf edges that form immediate cycles with ppo and dp *)
-      let all_rf_inv = URelation.inverse_relation all_rf in
-      let all_rf_inv_before_cycle = URelation.inverse_relation all_rf in
+      let all_rf_inv = URelation.inverse all_rf in
+      let all_rf_inv_before_cycle = URelation.inverse all_rf in
       let all_rf_inv =
         USet.filter (fun (r, w) -> not (USet.mem dp_ppo_tc (r, w))) all_rf_inv
       in
@@ -777,7 +973,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
                       r w (List.length combo)
                 );
                 let new_combo_inv =
-                  URelation.inverse_relation (USet.of_list (pair :: combo))
+                  URelation.inverse (USet.of_list (pair :: combo))
                 in
                 let env_rf =
                   ReadFromValidation.env_rf structure new_combo_inv
@@ -858,7 +1054,23 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
           Landmark.exit landmark;
           Lwt.return rf_candidates
 
-(** Creates executions from a list of justifications for a given path. *)
+(** [freeze structure path j_list init_ppo statex ~elided ~constraints
+     ~include_rf] creates executions from justifications.
+
+    The "freeze" operation converts a list of justifications for a path into
+    concrete executions by: 1. Computing dependency and PPO relations 2.
+    Generating valid read-from combinations 3. Validating each combination 4.
+    Creating freeze results for valid combinations
+
+    @param structure The event structure.
+    @param path Current path.
+    @param j_list List of justifications for writes on path.
+    @param init_ppo Initial PPO edges.
+    @param statex Static constraints.
+    @param elided Set of elided events.
+    @param constraints Additional constraints.
+    @param include_rf Whether to compute RF relations (false for testing).
+    @return Promise of list of valid freeze results. *)
 let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
     ~elided ~constraints ~include_rf =
   let landmark = Landmark.register "freeze" in
@@ -1070,7 +1282,18 @@ let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
               Landmark.exit landmark;
               Lwt.return filtered_results
 
-(** Compute justification combinations for write events on path. *)
+(** [compute_justification_combinations structure paths init_ppo statex justmap]
+    computes justification combinations for all paths.
+
+    For each path, builds all valid combinations of justifications for the write
+    events on that path. Returns a stream of [(path, justifications)] pairs.
+
+    @param structure The event structure.
+    @param paths List of all paths through the structure.
+    @param init_ppo Initial PPO edges.
+    @param statex Static constraints.
+    @param justmap Hash table mapping write event IDs to justification lists.
+    @return Stream of [(path, justification list)] pairs. *)
 let compute_justification_combinations structure paths init_ppo statex
     (justmap : (int, justification list) Hashtbl.t) =
   (* Given a path, combine justifications for each write on the path. *)
@@ -1124,15 +1347,23 @@ let compute_justification_combinations structure paths init_ppo statex
 
 (** {1 Generate executions} *)
 
-(** Main execution generation - replaces the stub in calculate_dependencies.
+(** [generate_executions ?include_rf structure justs statex init_ppo
+     ~restrictions] generates all valid executions.
 
-    @param structure Symbolic Event Structure
-    @param justs Set of justifications
-    @param statex State expressions
-    @param init_ppo Initial preserved program order relation
-    @param restrictions Restrictions on execution generation
-    @param include_rf Whether to include read-from relations in the executions.
-*)
+    This is the main entry point for execution generation. The algorithm: 1.
+    Generates all maximal conflict-free paths 2. For each path, combines
+    justifications for writes 3. Freezes each combination to create executions
+    4. Deduplicates and minimizes results 5. Filters for memory model coherence
+
+    Uses streaming processing to handle large result sets efficiently.
+
+    @param include_rf Whether to compute read-from relations (default: true).
+    @param structure The symbolic event structure.
+    @param justs Set of justifications from elaboration.
+    @param statex Static constraints.
+    @param init_ppo Initial preserved program order.
+    @param restrictions Coherence restrictions to check.
+    @return Promise of list of valid coherent executions. *)
 let generate_executions ?(include_rf = true)
     (structure : symbolic_event_structure) (justs : justification uset) statex
     init_ppo ~restrictions =

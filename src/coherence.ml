@@ -68,7 +68,7 @@ module ModelUtils = struct
             with Not_found -> ()
           )
           e;
-        let result = URelation.identity_relation result in
+        let result = URelation.identity result in
           Landmark.exit landmark;
           result
 
@@ -265,16 +265,7 @@ module IMM : MEMORY_MODEL = struct
       in
 
       Landmark.exit landmark;
-      {
-        hb;
-        rf;
-        rfi = URelation.inverse_relation rf;
-        ar_;
-        po;
-        psc_a;
-        psc_b;
-        rmw;
-      }
+      { hb; rf; rfi = URelation.inverse rf; ar_; po; psc_a; psc_b; rmw }
 
   (** IMM coherence checker *)
   let check_coherence (co : (int * int) uset) (cache : cache) : bool =
@@ -547,7 +538,7 @@ end) : MEMORY_MODEL = struct
       {
         sb;
         hb;
-        rfi = URelation.inverse_relation rf;
+        rfi = URelation.inverse rf;
         rf;
         ex_e;
         events;
@@ -691,7 +682,7 @@ module Undefined : MEMORY_MODEL = struct
       (loc_restrict : (int * int) uset -> (int * int) uset) : cache =
     if USet.size execution.ex_rmw > 0 then
       {
-        rfi = Some (URelation.inverse_relation execution.rf);
+        rfi = Some (URelation.inverse execution.rf);
         rmw = Some execution.ex_rmw;
       }
     else { rfi = None; rmw = None }
@@ -906,9 +897,7 @@ let check_for_coherence structure execution restrictions =
                   |> USet.filter (fun (a, b) -> a <= b)
                   )
             in
-            let eqlocs =
-              USet.inplace_union eqlocs (URelation.inverse_relation eqlocs)
-            in
+            let eqlocs = USet.inplace_union eqlocs (URelation.inverse eqlocs) in
 
             (* Build location restriction once *)
             let loc_restrict =

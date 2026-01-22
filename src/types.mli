@@ -90,7 +90,7 @@ type value_type =
 type expr =
   | EBinOp of expr * string * expr
   | EUnOp of string * expr
-  | EOr of expr list list
+  | EOr of expr list
   | EVar of string
   | ESymbol of string
   | EBoolean of bool
@@ -131,7 +131,7 @@ type symbolic_event_structure = {
   pwg : expr list;
   fj : (int * int) uset;
   p : (int, (string, expr) Hashtbl.t) Hashtbl.t;
-  constraint_ : expr list;
+  constraints : expr list;
   conflict : (int * int) uset;
   origin : (string, int) Hashtbl.t; (* Origin mapping for symbols *)
   loop_indices : (int, int list) Hashtbl.t; (* Loop indices per event *)
@@ -171,7 +171,6 @@ type justification = {
   fwd : (int * int) uset; (* Forwarding edges (event pairs) *)
   we : (int * int) uset; (* Write-elision edges (event pairs) *)
   w : event; (* The write event being justified *)
-  op : string * justification option * expr option; (* Operation tag *)
 }
 [@@deriving show]
 

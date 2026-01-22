@@ -1,4 +1,10 @@
-(** Forwarding Context for symbolic execution *)
+(** Forwarding context for symbolic execution.
+
+    This module manages forwarding and write-exclusion contexts in symbolic
+    event structures. It tracks how events can be reordered through forwarding
+    (allowing reads to observe writes out of program order) and write-exclusion
+    (ensuring certain writes don't interfere). The module computes preserved
+    program order (PPO) relations under various memory model constraints. *)
 
 open Eventstructures
 open Expr
@@ -6,45 +12,98 @@ open Lwt.Syntax
 open Types
 open Uset
 
-(** Global state - mutable references *)
+(** {1 Global State} *)
+
+(** Global mutable state for forwarding context.
+
+    Stores the current event structure and precomputed relations needed for
+    efficient PPO computation. State is initialized via {!init} and shared
+    across all forwarding contexts. *)
 module State = struct
+  (** Set of all events in the current execution. *)
   let e : int uset ref = ref (USet.create ())
 
+  (** The symbolic event structure being analyzed. *)
   let structure : symbolic_event_structure ref =
     ref (SymbolicEventStructure.create ())
 
+  (** Function mapping event IDs to their values. *)
   let val_fn : (int -> expr option) ref = ref (fun _ -> None)
+
+  (** Base location-based preserved program order. *)
   let ppo_loc_base : (int * int) uset ref = ref (USet.create ())
+
+  (** Base preserved program order. *)
   let ppo_base : (int * int) uset ref = ref (USet.create ())
+
+  (** Synchronization preserved program order. *)
   let ppo_sync : (int * int) uset ref = ref (USet.create ())
+
+  (** Location-based PPO template (before PO intersection). *)
   let ppo_loc_baseA : (int * int) uset ref = ref (USet.create ())
+
+  (** Location equality PPO component. *)
   let ppo_loc_eqA : (int * int) uset ref = ref (USet.create ())
+
+  (** Synchronization PPO template (before PO intersection). *)
   let ppo_syncA : (int * int) uset ref = ref (USet.create ())
+
+  (** Volatile PPO component. *)
   let ppo_volA : (int * int) uset ref = ref (USet.create ())
+
+  (** Read-modify-write PPO component. *)
   let ppo_rmwA : (int * int) uset ref = ref (USet.create ())
 end
 
-(** Good and bad contexts tracking *)
-let goodcon : ((int * int) uset * (int * int) uset) uset = USet.create () (*16*)
+(** {1 Context Classification} *)
 
-let badcon : ((int * int) uset * (int * int) uset) uset = USet.create () (*16*)
+(** Set of known-good forwarding contexts.
 
-(** Cache key type *)
+    Contexts proven to be satisfiable are cached here to avoid redundant solver
+    queries. *)
+let goodcon : ((int * int) uset * (int * int) uset) uset = USet.create ()
+
+(** Set of known-bad forwarding contexts.
+
+    Contexts proven to be unsatisfiable are cached here to quickly reject
+    invalid configurations. *)
+let badcon : ((int * int) uset * (int * int) uset) uset = USet.create ()
+
+(** {1 Caching} *)
+
+(** Cache key combining context and predicates.
+
+    Used to look up previously computed PPO relations for a given forwarding
+    context and predicate set. *)
 type cache_key = {
   con : (int * int) uset * (int * int) uset;
-  predicates : expr list;
+      (** The forwarding context (fwd edges, we edges). *)
+  predicates : expr list;  (** The predicate constraints. *)
 }
 
-(** Cache value type *)
+(** Cache value storing computed PPO relations.
+
+    Stores both standard PPO and location-specific PPO to avoid recomputation.
+*)
 type cache_value = {
-  ppo : (int * int) uset option;
+  ppo : (int * int) uset option;  (** Preserved program order relation. *)
   ppo_loc : (int * int) uset option;
+      (** Location-based preserved program order. *)
 }
 
-(** Forwarding cache *)
+(** Cache for forwarding computations.
+
+    Maintains two caches: an exact-match cache keyed by full context and
+    predicates, and a subset cache that can return partial results when
+    predicates are a superset of cached entries. *)
 module FwdCache = struct
+  (** Exact-match cache mapping keys to computed values. *)
   let cache : (cache_key, cache_value) Hashtbl.t = Hashtbl.create 256
 
+  (** Context-indexed cache for subset lookups.
+
+      Groups cache entries by context, allowing lookup of entries whose
+      predicates are subsets of a query. *)
   let cache_con :
       ( (int * int) uset * (int * int) uset,
         (expr list * cache_value) list
@@ -52,15 +111,31 @@ module FwdCache = struct
       Hashtbl.t =
     Hashtbl.create 256
 
+  (** [clear ()] clears both caches.
+
+      Should be called when the underlying program order changes. *)
   let clear () =
     Hashtbl.clear cache;
     Hashtbl.clear cache_con
 
+  (** [get con predicates] retrieves cached value for exact match.
+
+      @param con The forwarding context (fwd, we).
+      @param predicates The predicate list.
+      @return Cached value or empty value if not found. *)
   let get con predicates =
     let key = { con; predicates } in
       try Hashtbl.find cache key
       with Not_found -> { ppo = None; ppo_loc = None }
 
+  (** [get_subset con predicates] finds cached entry with subset predicates.
+
+      Searches for cached entries where the cached predicates are a subset of
+      the query predicates. Returns the entry with the largest PPO.
+
+      @param con The forwarding context.
+      @param predicates The predicate list.
+      @return [Some value] if matching entry found, [None] otherwise. *)
   let get_subset con predicates =
     try
       let pred_set = USet.of_list predicates in
@@ -94,6 +169,15 @@ module FwdCache = struct
               Some (snd (List.hd sorted))
     with Not_found -> None
 
+  (** [set con key predicates value] stores computed value in cache.
+
+      Updates both the exact-match cache and the context-indexed cache.
+
+      @param con The forwarding context.
+      @param key Either ["ppo"] or ["ppo_loc"] to specify which field to update.
+      @param predicates The predicate list.
+      @param value The computed relation to store.
+      @return The stored value. *)
   let set con key predicates value =
     let cache_key = { con; predicates } in
     let current = get con predicates in
@@ -113,16 +197,35 @@ module FwdCache = struct
 
         value
 
+  (** [size ()] returns the number of entries in the exact-match cache. *)
   let size () = Hashtbl.length cache
 end
 
-(** Check if context is good *)
+(** {1 Context Classification Queries} *)
+
+(** [is_good fwd we] checks if context is known to be satisfiable.
+
+    @param fwd The forwarding edge set.
+    @param we The write-exclusion edge set.
+    @return [true] if context is cached as good. *)
 let is_good fwd we = USet.mem goodcon (fwd, we)
 
-(** Check if context is bad *)
+(** [is_bad fwd we] checks if context is known to be unsatisfiable.
+
+    @param fwd The forwarding edge set.
+    @param we The write-exclusion edge set.
+    @return [true] if context is cached as bad. *)
 let is_bad fwd we = USet.mem badcon (fwd, we)
 
-(** Update with new program order *)
+(** {1 State Management} *)
+
+(** [update_po po] updates PPO relations for new program order.
+
+    Recomputes all PPO relations by intersecting templates with the given
+    program order. Clears the forwarding cache since all cached results are now
+    invalid.
+
+    @param po The new program order relation. *)
 let update_po po =
   State.ppo_loc_base := USet.intersection !State.ppo_loc_baseA po;
   State.ppo_sync := USet.intersection !State.ppo_syncA po;
@@ -132,20 +235,34 @@ let update_po po =
   State.ppo_base := USet.intersection !State.ppo_base po;
   FwdCache.clear ()
 
-(** Initialization parameters type *)
+(** Initialization parameters for forwarding context.
+
+    Contains the event structure and value function needed to initialize the
+    global state. *)
 type init_params = {
   init_structure : symbolic_event_structure;
+      (** The event structure to analyze. *)
   init_val : int -> expr option;
+      (** Function mapping event IDs to their values. *)
 }
 
-(** Initialize forwarding context state Usage:
+(** [init params] initializes the forwarding context global state.
+
+    Sets up all PPO templates according to the C11 memory model, including
+    volatile, synchronization, and RMW orderings. Must be called before creating
+    any forwarding contexts.
+
+    Example usage:
     {[
-      let* () = ForwardingContext.init {
+      let* () = Forwardingcontext.init {
         init_structure = structure;
         init_val = val_function;
       } in
       ...
-    ]} *)
+    ]}
+
+    @param params Initialization parameters.
+    @return Promise that completes when initialization is done. *)
 let init params =
   let* _ = Lwt.return_unit in
 
@@ -274,7 +391,7 @@ let init params =
 
     (* RMW ppo *)
     (* TODO fix RMW *)
-    let rmw_inv = URelation.inverse_relation rmw in
+    let rmw_inv = URelation.inverse rmw in
       State.ppo_rmwA :=
         USet.union
           (semicolon !State.ppo_syncA rmw_inv)
@@ -306,17 +423,37 @@ let init params =
         update_po po;
         Lwt.return_unit
 
-(** Forwarding context type *)
+(** {1 Forwarding Context Type} *)
+
+(** Forwarding context representing event reorderings.
+
+    Encapsulates a set of forwarding edges (reads seeing later writes) and
+    write-exclusion edges (writes being elided by later writes), along with
+    derived information like value equalities and remapping tables. *)
 type t = {
   fwd : (int * int) uset;
+      (** Forwarding edges: [(e1, e2)] means [e2] reads from [e1]. *)
   we : (int * int) uset;
+      (** Write-exclusion edges: [(e1, e2)] means [e1] is overwritten by [e2].
+      *)
   valmap : (expr * expr) list;
+      (** Value equalities implied by forwarding edges. *)
   psi : expr list;
+      (** Constraints from value equalities (tautologies removed). *)
   fwdwe : (int * int) uset;
+      (** Union of forwarding and write-exclusion edges. *)
   remap_map : (int, int) Hashtbl.t;
+      (** Event remapping table after applying context. *)
 }
 
-(** Create forwarding context *)
+(** [create ?fwd ?we ()] creates a new forwarding context.
+
+    Builds derived information including value equalities, constraints, and the
+    event remapping table.
+
+    @param fwd Optional forwarding edge set (default: empty).
+    @param we Optional write-exclusion edge set (default: empty).
+    @return A new forwarding context. *)
 let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
   let fwdwe = USet.union fwd we in
 
@@ -342,20 +479,44 @@ let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
   in
 
   (* Build remap map *)
-  let remap_map = Hashtbl.create 16 in
+  let remap_map = Hashtbl.create (USet.size fwdwe) in
+  (* Contract forwarding *)
   let rec find_root e =
-    match USet.find (fun (e1, e2) -> e2 = e) fwdwe with
+    match USet.find (fun (e1, e2) -> e2 = e) fwd with
     | Some (e1, _) -> find_root e1
     | None -> e
   in
     USet.iter (fun e -> Hashtbl.add remap_map e (find_root e)) !State.e;
+    (* Expand write elisions *)
+    let rec find_root e =
+      match USet.find (fun (e1, e2) -> e1 = e) we with
+      | Some (_, e2) -> find_root e2
+      | None -> e
+    in
+      USet.iter (fun e -> Hashtbl.add remap_map e (find_root e)) !State.e;
 
-    { fwd; we; valmap; psi; fwdwe; remap_map }
+      { fwd; we; valmap; psi; fwdwe; remap_map }
 
-(** Remap single event *)
+(** {1 Remapping Operations} *)
+
+(** [remap ctx e] remaps a single event through the context.
+
+    Follows forwarding chains and write-exclusion to find the canonical event
+    that [e] maps to in this context.
+
+    @param ctx The forwarding context.
+    @param e The event ID to remap.
+    @return The canonical event ID. *)
 let remap ctx e = try Hashtbl.find ctx.remap_map e with Not_found -> e
 
-(** Remap relation *)
+(** [remap_rel ctx rel] remaps a relation through the context.
+
+    Applies event remapping to both components of each pair in the relation,
+    removing self-edges that result from remapping.
+
+    @param ctx The forwarding context.
+    @param rel The relation to remap.
+    @return The remapped relation. *)
 let remap_rel ctx rel =
   USet.map
     (fun (from, to_) ->
@@ -366,54 +527,64 @@ let remap_rel ctx rel =
     rel
   |> USet.filter (fun (from, to_) -> from <> to_)
 
-(** Remap expression - simplified *)
-let remap_expr ctx expr =
-  (* In full implementation, would substitute values using valmap *)
-  expr
+(** [remap_just ctx just op] remaps a justification through the context.
 
-(** Remap justification *)
+    Updates the justification's forwarding and write-exclusion sets by combining
+    them with the context's edges.
+
+    @param ctx The forwarding context.
+    @param just The justification to remap.
+    @param op Optional operation descriptor (currently unused).
+    @return The remapped justification. *)
 let remap_just ctx (just : justification) op =
-  let w =
-    {
-      just.w with
-      wval = remap_expr ctx just.w.wval;
-      id = Option.map (remap_expr ctx) just.w.id;
-    }
-  in
-  let p = List.map (remap_expr ctx) just.p in
   let fwd = USet.union ctx.fwd just.fwd in
   let we = USet.union ctx.we just.we in
-    {
-      just with
-      p;
-      fwd;
-      we;
-      w;
-      op =
-        ( match op with
-        | Some o -> o
-        | None -> just.op
-        );
-    }
+    { just with fwd; we }
 
-(** Get from cache *)
+(** {1 Cache Access} *)
+
+(** [cache_get ctx predicates] retrieves exact cache match.
+
+    @param ctx The forwarding context.
+    @param predicates The predicate list.
+    @return Cached value or empty value if not found. *)
 let cache_get ctx predicates = FwdCache.get (ctx.fwd, ctx.we) predicates
 
-(** Get subset from cache *)
+(** [cache_get_subset ctx predicates] retrieves subset cache match.
+
+    @param ctx The forwarding context.
+    @param predicates The predicate list.
+    @return [Some value] if matching entry found, [None] otherwise. *)
 let cache_get_subset ctx predicates =
   FwdCache.get_subset (ctx.fwd, ctx.we) predicates
 
-(** Set in cache *)
+(** [cache_set ctx key predicates value] stores value in cache.
+
+    @param ctx The forwarding context.
+    @param key Either ["ppo"] or ["ppo_loc"].
+    @param predicates The predicate list.
+    @param value The computed relation.
+    @return The stored value. *)
 let cache_set ctx key predicates value =
   FwdCache.set (ctx.fwd, ctx.we) key predicates value
 
-(** Compute preserved program order *)
-let ppo ctx predicates =
+(** {1 PPO Computation} *)
+
+(** [ppo ?debug ctx predicates] computes preserved program order.
+
+    Computes the PPO relation by filtering base orderings through semantic alias
+    analysis. Uses caching to avoid redundant solver queries.
+
+    @param debug Optional flag to enable debug output (default: false).
+    @param ctx The forwarding context.
+    @param predicates Additional predicate constraints.
+    @return Promise of the PPO relation. *)
+let ppo ?(debug = false) ctx predicates =
   let p = predicates @ ctx.psi in
   let cached = cache_get ctx p in
     match cached.ppo with
-    | Some v -> Lwt.return v
-    | None ->
+    (*| Some v -> Lwt.return v*)
+    | _ ->
         let* result =
           let sub = cache_get_subset ctx p in
           let base =
@@ -437,10 +608,19 @@ let ppo ctx predicates =
               )
               base
         in
-        let remapped = remap_rel ctx (USet.union !State.ppo_base result) in
+        let u = USet.union !State.ppo_base result in
+        let remapped = remap_rel ctx u in
           Lwt.return (cache_set ctx "ppo" p remapped)
 
-(** Compute location-based preserved program order *)
+(** [ppo_loc ctx predicates] computes location-based PPO.
+
+    Computes PPO restricted to events accessing the same concrete location. More
+    precise than standard PPO as it requires exact location equality under the
+    given predicates.
+
+    @param ctx The forwarding context.
+    @param predicates The predicate constraints.
+    @return Promise of the location-based PPO relation. *)
 let ppo_loc ctx predicates =
   let p =
     predicates @ ctx.psi
@@ -479,10 +659,24 @@ let ppo_loc ctx predicates =
           let remapped = remap_rel ctx filtered in
             Lwt.return (cache_set ctx "ppo_loc" p remapped)
 
-(** Compute synchronization preserved program order *)
+(** [ppo_sync ctx] computes synchronization PPO.
+
+    Returns the synchronization-based preserved program order, which includes
+    orderings from acquire-release, SC fences, and volatile accesses.
+
+    @param ctx The forwarding context.
+    @return The synchronization PPO relation. *)
 let ppo_sync ctx = remap_rel ctx !State.ppo_sync
 
-(** Check context satisfiability *)
+(** {1 Context Validation} *)
+
+(** [check ctx] validates context satisfiability.
+
+    Uses an SMT solver to check if the constraints implied by the forwarding
+    context are satisfiable. Caches the result in good/bad context sets.
+
+    @param ctx The forwarding context to validate.
+    @return Promise of [true] if satisfiable, [false] otherwise. *)
 let check ctx =
   let* result = Solver.check (Solver.create ctx.psi) in
     match result with
@@ -493,7 +687,12 @@ let check ctx =
         USet.add badcon (ctx.fwd, ctx.we) |> ignore;
         Lwt.return_false
 
-(** Convert to string *)
+(** {1 Utilities} *)
+
+(** [to_string ctx] converts context to string representation.
+
+    @param ctx The forwarding context.
+    @return String showing forwarding and write-exclusion edges. *)
 let to_string ctx =
   Printf.sprintf "(%s, %s)"
     (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ctx.fwd)

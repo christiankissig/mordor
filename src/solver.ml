@@ -81,15 +81,7 @@ and expr_to_z3 context = function
         Z3.Arithmetic.mk_unary_minus context.ctx r
   | EUnOp (op, _) -> failwith (sprintf "Unsupported unary operator %s" op)
   | EOr clauses ->
-      let clause_exprs =
-        List.map
-          (fun clause ->
-            let exprs = List.map (expr_to_z3 context) clause in
-              Z3.Boolean.mk_and context.ctx exprs
-          )
-          clauses
-      in
-        Z3.Boolean.mk_or context.ctx clause_exprs
+      List.map (expr_to_z3 context) clauses |> Z3.Boolean.mk_or context.ctx
 
 (** Constraint type for range-based solving *)
 type range = Z.t * Z.t (* (min, max) inclusive *)

@@ -56,7 +56,7 @@ module TestData = struct
       pwg = [];
       fj = USet.create ();
       p = Hashtbl.create 4;
-      constraint_ = [];
+      constraints = [];
       conflict = USet.create ();
       origin = Hashtbl.create 4;
       loop_indices = Hashtbl.create 4;
@@ -78,7 +78,6 @@ module TestData = struct
       fwd = Option.value fwd ~default:(USet.create ());
       we = Option.value we ~default:(USet.create ());
       w = w_event;
-      op = ("test", None, None);
     }
 
   (* Test cases for disjoint function *)
