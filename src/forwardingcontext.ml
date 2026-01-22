@@ -6,6 +6,7 @@
     (ensuring certain writes don't interfere). The module computes preserved
     program order (PPO) relations under various memory model constraints. *)
 
+open Algorithms
 open Eventstructures
 open Expr
 open Lwt.Syntax
@@ -455,47 +456,38 @@ type t = {
     @param we Optional write-exclusion edge set (default: empty).
     @return A new forwarding context. *)
 let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
-  let fwdwe = USet.union fwd we in
+  let landmark = Landmark.register "ForwardingContext.create" in
+    Landmark.enter landmark;
+    let fwdwe = USet.union fwd we in
 
-  (* valmap is filtered by non-None values *)
-  let valmap =
-    USet.values fwd
-    |> List.filter_map (fun (e1, e2) ->
-        match (!State.val_fn e1, !State.val_fn e2) with
-        | Some v1, Some v2 -> Some (v1, v2)
-        | _ -> None
-    )
-  in
-
-  let psi =
-    List.filter_map
-      (fun (e1, e2) ->
-        let expr = Expr.evaluate (EBinOp (e1, "=", e2)) in
-          match expr with
-          | EBoolean true -> None
-          | _ -> Some expr
+    (* valmap is filtered by non-None values *)
+    let valmap =
+      USet.values fwd
+      |> List.filter_map (fun (e1, e2) ->
+          match (!State.val_fn e1, !State.val_fn e2) with
+          | Some v1, Some v2 -> Some (v1, v2)
+          | _ -> None
       )
-      valmap
-  in
-
-  (* Build remap map *)
-  let remap_map = Hashtbl.create (USet.size fwdwe) in
-  (* Contract forwarding *)
-  let rec find_root e =
-    match USet.find (fun (e1, e2) -> e2 = e) fwd with
-    | Some (e1, _) -> find_root e1
-    | None -> e
-  in
-    USet.iter (fun e -> Hashtbl.add remap_map e (find_root e)) !State.e;
-    (* Expand write elisions *)
-    let rec find_root e =
-      match USet.find (fun (e1, e2) -> e1 = e) we with
-      | Some (_, e2) -> find_root e2
-      | None -> e
     in
-      USet.iter (fun e -> Hashtbl.add remap_map e (find_root e)) !State.e;
 
-      { fwd; we; valmap; psi; fwdwe; remap_map }
+    let psi =
+      List.filter_map
+        (fun (e1, e2) ->
+          let expr = Expr.evaluate (EBinOp (e1, "=", e2)) in
+            match expr with
+            | EBoolean true -> None
+            | _ -> Some expr
+        )
+        valmap
+    in
+
+    (* Build remap map *)
+    let remap_map =
+      URelation.inverse fwdwe |> URelation.to_map |> map_transitive_closure
+    in
+
+    Landmark.exit landmark;
+    { fwd; we; valmap; psi; fwdwe; remap_map }
 
 (** {1 Remapping Operations} *)
 
@@ -580,37 +572,42 @@ let cache_set ctx key predicates value =
     @param predicates Additional predicate constraints.
     @return Promise of the PPO relation. *)
 let ppo ?(debug = false) ctx predicates =
-  let p = predicates @ ctx.psi in
-  let cached = cache_get ctx p in
-    match cached.ppo with
-    (*| Some v -> Lwt.return v*)
-    | _ ->
-        let* result =
-          let sub = cache_get_subset ctx p in
-          let base =
-            match sub with
-            | Some s -> (
-                match s.ppo with
-                | Some ppo -> ppo
-                | None -> !State.ppo_loc_base
-              )
-            | None -> !State.ppo_loc_base
-          in
-            (* Filter with alias analysis using solver - check if locations are
+  let landmark = Landmark.register "ForwardingContext.ppo" in
+    Landmark.enter landmark;
+    let p = predicates @ ctx.psi in
+    let cached = cache_get ctx p in
+      match cached.ppo with
+      | Some v ->
+          Landmark.exit landmark;
+          Lwt.return v
+      | _ ->
+          let* result =
+            let sub = cache_get_subset ctx p in
+            let base =
+              match sub with
+              | Some s -> (
+                  match s.ppo with
+                  | Some ppo -> ppo
+                  | None -> !State.ppo_loc_base
+                )
+              | None -> !State.ppo_loc_base
+            in
+              (* Filter with alias analysis using solver - check if locations are
                equal given predicates and psi of forwarding context *)
-            USet.async_filter
-              (fun (e1, e2) ->
-                let loc1 = Events.get_loc !State.structure e1 in
-                let loc2 = Events.get_loc !State.structure e2 in
-                  match (loc1, loc2) with
-                  | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
-                  | _ -> Lwt.return false
-              )
-              base
-        in
-        let u = USet.union !State.ppo_base result in
-        let remapped = remap_rel ctx u in
-          Lwt.return (cache_set ctx "ppo" p remapped)
+              USet.async_filter
+                (fun (e1, e2) ->
+                  let loc1 = Events.get_loc !State.structure e1 in
+                  let loc2 = Events.get_loc !State.structure e2 in
+                    match (loc1, loc2) with
+                    | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                    | _ -> Lwt.return false
+                )
+                base
+          in
+          let u = USet.union !State.ppo_base result in
+          let remapped = remap_rel ctx u in
+            Landmark.exit landmark;
+            Lwt.return (cache_set ctx "ppo" p remapped)
 
 (** [ppo_loc ctx predicates] computes location-based PPO.
 
@@ -622,42 +619,47 @@ let ppo ?(debug = false) ctx predicates =
     @param predicates The predicate constraints.
     @return Promise of the location-based PPO relation. *)
 let ppo_loc ctx predicates =
-  let p =
-    predicates @ ctx.psi
-    |> USet.of_list
-    |> USet.values
-    |> List.sort Expr.compare
-  in
-  let cached = cache_get ctx p in
-    match cached.ppo_loc with
-    | Some v -> Lwt.return v
-    | None ->
-        (* Get base ppo_alias from cache or compute it *)
-        let* ppo_alias =
-          let sub = cache_get_subset ctx p in
-            match sub with
-            | Some s -> (
-                match (s.ppo_loc, s.ppo) with
-                | Some ppo_loc, _ -> Lwt.return ppo_loc
-                | None, Some ppo -> Lwt.return ppo
-                | None, None -> ppo ctx predicates
-              )
-            | None -> ppo ctx predicates
-        in
-          (* Filter for exact location equality using the predicates P *)
-          let* filtered =
-            USet.async_filter
-              (fun (e1, e2) ->
-                let loc1 = Events.get_loc !State.structure e1 in
-                let loc2 = Events.get_loc !State.structure e2 in
-                  match (loc1, loc2) with
-                  | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
-                  | _ -> Lwt.return false
-              )
-              ppo_alias
+  let landmark = Landmark.register "ForwardingContext.ppo_loc" in
+    Landmark.enter landmark;
+    let p =
+      predicates @ ctx.psi
+      |> USet.of_list
+      |> USet.values
+      |> List.sort Expr.compare
+    in
+    let cached = cache_get ctx p in
+      match cached.ppo_loc with
+      | Some v ->
+          Landmark.exit landmark;
+          Lwt.return v
+      | None ->
+          (* Get base ppo_alias from cache or compute it *)
+          let* ppo_alias =
+            let sub = cache_get_subset ctx p in
+              match sub with
+              | Some s -> (
+                  match (s.ppo_loc, s.ppo) with
+                  | Some ppo_loc, _ -> Lwt.return ppo_loc
+                  | None, Some ppo -> Lwt.return ppo
+                  | None, None -> ppo ctx predicates
+                )
+              | None -> ppo ctx predicates
           in
-          let remapped = remap_rel ctx filtered in
-            Lwt.return (cache_set ctx "ppo_loc" p remapped)
+            (* Filter for exact location equality using the predicates P *)
+            let* filtered =
+              USet.async_filter
+                (fun (e1, e2) ->
+                  let loc1 = Events.get_loc !State.structure e1 in
+                  let loc2 = Events.get_loc !State.structure e2 in
+                    match (loc1, loc2) with
+                    | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                    | _ -> Lwt.return false
+                )
+                ppo_alias
+            in
+            let remapped = remap_rel ctx filtered in
+              Landmark.exit landmark;
+              Lwt.return (cache_set ctx "ppo_loc" p remapped)
 
 (** [ppo_sync ctx] computes synchronization PPO.
 

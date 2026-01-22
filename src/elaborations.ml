@@ -913,7 +913,9 @@ end = struct
       Landmark.enter landmark;
 
       let remap_symbol ~con ~ppo (w : int) (s : string) =
-        let origin = Hashtbl.find elab_ctx.structure.origin s in
+        let origin =
+          Eventstructures.origin elab_ctx.structure s |> Option.get
+        in
         let remapped = Forwardingcontext.remap con origin in
           (* symbols are not to be mapped over the write event *)
           if USet.mem ppo (w, remapped) then s

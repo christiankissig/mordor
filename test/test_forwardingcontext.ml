@@ -179,7 +179,7 @@ let test_remap_with_forwarding () =
     (let params = TestUtil.make_init_params () in
        let* () = init params in
        let fwd = USet.create () in
-         ignore (USet.add fwd (1, 2));
+         USet.add fwd (1, 2) |> ignore;
          let ctx = create ~fwd () in
            (* Event 2 should remap to 1 *)
            Alcotest.(check int) "Remapped event" 1 (remap ctx 2);
@@ -191,8 +191,8 @@ let test_remap_transitive () =
     (let params = TestUtil.make_init_params () in
        let* () = init params in
        let fwd = USet.create () in
-         ignore (USet.add fwd (1, 2));
-         ignore (USet.add fwd (2, 3));
+         USet.add fwd (1, 2) |> ignore;
+         USet.add fwd (2, 3) |> ignore;
          let ctx = create ~fwd () in
            (* Event 3 should remap transitively to 1 *)
            Alcotest.(check int) "Transitive remap" 1 (remap ctx 3);

@@ -207,3 +207,49 @@ let rec permutations = function
              )
              perms
           )
+
+(** {1 Map Operations} *)
+
+(** [map_transitive_closure map
+    Computes the transitive closure of a mapping represented as a hash table.
+
+    Given a hash table mapping keys to values, computes the transitive closure
+    such that each key maps directly to its final target after following the
+    chain of mappings. Detects cycles and raises an exception if found.
+
+    @param map Hash table representing the initial mapping.
+    @return New hash table representing the transitive closure of the mapping.
+
+    Example:
+    {[
+      let map = Hashtbl.create 3 in
+      Hashtbl.add map "a" "b";
+      Hashtbl.add map "b" "c";
+      Hashtbl.add map "c" "d";
+
+      let closure = map_transitive_closure map;
+      (* closure now maps:
+         "a" -> "d"
+         "b" -> "d"
+         "c" -> "d"
+      *)
+    ]} *)
+let map_transitive_closure (map : ('a, 'a) Hashtbl.t) : ('a, 'a) Hashtbl.t =
+  let result = Hashtbl.create (Hashtbl.length map) in
+  let rec find_root (k : 'a) (visited : 'a USet.t) =
+    if USet.mem visited k then None (* Cycle detected *)
+    else
+      let _ = USet.add visited k in
+        (* Mutate visited in-place *)
+        match Hashtbl.find_opt map k with
+        | None -> Some k (* No further mapping, k is root *)
+        | Some v -> find_root v visited (* Pass same (now modified) visited *)
+  in
+    Hashtbl.iter
+      (fun k _ ->
+        match find_root k (USet.create ()) with
+        | Some root -> Hashtbl.replace result k root
+        | None -> failwith "Cycle detected in mapping"
+      )
+      map;
+    result

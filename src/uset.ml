@@ -1,19 +1,19 @@
 (** Unordered set and relation operations.
 
     This module provides efficient unordered set (hash set) operations and
-    relation operations built on top of sets. Sets are implemented using
-    Core's polymorphic hash sets for good performance. Relations are
-    represented as sets of pairs and support standard relational algebra
-    operations like composition, closure, and acyclicity checking. *)
+    relation operations built on top of sets. Sets are implemented using Core's
+    polymorphic hash sets for good performance. Relations are represented as
+    sets of pairs and support standard relational algebra operations like
+    composition, closure, and acyclicity checking. *)
 
 (** {1 Unordered Set} *)
 
 (** Unordered set using Core's polymorphic hash set.
 
-    Provides a functional-style API over mutable hash sets. Most operations
-    that modify sets return the set for chaining, though the modification
-    happens in-place. Operations prefixed with "i" (inplace) explicitly
-    mutate and return the same set. *)
+    Provides a functional-style API over mutable hash sets. Most operations that
+    modify sets return the set for chaining, though the modification happens
+    in-place. Operations prefixed with "i" (inplace) explicitly mutate and
+    return the same set. *)
 module USet : sig
   (** The set type. Polymorphic hash set supporting any type. *)
   type 'a t
@@ -80,8 +80,8 @@ module USet : sig
 
   (** [add s x] adds element to set.
 
-      Mutates the set and returns it for chaining.
-      If [x] already exists, set is unchanged.
+      Mutates the set and returns it for chaining. If [x] already exists, set is
+      unchanged.
 
       @param s The set to modify.
       @param x Element to add.
@@ -90,8 +90,8 @@ module USet : sig
 
   (** [remove s x] removes element from set.
 
-      Mutates the set and returns it for chaining.
-      If [x] doesn't exist, set is unchanged.
+      Mutates the set and returns it for chaining. If [x] doesn't exist, set is
+      unchanged.
 
       @param s The set to modify.
       @param x Element to remove.
@@ -262,8 +262,7 @@ module USet : sig
 
   (** [iter f s] iterates over elements.
 
-      Applies function to each element for side effects.
-      Order is unspecified.
+      Applies function to each element for side effects. Order is unspecified.
 
       @param f Function to apply.
       @param s The set. *)
@@ -280,8 +279,8 @@ module USet : sig
 
   (** [fold f s init] folds over elements.
 
-      Accumulates a value by applying function to each element.
-      Order is unspecified.
+      Accumulates a value by applying function to each element. Order is
+      unspecified.
 
       @param f Accumulator function.
       @param s The set.
@@ -491,8 +490,8 @@ end
 
     A relation is a set of pairs representing connections between elements.
     Provides standard relational algebra operations including composition,
-    closures, and graph-theoretic properties like acyclicity. Relations
-    are heavily used to represent orderings and dependencies in the symbolic
+    closures, and graph-theoretic properties like acyclicity. Relations are
+    heavily used to represent orderings and dependencies in the symbolic
     execution engine. *)
 module URelation : sig
   (** Binary relation type: set of pairs. *)
@@ -529,10 +528,9 @@ module URelation : sig
 
   (** [compose rels] composes relations sequentially.
 
-      Computes r1 ; r2 ; ... ; rn where [(a,c)] is in result if there
-      exist intermediate elements such that pairs form a chain.
-      Optimized to O(n × k) where n is largest relation size and k is
-      number of relations.
+      Computes r1 ; r2 ; ... ; rn where [(a,c)] is in result if there exist
+      intermediate elements such that pairs form a chain. Optimized to O(n × k)
+      where n is largest relation size and k is number of relations.
 
       @param rels List of relations to compose.
       @return Composed relation. *)
@@ -550,7 +548,8 @@ module URelation : sig
 
   (** [reflexive_closure domain rel] adds reflexive edges.
 
-      Returns relation with all pairs from [rel] plus [(x,x)] for all [x] in domain.
+      Returns relation with all pairs from [rel] plus [(x,x)] for all [x] in
+      domain.
 
       @param domain The domain set.
       @param rel The relation.
@@ -567,8 +566,8 @@ module URelation : sig
 
   (** [transitive_closure rel] computes transitive closure.
 
-      Returns smallest transitive relation containing [rel].
-      If [(a,b)] and [(b,c)] are in result, so is [(a,c)].
+      Returns smallest transitive relation containing [rel]. If [(a,b)] and
+      [(b,c)] are in result, so is [(a,c)].
 
       @param rel The relation.
       @return Transitive closure. *)
@@ -595,8 +594,8 @@ module URelation : sig
 
   (** [acyclic rel] checks if relation is acyclic.
 
-      A relation is acyclic if its transitive closure contains no
-      reflexive edges (no element reaches itself).
+      A relation is acyclic if its transitive closure contains no reflexive
+      edges (no element reaches itself).
 
       @param rel The relation.
       @return [true] if acyclic. *)
@@ -612,8 +611,8 @@ module URelation : sig
 
   (** [is_function rel] checks if relation is a function.
 
-      A relation is a function if each element in the domain maps to
-      at most one element in the codomain.
+      A relation is a function if each element in the domain maps to at most one
+      element in the codomain.
 
       @param rel The relation.
       @return [true] if relation is a function. *)
@@ -641,8 +640,8 @@ module URelation : sig
 
   (** [adjacency_map rel] builds adjacency map with USets.
 
-      Creates hash table mapping each element to the set of elements
-      it relates to. Useful for efficient graph traversal.
+      Creates hash table mapping each element to the set of elements it relates
+      to. Useful for efficient graph traversal.
 
       @param rel The relation.
       @return Hash table from elements to their successors. *)
@@ -655,6 +654,16 @@ module URelation : sig
       @param rel The relation.
       @return Hash table from elements to successor lists. *)
   val adjacency_list_map : 'a t -> ('a, 'a list) Hashtbl.t
+
+  (** [to_map rel] converts relation to map.
+
+      Creates hash table mapping each first element to its corresponding second
+      element. If multiple pairs share the same first element, one is chosen
+      arbitrarily.
+
+      @param rel The relation.
+      @return Hash table from first to second elements. *)
+  val to_map : 'a t -> ('a, 'a) Hashtbl.t
 end = struct
   type 'a t = ('a * 'a) USet.t
 
@@ -689,6 +698,11 @@ end = struct
             Hashtbl.replace map from (to_ :: existing)
         )
         rel;
+      map
+
+  let to_map rel =
+    let map = Hashtbl.create (USet.size rel) in
+      USet.iter (fun (f, t) -> Hashtbl.replace map f t) rel;
       map
 
   let compose (rels : 'a t list) : 'a t =
@@ -754,26 +768,29 @@ end = struct
   let inverse s = USet.map (fun (a, b) -> (b, a)) s
 
   let transitive_closure s =
-    let result = USet.clone s in
-    let changed = ref true in
-      while !changed do
-        changed := false;
-        let vals = USet.to_list result in
-          List.iter
-            (fun (a, b) ->
-              List.iter
-                (fun (c, d) ->
-                  if b = c && not (USet.mem result (a, d)) then (
-                    USet.add result (a, d) |> ignore;
-                    changed := true;
-                    ()
+    let landmark = Landmark.register "URelation.transitive_closure" in
+      Landmark.enter landmark;
+      let result = USet.clone s in
+      let changed = ref true in
+        while !changed do
+          changed := false;
+          let vals = USet.to_list result in
+            List.iter
+              (fun (a, b) ->
+                List.iter
+                  (fun (c, d) ->
+                    if b = c && not (USet.mem result (a, d)) then (
+                      USet.add result (a, d) |> ignore;
+                      changed := true;
+                      ()
+                    )
                   )
-                )
-                vals
-            )
-            vals
-      done;
-      result
+                  vals
+              )
+              vals
+        done;
+        Landmark.exit landmark;
+        result
 
   let transitive_reduction rel =
     USet.filter

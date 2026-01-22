@@ -429,8 +429,10 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
         let* symbolic_structure, symbolic_source_spans =
           SymbolicLoopSemantics.interpret lwt_ctx
         in
-          Logs.debug (fun m -> m "Symbolic event structure with symbolic loop \
-          semantics.\n%s\n\n" (show_symbolic_event_structure symbolic_structure));
+          Logs.debug (fun m ->
+              m "Symbolic event structure with symbolic loop semantics.\n%s\n\n"
+                (show_symbolic_event_structure symbolic_structure)
+          );
           let* three_structure, three_source_spans =
             StepCounterSemantics.interpret ~step_counter:3 lwt_ctx
           in

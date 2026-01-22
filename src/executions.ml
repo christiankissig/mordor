@@ -1054,233 +1054,282 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
           Landmark.exit landmark;
           Lwt.return rf_candidates
 
-(** [freeze structure path j_list init_ppo statex ~elided ~constraints
-     ~include_rf] creates executions from justifications.
+module Freeze : sig
+  val freeze :
+    symbolic_event_structure ->
+    path_info ->
+    justification list ->
+    (int * int) USet.t ->
+    expr list ->
+    elided:int USet.t ->
+    constraints:expr list ->
+    include_rf:bool ->
+    FreezeResult.t list Lwt.t
+end = struct
+  (** [freeze_dp structure just] freezes semantic dependency relations from
+      justification.
 
-    The "freeze" operation converts a list of justifications for a path into
-    concrete executions by: 1. Computing dependency and PPO relations 2.
-    Generating valid read-from combinations 3. Validating each combination 4.
-    Creating freeze results for valid combinations
-
-    @param structure The event structure.
-    @param path Current path.
-    @param j_list List of justifications for writes on path.
-    @param init_ppo Initial PPO edges.
-    @param statex Static constraints.
-    @param elided Set of elided events.
-    @param constraints Additional constraints.
-    @param include_rf Whether to compute RF relations (false for testing).
-    @return Promise of list of valid freeze results. *)
-let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
-    ~elided ~constraints ~include_rf =
-  let landmark = Landmark.register "freeze" in
-    Landmark.enter landmark;
-
-    Logs.debug (fun m ->
-        m
-          "[freeze] Starting freeze for path with %d events, %d \
-           justifications, %d elided events"
-          (USet.size path.path) (List.length j_list) (USet.size elided)
-    );
-
-    (* let* _ = Lwt.return_unit in *)
-    let ( let*? ) (condition, msg) f =
-      if condition then f ()
-      else (
-        Logs.debug (fun m -> m "[freeze] Early exit: %s" msg);
+      @param structure The symbolic event structure.
+      @param just The justification to freeze.
+      @return The semantic dependency relation for symbols in just. *)
+  let freeze_dp structure just =
+    let landmark = Landmark.register "freeze_dp" in
+      Landmark.enter landmark;
+      (* take symbols from the justifications predicate and the d set *)
+      let syms =
+        List.map Expr.get_symbols just.p
+        |> List.flatten
+        |> USet.of_list
+        |> USet.union just.d
+      in
+      let dp =
+        USet.fold
+          (fun (acc : (int * int) USet.t) (s : string) ->
+            match origin structure s with
+            | Some orig -> USet.add acc (orig, just.w.label)
+            | None -> acc
+          )
+          syms (USet.create ())
+      in
         Landmark.exit landmark;
-        Lwt.return []
-      )
-    in
+        dp
 
-    let e = path.path in
-    let e_squared = URelation.cross e e in
+  (** [freeze_ppo structure path j_list con p_combined init_ppo] computes PPO
+      for justification list.
 
-    let read_events = USet.intersection structure.read_events e in
-    let write_events = USet.intersection structure.write_events e in
-    let malloc_events = USet.intersection structure.malloc_events e in
-    let free_events = USet.intersection structure.free_events e in
+      @param structure The event structure.
+      @param path Current path.
+      @param j_list List of justifications.
+      @param con Forwarding context.
+      @param p_combined Combined predicates.
+      @param init_ppo Initial PPO edges.
+      @return Pair (PPO, PPO_loc) of ppo relations. *)
+  let freeze_ppo structure path j_list con p_combined init_ppo =
+    let landmark = Landmark.register "freeze_ppo" in
+      Landmark.enter landmark;
+      let e_squared = URelation.cross path.path path.path in
 
-    (* Compute dependency relation *)
-    let dp =
-      List.concat_map
-        (fun just ->
-          (* take symbols from the justifications predicate and the d set *)
-          let syms =
-            List.map Expr.get_symbols just.p
-            |> List.flatten
-            |> USet.of_list
-            |> USet.union just.d
-            |> USet.values
-          in
-            List.concat_map
-              (fun sym ->
-                match origin structure sym with
-                | Some orig -> [ (orig, just.w.label) ]
-                | None -> []
-              )
-              syms
+      (* Compute PPO for each justification *)
+      let* ppos =
+        Lwt_list.map_s
+          (fun just ->
+            let just_con =
+              Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
+            in
+              let* ppo_j = Forwardingcontext.ppo just_con just.p in
+
+              (* TODO path should be po-downward closed *)
+              (* Intersect with po pairs ending at or before this write *)
+              let po_to_w =
+                USet.filter (fun (_, t) -> t = just.w.label) structure.po
+              in
+              (* Include the write event itself in the cross product
+                 so ppo edges TO the write are preserved *)
+              let po_predecessors_and_w =
+                USet.add (URelation.pi_1 po_to_w) just.w.label
+              in
+              let po_to_w_squared =
+                URelation.cross po_predecessors_and_w po_predecessors_and_w
+              in
+                Lwt.return (USet.intersection ppo_j po_to_w_squared)
+          )
+          j_list
+      in
+
+      (* Compute ppo_loc *)
+      let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
+      let ppo_loc =
+        USet.union ppo_loc_base init_ppo
+        |> USet.intersection e_squared
+        |> (fun rel ->
+        USet.set_minus rel
+          (URelation.cross structure.read_events structure.read_events)
         )
-        j_list
-      |> USet.of_list
-    in
+        |> URelation.transitive_closure
+      in
 
-    Logs.debug (fun m ->
-        m "[freeze] Computed dependency relation dp with %d edges:\n %s"
-          (USet.size dp)
-          (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) dp)
-    );
+      let ppo =
+        List.fold_left USet.inplace_union (USet.create ()) ppos
+        |> USet.inplace_union (Forwardingcontext.ppo_sync con)
+        |> USet.inplace_union init_ppo
+        |> USet.inplace_union ppo_loc
+        |> USet.intersection e_squared
+        |> URelation.transitive_closure
+      in
 
-    (* Compute combined fwd and we *)
-    let f = List.map (fun j -> j.fwd) j_list |> USet.of_list |> USet.flatten in
-    let we = List.map (fun j -> j.we) j_list |> USet.of_list |> USet.flatten in
+      Logs.debug (fun m ->
+          m "[freeze] Computed PPO: %d edges, PPO_loc: %d edges" (USet.size ppo)
+            (USet.size ppo_loc)
+      );
+      Landmark.exit landmark;
+      Lwt.return (ppo, ppo_loc)
 
-    (* Create forwarding context *)
-    let con = Forwardingcontext.create ~fwd:f ~we () in
+  (** [freeze structure path j_list init_ppo statex ~elided ~constraints
+       ~include_rf] creates executions from justifications.
 
-    (* Combine predicates *)
-    let p_combined =
-      List.concat_map (fun (j : justification) -> j.p) j_list
-      @ con.psi
-      @ path.p
-      @ statex
-      |> USet.of_list
-      |> USet.values
-      |> List.sort Expr.compare
-    in
+      The "freeze" operation converts a list of justifications for a path into
+      concrete executions by: 1. Computing dependency and PPO relations 2.
+      Generating valid read-from combinations 3. Validating each combination 4.
+      Creating freeze results for valid combinations
 
-    (* Debug: Show all predicate sources *)
-    Logs.debug (fun m ->
-        m "[freeze] Path predicates (%d): [%s]" (List.length path.p)
-          (String.concat "; " (List.map Expr.to_string path.p))
-    );
-    List.iteri
-      (fun i j ->
-        Logs.debug (fun m ->
-            m "[freeze] Justification %d (event %d) predicates (%d): [%s]" i
-              j.w.label (List.length j.p)
-              (String.concat "; " (List.map Expr.to_string j.p))
-        )
-      )
-      j_list;
-    Logs.debug (fun m ->
-        m "[freeze] Forwarding context predicates (%d): [%s]"
-          (List.length con.psi)
-          (String.concat "; " (List.map Expr.to_string con.psi))
-    );
-    Logs.debug (fun m ->
-        m "[freeze] Statex predicates (%d): [%s]" (List.length statex)
-          (String.concat "; " (List.map Expr.to_string statex))
-    );
-    Logs.debug (fun m ->
-        m "[freeze] Combined p_combined (%d total predicates): [%s]"
-          (List.length p_combined)
-          (String.concat "; " (List.map Expr.to_string p_combined))
-    );
+      @param structure The event structure.
+      @param path Current path.
+      @param j_list List of justifications for writes on path.
+      @param init_ppo Initial PPO edges.
+      @param statex Static constraints.
+      @param elided Set of elided events.
+      @param constraints Additional constraints.
+      @param include_rf Whether to compute RF relations (false for testing).
+      @return Promise of list of valid freeze results. *)
+  let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
+      ~elided ~constraints ~include_rf =
+    let landmark = Landmark.register "Executions.freeze" in
+      Landmark.enter landmark;
 
-    (* Check if predicates are satisfiable *)
-    let* combined_p_sat = Solver.is_sat_cached p_combined in
       Logs.debug (fun m ->
           m
-            "[freeze] Combined predicates satisfiable: %b (checked %d \
-             predicates)"
-            combined_p_sat (List.length p_combined)
+            "[freeze] Starting freeze for path with %d events, %d \
+             justifications, %d elided events"
+            (USet.size path.path) (List.length j_list) (USet.size elided)
       );
-      let*? () = (combined_p_sat, "predicates unsatisfiable") in
-        (* Compute PPO for each justification *)
-        let* ppos =
-          Lwt_list.map_s
-            (fun just ->
-              let just_con =
-                Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
-              in
-                let* ppo_j = Forwardingcontext.ppo just_con just.p in
 
-                (* TODO path should be po-downward closed *)
-                (* Intersect with po pairs ending at or before this write *)
-                let po_to_w =
-                  USet.filter (fun (_, t) -> t = just.w.label) structure.po
-                in
-                (* Include the write event itself in the cross product
-                 so ppo edges TO the write are preserved *)
-                let po_predecessors_and_w =
-                  USet.add (URelation.pi_1 po_to_w) just.w.label
-                in
-                let po_to_w_squared =
-                  URelation.cross po_predecessors_and_w po_predecessors_and_w
-                in
-                  Lwt.return (USet.intersection ppo_j po_to_w_squared)
-            )
-            j_list
-        in
+      (* let* _ = Lwt.return_unit in *)
+      let ( let*? ) (condition, msg) f =
+        if condition then f ()
+        else (
+          Logs.debug (fun m -> m "[freeze] Early exit: %s" msg);
+          Landmark.exit landmark;
+          Lwt.return []
+        )
+      in
 
-        (* Compute ppo_loc *)
-        let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
-        let ppo_loc =
-          USet.union ppo_loc_base init_ppo
-          (* Filter out read-read pairs *)
-          |> USet.filter (fun (a, b) ->
-              not
-                (USet.mem structure.read_events a
-                && USet.mem structure.read_events b
-                )
+      let e = path.path in
+      let e_squared = URelation.cross e e in
+
+      let read_events = USet.intersection structure.read_events e in
+      let write_events = USet.intersection structure.write_events e in
+      let malloc_events = USet.intersection structure.malloc_events e in
+      let free_events = USet.intersection structure.free_events e in
+
+      (* Compute dependency relation *)
+      let justs = USet.of_list j_list in
+      let dp = USet.map (freeze_dp structure) justs |> USet.flatten in
+
+      Logs.debug (fun m ->
+          m "[freeze] Computed dependency relation dp with %d edges:\n %s"
+            (USet.size dp)
+            (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) dp)
+      );
+
+      (* Compute combined fwd and we *)
+      let fwd =
+        USet.fold
+          (fun acc just -> USet.inplace_union acc just.fwd)
+          justs (USet.create ())
+      in
+      let we =
+        USet.fold
+          (fun acc just -> USet.inplace_union acc just.we)
+          justs (USet.create ())
+      in
+
+      (* Create forwarding context *)
+      let con = Forwardingcontext.create ~fwd ~we () in
+
+      (* Combine predicates *)
+      let p_combined =
+        USet.map (fun j -> USet.of_list j.p) justs
+        |> USet.flatten
+        |> USet.inplace_union (USet.of_list con.psi)
+        |> USet.inplace_union (USet.of_list path.p)
+        |> USet.inplace_union (USet.of_list statex)
+        |> USet.values
+        |> List.sort Expr.compare
+      in
+
+      (* Debug: Show all predicate sources *)
+      Logs.debug (fun m ->
+          m "[freeze] Path predicates (%d): [%s]" (List.length path.p)
+            (String.concat "; " (List.map Expr.to_string path.p))
+      );
+      List.iteri
+        (fun i j ->
+          Logs.debug (fun m ->
+              m "[freeze] Justification %d (event %d) predicates (%d): [%s]" i
+                j.w.label (List.length j.p)
+                (String.concat "; " (List.map Expr.to_string j.p))
           )
-          |> USet.intersection e_squared
-          |> URelation.transitive_closure
-        in
+        )
+        j_list;
+      Logs.debug (fun m ->
+          m "[freeze] Forwarding context predicates (%d): [%s]"
+            (List.length con.psi)
+            (String.concat "; " (List.map Expr.to_string con.psi))
+      );
+      Logs.debug (fun m ->
+          m "[freeze] Statex predicates (%d): [%s]" (List.length statex)
+            (String.concat "; " (List.map Expr.to_string statex))
+      );
+      Logs.debug (fun m ->
+          m "[freeze] Combined p_combined (%d total predicates): [%s]"
+            (List.length p_combined)
+            (String.concat "; " (List.map Expr.to_string p_combined))
+      );
 
-        let ppo =
-          List.fold_left USet.inplace_union (USet.create ()) ppos
-          |> USet.inplace_union (Forwardingcontext.ppo_sync con)
-          |> USet.inplace_union init_ppo
-          |> USet.inplace_union ppo_loc
-          |> USet.intersection e_squared
-          |> URelation.transitive_closure
-        in
-
+      (* Check if predicates are satisfiable *)
+      let* combined_p_sat = Solver.is_sat_cached p_combined in
         Logs.debug (fun m ->
-            m "[freeze] Computed PPO: %d edges, PPO_loc: %d edges"
-              (USet.size ppo) (USet.size ppo_loc)
+            m
+              "[freeze] Combined predicates satisfiable: %b (checked %d \
+               predicates)"
+              combined_p_sat (List.length p_combined)
         );
-
-        let* all_fr =
-          if include_rf then
-            compute_path_rf structure path ~elided ~constraints statex ppo dp
-              p_combined
-          else Lwt.return [ [] ]
-        in
-        let all_rf =
-          List.map
-            (fun fr -> List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
-            all_fr
-        in
-          Logs.debug (fun m ->
-              m "[freeze] Computed %d RF combination for path"
-                (List.length all_rf)
-          );
-          Logs.debug (fun m ->
-              m "[freeze] Starting instantiate_execution for %d RF combinations"
-                (List.length all_rf)
-          );
-          let all_validations =
-            List.map
-              (fun rf ->
-                instantiate_execution structure path dp ppo j_list path.p
-                  p_combined rf
-              )
-              all_rf
+        let*? () = (combined_p_sat, "predicates unsatisfiable") in
+          let* ppo, ppo_loc =
+            freeze_ppo structure path j_list con p_combined init_ppo
           in
-            let* results = Lwt.all all_validations in
-            let filtered_results = List.filter_map Fun.id results in
-              Logs.debug (fun m ->
-                  m
-                    "[freeze] instantiate_execution produced %d valid results \
-                     from %d RF combos"
-                    (List.length filtered_results)
-                    (List.length all_rf)
-              );
-              Landmark.exit landmark;
-              Lwt.return filtered_results
+
+          let* all_fr =
+            if include_rf then
+              compute_path_rf structure path ~elided ~constraints statex ppo dp
+                p_combined
+            else Lwt.return [ [] ]
+          in
+          let all_rf =
+            List.map
+              (fun fr -> List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
+              all_fr
+          in
+            Logs.debug (fun m ->
+                m "[freeze] Computed %d RF combination for path"
+                  (List.length all_rf)
+            );
+            Logs.debug (fun m ->
+                m
+                  "[freeze] Starting instantiate_execution for %d RF \
+                   combinations"
+                  (List.length all_rf)
+            );
+            let all_validations =
+              List.map
+                (fun rf ->
+                  instantiate_execution structure path dp ppo j_list path.p
+                    p_combined rf
+                )
+                all_rf
+            in
+              let* results = Lwt.all all_validations in
+              let filtered_results = List.filter_map Fun.id results in
+                Logs.debug (fun m ->
+                    m
+                      "[freeze] instantiate_execution produced %d valid \
+                       results from %d RF combos"
+                      (List.length filtered_results)
+                      (List.length all_rf)
+                );
+                Landmark.exit landmark;
+                Lwt.return filtered_results
+end
 
 (** [compute_justification_combinations structure paths init_ppo statex justmap]
     computes justification combinations for all paths.
@@ -1431,7 +1480,7 @@ let generate_executions ?(include_rf = true)
           in
 
           let* freeze_results =
-            freeze structure path j_remapped init_ppo statex ~elided
+            Freeze.freeze structure path j_remapped init_ppo statex ~elided
               ~constraints ~include_rf
           in
             Logs.info (fun m ->

@@ -290,14 +290,19 @@ let quick_check exprs =
 let quick_check_cache = Hashtbl.create 256
 
 let quick_check_cached exprs =
-  let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
-  let key = String.concat ";" (List.map Expr.to_string exprs) in
-    match Hashtbl.find_opt quick_check_cache key with
-    | Some result -> Lwt.return result
-    | None ->
-        let* result = quick_check exprs in
-          Hashtbl.add quick_check_cache key result;
+  let landmark = Landmark.register "quick_check_cached" in
+    Landmark.enter landmark;
+    let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
+    let key = String.concat ";" (List.map Expr.to_string exprs) in
+      match Hashtbl.find_opt quick_check_cache key with
+      | Some result ->
+          Landmark.exit landmark;
           Lwt.return result
+      | None ->
+          let* result = quick_check exprs in
+            Hashtbl.add quick_check_cache key result;
+            Landmark.exit landmark;
+            Lwt.return result
 
 (** Create a solver and get a model in one go *)
 let quick_solve exprs =
