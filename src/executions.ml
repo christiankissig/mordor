@@ -18,6 +18,7 @@ open Coherence
 open Events
 open Eventstructures
 open Expr
+open Forwardingcontext
 open Justifications
 open Lwt.Syntax
 open Types
@@ -1114,9 +1115,9 @@ end = struct
         Lwt_list.map_s
           (fun just ->
             let just_con =
-              Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
+              ForwardingContext.create ~fwd:just.fwd ~we:just.we ()
             in
-              let* ppo_j = Forwardingcontext.ppo just_con just.p in
+              let* ppo_j = ForwardingContext.ppo just_con just.p in
 
               (* TODO path should be po-downward closed *)
               (* Intersect with po pairs ending at or before this write *)
@@ -1137,7 +1138,7 @@ end = struct
       in
 
       (* Compute ppo_loc *)
-      let* ppo_loc_base = Forwardingcontext.ppo_loc con p_combined in
+      let* ppo_loc_base = ForwardingContext.ppo_loc con p_combined in
       let ppo_loc =
         USet.union ppo_loc_base init_ppo
         |> USet.intersection e_squared
@@ -1150,7 +1151,7 @@ end = struct
 
       let ppo =
         List.fold_left USet.inplace_union (USet.create ()) ppos
-        |> USet.inplace_union (Forwardingcontext.ppo_sync con)
+        |> USet.inplace_union (ForwardingContext.ppo_sync con)
         |> USet.inplace_union init_ppo
         |> USet.inplace_union ppo_loc
         |> USet.intersection e_squared
@@ -1234,7 +1235,7 @@ end = struct
       in
 
       (* Create forwarding context *)
-      let con = Forwardingcontext.create ~fwd ~we () in
+      let con = ForwardingContext.create ~fwd ~we () in
 
       (* Combine predicates *)
       let p_combined =
@@ -1468,11 +1469,9 @@ let generate_executions ?(include_rf = true)
               (fun acc j -> USet.inplace_union acc j.we)
               (USet.create ()) just_combo
           in
-          let con = Forwardingcontext.create ~fwd ~we () in
+          let con = ForwardingContext.create ~fwd ~we () in
           let j_remapped =
-            List.map
-              (fun j -> Forwardingcontext.remap_just con j None)
-              just_combo
+            List.map (fun j -> ForwardingContext.remap_just con j) just_combo
           in
           let elided = URelation.pi_2 (USet.inplace_union fwd we) in
           let constraints =

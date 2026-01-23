@@ -3,6 +3,7 @@ open Elaborations
 open Events
 open Eventstructures
 open Expr
+open Forwardingcontext
 open Justifications
 open Lwt.Syntax
 open Types
@@ -84,8 +85,11 @@ module TestData = struct
     {
       structure;
       fj = USet.create ();
-      lifted_cache = LiftedCache.create ();
+      value_assign_seen = JustificationCache.create 0;
+      lifted_seen = JustificationPairCache.create 0;
       forwarding_seen = JustificationCache.create 0;
+      weaken_seen = JustificationCache.create 0;
+      filter_seen = JustificationPairCache.create 0;
     }
 
   (* Mock justification builder *)
@@ -157,142 +161,6 @@ module TestData = struct
       );
     ]
 end
-
-(** Lifted cache tests *)
-
-let test_lifted_cache_has_operations () =
-  let cache = LiftedCache.create () in
-  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
-  let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
-  let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
-
-  (* Not found *)
-  check
-    (option (list reject))
-    "has returns None for missing" None
-    (LiftedCache.has_lifted cache (just1, just2));
-
-  (* Empty result after add *)
-  LiftedCache.add_lifted cache (just1, just2) [];
-  check
-    (option (list reject))
-    "has returns Some [] after add" (Some [])
-    (LiftedCache.has_lifted cache (just1, just2))
-
-let test_lifted_cache_to_retrieval () =
-  let cache = LiftedCache.create () in
-  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
-  let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
-  let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
-  let result_just = TestData.make_justification 3 ~predicates:[ pred ] in
-
-  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
-
-  match LiftedCache.has_lifted cache (just1, just2) with
-  | Some results ->
-      check int "retrieved correct count" 1 (List.length results);
-      let r = List.hd results in
-        check int "correct write label" 3 r.w.label;
-        check int "predicates preserved"
-          (List.length result_just.p)
-          (List.length r.p)
-  | None -> fail "Expected Some results"
-
-let test_lifted_cache_predicate_matching () =
-  let cache = LiftedCache.create () in
-  let pred1 = EBinOp (ENum Z.one, "=", ENum Z.one) in
-  let pred2 = EBinOp (ENum (Z.of_int 2), "=", ENum (Z.of_int 2)) in
-  let pred3 = EBinOp (ENum (Z.of_int 3), "=", ENum (Z.of_int 3)) in
-
-  let just1 = TestData.make_justification 1 ~predicates:[ pred1 ] in
-  let just2 = TestData.make_justification 2 ~predicates:[ pred2 ] in
-  let result_just = TestData.make_justification 3 ~predicates:[ pred1 ] in
-
-  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
-
-  (* Matching predicates *)
-  let just1_match = TestData.make_justification 1 ~predicates:[ pred1 ] in
-  let just2_match = TestData.make_justification 2 ~predicates:[ pred2 ] in
-    check bool "matches by predicates" true
-      (Option.is_some (LiftedCache.has_lifted cache (just1_match, just2_match)));
-
-    (* Different predicates *)
-    let just1_diff = TestData.make_justification 1 ~predicates:[ pred3 ] in
-    let just2_diff = TestData.make_justification 2 ~predicates:[ pred2 ] in
-      check bool "no match with different predicates" true
-        (Option.is_none (LiftedCache.has cache (just1_diff, just2_diff)))
-
-let test_lifted_cache_fwd_we_matching () =
-  let cache = LiftedCache.create () in
-  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
-  let fwd_set = USet.of_list [ (1, 2); (2, 3) ] in
-  let we_set = USet.of_list [ (3, 4) ] in
-
-  let just1 =
-    TestData.make_justification 1 ~predicates:[ pred ] ~fwd:fwd_set ~we:we_set
-  in
-  let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
-  let result_just = TestData.make_justification 3 ~predicates:[ pred ] in
-
-  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
-
-  let just1_match =
-    TestData.make_justification 1 ~predicates:[ pred ] ~fwd:fwd_set ~we:we_set
-  in
-  let just2_match = TestData.make_justification 2 ~predicates:[ pred ] in
-
-  check bool "matches by fwd and we" true
-    (Option.is_some (LiftedCache.has_lifted cache (just1_match, just2_match)))
-
-let test_lifted_cache_returns_modified () =
-  let cache = LiftedCache.create () in
-  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
-  let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
-  let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
-  let result_just = TestData.make_justification 3 ~predicates:[ pred ] in
-
-  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
-
-  let just1_query = TestData.make_justification 1 ~predicates:[ pred ] in
-  let just2_query = TestData.make_justification 2 ~predicates:[ pred ] in
-
-  match LiftedCache.has_lifted cache (just1_query, just2_query) with
-  | Some results -> check int "returns results" 1 (List.length results)
-  | None -> fail "Expected Some results"
-
-let test_lifted_cache_multiple_and_clear () =
-  let cache = LiftedCache.create () in
-  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
-  let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
-  let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
-  let results =
-    [
-      TestData.make_justification 3 ~predicates:[ pred ];
-      TestData.make_justification 4 ~predicates:[ pred ];
-    ]
-  in
-
-  LiftedCache.add_lifted cache (just1, just2) results;
-
-  (* Multiple results *)
-  match LiftedCache.has_lifted cache (just1, just2) with
-  | Some res -> check int "multiple results" 2 (List.length res)
-  | None -> fail "Expected results"
-
-let test_lifted_cache_no_match_different_labels () =
-  let cache = LiftedCache.create () in
-  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
-  let just1 = TestData.make_justification 1 ~predicates:[ pred ] in
-  let just2 = TestData.make_justification 2 ~predicates:[ pred ] in
-  let result_just = TestData.make_justification 3 ~predicates:[ pred ] in
-
-  LiftedCache.add_lifted cache (just1, just2) [ result_just ];
-
-  let just1_diff = TestData.make_justification 99 ~predicates:[ pred ] in
-  let just2_diff = TestData.make_justification 2 ~predicates:[ pred ] in
-
-  check bool "no match with different labels" true
-    (Option.is_none (LiftedCache.has cache (just1_diff, just2_diff)))
 
 (** Filter and value_assign tests *)
 
@@ -381,7 +249,7 @@ let test_fprime_operations () =
 let test_fwd_operations () =
   let ctx = TestData.make_context () in
   let pred_fn _e = USet.create () in
-  let fwd_ctx = Forwardingcontext.create () in
+  let fwd_ctx = ForwardingContext.create () in
   let just = TestData.make_justification 3 in
   let ppo_loc = USet.of_list [ (1, 2) ] in
 
@@ -412,7 +280,7 @@ let test_fwd_operations () =
 let test_we_operations () =
   let ctx = TestData.make_context () in
   let pred_fn _e = USet.create () in
-  let we_ctx = Forwardingcontext.create () in
+  let we_ctx = ForwardingContext.create () in
   let just = TestData.make_justification 4 in
   let ppo_loc = USet.of_list [ (1, 3) ] in
 
@@ -661,8 +529,11 @@ module LiftingTests = struct
       {
         structure;
         fj = USet.create ();
-        lifted_cache = LiftedCache.create ();
+        value_assign_seen = JustificationCache.create 0;
+        lifted_seen = JustificationPairCache.create 0;
         forwarding_seen = JustificationCache.create 0;
+        weaken_seen = JustificationCache.create 0;
+        filter_seen = JustificationPairCache.create 0;
       }
 
     (* Predicate test cases *)
@@ -843,8 +714,8 @@ module LiftingTests = struct
     let just_2 = TestData.create_justification events test_case.just_2_spec in
     let ppo_1 = USet.of_list [] in
     let ppo_2 = USet.of_list [] in
-    let con_1 = Forwardingcontext.create () in
-    let con_2 = Forwardingcontext.create () in
+    let con_1 = ForwardingContext.create () in
+    let con_2 = ForwardingContext.create () in
 
     Lwt_main.run
       (let* relabelings =
@@ -968,21 +839,6 @@ end
 let suite =
   ( "Elaborations",
     [
-      (* Lifted cache tests *)
-      test_case "lifted_cache has operations" `Quick
-        test_lifted_cache_has_operations;
-      test_case "lifted_cache to retrieval" `Quick
-        test_lifted_cache_to_retrieval;
-      test_case "lifted_cache predicate matching" `Quick
-        test_lifted_cache_predicate_matching;
-      test_case "lifted_cache fwd_we matching" `Quick
-        test_lifted_cache_fwd_we_matching;
-      test_case "lifted_cache returns modified" `Quick
-        test_lifted_cache_returns_modified;
-      test_case "lifted_cache multiple and clear" `Quick
-        test_lifted_cache_multiple_and_clear;
-      test_case "lifted_cache no match different labels" `Quick
-        test_lifted_cache_no_match_different_labels;
       (* Filter and value_assign *)
       test_case "filter operations" `Quick test_filter_operations;
       test_case "value_assign operations" `Quick test_value_assign_operations;

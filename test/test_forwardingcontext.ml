@@ -130,7 +130,7 @@ let test_init_clears_state () =
 
 (** Test context creation *)
 let test_create_empty_context () =
-  let ctx = create () in
+  let ctx = ForwardingContext.create () in
     Alcotest.(check int) "Empty fwd" 0 (USet.size ctx.fwd);
     Alcotest.(check int) "Empty we" 0 (USet.size ctx.we);
     Alcotest.(check int) "Empty valmap" 0 (List.length ctx.valmap);
@@ -139,14 +139,14 @@ let test_create_empty_context () =
 let test_create_with_fwd () =
   let fwd = USet.create () in
     ignore (USet.add fwd (1, 2));
-    let ctx = create ~fwd () in
+    let ctx = ForwardingContext.create ~fwd () in
       Alcotest.(check int) "Fwd size" 1 (USet.size ctx.fwd);
       Alcotest.(check int) "Empty we" 0 (USet.size ctx.we)
 
 let test_create_with_we () =
   let we = USet.create () in
     ignore (USet.add we (2, 3));
-    let ctx = create ~we () in
+    let ctx = ForwardingContext.create ~we () in
       Alcotest.(check int) "Empty fwd" 0 (USet.size ctx.fwd);
       Alcotest.(check int) "WE size" 1 (USet.size ctx.we)
 
@@ -156,7 +156,7 @@ let test_create_generates_psi () =
        let* () = init params in
        let fwd = USet.create () in
          ignore (USet.add fwd (1, 2));
-         let ctx = create ~fwd () in
+         let ctx = ForwardingContext.create ~fwd () in
            (* Should have predicates for value equality *)
            Alcotest.(check bool)
              "Has psi predicates" true
@@ -169,8 +169,8 @@ let test_remap_identity () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let ctx = create () in
-         Alcotest.(check int) "Identity remap" 1 (remap ctx 1);
+       let ctx = ForwardingContext.create () in
+         Alcotest.(check int) "Identity remap" 1 (ForwardingContext.remap ctx 1);
          Lwt.return_unit
     )
 
@@ -180,9 +180,11 @@ let test_remap_with_forwarding () =
        let* () = init params in
        let fwd = USet.create () in
          USet.add fwd (1, 2) |> ignore;
-         let ctx = create ~fwd () in
+         let ctx = ForwardingContext.create ~fwd () in
            (* Event 2 should remap to 1 *)
-           Alcotest.(check int) "Remapped event" 1 (remap ctx 2);
+           Alcotest.(check int)
+             "Remapped event" 1
+             (ForwardingContext.remap ctx 2);
            Lwt.return_unit
     )
 
@@ -193,9 +195,11 @@ let test_remap_transitive () =
        let fwd = USet.create () in
          USet.add fwd (1, 2) |> ignore;
          USet.add fwd (2, 3) |> ignore;
-         let ctx = create ~fwd () in
+         let ctx = ForwardingContext.create ~fwd () in
            (* Event 3 should remap transitively to 1 *)
-           Alcotest.(check int) "Transitive remap" 1 (remap ctx 3);
+           Alcotest.(check int)
+             "Transitive remap" 1
+             (ForwardingContext.remap ctx 3);
            Lwt.return_unit
     )
 
@@ -205,12 +209,12 @@ let test_remap_rel () =
        let* () = init params in
        let fwd = USet.create () in
          ignore (USet.add fwd (1, 2));
-         let ctx = create ~fwd () in
+         let ctx = ForwardingContext.create ~fwd () in
 
          let rel = USet.create () in
            ignore (USet.add rel (2, 3));
 
-           let remapped = remap_rel ctx rel in
+           let remapped = ForwardingContext.remap_rel ctx rel in
              (* (2,3) should become (1,3) *)
              Alcotest.(check bool)
                "Relation remapped" true
@@ -224,13 +228,13 @@ let test_remap_rel_filters_reflexive () =
        let* () = init params in
        let fwd = USet.create () in
          ignore (USet.add fwd (1, 2));
-         let ctx = create ~fwd () in
+         let ctx = ForwardingContext.create ~fwd () in
 
          let rel = USet.create () in
            ignore (USet.add rel (2, 1));
 
            (* Will remap to (1,1) *)
-           let remapped = remap_rel ctx rel in
+           let remapped = ForwardingContext.remap_rel ctx rel in
              (* Should filter out (1,1) *)
              Alcotest.(check int) "Reflexive filtered" 0 (USet.size remapped);
              Lwt.return_unit
@@ -238,25 +242,25 @@ let test_remap_rel_filters_reflexive () =
 
 (** Test cache operations *)
 let test_cache_initially_empty () =
-  let ctx = create () in
-  let cached = cache_get ctx [] in
+  let ctx = ForwardingContext.create () in
+  let cached = ForwardingContext.cache_get ctx [] in
     Alcotest.(check bool) "Cache empty - no ppo" true (cached.ppo = None);
     Alcotest.(check bool) "Cache empty - no ppo_loc" true (cached.ppo_loc = None)
 
 let test_cache_set_and_get () =
-  let ctx = create () in
+  let ctx = ForwardingContext.create () in
   let test_set = USet.create () in
     ignore (USet.add test_set (1, 2));
 
-    let _ = cache_set ctx "ppo" [] test_set in
-    let cached = cache_get ctx [] in
+    let _ = ForwardingContext.cache_set ctx "ppo" [] test_set in
+    let cached = ForwardingContext.cache_get ctx [] in
 
     match cached.ppo with
     | Some s -> Alcotest.(check int) "Cached ppo size" 1 (USet.size s)
     | None -> Alcotest.fail "Expected cached value"
 
 let test_cache_different_predicates () =
-  let ctx = create () in
+  let ctx = ForwardingContext.create () in
   let set1 = USet.create () in
     ignore (USet.add set1 (1, 2));
     let set2 = USet.create () in
@@ -265,11 +269,11 @@ let test_cache_different_predicates () =
       let pred1 = [ ENum Z.one ] in
       let pred2 = [ ENum Z.zero ] in
 
-      let _ = cache_set ctx "ppo" pred1 set1 in
-      let _ = cache_set ctx "ppo" pred2 set2 in
+      let _ = ForwardingContext.cache_set ctx "ppo" pred1 set1 in
+      let _ = ForwardingContext.cache_set ctx "ppo" pred2 set2 in
 
-      let cached1 = cache_get ctx pred1 in
-      let cached2 = cache_get ctx pred2 in
+      let cached1 = ForwardingContext.cache_get ctx pred1 in
+      let cached2 = ForwardingContext.cache_get ctx pred2 in
 
       match (cached1.ppo, cached2.ppo) with
       | Some s1, Some s2 ->
@@ -296,9 +300,12 @@ let test_check_tautology () =
        let* () = init params in
        (* Context with tautological predicates *)
        let ctx =
-         { (create ()) with psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] }
+         {
+           (ForwardingContext.create ()) with
+           psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ];
+         }
        in
-         let* result = check ctx in
+         let* result = ForwardingContext.check ctx in
            Alcotest.(check bool) "Tautology is satisfiable" true result;
            Lwt.return_unit
     )
@@ -309,9 +316,12 @@ let test_check_contradiction () =
        let* () = init params in
        (* Context with contradictory predicates *)
        let ctx =
-         { (create ()) with psi = [ EBinOp (ENum Z.one, "=", ENum Z.zero) ] }
+         {
+           (ForwardingContext.create ()) with
+           psi = [ EBinOp (ENum Z.one, "=", ENum Z.zero) ];
+         }
        in
-         let* result = check ctx in
+         let* result = ForwardingContext.check ctx in
            Alcotest.(check bool) "Contradiction is unsatisfiable" false result;
            Lwt.return_unit
     )
@@ -321,9 +331,12 @@ let test_check_marks_good () =
     (let params = TestUtil.make_init_params () in
        let* () = init params in
        let ctx =
-         { (create ()) with psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] }
+         {
+           (ForwardingContext.create ()) with
+           psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ];
+         }
        in
-         let* _result = check ctx in
+         let* _result = ForwardingContext.check ctx in
            Alcotest.(check bool) "Marked as good" true (is_good ctx.fwd ctx.we);
            Lwt.return_unit
     )
@@ -333,9 +346,12 @@ let test_check_marks_bad () =
     (let params = TestUtil.make_init_params () in
        let* () = init params in
        let ctx =
-         { (create ()) with psi = [ EBinOp (ENum Z.one, "=", ENum Z.zero) ] }
+         {
+           (ForwardingContext.create ()) with
+           psi = [ EBinOp (ENum Z.one, "=", ENum Z.zero) ];
+         }
        in
-         let* _result = check ctx in
+         let* _result = ForwardingContext.check ctx in
            Alcotest.(check bool) "Marked as bad" true (is_bad ctx.fwd ctx.we);
            Lwt.return_unit
     )
@@ -345,8 +361,8 @@ let test_ppo_returns_remapped () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let ctx = create () in
-         let* ppo = ppo ctx [] in
+       let ctx = ForwardingContext.create () in
+         let* ppo = ForwardingContext.ppo ctx [] in
            (* Should return some relation *)
            Alcotest.(check bool) "PPO is a uset" true (USet.size ppo >= 0);
            Lwt.return_unit
@@ -356,13 +372,13 @@ let test_ppo_caches_result () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let ctx = create () in
+       let ctx = ForwardingContext.create () in
        let predicates = [] in
 
        (* First call *)
-       let* ppo1 = ppo ctx predicates in
+       let* ppo1 = ForwardingContext.ppo ctx predicates in
          (* Second call - should hit cache *)
-         let* ppo2 = ppo ctx predicates in
+         let* ppo2 = ForwardingContext.ppo ctx predicates in
 
          Alcotest.(check bool) "PPO cached" true (USet.equal ppo1 ppo2);
          Lwt.return_unit
@@ -372,8 +388,8 @@ let test_ppo_loc_returns_remapped () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let ctx = create () in
-         let* ppo_loc = ppo_loc ctx [] in
+       let ctx = ForwardingContext.create () in
+         let* ppo_loc = ForwardingContext.ppo_loc ctx [] in
            (* Should return some relation *)
            Alcotest.(check bool)
              "PPO_loc is a uset" true
@@ -385,8 +401,8 @@ let test_ppo_sync_returns_remapped () =
   Lwt_main.run
     (let params = TestUtil.make_init_params () in
        let* () = init params in
-       let ctx = create () in
-       let ppo_sync = ppo_sync ctx in
+       let ctx = ForwardingContext.create () in
+       let ppo_sync = ForwardingContext.ppo_sync ctx in
          (* Should return some relation *)
          Alcotest.(check bool)
            "PPO_sync is a uset" true
@@ -396,8 +412,8 @@ let test_ppo_sync_returns_remapped () =
 
 (** Test to_string *)
 let test_to_string_empty () =
-  let ctx = create () in
-  let s = to_string ctx in
+  let ctx = ForwardingContext.create () in
+  let s = ForwardingContext.to_string ctx in
     Alcotest.(check bool)
       "String contains empty markers" true
       (String.length s > 0)
@@ -405,8 +421,8 @@ let test_to_string_empty () =
 let test_to_string_with_edges () =
   let fwd = USet.create () in
     ignore (USet.add fwd (1, 2));
-    let ctx = create ~fwd () in
-    let s = to_string ctx in
+    let ctx = ForwardingContext.create ~fwd () in
+    let s = ForwardingContext.to_string ctx in
       Alcotest.(check bool) "String not empty" true (String.length s > 0)
 
 (** Test update_po *)
@@ -416,10 +432,10 @@ let test_update_po_clears_cache () =
        let* () = init params in
 
        (* Create a context and cache something *)
-       let ctx = create () in
+       let ctx = ForwardingContext.create () in
        let test_set = USet.create () in
          ignore (USet.add test_set (1, 2));
-         let _ = cache_set ctx "ppo" [] test_set in
+         let _ = ForwardingContext.cache_set ctx "ppo" [] test_set in
 
          (* Update PO - should clear cache *)
          let new_po = USet.create () in

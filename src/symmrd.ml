@@ -66,8 +66,11 @@ let calculate_dependencies ?(include_rf = true)
     {
       structure;
       fj;
-      lifted_cache = LiftedCache.create ();
+      value_assign_seen = JustificationCache.create 0;
+      lifted_seen = JustificationPairCache.create 0;
       forwarding_seen = JustificationCache.create 0;
+      weaken_seen = JustificationCache.create 0;
+      filter_seen = JustificationPairCache.create 0;
     }
   in
 

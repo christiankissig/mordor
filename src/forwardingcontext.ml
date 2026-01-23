@@ -426,6 +426,145 @@ let init params =
 
 (** {1 Forwarding Context Type} *)
 
+module ForwardingContext : sig
+
+  (** Forwarding context representing event reorderings.
+
+      Encapsulates a set of forwarding edges (reads seeing later writes) and
+      write-exclusion edges (writes being elided by later writes), along with
+      derived information like value equalities and remapping tables. *)
+  type t = {
+    fwd : (int * int) uset;
+        (** Forwarding edges: [(e1, e2)] means [e2] reads from [e1]. *)
+    we : (int * int) uset;
+        (** Write-exclusion edges: [(e1, e2)] means [e1] is overwritten by [e2].
+        *)
+    valmap : (expr * expr) list;
+        (** Value equalities implied by forwarding edges. *)
+    psi : expr list;
+        (** Constraints from value equalities (tautologies removed). *)
+    fwdwe : (int * int) uset;
+        (** Union of forwarding and write-exclusion edges. *)
+    remap_map : (int, int) Hashtbl.t;
+        (** Event remapping table after applying context. *)
+  }
+
+  (** [create ?fwd ?we ()] creates a new forwarding context.
+
+      Builds derived information including value equalities, constraints, and the
+      event remapping table.
+
+      @param fwd Optional forwarding edge set (default: empty).
+      @param we Optional write-exclusion edge set (default: empty).
+      @return A new forwarding context. *)
+  val create : ?fwd:(int * int) uset -> ?we:(int * int) uset -> unit -> t
+
+  (** [remap ctx e] remaps a single event through the context.
+
+      Follows forwarding chains and write-exclusion to find the canonical event
+      that [e] maps to in this context.
+
+      @param ctx The forwarding context.
+      @param e The event ID to remap.
+      @return The canonical event ID. *)
+  val remap : t -> int -> int
+
+  (** [remap_rel ctx rel] remaps a relation through the context.
+
+      Applies event remapping to both components of each pair in the relation,
+      removing self-edges that result from remapping.
+
+      @param ctx The forwarding context.
+      @param rel The relation to remap.
+      @return The remapped relation. *)
+  val remap_rel : t -> (int * int) uset -> (int * int) uset
+
+  (** [remap_just ctx just op] remaps a justification through the context.
+
+      Updates the justification's forwarding and write-exclusion sets by combining
+      them with the context's edges.
+
+      @param ctx The forwarding context.
+      @param just The justification to remap.
+      @param op Optional operation descriptor (currently unused).
+      @return The remapped justification. *)
+  val remap_just : t -> justification -> justification
+
+  (** [ppo ?debug ctx predicates] computes preserved program order.
+
+      Computes the PPO relation by filtering base orderings through semantic alias
+      analysis. Uses caching to avoid redundant solver queries.
+
+      @param debug Optional flag to enable debug output (default: false).
+      @param ctx The forwarding context.
+      @param predicates Additional predicate constraints.
+      @return Promise of the PPO relation. *)
+  val ppo : ?debug:bool -> t -> expr list -> (int * int) uset Lwt.t
+  (** [ppo_loc ctx predicates] computes location-based PPO.
+
+      Computes PPO restricted to events accessing the same concrete location. More
+      precise than standard PPO as it requires exact location equality under the
+      given predicates.
+
+      @param ctx The forwarding context.
+      @param predicates The predicate constraints.
+      @return Promise of the location-based PPO relation. *)
+  val ppo_loc : t -> expr list -> (int * int) uset Lwt.t
+
+  (** [ppo_sync ctx] computes synchronization PPO.
+
+      Returns the synchronization-based preserved program order, which includes
+      orderings from acquire-release, SC fences, and volatile accesses.
+
+      @param ctx The forwarding context.
+      @return The synchronization PPO relation. *)
+  val ppo_sync : t -> (int * int) uset
+
+  (** [check ctx] validates context satisfiability.
+
+      Uses an SMT solver to check if the constraints implied by the forwarding
+      context are satisfiable. Caches the result in good/bad context sets.
+
+      @param ctx The forwarding context to validate.
+      @return Promise of [true] if satisfiable *)
+  val check : t -> bool Lwt.t
+
+  (** [cache_set ctx key predicates value] stores value in cache.
+
+      @param ctx The forwarding context.
+      @param key Either ["ppo"] or ["ppo_loc"].
+      @param predicates The predicate list.
+      @param value The computed relation.
+      @return The stored value. *)
+  val cache_set :
+    t -> string -> expr list -> (int * int) uset -> (int * int) uset
+
+  (** [cache_get ctx predicates] retrieves exact cache match.
+
+      @param ctx The forwarding context.
+      @param predicates The predicate list.
+      @return Cached value or empty value if not found. *)
+  val cache_get :
+    t -> expr list -> cache_value
+
+  (** [cache_get_subset ctx predicates] retrieves subset cache match.
+
+      @param ctx The forwarding context.
+      @param predicates The predicate list.
+      @return [Some value] if matching entry found, [None] otherwise. *)
+  val cache_get_subset :
+    t -> expr list -> cache_value option
+
+  (** [to_string ctx] converts context to human-readable string.
+
+      Format: [{valmap} | {fwd} | {we}]
+
+      @param ctx The forwarding context.
+      @return String representation showing all components. *)
+  val to_string : t -> string
+
+end = struct
+
 (** Forwarding context representing event reorderings.
 
     Encapsulates a set of forwarding edges (reads seeing later writes) and
@@ -526,9 +665,8 @@ let remap_rel ctx rel =
 
     @param ctx The forwarding context.
     @param just The justification to remap.
-    @param op Optional operation descriptor (currently unused).
     @return The remapped justification. *)
-let remap_just ctx (just : justification) op =
+let remap_just ctx (just : justification) =
   let fwd = USet.union ctx.fwd just.fwd in
   let we = USet.union ctx.we just.we in
     { just with fwd; we }
@@ -691,11 +829,13 @@ let check ctx =
 
 (** {1 Utilities} *)
 
-(** [to_string ctx] converts context to string representation.
+(** [to_string fwd_ctx] converts context to string representation.
 
-    @param ctx The forwarding context.
+    @param fwd_ctx The forwarding context.
     @return String showing forwarding and write-exclusion edges. *)
-let to_string ctx =
+let to_string fwd_ctx =
   Printf.sprintf "(%s, %s)"
-    (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ctx.fwd)
-    (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ctx.we)
+    (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) fwd_ctx.fwd)
+    (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) fwd_ctx.we)
+
+end

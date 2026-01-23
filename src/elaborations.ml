@@ -7,69 +7,11 @@
 
 open Algorithms
 open Expr
+open Forwardingcontext
 open Lwt.Syntax
 open Types
 open Uset
 open Justifications
-
-(** {1 Lifted Cache} *)
-
-(** Cache for lifted relation computations with forwarding context.
-
-    Stores both simple membership checks and computed results from lifting
-    operations to avoid redundant expensive computations. *)
-module LiftedCache : sig
-  (** The cache type. *)
-  type t
-
-  (** [create ()] creates a new empty lifted cache. *)
-  val create : unit -> t
-
-  (** [has cache (j1, j2)] checks if the justification pair has been seen.
-
-      @return [Some ()] if the pair exists in cache, [None] otherwise. *)
-  val has : t -> justification * justification -> unit option
-
-  (** [has_lifted cache (j1, j2)] checks if pair has computed results.
-
-      @return [Some results] if mapping exists, [None] otherwise. *)
-  val has_lifted :
-    t -> justification * justification -> justification list option
-
-  (** [add cache (j1, j2)] marks a justification pair as seen.
-
-      Records that this pair has been processed to prevent redundant work. *)
-  val add : t -> justification * justification -> unit
-
-  (** [add_lifted cache (j1, j2) results] stores computed lifting results.
-
-      @param results The list of justifications produced by lifting [(j1, j2)].
-  *)
-  val add_lifted :
-    t -> justification * justification -> justification list -> unit
-end = struct
-  type t = {
-    seen : unit JustificationPairCache.t;
-    lifted : justification list JustificationPairCache.t;
-  }
-
-  let create () =
-    {
-      seen = JustificationPairCache.create 0;
-      lifted = JustificationPairCache.create 0;
-    }
-
-  let has cache (a, b) = JustificationPairCache.find_opt cache.seen (a, b)
-
-  let has_lifted cache (a, b) =
-    JustificationPairCache.find_opt cache.lifted (a, b)
-
-  let add cache (a, b) =
-    JustificationPairCache.add cache.seen (a, b) () |> ignore
-
-  let add_lifted cache x r =
-    JustificationPairCache.add cache.lifted x r |> ignore
-end
 
 (** {1 Foundational Types} *)
 
@@ -81,9 +23,12 @@ type context = {
   structure : symbolic_event_structure;
       (** The symbolic event structure being elaborated. *)
   fj : (int * int) USet.t;  (** Fork-join edges that constrain forwarding. *)
-  lifted_cache : LiftedCache.t;  (** Cache for lifted relation results. *)
+  (* Caches to track seen justifications for elaborations *)
+  value_assign_seen : unit JustificationCache.t;
+  lifted_seen : unit JustificationPairCache.t;
   forwarding_seen : unit JustificationCache.t;
-      (** Cache tracking which justifications have been forwarded. *)
+  weaken_seen : unit JustificationCache.t;
+  filter_seen : unit JustificationPairCache.t;
 }
 
 (** [pred elab_ctx ctx p ?ppo ()] computes the predecessor function.
@@ -96,14 +41,14 @@ type context = {
     @param p Optional predicate list for computing PPO.
     @param ppo Optional pre-computed PPO relation to avoid recomputation.
     @return Promise of a function from events to their predecessor sets. *)
-let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
+let pred (elab_ctx : context) (ctx : ForwardingContext.t option)
     (p : expr list option) ?ppo () =
   let* ppo_result =
     match ppo with
     | Some ppo_val -> ppo_val
     | None -> (
         match (ctx, p) with
-        | Some ctx_val, Some p_val -> Forwardingcontext.ppo ctx_val p_val
+        | Some ctx_val, Some p_val -> ForwardingContext.ppo ctx_val p_val
         | _ -> failwith "ctx and p must be provided when ppo is not given"
       )
   in
@@ -123,8 +68,20 @@ let pred (elab_ctx : context) (ctx : Forwardingcontext.t option)
     @param elab
       Function mapping a justification to a list of elaborated justifications.
     @return Promise of the union of original and new justifications. *)
-let close_under_elab justs elab =
-  let* elaborated = USet.async_map elab justs in
+let close_under_elab ?cache justs elab =
+  let* elaborated =
+    USet.async_map
+      (fun just ->
+        if
+          Option.is_some cache && JustificationCache.mem (Option.get cache) just
+        then Lwt.return []
+        else (
+          Option.iter (fun cache -> JustificationCache.add cache just ()) cache;
+          elab just
+        )
+      )
+      justs
+  in
   let new_justs = USet.values elaborated |> List.flatten in
     Logs.debug (fun m ->
         m "Elaboration produced %d justifications before filtering.\n%s\n"
@@ -156,9 +113,22 @@ let close_under_elab justs elab =
     @param justs The set of justifications to elaborate.
     @param elab Function mapping two justifications to a list of results.
     @return Promise of the union of original and new justifications. *)
-let close_under_elab_2 justs elab =
+let close_under_elab_2 ?cache justs elab =
   let* elaborated =
-    USet.async_map (fun (j1, j2) -> elab j1 j2) (URelation.cross justs justs)
+    USet.async_map
+      (fun (j1, j2) ->
+        if
+          Option.is_some cache
+          && JustificationPairCache.mem (Option.get cache) (j1, j2)
+        then Lwt.return []
+        else (
+          Option.iter
+            (fun cache -> JustificationPairCache.add cache (j1, j2) ())
+            cache;
+          elab j1 j2
+        )
+      )
+      (URelation.cross justs justs)
   in
   let new_justs = USet.values elaborated |> List.flatten in
     Logs.debug (fun m ->
@@ -268,8 +238,8 @@ let filter elab_ctx (justs : justification uset) =
     let* () =
       Lwt_list.iter_s
         (fun just ->
-          let con = Forwardingcontext.create ~fwd:just.fwd ~we:just.we () in
-            let* ppo = Forwardingcontext.ppo con just.p in
+          let con = ForwardingContext.create ~fwd:just.fwd ~we:just.we () in
+            let* ppo = ForwardingContext.ppo con just.p in
             let existing =
               Hashtbl.find_opt justs_with_ppo just.w.label
               |> Option.value ~default:[]
@@ -341,7 +311,7 @@ let value_assign elab_ctx justs =
     );
 
     let elab just =
-      let fwd_ctx = Forwardingcontext.create ~fwd:just.fwd ~we:just.we () in
+      let fwd_ctx = ForwardingContext.create ~fwd:just.fwd ~we:just.we () in
       let solver = Solver.create (just.p @ fwd_ctx.psi) in
         let* model = Solver.solve solver in
           match model with
@@ -376,7 +346,9 @@ let value_assign elab_ctx justs =
                 Lwt.return [ { just with w; d } ]
           | None -> Lwt.return [ just ]
     in
-      let* results = close_under_elab justs elab in
+      let* results =
+        close_under_elab ~cache:elab_ctx.value_assign_seen justs elab
+      in
 
       Logs.debug (fun m ->
           m "Completed value assignment on %d justifications."
@@ -466,160 +438,145 @@ let forward elab_ctx justs =
     );
 
     let elab just =
-      (* don't repeat forwarding *)
-      if JustificationCache.mem elab_ctx.forwarding_seen just then Lwt.return []
-      else (
-        JustificationCache.add elab_ctx.forwarding_seen just ();
-
-        (* Determine paths to check: if available check P or P with program wide
+      (* Determine paths to check: if available check P or P with program wide
        guarantees. *)
-        let ps =
-          if elab_ctx.structure.pwg <> [] then
-            [ just.p; just.p @ elab_ctx.structure.pwg ]
-          else [ just.p ]
-        in
-          (* Map over each path *)
-          let* path_results =
-            Lwt_list.map_p
-              (fun p ->
-                let fwd_ctx =
-                  Forwardingcontext.create ~fwd:just.fwd ~we:just.we ()
-                in
-                  let* ppo = Forwardingcontext.ppo fwd_ctx p in
-                    let* ppo_loc = Forwardingcontext.ppo_loc fwd_ctx p in
-                      let* _pred =
-                        pred elab_ctx None None ~ppo:(Lwt.return ppo) ()
-                      in
+      let ps =
+        if elab_ctx.structure.pwg <> [] then
+          [ just.p; just.p @ elab_ctx.structure.pwg ]
+        else [ just.p ]
+      in
+        (* Map over each path *)
+        let* path_results =
+          Lwt_list.map_p
+            (fun p ->
+              let fwd_ctx =
+                ForwardingContext.create ~fwd:just.fwd ~we:just.we ()
+              in
+                let* ppo = ForwardingContext.ppo fwd_ctx p in
+                  let* ppo_loc = ForwardingContext.ppo_loc fwd_ctx p in
+                    let* _pred =
+                      pred elab_ctx None None ~ppo:(Lwt.return ppo) ()
+                    in
 
-                      (* Subtract fj from ppo_loc. TODO marked as DIFFERS in JS:
+                    (* Subtract fj from ppo_loc. TODO marked as DIFFERS in JS:
                      symmrd.ml defines fj as the union of init_ppo (ordering
                      the initial event before any other event and the
                      fork-join edges from the symbolic event structure.
                      Critically, these edges should not be part of forwarding.
                   *)
-                      let _ppo_loc = USet.set_minus ppo_loc elab_ctx.fj in
+                    let _ppo_loc = USet.set_minus ppo_loc elab_ctx.fj in
 
-                      (* Compute fwd and we edges *)
-                      let* _fwd = fwd elab_ctx _pred fwd_ctx _ppo_loc just in
-                        let* _we = we elab_ctx _pred fwd_ctx _ppo_loc just in
+                    (* Compute fwd and we edges *)
+                    let* _fwd = fwd elab_ctx _pred fwd_ctx _ppo_loc just in
+                      let* _we = we elab_ctx _pred fwd_ctx _ppo_loc just in
 
-                        let _fwd =
-                          USet.filter
-                            (fun (e1, e2) ->
-                              e1 > 0
-                              (* && e2 <> just.w.label *)
-                              (* TODO disagrees with paper,
+                      let _fwd =
+                        USet.filter
+                          (fun (e1, e2) ->
+                            e1 > 0
+                            (* && e2 <> just.w.label *)
+                            (* TODO disagrees with paper,
                         freeze definition *)
-                              (* e1 and e2 are po before w, pulled forward from freeze
+                            (* e1 and e2 are po before w, pulled forward from freeze
                            *)
-                              && USet.mem elab_ctx.structure.po
-                                   (e1, just.w.label)
-                              && (e2 == just.w.label
-                                 || USet.mem elab_ctx.structure.po
-                                      (e2, just.w.label)
-                                 )
-                            )
-                            _fwd
-                        in
-                        let _we =
-                          USet.filter
-                            (fun (e1, e2) ->
-                              e1 > 0
-                              (* && e2 <> just.w.label *)
-                              (* NOTE disagrees with paper, freeze definition *)
-                              (* e1 and e2 are po before w, pulled forward from freeze
+                            && USet.mem elab_ctx.structure.po (e1, just.w.label)
+                            && (e2 == just.w.label
+                               || USet.mem elab_ctx.structure.po
+                                    (e2, just.w.label)
+                               )
+                          )
+                          _fwd
+                      in
+                      let _we =
+                        USet.filter
+                          (fun (e1, e2) ->
+                            e1 > 0
+                            (* && e2 <> just.w.label *)
+                            (* NOTE disagrees with paper, freeze definition *)
+                            (* e1 and e2 are po before w, pulled forward from freeze
                            *)
-                              && USet.mem elab_ctx.structure.po
-                                   (e1, just.w.label)
-                              && (e2 == just.w.label
-                                 || USet.mem elab_ctx.structure.po
-                                      (e2, just.w.label)
-                                 )
+                            && USet.mem elab_ctx.structure.po (e1, just.w.label)
+                            && (e2 == just.w.label
+                               || USet.mem elab_ctx.structure.po
+                                    (e2, just.w.label)
+                               )
+                          )
+                          _we
+                      in
+
+                      (* Filter edge function *)
+                      let filtedge (edge, new_fwd, new_we) =
+                        if Forwardingcontext.is_bad new_fwd new_we then
+                          Lwt.return_false
+                        else if Forwardingcontext.is_good new_fwd new_we then
+                          Lwt.return_true
+                        else
+                          let con =
+                            ForwardingContext.create ~fwd:new_fwd ~we:new_we ()
+                          in
+                            ForwardingContext.check con
+                      in
+
+                      (* Create fwd edges with contexts *)
+                      let fwdedges =
+                        USet.values _fwd
+                        |> List.map (fun edge ->
+                            ( edge,
+                              USet.union just.fwd (USet.singleton edge),
+                              just.we
                             )
-                            _we
+                        )
+                      in
+
+                      (* Create we edges with contexts *)
+                      let weedges =
+                        USet.values _we
+                        |> List.map (fun edge ->
+                            ( edge,
+                              just.fwd,
+                              USet.union just.we (USet.singleton edge)
+                            )
+                        )
+                      in
+
+                      (* Filter both edge types *)
+                      let* filtered_fwd = Lwt_list.filter_p filtedge fwdedges in
+                        let* filtered_we = Lwt_list.filter_p filtedge weedges in
+
+                        (* Remap justifications *)
+                        let fwd_justs =
+                          List.map
+                            (fun (edge, new_fwd, new_we) ->
+                              let con =
+                                ForwardingContext.create ~fwd:new_fwd ~we:new_we
+                                  ()
+                              in
+                                ForwardingContext.remap_just con just
+                            )
+                            filtered_fwd
                         in
 
-                        (* Filter edge function *)
-                        let filtedge (edge, new_fwd, new_we) =
-                          if Forwardingcontext.is_bad new_fwd new_we then
-                            Lwt.return_false
-                          else if Forwardingcontext.is_good new_fwd new_we then
-                            Lwt.return_true
-                          else
-                            let con =
-                              Forwardingcontext.create ~fwd:new_fwd ~we:new_we
-                                ()
-                            in
-                              Forwardingcontext.check con
+                        let we_justs =
+                          List.map
+                            (fun (edge, new_fwd, new_we) ->
+                              let con =
+                                ForwardingContext.create ~fwd:new_fwd ~we:new_we
+                                  ()
+                              in
+                                ForwardingContext.remap_just con just
+                            )
+                            filtered_we
                         in
 
-                        (* Create fwd edges with contexts *)
-                        let fwdedges =
-                          USet.values _fwd
-                          |> List.map (fun edge ->
-                              ( edge,
-                                USet.union just.fwd (USet.singleton edge),
-                                just.we
-                              )
-                          )
-                        in
-
-                        (* Create we edges with contexts *)
-                        let weedges =
-                          USet.values _we
-                          |> List.map (fun edge ->
-                              ( edge,
-                                just.fwd,
-                                USet.union just.we (USet.singleton edge)
-                              )
-                          )
-                        in
-
-                        (* Filter both edge types *)
-                        let* filtered_fwd =
-                          Lwt_list.filter_p filtedge fwdedges
-                        in
-                          let* filtered_we =
-                            Lwt_list.filter_p filtedge weedges
-                          in
-
-                          (* Remap justifications *)
-                          let fwd_justs =
-                            List.map
-                              (fun (edge, new_fwd, new_we) ->
-                                let con =
-                                  Forwardingcontext.create ~fwd:new_fwd
-                                    ~we:new_we ()
-                                in
-                                  Forwardingcontext.remap_just con just
-                                    (Some ("fwd", Some just, None))
-                              )
-                              filtered_fwd
-                          in
-
-                          let we_justs =
-                            List.map
-                              (fun (edge, new_fwd, new_we) ->
-                                let con =
-                                  Forwardingcontext.create ~fwd:new_fwd
-                                    ~we:new_we ()
-                                in
-                                  Forwardingcontext.remap_just con just
-                                    (Some ("we", Some just, None))
-                              )
-                              filtered_we
-                          in
-
-                          Lwt.return (fwd_justs @ we_justs)
-              )
-              ps
-          in
-          let results = List.concat path_results in
-            Lwt.return results
-      )
+                        Lwt.return (fwd_justs @ we_justs)
+            )
+            ps
+        in
+        let results = List.concat path_results in
+          Lwt.return results
     in
 
-    let* out = close_under_elab justs elab in
+    let* out = close_under_elab ~cache:elab_ctx.forwarding_seen justs elab in
 
     Landmark.exit landmark;
     Lwt.return out
@@ -680,8 +637,8 @@ module Lifting : sig
     justification ->
     (int * int) USet.t ->
     (int * int) USet.t ->
-    Forwardingcontext.t ->
-    Forwardingcontext.t ->
+    ForwardingContext.t ->
+    ForwardingContext.t ->
     (string, string) Hashtbl.t uset Lwt.t
 end = struct
   let relabel expr pairs =
@@ -980,7 +937,7 @@ end = struct
         let origin =
           Eventstructures.origin elab_ctx.structure s |> Option.get
         in
-        let remapped = Forwardingcontext.remap con origin in
+        let remapped = ForwardingContext.remap con origin in
           (* symbols are not to be mapped over the write event *)
           if USet.mem ppo (w, remapped) then s
           else
@@ -1082,103 +1039,131 @@ end = struct
                 (Justification.to_string just_1)
                 (Justification.to_string just_2)
           );
-        (* Check lifted cache *)
-        match LiftedCache.has elab_ctx.lifted_cache (just_1, just_2) with
-        | Some () -> Lwt.return []
-        | None ->
-            (* Static constraints from structure *)
-            let statex = elab_ctx.structure.constraints in
+        (* Static constraints from structure *)
+        let statex = elab_ctx.structure.constraints in
 
-            (* Add to cache to prevent recomputation *)
-            LiftedCache.add elab_ctx.lifted_cache (just_1, just_2);
+        (* Create forwarding contexts *)
+        let con_1 = ForwardingContext.create ~fwd:just_1.fwd ~we:just_1.we () in
+        let con_2 = ForwardingContext.create ~fwd:just_2.fwd ~we:just_2.we () in
 
-            (* Create forwarding contexts *)
-            let con_1 =
-              Forwardingcontext.create ~fwd:just_1.fwd ~we:just_1.we ()
-            in
-            let con_2 =
-              Forwardingcontext.create ~fwd:just_2.fwd ~we:just_2.we ()
-            in
+        (* Compute ppo for both justifications *)
+        let* ppo_1 = ForwardingContext.ppo con_1 just_1.p in
+          let* ppo_2 = ForwardingContext.ppo ~debug:true con_2 just_2.p in
+            if is_trace then (
+              Logs.debug (fun m ->
+                  m "PPO in context 1: %s"
+                    (USet.fold
+                       (fun acc (e1, e2) ->
+                         Printf.sprintf "%s,(%d,%d)" acc e1 e2
+                       )
+                       ppo_1 ""
+                    )
+              );
+              Logs.debug (fun m ->
+                  m "PPO in context 2: %s"
+                    (USet.fold
+                       (fun acc (e1, e2) ->
+                         Printf.sprintf "%s,(%d,%d)" acc e1 e2
+                       )
+                       ppo_2 ""
+                    )
+              )
+            );
 
-            (* Compute ppo for both justifications *)
-            let* ppo_1 = Forwardingcontext.ppo con_1 just_1.p in
-              let* ppo_2 = Forwardingcontext.ppo ~debug:true con_2 just_2.p in
-                if is_trace then (
-                  Logs.debug (fun m ->
-                      m "PPO in context 1: %s"
-                        (USet.fold
-                           (fun acc (e1, e2) ->
-                             Printf.sprintf "%s,(%d,%d)" acc e1 e2
-                           )
-                           ppo_1 ""
-                        )
-                  );
-                  Logs.debug (fun m ->
-                      m "PPO in context 2: %s"
-                        (USet.fold
-                           (fun acc (e1, e2) ->
-                             Printf.sprintf "%s,(%d,%d)" acc e1 e2
-                           )
-                           ppo_2 ""
-                        )
-                  )
-                );
+            (* Get pred function *)
+            let* pred_1 = pred elab_ctx None None ~ppo:(Lwt.return ppo_1) () in
+              let* pred_2 =
+                pred elab_ctx None None ~ppo:(Lwt.return ppo_2) ()
+              in
 
-                (* Get pred function *)
-                let* pred_1 =
-                  pred elab_ctx None None ~ppo:(Lwt.return ppo_1) ()
-                in
-                  let* pred_2 =
-                    pred elab_ctx None None ~ppo:(Lwt.return ppo_2) ()
-                  in
-
-                  (* Generate candidate relabelings for the pair of justifications *)
-                  let* relabs =
-                    generate_relabelings elab_ctx just_1 just_2 ppo_1 ppo_2
-                      con_1 con_2
-                  in
-                    let* lifted =
-                      Lwt_list.map_s
-                        (fun relab ->
-                          let relabeled_just_1_p =
-                            List.map
-                              (Expr.relabel ~relab:(Hashtbl.find_opt relab))
-                              just_1.p
-                            |> Expr.evaluate_conjunction
-                          in
-                            match
-                              find_distinguishing_predicate relabeled_just_1_p
-                                just_2.p
-                            with
-                            | None ->
+              (* Generate candidate relabelings for the pair of justifications *)
+              let* relabs =
+                generate_relabelings elab_ctx just_1 just_2 ppo_1 ppo_2 con_1
+                  con_2
+              in
+                let* lifted =
+                  Lwt_list.map_s
+                    (fun relab ->
+                      let relabeled_just_1_p =
+                        List.map
+                          (Expr.relabel ~relab:(Hashtbl.find_opt relab))
+                          just_1.p
+                        |> Expr.evaluate_conjunction
+                      in
+                        match
+                          find_distinguishing_predicate relabeled_just_1_p
+                            just_2.p
+                        with
+                        | None ->
+                            if is_trace then
+                              Logs.debug (fun m ->
+                                  m
+                                    "Relabeling did not yield distinguishing \
+                                     predicate.\n\
+                                     \tRelabeled P1: [%s]\n\
+                                     \tP2: [%s]"
+                                    (String.concat "; "
+                                       (List.map Expr.to_string
+                                          relabeled_just_1_p
+                                       )
+                                    )
+                                    (String.concat "; "
+                                       (List.map Expr.to_string just_2.p)
+                                    )
+                              );
+                            Lwt.return None
+                        | Some (distinguishing_predicate, disjunction) ->
+                            let* is_closed_relab_equiv_writes =
+                              is_closed_relab_equiv elab_ctx statex relab pred_1
+                                pred_2 just_1.p just_1.w just_2.p just_2.w
+                            in
+                              if not is_closed_relab_equiv_writes then (
                                 if is_trace then
                                   Logs.debug (fun m ->
                                       m
-                                        "Relabeling did not yield \
-                                         distinguishing predicate.\n\
-                                         \tRelabeled P1: [%s]\n\
-                                         \tP2: [%s]"
-                                        (String.concat "; "
-                                           (List.map Expr.to_string
-                                              relabeled_just_1_p
-                                           )
-                                        )
-                                        (String.concat "; "
-                                           (List.map Expr.to_string just_2.p)
-                                        )
+                                        "Relabeling failed writes equivalence.\n\
+                                         \tW1: %d\n\
+                                         \tW2: %d"
+                                        just_1.w.label just_2.w.label
                                   );
                                 Lwt.return None
-                            | Some (distinguishing_predicate, disjunction) ->
-                                let* is_closed_relab_equiv_writes =
-                                  is_closed_relab_equiv elab_ctx statex relab
-                                    pred_1 pred_2 just_1.p just_1.w just_2.p
-                                    just_2.w
+                              )
+                              else
+                                let* is_closed_relab_equiv_origins =
+                                  USet.async_for_all
+                                    (fun s ->
+                                      let o1 =
+                                        Hashtbl.find elab_ctx.structure.origin s
+                                      in
+                                        match Hashtbl.find_opt relab s with
+                                        | Some s' ->
+                                            let o2 =
+                                              Hashtbl.find
+                                                elab_ctx.structure.origin s'
+                                            in
+                                            (* TODO looking up events by id
+                                                   misses effect of value
+                                                   assignment elaboration *)
+                                            let e1 =
+                                              Hashtbl.find
+                                                elab_ctx.structure.events o1
+                                            in
+                                            let e2 =
+                                              Hashtbl.find
+                                                elab_ctx.structure.events o2
+                                            in
+                                              is_closed_relab_equiv elab_ctx
+                                                statex relab pred_1 pred_2
+                                                just_1.p e1 just_2.p e2
+                                        | None -> Lwt.return true
+                                    )
+                                    just_1.d
                                 in
-                                  if not is_closed_relab_equiv_writes then (
+                                  if not is_closed_relab_equiv_origins then (
                                     if is_trace then
                                       Logs.debug (fun m ->
                                           m
-                                            "Relabeling failed writes \
+                                            "Relabeling failed origins \
                                              equivalence.\n\
                                              \tW1: %d\n\
                                              \tW2: %d"
@@ -1187,84 +1172,37 @@ end = struct
                                     Lwt.return None
                                   )
                                   else
-                                    let* is_closed_relab_equiv_origins =
-                                      USet.async_for_all
-                                        (fun s ->
-                                          let o1 =
-                                            Hashtbl.find
-                                              elab_ctx.structure.origin s
-                                          in
-                                            match Hashtbl.find_opt relab s with
-                                            | Some s' ->
-                                                let o2 =
-                                                  Hashtbl.find
-                                                    elab_ctx.structure.origin s'
-                                                in
-                                                (* TODO looking up events by id
-                                                   misses effect of value
-                                                   assignment elaboration *)
-                                                let e1 =
-                                                  Hashtbl.find
-                                                    elab_ctx.structure.events o1
-                                                in
-                                                let e2 =
-                                                  Hashtbl.find
-                                                    elab_ctx.structure.events o2
-                                                in
-                                                  is_closed_relab_equiv elab_ctx
-                                                    statex relab pred_1 pred_2
-                                                    just_1.p e1 just_2.p e2
-                                            | None -> Lwt.return true
-                                        )
-                                        just_1.d
-                                    in
-                                      if not is_closed_relab_equiv_origins then (
-                                        if is_trace then
-                                          Logs.debug (fun m ->
-                                              m
-                                                "Relabeling failed origins \
-                                                 equivalence.\n\
-                                                 \tW1: %d\n\
-                                                 \tW2: %d"
-                                                just_1.w.label just_2.w.label
-                                          );
-                                        Lwt.return None
-                                      )
-                                      else
-                                        Lwt.return_some
-                                          {
-                                            p = disjunction;
-                                            (* fwd and we need to be of just_2 as
+                                    Lwt.return_some
+                                      {
+                                        p = disjunction;
+                                        (* fwd and we need to be of just_2 as
                                          we're checking if delta is on path
                                          while generating executions *)
-                                            fwd = just_2.fwd;
-                                            we = just_2.we;
-                                            d = just_2.d;
-                                            w = just_2.w;
-                                          }
+                                        fwd = just_2.fwd;
+                                        we = just_2.we;
+                                        d = just_2.d;
+                                        w = just_2.w;
+                                      }
+                    )
+                    (USet.values relabs)
+                in
+                let lifted = List.filter_map Fun.id lifted in
+
+                if is_trace then
+                  Logs.debug (fun m ->
+                      m "Lifting produced %d justifications:\n%s"
+                        (List.length lifted)
+                        (String.concat "\n"
+                           (List.map
+                              (fun j ->
+                                Printf.sprintf "\t%s" (Justification.to_string j)
+                              )
+                              lifted
+                           )
                         )
-                        (USet.values relabs)
-                    in
-                    let lifted = List.filter_map Fun.id lifted in
+                  );
 
-                    if is_trace then
-                      Logs.debug (fun m ->
-                          m "Lifting produced %d justifications:\n%s"
-                            (List.length lifted)
-                            (String.concat "\n"
-                               (List.map
-                                  (fun j ->
-                                    Printf.sprintf "\t%s"
-                                      (Justification.to_string j)
-                                  )
-                                  lifted
-                               )
-                            )
-                      );
-
-                    (* Store in cache *)
-                    LiftedCache.add elab_ctx.lifted_cache (just_1, just_2);
-                    Lwt.return lifted
+                Lwt.return lifted
       )
 end
 
@@ -1281,7 +1219,10 @@ let lift elab_ctx justs =
     Landmark.enter landmark;
     Logs.debug (fun m -> m "Lifting %d justifications..." (USet.size justs));
 
-    let* out = close_under_elab_2 justs (Lifting.elab elab_ctx) in
+    let* out =
+      close_under_elab_2 ~cache:elab_ctx.lifted_seen justs
+        (Lifting.elab elab_ctx)
+    in
       Logs.debug (fun m ->
           m "Lifting produced %d justifications." (USet.size out)
       );
@@ -1307,7 +1248,7 @@ let weaken elab_ctx (justs : justification uset) : justification uset Lwt.t =
       Landmark.enter landmark;
 
       let elab just =
-        let con = Forwardingcontext.create ~fwd:just.fwd ~we:just.we () in
+        let con = ForwardingContext.create ~fwd:just.fwd ~we:just.we () in
 
         (* Filter predicates that are not implied by PWG *)
         let* filtered_p =
@@ -1337,6 +1278,7 @@ let weaken elab_ctx (justs : justification uset) : justification uset Lwt.t =
         Lwt.return [ { just with p = filtered_p } ]
       in
 
-      let* out = close_under_elab justs elab in
+      (* TODO replace justifications instead of accumulating new ones *)
+      let* out = close_under_elab ~cache:elab_ctx.weaken_seen justs elab in
         Landmark.exit landmark;
         Lwt.return out
