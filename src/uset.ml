@@ -340,7 +340,7 @@ module USet : sig
 
   (** [to_string string_of_val s] converts set to string.
 
-      Uses mathematical set notation: {1,2,3} or ∅ for empty.
+      Uses mathematical set notation: \{1,2,3\} or ∅ for empty.
 
       @param string_of_val Function to convert elements to strings.
       @param s The set.

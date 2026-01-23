@@ -17,8 +17,28 @@ open Uset
     Supports incremental validation through partial and final checks to prune
     the search space early.
 
-    Example: Given map {[{a: [1,2], b: [3,4]}]} and keys {[[a,b]]},
-    produces {[[[(a,1);(b,3)], [(a,1);(b,4)], [(a,2);(b,3)], [(a,2);(b,4)]]]}. *)
+    Example: Given map
+    {[
+      {a: [1,2], b: [3,4
+    ]}
+
+    and keys
+
+    {[
+      [ (a, b) ]
+    ]}
+
+    produces
+
+    {[
+      [
+        ( [ (a, 1); (b, 3) ],
+          [ (a, 1); (b, 4) ],
+          [ (a, 2); (b, 3) ],
+          [ (a, 2); (b, 4) ]
+        );
+      ]
+    ]} *)
 module ListMapCombinationBuilder = struct
   (** [build_combinations listmap keys ?check_partial ?check_final ()] generates
       combinations.
@@ -57,7 +77,6 @@ module ListMapCombinationBuilder = struct
         let map = Hashtbl.create 2 in
         Hashtbl.add map "x" [1; 2];
         Hashtbl.add map "y" [3; 4];
-
         let* combos = ListMapCombinationBuilder.build_combinations
           map ["x"; "y"]
           ~check_partial:(fun combo ?alternatives (k, v) ->
@@ -210,8 +229,7 @@ let rec permutations = function
 
 (** {1 Map Operations} *)
 
-(** [map_transitive_closure map
-    Computes the transitive closure of a mapping represented as a hash table.
+(** Computes the transitive closure of a mapping represented as a hash table.
 
     Given a hash table mapping keys to values, computes the transitive closure
     such that each key maps directly to its final target after following the
@@ -226,7 +244,6 @@ let rec permutations = function
       Hashtbl.add map "a" "b";
       Hashtbl.add map "b" "c";
       Hashtbl.add map "c" "d";
-
       let closure = map_transitive_closure map;
       (* closure now maps:
          "a" -> "d"
