@@ -284,7 +284,7 @@ let test_interpret_main =
               };
           ]
       in
-        let* structure, events_tbl, _ = interpret ast None [] [] in
+        let* structure, events_tbl, _ = interpret ast in
           Alcotest.(check int)
             "has init and store and terminal events" 3 (USet.size structure.e);
           Alcotest.(check bool)
@@ -316,7 +316,7 @@ let test_interpret_main_with_po =
               };
           ]
       in
-        let* structure, _, _ = interpret ast None [] [] in
+        let* structure, _, _ = interpret ast in
           Alcotest.(check int) "has four events" 4 (USet.size structure.e);
           (* Check that po relations exist *)
           Alcotest.(check bool) "po not empty" true (USet.size structure.po > 0);

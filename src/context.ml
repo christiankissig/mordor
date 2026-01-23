@@ -143,6 +143,7 @@ type mordor_ctx = {
   mutable litmus : string option;
   (* parser *)
   mutable litmus_constraints : expr list option;
+  mutable litmus_defacto : expr list option;
   mutable program_stmts : ir_node list option;
   mutable assertions : ir_assertion option;
   (* event structures *)
@@ -177,6 +178,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     litmus_file = None;
     litmus = None;
     litmus_constraints = None;
+    litmus_defacto = None;
     assertions = None;
     program_stmts = None;
     step_counter;

@@ -367,7 +367,7 @@ let value_assign elab_ctx justs =
                 List.map Expr.get_symbols just.p |> List.flatten |> USet.of_list
               in
               let new_w_d =
-                Option.map Expr.get_symbols just.w.wval
+                Option.map Expr.get_symbols new_wval
                 |> Option.value ~default:[]
                 |> USet.of_list
               in
@@ -400,6 +400,7 @@ let value_assign elab_ctx justs =
     @return Promise of [true] if condition holds. *)
 let fprime elab_ctx pred_fn ppo_loc just e1 e2 =
   if USet.mem ppo_loc (e1, e2) && USet.mem (pred_fn e2) e1 then
+    (* TODO use of get_loc misses effects of value assignment elaboration *)
     let loc1 = Events.get_loc elab_ctx.structure e1 in
     let loc2 = Events.get_loc elab_ctx.structure e2 in
       match (loc1, loc2) with
@@ -525,8 +526,7 @@ let forward elab_ctx justs =
                             (fun (e1, e2) ->
                               e1 > 0
                               (* && e2 <> just.w.label *)
-                              (* TODO disagrees with paper,
-                        freeze definition *)
+                              (* NOTE disagrees with paper, freeze definition *)
                               (* e1 and e2 are po before w, pulled forward from freeze
                            *)
                               && USet.mem elab_ctx.structure.po
@@ -721,55 +721,117 @@ end = struct
       @param e2 Second event.
       @return Promise of [true] if equivalent. *)
   let is_relab_equiv elab_ctx relab p1 e1 p2 e2 =
-    if e1 = e2 then Lwt.return_true
-    else if
-      USet.mem elab_ctx.structure.fence_events e1
-      && USet.mem elab_ctx.structure.fence_events e2
-    then Lwt.return_true
-    else if
-      USet.mem elab_ctx.structure.free_events e1
-      && USet.mem elab_ctx.structure.free_events e2
-    then
-      match
-        ( Events.get_loc elab_ctx.structure e1,
-          Events.get_loc elab_ctx.structure e2
-        )
-      with
-      | Some loc1, Some loc2 ->
-          let* loc_eq = is_expr_relab_equiv elab_ctx relab p1 loc1 p2 loc2 in
-            Lwt.return loc_eq
-      | None, None -> Lwt.return_true
-      | _ -> Lwt.return_false
-    else if
-      USet.mem elab_ctx.structure.read_events e1
-      && USet.mem elab_ctx.structure.read_events e2
-      || USet.mem elab_ctx.structure.write_events e1
-         && USet.mem elab_ctx.structure.write_events e2
-      || USet.mem elab_ctx.structure.malloc_events e1
-         && USet.mem elab_ctx.structure.malloc_events e2
-    then
-      match
-        ( Events.get_loc elab_ctx.structure e1,
-          Events.get_loc elab_ctx.structure e2
-        )
-      with
-      | Some loc1, Some loc2 -> (
-          let* loc_eq = is_expr_relab_equiv elab_ctx relab p1 loc1 p2 loc2 in
-            if not loc_eq then Lwt.return_false
-            else
-              match
-                ( Events.get_val elab_ctx.structure e1,
-                  Events.get_val elab_ctx.structure e2
-                )
-              with
-              | Some v1, Some v2 ->
-                  is_expr_relab_equiv elab_ctx relab p1 v1 p2 v2
-              | None, None -> Lwt.return_true
-              | _ -> Lwt.return_false
-        )
-      | None, None -> Lwt.return_true
-      | _ -> Lwt.return_false
-    else Lwt.return_false
+    let is_trace =
+      (e1.label = 5 && e2.label = 7) || (e1.label = 7 && e2.label = 5)
+    in
+      if is_trace then
+        Logs.debug (fun m ->
+            m "Checking relab equivalence between %d and %d" e1.label e2.label
+        );
+      if e1.label = e2.label then Lwt.return_true
+      else if
+        USet.mem elab_ctx.structure.fence_events e1.label
+        && USet.mem elab_ctx.structure.fence_events e2.label
+      then Lwt.return_true
+      else if
+        USet.mem elab_ctx.structure.free_events e1.label
+        && USet.mem elab_ctx.structure.free_events e2.label
+      then (
+        match (e1.loc, e2.loc) with
+        | Some loc1, Some loc2 ->
+            let* loc_eq = is_expr_relab_equiv elab_ctx relab p1 loc1 p2 loc2 in
+              if is_trace then
+                Logs.debug (fun m ->
+                    m "Free events %d and %d location equivalence: %b" e1.label
+                      e2.label loc_eq
+                );
+              Lwt.return loc_eq
+        | None, None -> Lwt.return_true
+        | _ ->
+            if is_trace then
+              Logs.debug (fun m ->
+                  m "Free events %d and %d have mismatched locations." e1.label
+                    e2.label
+              );
+            Lwt.return_false
+      )
+      else if
+        USet.mem elab_ctx.structure.read_events e1.label
+        && USet.mem elab_ctx.structure.read_events e2.label
+        || USet.mem elab_ctx.structure.write_events e1.label
+           && USet.mem elab_ctx.structure.write_events e2.label
+        || USet.mem elab_ctx.structure.malloc_events e1.label
+           && USet.mem elab_ctx.structure.malloc_events e2.label
+      then (
+        match (e1.loc, e2.loc) with
+        | Some loc1, Some loc2 -> (
+            let* loc_eq = is_expr_relab_equiv elab_ctx relab p1 loc1 p2 loc2 in
+              if not loc_eq then (
+                if is_trace then
+                  Logs.debug (fun m ->
+                      m "Events %d and %d location equivalence: %b" e1.label
+                        e2.label loc_eq
+                  );
+                Lwt.return_false
+              )
+              else
+                match (e1.rval, e2.rval) with
+                | Some v1, Some v2 ->
+                    let* val_eq =
+                      is_expr_relab_equiv elab_ctx relab p1 (Expr.of_value v1)
+                        p2 (Expr.of_value v2)
+                    in
+                      if is_trace then
+                        Logs.debug (fun m ->
+                            m "Events %d and %d value equivalence: %b" e1.label
+                              e2.label val_eq
+                        );
+                      Lwt.return val_eq
+                | None, None -> (
+                    match (e1.wval, e2.wval) with
+                    | Some v1, Some v2 ->
+                        let* val_eq =
+                          is_expr_relab_equiv elab_ctx relab p1 v1 p2 v2
+                        in
+                          if is_trace then
+                            Logs.debug (fun m ->
+                                m "Events %d and %d value equivalence: %b"
+                                  e1.label e2.label val_eq
+                            );
+                          Lwt.return val_eq
+                    | None, None -> Lwt.return_true
+                    | _ ->
+                        if is_trace then
+                          Logs.debug (fun m ->
+                              m "Events %d and %d have mismatched write values."
+                                e1.label e2.label
+                          );
+                        Lwt.return_false
+                  )
+                | _ ->
+                    if is_trace then
+                      Logs.debug (fun m ->
+                          m "Events %d and %d have mismatched values." e1.label
+                            e2.label
+                      );
+                    Lwt.return_false
+          )
+        | None, None -> Lwt.return_true
+        | _ ->
+            if is_trace then
+              Logs.debug (fun m ->
+                  m "Events %d and %d have mismatched locations." e1.label
+                    e2.label
+              );
+            Lwt.return_false
+      )
+      else (
+        if is_trace then
+          Logs.debug (fun m ->
+              m "Events %d and %d are of different types." e1.label e2.label
+          );
+        Lwt.return_false
+      )
 
   (** [is_closed_relab_equiv elab_ctx statex relab pred_1 pred_2 p1 e1 p2 e2]
       checks closed relabeling equivalence.
@@ -788,38 +850,34 @@ end = struct
       @param e2 Second event.
       @return Promise of [true] if closed equivalence holds. *)
   let is_closed_relab_equiv elab_ctx statex relab pred_1 pred_2 p1 e1 p2 e2 =
-    let is_trace = (e1 = 4 && e2 = 8) || (e1 = 8 && e2 = 4) in
+    let is_trace =
+      (e1.label = 5 && e2.label = 7) || (e1.label = 7 && e2.label = 5)
+    in
     let rec aux p1 e1 p2 e2 =
       if is_trace then
         Logs.debug (fun m ->
-            m "Checking closed relab equivalence between %d and %d" e1 e2
+            m "Checking closed relab equivalence between %d and %d" e1.label
+              e2.label
         );
       if e1 = e2 then Lwt.return_true
       else
         let* ire = is_relab_equiv elab_ctx relab p1 e1 p2 e2 in
           if ire then (
-            let pred_e1 = pred_1 e1 in
-            let pred_e2 = pred_2 e2 in
+            let pred_e1 = pred_1 e1.label in
+            let pred_e2 = pred_2 e2.label in
               if is_trace then (
                 Logs.debug (fun m ->
-                    m "Predecessors for %d: %s" e1
+                    m "Predecessors for %d: %s" e1.label
                       (USet.fold
                          (fun acc e' -> Printf.sprintf "%s,%d" acc e')
                          pred_e1 ""
                       )
                 );
                 Logs.debug (fun m ->
-                    m "Predecessors for %d: %s" e2
+                    m "Predecessors for %d: %s" e2.label
                       (USet.fold
                          (fun acc e' -> Printf.sprintf "%s,%d" acc e')
                          pred_e2 ""
-                      )
-                );
-                Logs.debug (fun m ->
-                    m "Predecessors_2 for %d: %s (for debugging purposes)" 7
-                      (USet.fold
-                         (fun acc e' -> Printf.sprintf "%s,%d" acc e')
-                         (pred_2 7) ""
                       )
                 )
               );
@@ -828,7 +886,13 @@ end = struct
               else
                 let pred_pairs = URelation.cross pred_e1 pred_e2 in
                   USet.async_for_all
-                    (fun (e'1, e'2) -> aux p1 e'1 p2 e'2)
+                    (fun (l1, l2) ->
+                      (* TODO looking up events by label misses effects of value
+                         assignment elaboration *)
+                      let e'1 = Hashtbl.find elab_ctx.structure.events l1 in
+                      let e'2 = Hashtbl.find elab_ctx.structure.events l2 in
+                        aux p1 e'1 p2 e'2
+                    )
                     pred_pairs
           )
           else Lwt.return_false
@@ -920,6 +984,8 @@ end = struct
           (* symbols are not to be mapped over the write event *)
           if USet.mem ppo (w, remapped) then s
           else
+            (* TODO use of get_val misses effects of value assignment elaboration
+             *)
             match Events.get_val elab_ctx.structure remapped with
             | Some (ESymbol sym) when is_symbol sym -> sym
             | _ -> s
@@ -994,8 +1060,8 @@ end = struct
     (* only consider justifications of writes in conflict and with non-trivial
        predicates *)
     let is_trace =
-      (just_1.w.label = 4 && just_2.w.label = 8)
-      || (just_1.w.label = 8 && just_2.w.label = 4)
+      (just_1.w.label = 5 && just_2.w.label = 7)
+      || (just_1.w.label = 6 && just_2.w.label = 5)
     in
       if
         (not
@@ -1037,7 +1103,16 @@ end = struct
             (* Compute ppo for both justifications *)
             let* ppo_1 = Forwardingcontext.ppo con_1 just_1.p in
               let* ppo_2 = Forwardingcontext.ppo ~debug:true con_2 just_2.p in
-                if is_trace then
+                if is_trace then (
+                  Logs.debug (fun m ->
+                      m "PPO in context 1: %s"
+                        (USet.fold
+                           (fun acc (e1, e2) ->
+                             Printf.sprintf "%s,(%d,%d)" acc e1 e2
+                           )
+                           ppo_1 ""
+                        )
+                  );
                   Logs.debug (fun m ->
                       m "PPO in context 2: %s"
                         (USet.fold
@@ -1046,7 +1121,8 @@ end = struct
                            )
                            ppo_2 ""
                         )
-                  );
+                  )
+                );
 
                 (* Get pred function *)
                 let* pred_1 =
@@ -1095,8 +1171,8 @@ end = struct
                             | Some (distinguishing_predicate, disjunction) ->
                                 let* is_closed_relab_equiv_writes =
                                   is_closed_relab_equiv elab_ctx statex relab
-                                    pred_1 pred_2 just_1.p just_1.w.label
-                                    just_2.p just_2.w.label
+                                    pred_1 pred_2 just_1.p just_1.w just_2.p
+                                    just_2.w
                                 in
                                   if not is_closed_relab_equiv_writes then (
                                     if is_trace then
@@ -1124,9 +1200,20 @@ end = struct
                                                   Hashtbl.find
                                                     elab_ctx.structure.origin s'
                                                 in
+                                                (* TODO looking up events by id
+                                                   misses effect of value
+                                                   assignment elaboration *)
+                                                let e1 =
+                                                  Hashtbl.find
+                                                    elab_ctx.structure.events o1
+                                                in
+                                                let e2 =
+                                                  Hashtbl.find
+                                                    elab_ctx.structure.events o2
+                                                in
                                                   is_closed_relab_equiv elab_ctx
                                                     statex relab pred_1 pred_2
-                                                    just_1.p o1 just_2.p o2
+                                                    just_1.p e1 just_2.p e2
                                             | None -> Lwt.return true
                                         )
                                         just_1.d

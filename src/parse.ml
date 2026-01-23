@@ -245,6 +245,7 @@ and convert_litmus ast_litmus =
     | Some config -> config.values
     | None -> []
   in
+  (* TODO TBC program wide guarantees *)
   let defacto =
     match ast_litmus.config with
     | Some config -> convert_expr_list config.defacto
@@ -337,6 +338,7 @@ let step_parse_litmus (ctx_lwt : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
               )
               config.model;
             Option.iter (fun name -> ctx.litmus_name <- name) config.name;
+            ctx.litmus_defacto <- Some config.defacto;
             ctx.litmus_constraints <- Some config.constraints;
             ctx.program_stmts <- Some program;
             ctx.assertions <-

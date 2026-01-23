@@ -1,4 +1,8 @@
-(** Program interpreter *)
+(** Program interpreter for concurrent programs with memory operations.
+
+    This module provides interpretation of intermediate representation (IR)
+    programs as symbolic event structures. It supports various loop semantics
+    including step-counter based unrolling and symbolic loop handling. *)
 
 open Context
 open Events
@@ -10,16 +14,24 @@ open Uset
 
 let ir_node_to_string = Ir.to_string ~ann_to_string:(fun _ -> "")
 
-(** Event counter *)
+(** {1 Event and Symbol Generation} *)
+
+(** Event counter for generating unique event identifiers. *)
 let event_counter = ref 0
 
+(** Generate the next unique event identifier.
+    @return A fresh integer identifier. *)
 let next_event_id () =
   incr event_counter;
   !event_counter
 
-(** Symbol generators *)
+(** Counter for Greek letter symbols (α, β, γ, ...). *)
 let greek_counter = ref 0
 
+(** Generate the next Greek letter symbol with optional numeric suffix.
+    @return
+      A string containing a Greek letter, possibly with a numeric suffix (e.g.,
+      "α", "β", "α1", "β1", ...). *)
 let next_greek () =
   let num_greek_letters = String.length greek_alpha / 2 in
   (* 24 letters *)
@@ -29,8 +41,13 @@ let next_greek () =
     let base = String.sub greek_alpha (idx * 2) 2 in
       if suffix = 0 then base else base ^ string_of_int suffix
 
+(** Counter for Chinese character symbols. *)
 let zh_counter = ref 0
 
+(** Generate the next Chinese character symbol with optional numeric suffix.
+    @return
+      A string containing a Chinese character, possibly with a numeric suffix.
+*)
 let next_zh () =
   let num_zh_chars = String.length zh_alpha / 3 in
   let idx = !zh_counter mod num_zh_chars in
@@ -39,7 +56,9 @@ let next_zh () =
     let base = String.sub zh_alpha (idx * 3) 3 in
       if suffix = 0 then base else base ^ string_of_int suffix
 
-(** Structure tracking events globally.
+(** {1 Event Structure Tracking} *)
+
+(** Structure tracking events globally during interpretation.
 
     This improves efficiency as events and symbols (and thus origins) are
     enumerated from the start of the program, but event structures are
@@ -47,23 +66,23 @@ let next_zh () =
     origin tables at the end requires repeated merging. The last labels are
     anyways defined inductively from the start. *)
 type events_t = {
-  (* events indexed by label *)
-  events : (int, event) Hashtbl.t;
-  (* origin mapping for symbols *)
+  events : (int, event) Hashtbl.t;  (** Events indexed by label. *)
   origin : (string, int) Hashtbl.t;
-  (* p tracks the register environment at each event label *)
+      (** Origin mapping for symbols to event labels. *)
   env_by_evt : (int, (string, expr) Hashtbl.t) Hashtbl.t;
-  (* mapping from event labels to thread indices *)
+      (** Register environment at each event label. *)
   thread_index : (int, int) Hashtbl.t;
-  (* mapping from event labels to loop indices *)
+      (** Mapping from event labels to thread indices. *)
   loop_indices : (int, int list) Hashtbl.t;
-  (* mapping from event labels to source spans *)
+      (** Mapping from event labels to loop indices. *)
   source_spans : (int, source_span) Hashtbl.t;
-  (* set of globals *)
-  globals : string USet.t;
-  mutable label : int;
+      (** Mapping from event labels to source code spans. *)
+  globals : string USet.t;  (** Set of global variable names. *)
+  mutable label : int;  (** Counter for generating unique event labels. *)
 }
 
+(** Create a new empty events structure.
+    @return A fresh events_t with empty tables and zero label counter. *)
 let create_events () =
   {
     events = Hashtbl.create 256;
@@ -76,6 +95,14 @@ let create_events () =
     label = 0;
   }
 
+(** Add an event to the global events structure.
+
+    @param events The global events structure to add to.
+    @param event The event to add (label will be overwritten).
+    @param env The current register environment.
+    @param annotation
+      Source annotations including span, thread, and loop context.
+    @return The event with its newly assigned label. *)
 let add_event (events : events_t) event env (annotation : ir_node_ann) =
   let lbl = events.label in
     events.label <- events.label + 1;
@@ -97,6 +124,12 @@ let add_event (events : events_t) event env (annotation : ir_node_ann) =
       );
       event'
 
+(** Update the register environment with a new binding.
+
+    @param env The current environment.
+    @param register The register name to update.
+    @param expr The expression to bind to the register (will be evaluated).
+    @return A new environment with the updated binding. *)
 let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr)
     =
   let regexpr : expr = Expr.evaluate ~env:(Hashtbl.find_opt env) expr in
@@ -104,35 +137,42 @@ let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr
     Hashtbl.replace env' register regexpr;
     env'
 
-(* TODO handle labels *)
-(* TODO check id makes sense here *)
+(** {1 Event Structure Construction} *)
 
-(** Interpretation of programs as lists of statements.
+(** Add a read-modify-write edge to a symbolic event structure.
 
-    Implemented in open recursion to allow for a flexible semantics of unbounded
-    loops. Loop semantics added below. *)
-
+    @param structure The event structure to modify.
+    @param er The label of the read event.
+    @param ew The label of the write event.
+    @return A new event structure with the RMW edge added. *)
 let add_rmw_edge (structure : symbolic_event_structure) (er : int) (ew : int) =
   {
     structure with
     rmw = USet.add (structure : symbolic_event_structure).rmw (er, ew);
   }
 
-(** Interprets programs as lists of IR nodes depth-first using open recursion.
+(** {1 Statement Interpretation} *)
+
+(** Interpret programs as lists of IR nodes depth-first using open recursion.
 
     The [recurse] argument is the interpretation function to use for recursive
     calls. The [add_event] argument is the function to use to add events to the
     global event table.
 
-    The [env] argument is the current register environment mapping registers to
-    expressions. The [phi] argument is the current path condition as a list of
-    expressions. The [events] argument is the global events table being built.
-
-    Returns a symbolic event structure representing the interpreted program
-    fragment. *)
+    @param recurse The interpretation function for recursive calls.
+    @param final_structure
+      Function to construct the final structure when nodes are exhausted.
+    @param add_event Function to add events to the global table.
+    @param nodes The list of IR nodes to interpret.
+    @param env
+      The current register environment mapping registers to expressions.
+    @param phi The current path condition as a list of expressions.
+    @param events The global events table being built.
+    @return
+      A symbolic event structure representing the interpreted program fragment.
+*)
 let interpret_statements_open ~recurse ~final_structure ~add_event
     (nodes : ir_node list) env phi events =
-  (* note that negative step counters are treated as infinite steps *)
   match nodes with
   | [] -> final_structure ~add_event env phi events
   | node :: rest ->
@@ -491,8 +531,18 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
         in
           Lwt.return structure
 
-(** Generic terminal structure - creates a single terminal node *)
+(** {1 Terminal Structure} *)
 
+(** Create a generic terminal structure with a terminal event.
+
+    Adds a single terminal event and establishes distinctness constraints for
+    all global variables.
+
+    @param add_event Function to add events to the global table.
+    @param env The current register environment.
+    @param phi The current path condition.
+    @param events The global events structure.
+    @return A symbolic event structure with a terminal event. *)
 let make_generic_terminal_structure ~add_event env phi events =
   let structure = SymbolicEventStructure.create () in
   let terminal_evt = Event.create Terminal 0 () in
@@ -524,16 +574,35 @@ let make_generic_terminal_structure ~add_event env phi events =
   in
     Lwt.return (SymbolicEventStructure.dot terminal_evt cont phi)
 
-(** No interpretation of while statements *)
+(** {1 Basic Interpretation} *)
 
+(** Interpret statements with no special handling of while loops.
+
+    This is the base interpretation that handles all statements except unbounded
+    loops, which are left uninterpreted.
+
+    @param stmts The list of IR nodes to interpret.
+    @param env The initial register environment.
+    @param phi The initial path condition.
+    @param events The global events structure.
+    @return A symbolic event structure representing the interpretation. *)
 let rec interpret_statements stmts env phi events =
   interpret_statements_open ~recurse:interpret_statements
     ~final_structure:make_generic_terminal_structure ~add_event stmts env phi
     events
 
-(** Generic interpretation function **)
+(** {1 Generic Interpretation} *)
 
-let interpret_generic ~stmt_semantics stmts defacto restrictions constraint_ =
+(** Generic interpretation function with configurable statement semantics.
+
+    @param stmt_semantics The interpretation function for statements.
+    @param defacto Optional de facto constraints from litmus tests.
+    @param constraints Optional additional constraints from litmus tests.
+    @param stmts The program statements to interpret.
+    @return
+      A tuple of (symbolic event structure, events table, source spans table).
+*)
+let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
   let events = create_events () in
   let env = Hashtbl.create 32 in
 
@@ -561,65 +630,91 @@ let interpret_generic ~stmt_semantics stmts defacto restrictions constraint_ =
 
   Lwt.return (structure'', events.events, events.source_spans)
 
-(** Default interpretation function **)
+(** Default interpretation function with basic statement semantics.
 
-let interpret stmts env restrictions constraint_ =
-  interpret_generic ~stmt_semantics:interpret_statements stmts env restrictions
-    constraint_
+    @param defacto Optional de facto constraints.
+    @param constraints Optional additional constraints.
+    @param stmts The program statements to interpret.
+    @return
+      A tuple of (symbolic event structure, events table, source spans table).
+*)
+let interpret ?(defacto = None) ?(constraints = None) stmts =
+  interpret_generic ~stmt_semantics:interpret_statements ~defacto ~constraints
+    stmts
 
-(** Pipeline step for interpretation **)
+(** {1 Pipeline Integration} *)
+
+(** Generic pipeline step for program interpretation.
+
+    @param stmt_semantics The interpretation function for statements.
+    @param lwt_ctx The current Mordor context as a Lwt promise.
+    @return An updated Mordor context with interpretation results. *)
 let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
     mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
-    match (ctx.program_stmts, ctx.litmus_constraints) with
-    | Some stmts, Some constraints ->
-        let* structure, events, source_spans =
-          interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
-        in
-          Logs.debug (fun m ->
-              m
-                "Completed program interpretation with symbolic\n\
-                \        event structure: \n\
-                 %s\n\
-                 and events\n\
-                 %s"
-                (show_symbolic_event_structure structure)
-                (Hashtbl.fold
-                   (fun label evt acc ->
-                     acc
-                     ^ Printf.sprintf "Event %d: %s\n" label
-                         (Event.to_string evt)
-                   )
-                   events ""
-                )
-          );
-          ctx.structure <- Some structure;
-          ctx.events <- Some events;
-          ctx.source_spans <- Some source_spans;
-          Lwt.return ctx
+    match ctx.program_stmts with
+    | Some stmts ->
+        let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
+        let constraints = ctx.litmus_constraints |> Option.value ~default:[] in
+          let* structure, events, source_spans =
+            interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+          in
+            Logs.debug (fun m ->
+                m
+                  "Completed program interpretation with symbolic\n\
+                  \        event structure: \n\
+                   %s\n\
+                   and events\n\
+                   %s"
+                  (show_symbolic_event_structure structure)
+                  (Hashtbl.fold
+                     (fun label evt acc ->
+                       acc
+                       ^ Printf.sprintf "Event %d: %s\n" label
+                           (Event.to_string evt)
+                     )
+                     events ""
+                  )
+            );
+            ctx.structure <- Some structure;
+            ctx.events <- Some events;
+            ctx.source_spans <- Some source_spans;
+            Lwt.return ctx
     | _ ->
-        Logs.err (fun m ->
-            m "No program statements or constraints for interpretation."
-        );
+        Logs.err (fun m -> m "No program statements for interpretation.");
         Lwt.return ctx
 
-(** Finite step-counter semantics of unbounded loops
+(** {1 Step Counter Semantics} *)
+
+(** Finite step-counter semantics of unbounded loops.
 
     The semantics of do- and while-loops is defined in terms of a fixed number
     of unrollings of the loop as nested if-statements. Per-loop step-counter
     leads to fixed number of unrollings per loop, and a global step-counter
-    limiting unrollings across all sequential and nestested loops otherwise. The
+    limiting unrollings across all sequential and nested loops otherwise. The
     per-loop unrolling is applied before interpreting, while the global
     step-counter is applied during the interpretation. *)
-
 module StepCounterSemantics : sig
+  (** Pipeline step for interpreting with step counter semantics.
+
+      @param ctx The Mordor context.
+      @return Updated context with interpretation results. *)
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
 
+  (** Interpret a program with a specific step counter.
+
+      @param step_counter The maximum number of loop iterations to unroll.
+      @param ctx The Mordor context.
+      @return A tuple of (symbolic event structure, source spans table). *)
   val interpret :
     step_counter:int ->
     mordor_ctx Lwt.t ->
     (symbolic_event_structure * (int, source_span) Hashtbl.t) Lwt.t
 end = struct
+  (** Create an IR node with no annotations.
+
+      @param stmt The statement to wrap.
+      @return An IR node with empty annotations. *)
   let make_ir_node stmt : ir_node =
     Ir.
       {
@@ -627,8 +722,11 @@ end = struct
         stmt;
       }
 
-  (* one-step unrolling *)
+  (** Unroll a while loop once as an if-statement.
 
+      @param body The loop body.
+      @param condition The loop condition.
+      @return A list containing the unrolled loop as an if-statement. *)
   let unrol_while_loop_once body condition =
     [
       make_ir_node
@@ -641,6 +739,11 @@ end = struct
         );
     ]
 
+  (** Unroll a do-while loop once as body followed by an if-statement.
+
+      @param body The loop body.
+      @param condition The loop condition.
+      @return The body followed by an if-statement for continuation. *)
   let unrol_do_loop_once body condition =
     body
     @ [
@@ -654,8 +757,12 @@ end = struct
           );
       ]
 
-  (* per loop step counter *)
+  (** Unroll a while loop a specific number of times.
 
+      @param body The loop body.
+      @param condition The loop condition.
+      @param times The number of unrollings (must be non-negative).
+      @return A list of nested if-statements representing the unrolled loop. *)
   let rec unrol_while_loop body condition times =
     assert (times >= 0);
     if times = 0 then []
@@ -671,6 +778,12 @@ end = struct
           );
       ]
 
+  (** Unroll a do-while loop a specific number of times.
+
+      @param body The loop body.
+      @param condition The loop condition.
+      @param times The number of unrollings (must be at least 1).
+      @return The unrolled loop as nested body and if-statements. *)
   let rec unrol_do_loop body condition times =
     assert (times >= 1);
     if times = 1 then body
@@ -687,6 +800,15 @@ end = struct
             );
         ]
 
+  (** Interpret statements with step counter loop semantics.
+
+      @param step_counter Maximum loop iterations (must be non-negative).
+      @param per_loop If true, apply step counter per loop; otherwise globally.
+      @param nodes The IR nodes to interpret.
+      @param env The register environment.
+      @param phi The path condition.
+      @param events The global events structure.
+      @return A symbolic event structure. *)
   let rec interpret_statements_step_counter step_counter per_loop nodes env phi
       events =
     assert (step_counter >= 0);
@@ -746,30 +868,50 @@ end = struct
         interpret_statements_step_counter step_counter true
       in
 
-      match (ctx.program_stmts, ctx.litmus_constraints) with
-      | Some stmts, Some constraints ->
-          let* structure, events, source_spans =
-            interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
-          in
-            Lwt.return (structure, source_spans)
+      match ctx.program_stmts with
+      | Some stmts ->
+          let defacto = ctx.litmus_defacto in
+          let constraints = ctx.litmus_constraints in
+            let* structure, events, source_spans =
+              interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+            in
+              Lwt.return (structure, source_spans)
       | _ -> failwith "No program statements or constraints for interpretation."
 end
 
-(** {1 Symbolic loop semantics} *)
+(** {1 Symbolic Loop Semantics} *)
 
-(** Symbolic loop semantics for unbounded loops:
+(** Symbolic loop semantics for unbounded loops.
 
     Loop iterations are tracked symbolically: all branches are evaluated.
     Semantics is in general not sound unless all loops are episodic. Semantics
     is sufficient to establish episodicity criteria. *)
-
 module SymbolicLoopSemantics : sig
+  (** Pipeline step for interpreting with symbolic loop semantics.
+
+      @param ctx The Mordor context.
+      @return Updated context with interpretation results. *)
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
 
+  (** Interpret a program with symbolic loop semantics.
+
+      @param ctx The Mordor context.
+      @return A tuple of (symbolic event structure, source spans table). *)
   val interpret :
     mordor_ctx Lwt.t ->
     (symbolic_event_structure * (int, source_span) Hashtbl.t) Lwt.t
 end = struct
+  (** Interpret statements with symbolic loop semantics.
+
+      Evaluates all branches of loops symbolically without unrolling.
+
+      @param final_structure Function to create the final structure.
+      @param add_event Function to add events.
+      @param nodes The IR nodes to interpret.
+      @param env The register environment.
+      @param phi The path condition.
+      @param events The global events structure.
+      @return A symbolic event structure. *)
   let rec interpret_statements_symbolic_loop ~final_structure ~add_event
       (nodes : ir_node list) env phi events =
     match nodes with
@@ -841,15 +983,26 @@ end = struct
           ~final_structure:make_generic_terminal_structure ~add_event
       in
 
-      match (ctx.program_stmts, ctx.litmus_constraints) with
-      | Some stmts, Some constraints ->
-          let* structure, events, source_spans =
-            interpret_generic ~stmt_semantics stmts [] (Hashtbl.create 16) []
-          in
-            Lwt.return (structure, source_spans)
+      match ctx.program_stmts with
+      | Some stmts ->
+          let defacto = ctx.litmus_defacto in
+          let constraints = ctx.litmus_constraints in
+            let* structure, events, source_spans =
+              interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+            in
+              Lwt.return (structure, source_spans)
       | _ -> failwith "No program statements or constraints for interpretation."
 end
 
+(** {1 Main Pipeline Step} *)
+
+(** Main interpretation pipeline step.
+
+    Selects the appropriate loop semantics based on context options and performs
+    program interpretation.
+
+    @param lwt_ctx The Mordor context.
+    @return Updated context with interpretation results. *)
 let step_interpret lwt_ctx =
   let* ctx = lwt_ctx in
     Logs.debug (fun m ->
