@@ -1190,3 +1190,35 @@ let batch_elaborations elab_ctx pre_justs =
     let* final_justs = fixed_point (USet.create ()) pre_justs in
       Landmark.exit landmark;
       Lwt.return final_justs
+
+(** [generate_justifications structure init_ppo] generates justifications.
+
+    Generates justifications for the given event structure, starting from
+    initial PPO relations.
+
+    @param structure The event structure.
+    @param init_ppo Initial PPO relations.
+    @return Promise of generated justifications. *)
+let generate_justifications structure init_ppo =
+  let po = structure.po in
+  let events = structure.events in
+
+  (* Initialize justifications for writes *)
+  let pre_justs = pre_justifications structure in
+
+  Logs.debug (fun m ->
+      m "Pre-justifications for event\n\t%s"
+        (String.concat "\n\t"
+           (List.map Justification.to_string (USet.values pre_justs))
+        )
+  );
+
+  let fj = USet.union structure.fj init_ppo in
+
+  (* Build context for elaborations *)
+  let elab_ctx : context = { structure; fj } in
+
+  Logs.debug (fun m -> m "Starting elaborations...");
+
+  let* final_justs = batch_elaborations elab_ctx pre_justs in
+    Lwt.return final_justs

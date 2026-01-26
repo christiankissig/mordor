@@ -1,10 +1,8 @@
 (** Mordor - Main dependency calculation algorithm *)
 
 open Context
-open Elaborations
 open Executions
 open Expr
-open Justifications
 open Lwt.Syntax
 open Types
 open Uset
@@ -15,32 +13,13 @@ let calculate_dependencies ?(include_rf = true)
     (structure : symbolic_event_structure) ~exhaustive ~restrictions =
   let e_set = structure.e in
   let events = structure.events in
-  let restrict = structure.restrict in
   let po = structure.po in
-
-  let read_events = structure.read_events in
-  let write_events = structure.write_events in
-  let rlx_read_events = structure.rlx_read_events in
-  let rlx_write_events = structure.rlx_write_events in
-  let fence_events = structure.fence_events in
-  let malloc_events = structure.malloc_events in
-  let free_events = structure.free_events in
 
   (* Initialize ForwardingContext *)
   let* () =
     Forwardingcontext.init
       { init_structure = structure; init_val = Events.get_val structure }
   in
-
-  (* Initialize justifications for writes *)
-  let pre_justs = Elaborations.pre_justifications structure in
-
-  Logs.debug (fun m ->
-      m "Pre-justifications for event\n\t%s"
-        (String.concat "\n\t"
-           (List.map Justification.to_string (USet.values pre_justs))
-        )
-  );
 
   (* Initialize initial PPO relation - relates all initial events and terminal
      events to other events along po-edges. *)
@@ -59,21 +38,7 @@ let calculate_dependencies ?(include_rf = true)
   (* TODO discern in subsequent computation *)
   let init_ppo = USet.union init_ppo terminal_ppo in
 
-  let fj = USet.union structure.fj init_ppo in
-
-  (* Build context for elaborations *)
-  let elab_ctx : Elaborations.context = { structure; fj } in
-
-  Logs.debug (fun m -> m "Starting elaborations...");
-
-  let justification_set_equal s1 s2 =
-    USet.size s1 = USet.size s2
-    && USet.for_all
-         (fun j1 -> USet.exists (fun j2 -> Justification.equal j1 j2) s2)
-         s1
-  in
-
-  let* final_justs = Elaborations.batch_elaborations elab_ctx pre_justs in
+  let* final_justs = Elaborations.generate_justifications structure init_ppo in
 
   Logs.debug (fun m ->
       m "Elaborations complete. Final justifications count: %d"
@@ -108,7 +73,7 @@ let calculate_dependencies ?(include_rf = true)
     event.
     *)
   let malloc_locs =
-    USet.values malloc_events
+    USet.values structure.malloc_events
     |> List.filter_map (fun eid ->
         match Hashtbl.find_opt events eid with
         | Some evt -> Option.map Expr.of_value evt.rval
