@@ -107,11 +107,14 @@ end = struct
       (Event.to_string just.w)
 
   let equal j1 j2 =
-    j1.w = j2.w
-    && USet.equal j1.fwd j2.fwd
-    && USet.equal j1.we j2.we
-    && USet.equal j1.d j2.d
-    && List.equal Expr.equal j1.p j2.p
+    let result =
+      j1.w = j2.w
+      && USet.equal j1.fwd j2.fwd
+      && USet.equal j1.we j2.we
+      && USet.equal j1.d j2.d
+      && List.equal Expr.equal j1.p j2.p
+    in
+      result
 
   let hash j =
     let compare_pairs =
@@ -119,6 +122,7 @@ end = struct
       let c = compare a1 a2 in
         if c <> 0 then c else compare b1 b2
     in
+    let result =
       Hashtbl.hash
         ( j.w,
           USet.to_list j.fwd |> List.sort compare_pairs,
@@ -126,6 +130,8 @@ end = struct
           USet.to_list j.d |> List.sort String.compare,
           List.map hash_expr j.p
         )
+    in
+      result
 
   let get_symbols (just : justification) : string uset =
     let symbols = USet.create () in
@@ -163,9 +169,13 @@ end = struct
     && USet.equal just_x.fwd just_y.fwd
     && USet.equal just_x.we just_y.we
     && List.length just_y.p < List.length just_x.p
-    && List.for_all (fun e -> List.mem e just_x.p) just_y.p
-    (* TODO too strict? *)
-    && USet.equal ppo_x ppo_y
+    (* TODO use that just.p are ordered *)
+    && List.for_all
+         (fun e -> List.exists (fun e' -> Expr.equal e e') just_x.p)
+         just_y.p
+  (* TODO too strict! ppo is a function of fwd, we, and p, which we
+     test above. Less p seems to mean less ppo. Can this be removed altogether? *)
+  (* && USet.equal ppo_x ppo_y *)
 end
 
 (** {1 Justification Caching} *)

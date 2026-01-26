@@ -409,24 +409,34 @@ let exeq ?(state = []) a b =
   else
     (* If state && (a != b) is unsatisfiable, a = b is true given state *)
     let neq_expr = Expr.binop a "!=" b in
-    let solver = create (neq_expr :: state) in
-      let* result = check solver in
+      let* result =
+        quick_check_cached (neq_expr :: state |> List.sort Expr.compare)
+      in
         match result with
         | Some false -> Lwt.return_true
         | _ -> Lwt.return_false
 
 (** Check if two expressions are potentially equal (equality is satisfiable) *)
 let expoteq ?(state = []) a b =
-  if Expr.equal a b then Lwt.return_true
-  else
-    (* Check if a = b is satisfiable *)
-    let eq_expr = Expr.binop a "=" b in
-    let solver = create (eq_expr :: state) in
-      let* result = check solver in
-        match result with
-        | Some true ->
-            Lwt.return_true (* a = b is sat, so they could be equal *)
-        | _ -> Lwt.return_false
+  let landmark = Landmark.register "expoteq" in
+    Landmark.enter landmark;
+    if Expr.equal a b then (
+      Landmark.exit landmark;
+      Lwt.return_true
+    )
+    else
+      (* Check if a = b is satisfiable *)
+      let eq_expr = Expr.binop a "=" b in
+        let* result =
+          quick_check_cached (eq_expr :: state |> List.sort Expr.compare)
+        in
+          match result with
+          | Some true ->
+              Landmark.exit landmark;
+              Lwt.return_true (* a = b is sat, so they could be equal *)
+          | _ ->
+              Landmark.exit landmark;
+              Lwt.return_false
 
 (** Semantic equality module with state management *)
 module Semeq = struct

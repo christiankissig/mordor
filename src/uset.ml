@@ -840,7 +840,13 @@ end = struct
   let is_irreflexive s = USet.for_all (fun (a, b) -> not (a = b)) s
 
   let is_function s =
-    USet.for_all
-      (fun a -> USet.size (USet.filter (fun (x, _) -> x = a) s) <= 1)
-      (pi_1 s)
+    let landmark = Landmark.register "URelation.is_function" in
+      Landmark.enter landmark;
+      let result =
+        USet.for_all
+          (fun a -> USet.size (USet.filter (fun (x, _) -> x = a) s) <= 1)
+          (pi_1 s)
+      in
+        Landmark.exit landmark;
+        result
 end

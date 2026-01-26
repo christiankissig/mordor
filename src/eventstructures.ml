@@ -1,4 +1,5 @@
 open Events
+open Lwt.Syntax
 open Types
 open Uset
 
@@ -325,24 +326,30 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
    prevents r reading from shadowed writes w.*)
 (* TODO optimize *)
 let dslwb structure w r =
-  let write_events = structure.write_events in
-  let r_restrict =
-    Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
-  in
-    USet.async_exists
-      (fun (w2, r2) ->
-        if
-          r2 = r (* w2 po bfore r *)
-          && w2 <> w (* w2 is not w *)
-          && USet.mem write_events w2 (* w2 is a write *)
-          && USet.mem structure.po (w, w2)
-          (* w2 po after w, thus in between w and r *)
-        then
-          (* w2 potentially shadows w *)
-          (* TODO use semantic equivalence relative to valres *)
-          match (get_loc structure w, get_loc structure w2) with
-          | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
-          | _ -> Lwt.return false
-        else Lwt.return false
-      )
-      structure.po
+  let landmark = Landmark.register "dslwb" in
+    Landmark.enter landmark;
+    let write_events = structure.write_events in
+    let r_restrict =
+      Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
+    in
+      let* result =
+        USet.async_exists
+          (fun (w2, r2) ->
+            if
+              r2 = r (* w2 po bfore r *)
+              && w2 <> w (* w2 is not w *)
+              && USet.mem write_events w2 (* w2 is a write *)
+              && USet.mem structure.po (w, w2)
+              (* w2 po after w, thus in between w and r *)
+            then
+              (* w2 potentially shadows w *)
+              (* TODO use semantic equivalence relative to valres *)
+              match (get_loc structure w, get_loc structure w2) with
+              | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
+              | _ -> Lwt.return false
+            else Lwt.return false
+          )
+          structure.po
+      in
+        Landmark.exit landmark;
+        Lwt.return result

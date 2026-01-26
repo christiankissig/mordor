@@ -427,7 +427,6 @@ let init params =
 (** {1 Forwarding Context Type} *)
 
 module ForwardingContext : sig
-
   (** Forwarding context representing event reorderings.
 
       Encapsulates a set of forwarding edges (reads seeing later writes) and
@@ -451,8 +450,8 @@ module ForwardingContext : sig
 
   (** [create ?fwd ?we ()] creates a new forwarding context.
 
-      Builds derived information including value equalities, constraints, and the
-      event remapping table.
+      Builds derived information including value equalities, constraints, and
+      the event remapping table.
 
       @param fwd Optional forwarding edge set (default: empty).
       @param we Optional write-exclusion edge set (default: empty).
@@ -481,8 +480,8 @@ module ForwardingContext : sig
 
   (** [remap_just ctx just op] remaps a justification through the context.
 
-      Updates the justification's forwarding and write-exclusion sets by combining
-      them with the context's edges.
+      Updates the justification's forwarding and write-exclusion sets by
+      combining them with the context's edges.
 
       @param ctx The forwarding context.
       @param just The justification to remap.
@@ -492,19 +491,20 @@ module ForwardingContext : sig
 
   (** [ppo ?debug ctx predicates] computes preserved program order.
 
-      Computes the PPO relation by filtering base orderings through semantic alias
-      analysis. Uses caching to avoid redundant solver queries.
+      Computes the PPO relation by filtering base orderings through semantic
+      alias analysis. Uses caching to avoid redundant solver queries.
 
       @param debug Optional flag to enable debug output (default: false).
       @param ctx The forwarding context.
       @param predicates Additional predicate constraints.
       @return Promise of the PPO relation. *)
   val ppo : ?debug:bool -> t -> expr list -> (int * int) uset Lwt.t
+
   (** [ppo_loc ctx predicates] computes location-based PPO.
 
-      Computes PPO restricted to events accessing the same concrete location. More
-      precise than standard PPO as it requires exact location equality under the
-      given predicates.
+      Computes PPO restricted to events accessing the same concrete location.
+      More precise than standard PPO as it requires exact location equality
+      under the given predicates.
 
       @param ctx The forwarding context.
       @param predicates The predicate constraints.
@@ -544,16 +544,14 @@ module ForwardingContext : sig
       @param ctx The forwarding context.
       @param predicates The predicate list.
       @return Cached value or empty value if not found. *)
-  val cache_get :
-    t -> expr list -> cache_value
+  val cache_get : t -> expr list -> cache_value
 
   (** [cache_get_subset ctx predicates] retrieves subset cache match.
 
       @param ctx The forwarding context.
       @param predicates The predicate list.
       @return [Some value] if matching entry found, [None] otherwise. *)
-  val cache_get_subset :
-    t -> expr list -> cache_value option
+  val cache_get_subset : t -> expr list -> cache_value option
 
   (** [to_string ctx] converts context to human-readable string.
 
@@ -562,280 +560,277 @@ module ForwardingContext : sig
       @param ctx The forwarding context.
       @return String representation showing all components. *)
   val to_string : t -> string
-
 end = struct
+  (** Forwarding context representing event reorderings.
 
-(** Forwarding context representing event reorderings.
+      Encapsulates a set of forwarding edges (reads seeing later writes) and
+      write-exclusion edges (writes being elided by later writes), along with
+      derived information like value equalities and remapping tables. *)
+  type t = {
+    fwd : (int * int) uset;
+        (** Forwarding edges: [(e1, e2)] means [e2] reads from [e1]. *)
+    we : (int * int) uset;
+        (** Write-exclusion edges: [(e1, e2)] means [e1] is overwritten by [e2].
+        *)
+    valmap : (expr * expr) list;
+        (** Value equalities implied by forwarding edges. *)
+    psi : expr list;
+        (** Constraints from value equalities (tautologies removed). *)
+    fwdwe : (int * int) uset;
+        (** Union of forwarding and write-exclusion edges. *)
+    remap_map : (int, int) Hashtbl.t;
+        (** Event remapping table after applying context. *)
+  }
 
-    Encapsulates a set of forwarding edges (reads seeing later writes) and
-    write-exclusion edges (writes being elided by later writes), along with
-    derived information like value equalities and remapping tables. *)
-type t = {
-  fwd : (int * int) uset;
-      (** Forwarding edges: [(e1, e2)] means [e2] reads from [e1]. *)
-  we : (int * int) uset;
-      (** Write-exclusion edges: [(e1, e2)] means [e1] is overwritten by [e2].
-      *)
-  valmap : (expr * expr) list;
-      (** Value equalities implied by forwarding edges. *)
-  psi : expr list;
-      (** Constraints from value equalities (tautologies removed). *)
-  fwdwe : (int * int) uset;
-      (** Union of forwarding and write-exclusion edges. *)
-  remap_map : (int, int) Hashtbl.t;
-      (** Event remapping table after applying context. *)
-}
+  (** [create ?fwd ?we ()] creates a new forwarding context.
 
-(** [create ?fwd ?we ()] creates a new forwarding context.
+      Builds derived information including value equalities, constraints, and
+      the event remapping table.
 
-    Builds derived information including value equalities, constraints, and the
-    event remapping table.
+      @param fwd Optional forwarding edge set (default: empty).
+      @param we Optional write-exclusion edge set (default: empty).
+      @return A new forwarding context. *)
+  let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
+    let landmark = Landmark.register "ForwardingContext.create" in
+      Landmark.enter landmark;
+      let fwdwe = USet.union fwd we in
 
-    @param fwd Optional forwarding edge set (default: empty).
-    @param we Optional write-exclusion edge set (default: empty).
-    @return A new forwarding context. *)
-let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
-  let landmark = Landmark.register "ForwardingContext.create" in
-    Landmark.enter landmark;
-    let fwdwe = USet.union fwd we in
-
-    (* valmap is filtered by non-None values *)
-    let valmap =
-      USet.values fwd
-      |> List.filter_map (fun (e1, e2) ->
-          match (!State.val_fn e1, !State.val_fn e2) with
-          | Some v1, Some v2 -> Some (v1, v2)
-          | _ -> None
-      )
-    in
-
-    let psi =
-      List.filter_map
-        (fun (e1, e2) ->
-          let expr = Expr.evaluate (EBinOp (e1, "=", e2)) in
-            match expr with
-            | EBoolean true -> None
-            | _ -> Some expr
+      (* valmap is filtered by non-None values *)
+      let valmap =
+        USet.values fwd
+        |> List.filter_map (fun (e1, e2) ->
+            match (!State.val_fn e1, !State.val_fn e2) with
+            | Some v1, Some v2 -> Some (v1, v2)
+            | _ -> None
         )
-        valmap
-    in
+      in
 
-    (* Build remap map *)
-    let remap_map =
-      URelation.inverse fwdwe |> URelation.to_map |> map_transitive_closure
-    in
+      let psi =
+        List.filter_map
+          (fun (e1, e2) ->
+            let expr = Expr.evaluate (EBinOp (e1, "=", e2)) in
+              match expr with
+              | EBoolean true -> None
+              | _ -> Some expr
+          )
+          valmap
+      in
 
-    Landmark.exit landmark;
-    { fwd; we; valmap; psi; fwdwe; remap_map }
+      (* Build remap map *)
+      let remap_map =
+        URelation.inverse fwdwe |> URelation.to_map |> map_transitive_closure
+      in
 
-(** {1 Remapping Operations} *)
+      Landmark.exit landmark;
+      { fwd; we; valmap; psi; fwdwe; remap_map }
 
-(** [remap ctx e] remaps a single event through the context.
+  (** {1 Remapping Operations} *)
 
-    Follows forwarding chains and write-exclusion to find the canonical event
-    that [e] maps to in this context.
+  (** [remap ctx e] remaps a single event through the context.
 
-    @param ctx The forwarding context.
-    @param e The event ID to remap.
-    @return The canonical event ID. *)
-let remap ctx e = try Hashtbl.find ctx.remap_map e with Not_found -> e
+      Follows forwarding chains and write-exclusion to find the canonical event
+      that [e] maps to in this context.
 
-(** [remap_rel ctx rel] remaps a relation through the context.
+      @param ctx The forwarding context.
+      @param e The event ID to remap.
+      @return The canonical event ID. *)
+  let remap ctx e = try Hashtbl.find ctx.remap_map e with Not_found -> e
 
-    Applies event remapping to both components of each pair in the relation,
-    removing self-edges that result from remapping.
+  (** [remap_rel ctx rel] remaps a relation through the context.
 
-    @param ctx The forwarding context.
-    @param rel The relation to remap.
-    @return The remapped relation. *)
-let remap_rel ctx rel =
-  USet.map
-    (fun (from, to_) ->
-      let from' = remap ctx from in
-      let to_' = remap ctx to_ in
-        (from', to_')
-    )
-    rel
-  |> USet.filter (fun (from, to_) -> from <> to_)
+      Applies event remapping to both components of each pair in the relation,
+      removing self-edges that result from remapping.
 
-(** [remap_just ctx just op] remaps a justification through the context.
+      @param ctx The forwarding context.
+      @param rel The relation to remap.
+      @return The remapped relation. *)
+  let remap_rel ctx rel =
+    USet.map
+      (fun (from, to_) ->
+        let from' = remap ctx from in
+        let to_' = remap ctx to_ in
+          (from', to_')
+      )
+      rel
+    |> USet.filter (fun (from, to_) -> from <> to_)
 
-    Updates the justification's forwarding and write-exclusion sets by combining
-    them with the context's edges.
+  (** [remap_just ctx just op] remaps a justification through the context.
 
-    @param ctx The forwarding context.
-    @param just The justification to remap.
-    @return The remapped justification. *)
-let remap_just ctx (just : justification) =
-  let fwd = USet.union ctx.fwd just.fwd in
-  let we = USet.union ctx.we just.we in
-    { just with fwd; we }
+      Updates the justification's forwarding and write-exclusion sets by
+      combining them with the context's edges.
 
-(** {1 Cache Access} *)
+      @param ctx The forwarding context.
+      @param just The justification to remap.
+      @return The remapped justification. *)
+  let remap_just ctx (just : justification) =
+    let fwd = USet.union ctx.fwd just.fwd in
+    let we = USet.union ctx.we just.we in
+      { just with fwd; we }
 
-(** [cache_get ctx predicates] retrieves exact cache match.
+  (** {1 Cache Access} *)
 
-    @param ctx The forwarding context.
-    @param predicates The predicate list.
-    @return Cached value or empty value if not found. *)
-let cache_get ctx predicates = FwdCache.get (ctx.fwd, ctx.we) predicates
+  (** [cache_get ctx predicates] retrieves exact cache match.
 
-(** [cache_get_subset ctx predicates] retrieves subset cache match.
+      @param ctx The forwarding context.
+      @param predicates The predicate list.
+      @return Cached value or empty value if not found. *)
+  let cache_get ctx predicates = FwdCache.get (ctx.fwd, ctx.we) predicates
 
-    @param ctx The forwarding context.
-    @param predicates The predicate list.
-    @return [Some value] if matching entry found, [None] otherwise. *)
-let cache_get_subset ctx predicates =
-  FwdCache.get_subset (ctx.fwd, ctx.we) predicates
+  (** [cache_get_subset ctx predicates] retrieves subset cache match.
 
-(** [cache_set ctx key predicates value] stores value in cache.
+      @param ctx The forwarding context.
+      @param predicates The predicate list.
+      @return [Some value] if matching entry found, [None] otherwise. *)
+  let cache_get_subset ctx predicates =
+    FwdCache.get_subset (ctx.fwd, ctx.we) predicates
 
-    @param ctx The forwarding context.
-    @param key Either ["ppo"] or ["ppo_loc"].
-    @param predicates The predicate list.
-    @param value The computed relation.
-    @return The stored value. *)
-let cache_set ctx key predicates value =
-  FwdCache.set (ctx.fwd, ctx.we) key predicates value
+  (** [cache_set ctx key predicates value] stores value in cache.
 
-(** {1 PPO Computation} *)
+      @param ctx The forwarding context.
+      @param key Either ["ppo"] or ["ppo_loc"].
+      @param predicates The predicate list.
+      @param value The computed relation.
+      @return The stored value. *)
+  let cache_set ctx key predicates value =
+    FwdCache.set (ctx.fwd, ctx.we) key predicates value
 
-(** [ppo ?debug ctx predicates] computes preserved program order.
+  (** {1 PPO Computation} *)
 
-    Computes the PPO relation by filtering base orderings through semantic alias
-    analysis. Uses caching to avoid redundant solver queries.
+  (** [ppo ?debug ctx predicates] computes preserved program order.
 
-    @param debug Optional flag to enable debug output (default: false).
-    @param ctx The forwarding context.
-    @param predicates Additional predicate constraints.
-    @return Promise of the PPO relation. *)
-let ppo ?(debug = false) ctx predicates =
-  let landmark = Landmark.register "ForwardingContext.ppo" in
-    Landmark.enter landmark;
-    let p = predicates @ ctx.psi in
-    let cached = cache_get ctx p in
-      match cached.ppo with
-      | Some v ->
-          Landmark.exit landmark;
-          Lwt.return v
-      | _ ->
-          let* result =
-            let sub = cache_get_subset ctx p in
-            let base =
-              match sub with
-              | Some s -> (
-                  match s.ppo with
-                  | Some ppo -> ppo
-                  | None -> !State.ppo_loc_base
-                )
-              | None -> !State.ppo_loc_base
-            in
-              (* Filter with alias analysis using solver - check if locations are
-               equal given predicates and psi of forwarding context *)
-              USet.async_filter
-                (fun (e1, e2) ->
-                  let loc1 = Events.get_loc !State.structure e1 in
-                  let loc2 = Events.get_loc !State.structure e2 in
-                    match (loc1, loc2) with
-                    | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
-                    | _ -> Lwt.return false
-                )
-                base
-          in
-          let u = USet.union !State.ppo_base result in
-          let remapped = remap_rel ctx u in
+      Computes the PPO relation by filtering base orderings through semantic
+      alias analysis. Uses caching to avoid redundant solver queries.
+
+      @param debug Optional flag to enable debug output (default: false).
+      @param ctx The forwarding context.
+      @param predicates Additional predicate constraints.
+      @return Promise of the PPO relation. *)
+  let ppo ?(debug = false) ctx predicates =
+    let landmark = Landmark.register "ForwardingContext.ppo" in
+      Landmark.enter landmark;
+      let p = predicates @ ctx.psi in
+      let cached = cache_get ctx p in
+        match cached.ppo with
+        | Some v ->
             Landmark.exit landmark;
-            Lwt.return (cache_set ctx "ppo" p remapped)
-
-(** [ppo_loc ctx predicates] computes location-based PPO.
-
-    Computes PPO restricted to events accessing the same concrete location. More
-    precise than standard PPO as it requires exact location equality under the
-    given predicates.
-
-    @param ctx The forwarding context.
-    @param predicates The predicate constraints.
-    @return Promise of the location-based PPO relation. *)
-let ppo_loc ctx predicates =
-  let landmark = Landmark.register "ForwardingContext.ppo_loc" in
-    Landmark.enter landmark;
-    let p =
-      predicates @ ctx.psi
-      |> USet.of_list
-      |> USet.values
-      |> List.sort Expr.compare
-    in
-    let cached = cache_get ctx p in
-      match cached.ppo_loc with
-      | Some v ->
-          Landmark.exit landmark;
-          Lwt.return v
-      | None ->
-          (* Get base ppo_alias from cache or compute it *)
-          let* ppo_alias =
-            let sub = cache_get_subset ctx p in
-              match sub with
-              | Some s -> (
-                  match (s.ppo_loc, s.ppo) with
-                  | Some ppo_loc, _ -> Lwt.return ppo_loc
-                  | None, Some ppo -> Lwt.return ppo
-                  | None, None -> ppo ctx predicates
-                )
-              | None -> ppo ctx predicates
-          in
-            (* Filter for exact location equality using the predicates P *)
-            let* filtered =
-              USet.async_filter
-                (fun (e1, e2) ->
-                  let loc1 = Events.get_loc !State.structure e1 in
-                  let loc2 = Events.get_loc !State.structure e2 in
-                    match (loc1, loc2) with
-                    | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
-                    | _ -> Lwt.return false
-                )
-                ppo_alias
+            Lwt.return v
+        | _ ->
+            let* result =
+              let sub = cache_get_subset ctx p in
+              let base =
+                match sub with
+                | Some s -> (
+                    match s.ppo with
+                    | Some ppo -> ppo
+                    | None -> !State.ppo_loc_base
+                  )
+                | None -> !State.ppo_loc_base
+              in
+                (* Filter with alias analysis using solver - check if locations are
+               equal given predicates and psi of forwarding context *)
+                USet.async_filter
+                  (fun (e1, e2) ->
+                    let loc1 = Events.get_loc !State.structure e1 in
+                    let loc2 = Events.get_loc !State.structure e2 in
+                      match (loc1, loc2) with
+                      | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                      | _ -> Lwt.return false
+                  )
+                  base
             in
-            let remapped = remap_rel ctx filtered in
+            let u = USet.union !State.ppo_base result in
+            let remapped = remap_rel ctx u in
               Landmark.exit landmark;
-              Lwt.return (cache_set ctx "ppo_loc" p remapped)
+              Lwt.return (cache_set ctx "ppo" p remapped)
 
-(** [ppo_sync ctx] computes synchronization PPO.
+  (** [ppo_loc ctx predicates] computes location-based PPO.
 
-    Returns the synchronization-based preserved program order, which includes
-    orderings from acquire-release, SC fences, and volatile accesses.
+      Computes PPO restricted to events accessing the same concrete location.
+      More precise than standard PPO as it requires exact location equality
+      under the given predicates.
 
-    @param ctx The forwarding context.
-    @return The synchronization PPO relation. *)
-let ppo_sync ctx = remap_rel ctx !State.ppo_sync
+      @param ctx The forwarding context.
+      @param predicates The predicate constraints.
+      @return Promise of the location-based PPO relation. *)
+  let ppo_loc ctx predicates =
+    let landmark = Landmark.register "ForwardingContext.ppo_loc" in
+      Landmark.enter landmark;
+      let p =
+        predicates @ ctx.psi
+        |> USet.of_list
+        |> USet.values
+        |> List.sort Expr.compare
+      in
+      let cached = cache_get ctx p in
+        match cached.ppo_loc with
+        | Some v ->
+            Landmark.exit landmark;
+            Lwt.return v
+        | None ->
+            (* Get base ppo_alias from cache or compute it *)
+            let* ppo_alias =
+              let sub = cache_get_subset ctx p in
+                match sub with
+                | Some s -> (
+                    match (s.ppo_loc, s.ppo) with
+                    | Some ppo_loc, _ -> Lwt.return ppo_loc
+                    | None, Some ppo -> Lwt.return ppo
+                    | None, None -> ppo ctx predicates
+                  )
+                | None -> ppo ctx predicates
+            in
+              (* Filter for exact location equality using the predicates P *)
+              let* filtered =
+                USet.async_filter
+                  (fun (e1, e2) ->
+                    let loc1 = Events.get_loc !State.structure e1 in
+                    let loc2 = Events.get_loc !State.structure e2 in
+                      match (loc1, loc2) with
+                      | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                      | _ -> Lwt.return false
+                  )
+                  ppo_alias
+              in
+              let remapped = remap_rel ctx filtered in
+                Landmark.exit landmark;
+                Lwt.return (cache_set ctx "ppo_loc" p remapped)
 
-(** {1 Context Validation} *)
+  (** [ppo_sync ctx] computes synchronization PPO.
 
-(** [check ctx] validates context satisfiability.
+      Returns the synchronization-based preserved program order, which includes
+      orderings from acquire-release, SC fences, and volatile accesses.
 
-    Uses an SMT solver to check if the constraints implied by the forwarding
-    context are satisfiable. Caches the result in good/bad context sets.
+      @param ctx The forwarding context.
+      @return The synchronization PPO relation. *)
+  let ppo_sync ctx = remap_rel ctx !State.ppo_sync
 
-    @param ctx The forwarding context to validate.
-    @return Promise of [true] if satisfiable, [false] otherwise. *)
-let check ctx =
-  let* result = Solver.check (Solver.create ctx.psi) in
-    match result with
-    | Some true ->
-        USet.add goodcon (ctx.fwd, ctx.we) |> ignore;
-        Lwt.return_true
-    | _ ->
-        USet.add badcon (ctx.fwd, ctx.we) |> ignore;
-        Lwt.return_false
+  (** {1 Context Validation} *)
 
-(** {1 Utilities} *)
+  (** [check ctx] validates context satisfiability.
 
-(** [to_string fwd_ctx] converts context to string representation.
+      Uses an SMT solver to check if the constraints implied by the forwarding
+      context are satisfiable. Caches the result in good/bad context sets.
 
-    @param fwd_ctx The forwarding context.
-    @return String showing forwarding and write-exclusion edges. *)
-let to_string fwd_ctx =
-  Printf.sprintf "(%s, %s)"
-    (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) fwd_ctx.fwd)
-    (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) fwd_ctx.we)
+      @param ctx The forwarding context to validate.
+      @return Promise of [true] if satisfiable, [false] otherwise. *)
+  let check ctx =
+    let* result = Solver.quick_check_cached ctx.psi in
+      match result with
+      | Some true ->
+          USet.add goodcon (ctx.fwd, ctx.we) |> ignore;
+          Lwt.return_true
+      | _ ->
+          USet.add badcon (ctx.fwd, ctx.we) |> ignore;
+          Lwt.return_false
 
+  (** {1 Utilities} *)
+
+  (** [to_string fwd_ctx] converts context to string representation.
+
+      @param fwd_ctx The forwarding context.
+      @return String showing forwarding and write-exclusion edges. *)
+  let to_string fwd_ctx =
+    Printf.sprintf "(%s, %s)"
+      (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) fwd_ctx.fwd)
+      (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) fwd_ctx.we)
 end

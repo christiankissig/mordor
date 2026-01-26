@@ -535,17 +535,23 @@ end = struct
           else EOr normalised_clauses
 
   let evaluate_conjunction ?(env = fun _ -> None) exprs =
-    List.map (evaluate ~env) exprs
-    (* flatten nested conjunctions *)
-    |> List.map (fun expr ->
-        match expr with
-        | EBinOp (lhs, "&&", rhs) -> [ lhs; rhs ]
-        | _ -> [ expr ]
-    )
-    |> List.flatten
-    (* sort and remove duplicates *)
-    |> List.filter (fun e -> not (equal e (EBoolean true)))
-    |> List.sort_uniq compare
+    let landmark = Landmark.register "Expr.evaluate_conjunction" in
+      Landmark.enter landmark;
+      let result =
+        List.map (evaluate ~env) exprs
+        (* flatten nested conjunctions *)
+        |> List.map (fun expr ->
+            match expr with
+            | EBinOp (lhs, "&&", rhs) -> [ lhs; rhs ]
+            | _ -> [ expr ]
+        )
+        |> List.flatten
+        (* sort and remove duplicates *)
+        |> List.filter (fun e -> not (equal e (EBoolean true)))
+        |> List.sort_uniq compare
+      in
+        Landmark.exit landmark;
+        result
 
   (** Relabel symbols in an expression using a relabelling function *)
 

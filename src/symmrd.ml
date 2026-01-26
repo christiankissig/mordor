@@ -66,11 +66,11 @@ let calculate_dependencies ?(include_rf = true)
     {
       structure;
       fj;
-      value_assign_seen = JustificationCache.create 0;
-      lifted_seen = JustificationPairCache.create 0;
-      forwarding_seen = JustificationCache.create 0;
-      weaken_seen = JustificationCache.create 0;
-      filter_seen = JustificationPairCache.create 0;
+      value_assign_seen = JustificationCache.create 1000;
+      lifted_seen = JustificationPairCache.create 1000000;
+      forwarding_seen = JustificationCache.create 1000;
+      weaken_seen = JustificationCache.create 1000;
+      filter_seen = JustificationPairCache.create 1000;
     }
   in
 
@@ -83,44 +83,7 @@ let calculate_dependencies ?(include_rf = true)
          s1
   in
 
-  let* final_justs =
-    let rec fixed_point (justs : justification uset) =
-      Logs.debug (fun m ->
-          m "Fixed-point iteration with %d justifications:\n%s\n"
-            (USet.size justs)
-            (String.concat "\n\t"
-               (USet.values (USet.map Justification.to_string justs))
-            )
-      );
-      let* va = Elaborations.value_assign elab_ctx justs in
-        let* lift = Elaborations.lift elab_ctx va in
-          let* weak = Elaborations.weaken elab_ctx lift in
-            let* fwd = Elaborations.forward elab_ctx weak in
-              let* filtered = Elaborations.filter elab_ctx fwd in
-
-              let justs_str =
-                String.concat "\n\t"
-                  (List.map Justification.to_string (USet.values filtered))
-              in
-                if justification_set_equal filtered justs then (
-                  Logs.debug (fun m ->
-                      m "Fixed-point reached with %d justifications:\n\t%s"
-                        (USet.size filtered) justs_str
-                  );
-                  Lwt.return filtered
-                )
-                else (
-                  Logs.debug (fun m ->
-                      m "Continue elaborating with %d justifications:\n\t%s"
-                        (USet.size filtered) justs_str
-                  );
-                  fixed_point filtered
-                )
-    in
-
-    let* filtered_init = Elaborations.filter elab_ctx pre_justs in
-      fixed_point filtered_init
-  in
+  let* final_justs = Elaborations.chain_elaborations elab_ctx pre_justs in
 
   Logs.debug (fun m ->
       m "Elaborations complete. Final justifications count: %d"

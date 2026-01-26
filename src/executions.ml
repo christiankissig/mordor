@@ -858,10 +858,6 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
           (USet.size write_events) (USet.size read_events) (USet.size w_cross_r)
     );
 
-    let ( let*? ) (condition, msg) f =
-      if condition then f () else Lwt.return false
-    in
-
     let preds = path.p @ constraints @ statex |> USet.of_list |> USet.values in
 
     (* w must not be po-after r *)
@@ -880,47 +876,58 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
       let* all_rf =
         USet.async_filter
           (fun rf_edge ->
-            let w, r = rf_edge in
-            let r_restrict =
-              Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
-            in
-              (* Check that loc(w) = loc(r) is satisfiable *)
-              let* loc_eq =
-                match (get_loc structure w, get_loc structure r) with
-                | Some loc_w, Some loc_r ->
-                    Solver.expoteq ~state:preds loc_w loc_r
-                | _ ->
-                    Logs.debug (fun m ->
-                        m
-                          "[compute_path_rf] Edge (%d->%d) rejected: missing \
-                           location"
-                          w r
-                    );
-                    Lwt.return false
+            let landmark = Landmark.register "compute_path_rf_edge_filter" in
+              Landmark.enter landmark;
+              let ( let*? ) (condition, msg) f =
+                if condition then f ()
+                else (
+                  Landmark.exit landmark;
+                  Lwt.return false
+                )
               in
-                let*? () =
-                  if not loc_eq then
-                    Logs.debug (fun m ->
-                        m
-                          "[compute_path_rf] Edge (%d->%d) rejected: locations \
-                           not equal"
-                          w r
-                    );
-                  (loc_eq, "RF locs not equal")
+              let w, r = rf_edge in
+              let r_restrict =
+                Hashtbl.find_opt structure.restrict r
+                |> Option.value ~default:[]
+              in
+                (* Check that loc(w) = loc(r) is satisfiable *)
+                let* loc_eq =
+                  match (get_loc structure w, get_loc structure r) with
+                  | Some loc_w, Some loc_r ->
+                      Solver.expoteq ~state:preds loc_w loc_r
+                  | _ ->
+                      Logs.debug (fun m ->
+                          m
+                            "[compute_path_rf] Edge (%d->%d) rejected: missing \
+                             location"
+                            w r
+                      );
+                      Lwt.return false
                 in
-                  (* Check that writes are not shadowed for read-from *)
-                  let* has_dslwb = dslwb structure w r in
-                    let*? () =
-                      if has_dslwb then
-                        Logs.debug (fun m ->
-                            m
-                              "[compute_path_rf] Edge (%d->%d) rejected: \
-                               shadowed (dslwb)"
-                              w r
-                        );
-                      (not has_dslwb, "RF edge is shadowed (dslwb)")
-                    in
-                      Lwt.return true
+                  let*? () =
+                    if not loc_eq then
+                      Logs.debug (fun m ->
+                          m
+                            "[compute_path_rf] Edge (%d->%d) rejected: \
+                             locations not equal"
+                            w r
+                      );
+                    (loc_eq, "RF locs not equal")
+                  in
+                    (* Check that writes are not shadowed for read-from *)
+                    let* has_dslwb = dslwb structure w r in
+                      let*? () =
+                        if has_dslwb then
+                          Logs.debug (fun m ->
+                              m
+                                "[compute_path_rf] Edge (%d->%d) rejected: \
+                                 shadowed (dslwb)"
+                                w r
+                          );
+                        (not has_dslwb, "RF edge is shadowed (dslwb)")
+                      in
+                        Landmark.exit landmark;
+                        Lwt.return true
           )
           w_cross_r_minus_po
       in

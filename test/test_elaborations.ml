@@ -239,7 +239,7 @@ let test_fprime_operations () =
        (fun (name, ppo_loc, pred_fn, e1, e2, expected) ->
          let ctx = TestData.make_context () in
          let just = TestData.make_justification 3 in
-           let* result = fprime ctx pred_fn ppo_loc just e1 e2 in
+           let* result = Forwarding.fprime ctx pred_fn ppo_loc just e1 e2 in
              check bool name expected result;
              Lwt.return_unit
        )
@@ -255,7 +255,7 @@ let test_fwd_operations () =
 
   Lwt_main.run
     ((* Basic *)
-     let* result1 = fwd ctx pred_fn fwd_ctx ppo_loc just in
+     let* result1 = Forwarding.fwd ctx pred_fn fwd_ctx ppo_loc just in
        check bool "fwd returns edges" true (USet.size result1 >= 0);
 
        (* Filters volatile *)
@@ -270,7 +270,7 @@ let test_fwd_operations () =
          let pred_fn2 _e = USet.singleton 1 in
          let ppo_loc2 = USet.of_list [ (1, 4) ] in
          let just2 = TestData.make_justification 5 in
-           let* result2 = fwd ctx pred_fn2 fwd_ctx ppo_loc2 just2 in
+           let* result2 = Forwarding.fwd ctx pred_fn2 fwd_ctx ppo_loc2 just2 in
              check bool "fwd filters volatile" true
                (not (USet.exists (fun (_, e) -> e = 4) result2));
 
@@ -286,7 +286,7 @@ let test_we_operations () =
 
   Lwt_main.run
     ((* Basic *)
-     let* result1 = we ctx pred_fn we_ctx ppo_loc just in
+     let* result1 = Forwarding.we ctx pred_fn we_ctx ppo_loc just in
        check bool "we returns edges" true (USet.size result1 >= 0);
 
        (* Write-to-write *)
@@ -294,7 +294,7 @@ let test_we_operations () =
        let structure = { ctx.structure with po } in
        let ctx = { ctx with structure } in
        let pred_fn2 _e = USet.singleton 1 in
-         let* result2 = we ctx pred_fn2 we_ctx ppo_loc just in
+         let* result2 = Forwarding.we ctx pred_fn2 we_ctx ppo_loc just in
            check bool "we write-to-write" true (USet.size result2 >= 0);
 
            Lwt.return_unit
