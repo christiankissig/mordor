@@ -78,9 +78,9 @@ module ModelUtils = struct
   let thread_external po x = USet.set_minus x po
 
   (** Common relation builders *)
-  (* let build_release_sequence events ex_e po rf rmw loc_restrict = ... *)
+  (* let build_release_sequence events e po rf rmw loc_restrict = ... *)
 
-  (* let build_synchronizes_with events ex_e po rf release loc_restrict = ... *)
+  (* let build_synchronizes_with events e po rf release loc_restrict = ... *)
 end
 
 (** {1 Memory Model Implementations} *)
@@ -111,9 +111,9 @@ module IMM : MEMORY_MODEL = struct
     let landmark = Landmark.register "IMM.build_cache" in
       Landmark.enter landmark;
 
-      let ({ ex_e; rf; ex_rmw; _ } : symbolic_execution) = execution in
+      let ({ e; rf; ex_rmw; _ } : symbolic_execution) = execution in
       let ({ po; restrict; _ } : symbolic_event_structure) = structure in
-      let _E = ex_e in
+      let _E = e in
 
       let rf = USet.clone rf in
       let po = USet.clone po in
@@ -439,7 +439,7 @@ end) : MEMORY_MODEL = struct
     hb : (int * int) uset;
     rfi : (int * int) uset;
     rf : (int * int) uset;
-    ex_e : int uset;
+    e : int uset;
     events : (int, event) Hashtbl.t;
     rmw : (int * int) uset;
     loc_restrict : (int * int) uset -> (int * int) uset;
@@ -458,9 +458,9 @@ end) : MEMORY_MODEL = struct
     let landmark = Landmark.register "RC11.build_cache" in
       Landmark.enter landmark;
 
-      let ({ ex_e; rf; ex_rmw; _ } : symbolic_execution) = execution in
+      let ({ e; rf; ex_rmw; _ } : symbolic_execution) = execution in
       let ({ po; _ } : symbolic_event_structure) = structure in
-      let _E = ex_e in
+      let _E = e in
 
       let rf = USet.clone rf in
       let rmw = USet.clone ex_rmw in
@@ -535,24 +535,15 @@ end) : MEMORY_MODEL = struct
       let hb = URelation.transitive_closure (USet.inplace_union sw sb) in
 
       Landmark.exit landmark;
-      {
-        sb;
-        hb;
-        rfi = URelation.inverse rf;
-        rf;
-        ex_e;
-        events;
-        rmw;
-        loc_restrict;
-      }
+      { sb; hb; rfi = URelation.inverse rf; rf; e; events; rmw; loc_restrict }
 
   (** Check coherence *)
   let check_coherence (co : (int * int) uset) (cache : cache) : bool =
     let landmark = Landmark.register "RC11.check_coherence" in
       Landmark.enter landmark;
 
-      let { sb; hb; rfi; rf; ex_e; events; rmw; loc_restrict } = cache in
-      let _E = ex_e in
+      let { sb; hb; rfi; rf; e; events; rmw; loc_restrict } = cache in
+      let _E = e in
 
       (* rb = rf⁻¹;co *)
       let rb = URelation.compose [ rfi; co ] in
@@ -749,7 +740,7 @@ let try_all_coherence_orders structure execution cache check_coherence eqlocs =
   let landmark = Landmark.register "try_all_coherence_orders" in
     Landmark.enter landmark;
 
-    if USet.size execution.ex_e = 0 then Lwt.return false
+    if USet.size execution.e = 0 then Lwt.return false
     else
       let ({ po; restrict; _ } : symbolic_event_structure) = structure in
       let writes =
@@ -760,7 +751,7 @@ let try_all_coherence_orders structure execution cache check_coherence eqlocs =
                 event.typ = Write
             with Not_found -> false
           )
-          execution.ex_e
+          execution.e
       in
 
       if USet.size writes < 2 then Lwt.return true
@@ -865,7 +856,7 @@ let check_for_coherence structure execution restrictions =
     Landmark.enter landmark;
 
     let events = structure.events in
-      if USet.size execution.ex_e = 0 then Lwt.return false
+      if USet.size execution.e = 0 then Lwt.return false
       else
         match ModelRegistry.lookup restrictions.coherent with
         | None ->
@@ -876,7 +867,7 @@ let check_for_coherence structure execution restrictions =
             let module M = (val model : MEMORY_MODEL) in
             (* Create location equivalence relation using semantic equality *)
             let%lwt eqlocs =
-              let all_events = execution.ex_e in
+              let all_events = execution.e in
                 USet.async_filter
                   (fun (a, b) ->
                     if a = b then Lwt.return true

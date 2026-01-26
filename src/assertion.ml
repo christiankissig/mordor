@@ -258,7 +258,7 @@ module UBValidation = struct
         @param all_alloc_read_writes All pointer-related events. *)
     let check structure execution ub_reasons pointer_map rhb
         all_alloc_read_writes =
-      let all_frees = USet.intersection structure.free_events execution.ex_e in
+      let all_frees = USet.intersection structure.free_events execution.e in
       let uaf =
         USet.fold
           (fun acc free ->
@@ -304,9 +304,7 @@ module UBValidation = struct
         @param all_alloc_read_writes All pointer-related events. *)
     let check structure execution ub_reasons pointer_map rhb
         all_alloc_read_writes =
-      let all_alloc =
-        USet.intersection structure.malloc_events execution.ex_e
-      in
+      let all_alloc = USet.intersection structure.malloc_events execution.e in
       let all_pointer_read_writes =
         USet.difference all_alloc_read_writes all_alloc
       in
@@ -382,9 +380,9 @@ module ExecutionAnalysis = struct
         (USet.union execution.dp execution.rf)
     in
     let rhb_trans = URelation.transitive_closure rhb_base in
-    (* Add reflexive edges: (e, e) for all e in ex_e *)
+    (* Add reflexive edges: (e, e) for all e in e *)
     let rhb = USet.create () in
-      USet.iter (fun e -> USet.add rhb (e, e) |> ignore) execution.ex_e;
+      USet.iter (fun e -> USet.add rhb (e, e) |> ignore) execution.e;
       USet.iter (fun edge -> USet.add rhb edge |> ignore) rhb_trans;
       rhb
 
@@ -405,7 +403,7 @@ module ExecutionAnalysis = struct
           |> Option.get
         )
       )
-      (USet.intersection structure.malloc_events execution.ex_e)
+      (USet.intersection structure.malloc_events execution.e)
 
   (** [build_pointer_map pointers fix_rf_map] creates pointer symbol map.
 
@@ -456,7 +454,7 @@ module ExecutionAnalysis = struct
         | Some loc_sym -> List.mem loc_sym pointer_symbols
         | None -> false
       )
-      execution.ex_e
+      execution.e
 
   (** [build_rf_conditions structure execution] creates RF equality constraints.
 

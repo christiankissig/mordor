@@ -60,7 +60,7 @@ let make_events_table events =
 let make_empty_execution () =
   {
     id = 0;
-    ex_e = USet.create ();
+    e = USet.create ();
     rf = USet.create ();
     ex_rmw = USet.create ();
     dp = USet.create ();
@@ -202,13 +202,13 @@ let test_imm_coherent_simple () =
         (2, make_event 2 Write None (Some Relaxed) None None None None None);
       ]
   in
-  let ex_e = uset_of_list [ 1; 2 ] in
+  let e = uset_of_list [ 1; 2 ] in
   let po = uset_of_list [ (1, 2) ] in
   let rf = USet.create () in
   let restrict = Hashtbl.create 10 in
   let (structure : symbolic_event_structure) =
     {
-      e = ex_e;
+      e;
       events;
       po;
       po_iter = USet.create ();
@@ -237,7 +237,7 @@ let test_imm_coherent_simple () =
   let (execution : symbolic_execution) =
     {
       id = 0;
-      ex_e;
+      e;
       rf;
       ex_rmw = USet.create ();
       dp = USet.create ();
@@ -264,13 +264,13 @@ let test_rc11_coherent_simple () =
         (2, make_event 2 Read (Some Relaxed) None None None None None None);
       ]
   in
-  let ex_e = uset_of_list [ 1; 2 ] in
+  let e = uset_of_list [ 1; 2 ] in
   let po = uset_of_list [ (1, 2) ] in
   let rf = USet.create () in
   let restrict = Hashtbl.create 10 in
   let structure =
     {
-      e = ex_e;
+      e;
       events;
       po;
       po_iter = USet.create ();
@@ -299,7 +299,7 @@ let test_rc11_coherent_simple () =
   let execution =
     {
       id = 0;
-      ex_e;
+      e;
       rf;
       ex_rmw = USet.create ();
       dp = USet.create ();
@@ -326,13 +326,13 @@ let test_rc11c_coherent_simple () =
         (2, make_event 2 Read (Some Consume) None None None None None None);
       ]
   in
-  let ex_e = uset_of_list [ 1; 2 ] in
+  let e = uset_of_list [ 1; 2 ] in
   let po = uset_of_list [ (1, 2) ] in
   let rf = uset_of_list [ (1, 2) ] in
   let restrict = Hashtbl.create 10 in
   let structure =
     {
-      e = ex_e;
+      e;
       events;
       po;
       po_iter = USet.create ();
@@ -361,7 +361,7 @@ let test_rc11c_coherent_simple () =
   let execution =
     {
       id = 0;
-      ex_e;
+      e;
       rf;
       ex_rmw = USet.create ();
       dp = USet.create ();
@@ -392,7 +392,7 @@ let test_imm_coherent_rmw () =
         (3, make_event 3 Write None (Some Relaxed) None None None None None);
       ]
   in
-  let ex_e = uset_of_list [ 0; 1; 2; 3 ] in
+  let e = uset_of_list [ 0; 1; 2; 3 ] in
   let po = uset_of_list [ (1, 2) ] in
   let rf = uset_of_list [ (0, 1) ] in
   (* Read from initial write *)
@@ -400,7 +400,7 @@ let test_imm_coherent_rmw () =
   let restrict = Hashtbl.create 10 in
   let structure =
     {
-      e = ex_e;
+      e;
       events;
       po;
       po_iter = USet.create ();
@@ -429,7 +429,7 @@ let test_imm_coherent_rmw () =
   let execution =
     {
       id = 0;
-      ex_e;
+      e;
       rf;
       ex_rmw = rmw;
       dp = USet.create ();
@@ -452,13 +452,13 @@ let test_imm_coherent_rmw () =
 (** Test cache creation for different models *)
 let test_cache_types () =
   let events = make_events_table [] in
-  let ex_e = USet.create () in
+  let e = USet.create () in
   let po = USet.create () in
   let rf = USet.create () in
   let restrict = Hashtbl.create 10 in
   let structure =
     {
-      e = ex_e;
+      e;
       events;
       po;
       po_iter = USet.create ();
@@ -487,7 +487,7 @@ let test_cache_types () =
   let execution =
     {
       id = 0;
-      ex_e;
+      e;
       rf;
       ex_rmw = USet.create ();
       dp = USet.create ();

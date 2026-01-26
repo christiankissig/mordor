@@ -10,20 +10,20 @@ let calculate_future_set (execs : symbolic_execution uset) : future_set =
   USet.map
     (fun exec ->
       USet.union
-        (URelation.identity exec.ex_e)
+        (URelation.identity exec.e)
         (USet.intersection
            (USet.union exec.dp exec.ppo)
-           (URelation.cross exec.ex_e exec.ex_e)
+           (URelation.cross exec.e exec.e)
         )
     )
     execs
 
 (* Compute all histories of a symbolic execution.
-   A history is a subset of ex_e that is downward closed with respect to ppo,
+   A history is a subset of e that is downward closed with respect to ppo,
    dp, and rf. That is, if e2 is in a history H, then every e1 with (e1,e2) in
    ppo, dp, or rf must also be in H. *)
 let calculate_histories (exec : symbolic_execution) : int USet.t USet.t =
-  let all_events = exec.ex_e in
+  let all_events = exec.e in
   let ppo = exec.ppo in
   let dp = exec.dp in
   let rf = exec.rf in

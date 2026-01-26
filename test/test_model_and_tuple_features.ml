@@ -78,7 +78,7 @@ module TestSetMembership = struct
       List.iter (fun (a, b) -> USet.add ppo (a, b) |> ignore) ppo_pairs;
       {
         id = 0;
-        ex_e = USet.create ();
+        e = USet.create ();
         rf = USet.create ();
         ex_rmw = USet.create ();
         dp = USet.create ();

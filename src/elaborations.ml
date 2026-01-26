@@ -254,7 +254,7 @@ module Forwarding = struct
                     pred elab_ctx None None ~ppo:(Lwt.return ppo) ()
                   in
 
-                  (* Subtract fj from ppo_loc. TODO marked as DIFFERS in JS:
+                  (* Subtract fj from ppo_loc. NOTE DIFFERS in JS:
                      symmrd.ml defines fj as the union of init_ppo (ordering
                      the initial event before any other event and the
                      fork-join edges from the symbolic event structure.
@@ -271,10 +271,9 @@ module Forwarding = struct
                         (fun (e1, e2) ->
                           e1 > 0
                           (* && e2 <> just.w.label *)
-                          (* TODO disagrees with paper,
-                        freeze definition *)
-                          (* e1 and e2 are po before w, pulled forward from freeze
-                           *)
+                          (* NOTE JS disagrees with freeze definition *)
+                          (* NOTE e1 and e2 are po before w, pulled forward from
+                             freeze *)
                           && USet.mem elab_ctx.structure.po (e1, just.w.label)
                           && (e2 == just.w.label
                              || USet.mem elab_ctx.structure.po (e2, just.w.label)
@@ -287,9 +286,9 @@ module Forwarding = struct
                         (fun (e1, e2) ->
                           e1 > 0
                           (* && e2 <> just.w.label *)
-                          (* NOTE disagrees with paper, freeze definition *)
-                          (* e1 and e2 are po before w, pulled forward from freeze
-                           *)
+                          (* NOTE JS disagrees with freeze definition *)
+                          (* NOTE e1 and e2 are po before w, pulled forward from
+                             freeze *)
                           && USet.mem elab_ctx.structure.po (e1, just.w.label)
                           && (e2 == just.w.label
                              || USet.mem elab_ctx.structure.po (e2, just.w.label)
@@ -1188,6 +1187,16 @@ let batch_elaborations elab_ctx pre_justs =
     in
 
     let* final_justs = fixed_point (USet.create ()) pre_justs in
+      Logs.debug (fun m ->
+          m "Batch elaborations completed with %d justifications:\n%s"
+            (USet.size final_justs)
+            (String.concat "\n"
+               (List.map
+                  (fun j -> Printf.sprintf "\t%s" (Justification.to_string j))
+                  (USet.values final_justs)
+               )
+            )
+      );
       Landmark.exit landmark;
       Lwt.return final_justs
 

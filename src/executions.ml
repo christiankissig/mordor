@@ -44,7 +44,7 @@ module Execution = struct
       @param ex2 Second execution.
       @return [true] if executions are equal. *)
   let equal ex1 ex2 =
-    USet.equal ex1.ex_e ex2.ex_e
+    USet.equal ex1.e ex2.e
     && USet.equal ex1.dp ex2.dp
     && USet.equal ex1.ppo ex2.ppo
     && USet.equal ex1.rf ex2.rf
@@ -61,7 +61,7 @@ module Execution = struct
     in
     let hash_uset uset = USet.values uset |> List.sort compare |> hash_list in
       Hashtbl.hash
-        (hash_uset ex.ex_e, hash_uset ex.dp, hash_uset ex.ppo, hash_uset ex.rf)
+        (hash_uset ex.e, hash_uset ex.dp, hash_uset ex.ppo, hash_uset ex.rf)
 
   (** [contains exec1 exec2] checks if [exec1] subsumes [exec2].
 
@@ -73,7 +73,7 @@ module Execution = struct
       @param exec2 Potentially contained execution.
       @return [true] if [exec1] contains [exec2]. *)
   let contains exec1 exec2 =
-    USet.equal exec2.ex_e exec1.ex_e
+    USet.equal exec2.e exec1.e
     && USet.subset exec2.dp exec1.dp
     && USet.subset exec2.ppo exec1.ppo
     && USet.subset exec2.rf exec1.rf
@@ -1579,7 +1579,7 @@ let generate_executions ?(include_rf = true)
               let exec =
                 {
                   id = !id;
-                  ex_e = freeze_res.e;
+                  e = freeze_res.e;
                   rf = freeze_res.rf;
                   dp = freeze_res.dp;
                   ppo = freeze_res.ppo;
@@ -1596,7 +1596,7 @@ let generate_executions ?(include_rf = true)
 
               Logs.debug (fun m ->
                   m "Generated execution with %d events, %d RF edges"
-                    (USet.size exec.ex_e) (USet.size exec.rf)
+                    (USet.size exec.e) (USet.size exec.rf)
               );
 
               Landmark.exit landmark;

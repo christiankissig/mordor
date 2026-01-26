@@ -177,7 +177,7 @@ type justification = {
 (** Symbolic Execution *)
 type symbolic_execution = {
   id : int; (* Unique identifier *)
-  ex_e : int uset; (* Event set *)
+  e : int uset; (* Event set *)
   rf : (int * int) uset; (* Reads-from relation *)
   dp : (int * int) uset; (* Dependencies *)
   ppo : (int * int) uset; (* Preserved program order *)

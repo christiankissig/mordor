@@ -258,7 +258,7 @@ let pp_env fmt env =
 (* The main type with custom printers *)
 type symbolic_execution = {
   id : int;
-  ex_e : int uset; [@printer pp_int_uset]
+  e : int uset; [@printer pp_int_uset]
   rf : (int * int) uset; [@printer pp_int_urel]
   dp : (int * int) uset; [@printer pp_int_urel]
   ppo : (int * int) uset; [@printer pp_int_urel]
