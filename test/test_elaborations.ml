@@ -154,34 +154,6 @@ module TestData = struct
     ]
 end
 
-(** Filter and value_assign tests *)
-
-let test_filter_operations () =
-  let ctx = TestData.make_context () in
-  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
-
-  Lwt_main.run
-    ((* Empty *)
-     let* empty_result = filter ctx (USet.create ()) in
-       check int "empty filter" 0 (USet.size empty_result);
-
-       (* Valid *)
-       let just = TestData.make_justification 1 ~predicates:[ pred ] in
-         let* valid_result = filter ctx (USet.singleton just) in
-           check bool "filter keeps valid" true (USet.size valid_result >= 0);
-
-           (* Covered *)
-           let just1 =
-             TestData.make_justification 1 ~predicates:[ pred; pred ]
-           in
-           let just2 = TestData.make_justification 1 ~predicates:[ pred ] in
-             let* covered_result = filter ctx (USet.of_list [ just1; just2 ]) in
-               check bool "filter removes covered" true
-                 (USet.size covered_result <= 2);
-
-               Lwt.return_unit
-    )
-
 let test_value_assign_operations () =
   let ctx = TestData.make_context () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
@@ -189,8 +161,8 @@ let test_value_assign_operations () =
   Lwt_main.run
     ((* No variables *)
      let just = TestData.make_justification 1 ~predicates:[ pred ] in
-       let* result1 = value_assign ctx (USet.singleton just) in
-         check int "value_assign preserves size" 1 (USet.size result1);
+       let* result1 = ValueAssignment.elab ctx just in
+         check int "value_assign preserves size" 1 (List.length result1);
 
          (* With variable *)
          let w = TestData.make_event 1 ~wval:(Some (EVar "v1")) in
@@ -203,9 +175,9 @@ let test_value_assign_operations () =
              d = USet.create ();
            }
          in
-           let* result2 = value_assign ctx (USet.singleton just_var) in
+           let* result2 = ValueAssignment.elab ctx just_var in
              check bool "value_assign processes variables" true
-               (USet.size result2 > 0);
+               (List.length result2 > 0);
 
              Lwt.return_unit
     )
@@ -297,22 +269,18 @@ let test_forward_operations () =
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
 
   Lwt_main.run
-    ((* Empty *)
-     let* result1 = forward ctx (USet.create ()) in
-       check int "forward empty" 0 (USet.size result1);
+    ((* Single justification *)
+     let just = TestData.make_justification 1 ~predicates:[ pred ] in
+       let* result2 = Forwarding.elab ctx just in
+         check bool "forward produces results" true (List.length result2 >= 0);
 
-       (* Single justification *)
-       let just = TestData.make_justification 1 ~predicates:[ pred ] in
-         let* result2 = forward ctx (USet.singleton just) in
-           check bool "forward produces results" true (USet.size result2 >= 0);
+         (* With pwg *)
+         let structure = { ctx.structure with pwg = [ pred ] } in
+         let ctx_pwg = { ctx with structure } in
+           let* result3 = Forwarding.elab ctx_pwg just in
+             check bool "forward with pwg" true (List.length result3 >= 0);
 
-           (* With pwg *)
-           let structure = { ctx.structure with pwg = [ pred ] } in
-           let ctx_pwg = { ctx with structure } in
-             let* result3 = forward ctx_pwg (USet.singleton just) in
-               check bool "forward with pwg" true (USet.size result3 >= 0);
-
-               Lwt.return_unit
+             Lwt.return_unit
     )
 
 (** Lift, weaken, strengthen tests *)
@@ -321,26 +289,23 @@ let test_lift_and_weaken () =
   let ctx = TestData.make_context () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
   let just = TestData.make_justification 1 ~predicates:[ pred ] in
-  let justs = USet.singleton just in
 
   Lwt_main.run
     ((* Lift identity *)
-     let* lift_result = lift ctx justs in
-       check int "lift identity" (USet.size justs) (USet.size lift_result);
+     let* lift_result = Lifting.elab ctx just just in
+       check int "lift identity" 0 (List.length lift_result);
 
        (* Weaken no pwg *)
        let just2 = TestData.make_justification 1 ~predicates:[ pred; pred ] in
-       let justs2 = USet.singleton just2 in
-         let* weaken_result1 = weaken ctx justs2 in
-           check int "weaken no pwg" (USet.size justs2)
-             (USet.size weaken_result1);
+         let* weaken_result1 = Weakening.elab ctx just2 in
+           check int "weaken no pwg" 1 (List.length weaken_result1);
 
            (* Weaken with pwg *)
            let structure = { ctx.structure with pwg = [ pred ] } in
            let ctx_pwg = { ctx with structure } in
-             let* weaken_result2 = weaken ctx_pwg justs2 in
-               check bool "weaken with pwg" true (USet.size weaken_result2 > 0);
-               let just' = List.hd (USet.values weaken_result2) in
+             let* weaken_result2 = Weakening.elab ctx_pwg just2 in
+               check bool "weaken with pwg" true (List.length weaken_result2 > 0);
+               let just' = List.hd weaken_result2 in
                  check bool "weaken removes implied" true
                    (List.length just'.p <= List.length just2.p);
 
@@ -352,8 +317,8 @@ let test_lift_and_weaken () =
                  let just3 =
                    TestData.make_justification 1 ~predicates:[ not_pwg ]
                  in
-                   let* weaken_result3 = weaken ctx2 (USet.singleton just3) in
-                   let just'' = List.hd (USet.values weaken_result3) in
+                   let* weaken_result3 = Weakening.elab ctx2 just3 in
+                   let just'' = List.hd weaken_result3 in
                      check bool "weaken preserves non-implied" true
                        (List.length just''.p > 0);
 
@@ -823,7 +788,6 @@ let suite =
   ( "Elaborations",
     [
       (* Filter and value_assign *)
-      test_case "filter operations" `Quick test_filter_operations;
       test_case "value_assign operations" `Quick test_value_assign_operations;
       (* Forward-related *)
       test_case "fprime operations" `Quick test_fprime_operations;

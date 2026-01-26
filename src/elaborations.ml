@@ -56,113 +56,6 @@ let pred (elab_ctx : context) (ctx : ForwardingContext.t option)
           Hashtbl.find_opt tree e |> Option.value ~default:(USet.create ())
       )
 
-(** [close_under_elab justs elab] closes justification set under elaboration.
-
-    Applies the elaboration function [elab] to each justification in [justs] in
-    parallel, collecting and deduplicating results.
-
-    @param justs The set of justifications to elaborate.
-    @param elab
-      Function mapping a justification to a list of elaborated justifications.
-    @return Promise of the union of original and new justifications. *)
-let close_under_elab ?cache justs elab =
-  let* elaborated =
-    USet.async_map
-      (fun just ->
-        if
-          Option.is_some cache && JustificationCache.mem (Option.get cache) just
-        then Lwt.return []
-        else (
-          Option.iter (fun cache -> JustificationCache.add cache just ()) cache;
-          elab just
-        )
-      )
-      justs
-  in
-  let new_justs = USet.values elaborated |> List.flatten in
-    Logs.debug (fun m ->
-        m "Elaboration produced %d justifications before filtering.\n%s\n"
-          (List.length new_justs)
-          (String.concat "\n\t" (List.map Justification.to_string new_justs))
-    );
-    let new_justs =
-      new_justs
-      |> deduplicate_justification_list
-      |> List.filter (fun just ->
-          not (USet.exists (fun j -> Justification.equal j just) justs)
-      )
-      |> USet.of_list
-    in
-      Logs.debug (fun m ->
-          m "Elaboration produced %d new justifications.\n%s"
-            (USet.size new_justs)
-            (String.concat "\n\t"
-               (List.map Justification.to_string (USet.values new_justs))
-            )
-      );
-      Lwt.return (USet.union justs new_justs)
-
-(** [close_under_elab_2 justs elab] closes under binary elaboration.
-
-    Similar to {!close_under_elab} but for elaborations that take pairs of
-    justifications. Applies [elab] to all pairs in the cross product.
-
-    @param justs The set of justifications to elaborate.
-    @param elab Function mapping two justifications to a list of results.
-    @return Promise of the union of original and new justifications. *)
-let close_under_elab_2 ?cache justs elab =
-  let pairs = URelation.cross justs justs in
-  let landmark = Landmark.register "Elaborations.close_under_elab_2.filter" in
-    Landmark.enter landmark;
-    let filtered_pairs =
-      match cache with
-      | None -> pairs
-      | Some c ->
-          USet.filter
-            (fun (j1, j2) -> not (JustificationPairCache.mem c (j1, j2)))
-            pairs
-    in
-      Landmark.exit landmark;
-      let landmark = Landmark.register "Elaborations.close_under_elab_2.elab" in
-        Landmark.enter landmark;
-        let* elaborated =
-          USet.async_map
-            (fun (j1, j2) ->
-              Option.iter
-                (fun c -> JustificationPairCache.add c (j1, j2) ())
-                cache;
-              elab j1 j2
-            )
-            filtered_pairs
-        in
-          Landmark.exit landmark;
-          let new_justs = USet.values elaborated |> List.flatten in
-            Logs.debug (fun m ->
-                m
-                  "Elaboration produced %d justifications before filtering.\n\
-                   %s\n"
-                  (List.length new_justs)
-                  (String.concat "\n\t"
-                     (List.map Justification.to_string new_justs)
-                  )
-            );
-            let new_justs =
-              new_justs
-              |> deduplicate_justification_list
-              |> List.filter (fun just ->
-                  not (USet.exists (fun j -> Justification.equal j just) justs)
-              )
-              |> USet.of_list
-            in
-              Logs.debug (fun m ->
-                  m "Elaboration produced %d new justifications.\n%s"
-                    (USet.size new_justs)
-                    (String.concat "\n\t"
-                       (List.map Justification.to_string (USet.values new_justs))
-                    )
-              );
-              Lwt.return (USet.union justs new_justs)
-
 (** [pre_justifications structure] computes initial pre-justifications.
 
     Generates pre-justifications for write, allocation, and free events based on
@@ -214,96 +107,6 @@ let pre_justifications structure =
       )
       prejustifiable_events
 
-(** [filter elab_ctx justs] filters and deduplicates justifications.
-
-    Removes duplicate justifications and those covered by others. A
-    justification [j1] covers [j2] if [j1] is more general (has fewer
-    constraints).
-
-    @param elab_ctx The elaboration context.
-    @param justs The set of justifications to filter.
-    @return Promise of the filtered justification set. *)
-let filter elab_ctx (justs : justification uset) =
-  let landmark = Landmark.register "Elaborations.filter" in
-    Landmark.enter landmark;
-    Logs.debug (fun m ->
-        m "Filtering %d justifications...\n%s" (USet.size justs)
-          (String.concat "\n\t"
-             (List.map Justification.to_string (USet.values justs))
-          )
-    );
-
-    let deduplicated = deduplicate_justification_list (USet.values justs) in
-
-    (* Sort by predicate length; needed to half filtering by covered
-     justifications below. *)
-    let sorted =
-      List.sort (fun a b -> List.length a.p - List.length b.p) deduplicated
-    in
-
-    (* Compute ppo for each justification once *)
-    let justs_with_ppo = Hashtbl.create (List.length sorted) in
-
-    let* () =
-      Lwt_list.iter_s
-        (fun just ->
-          let con = ForwardingContext.create ~fwd:just.fwd ~we:just.we () in
-            let* ppo = ForwardingContext.ppo con just.p in
-            let existing =
-              Hashtbl.find_opt justs_with_ppo just.w.label
-              |> Option.value ~default:[]
-            in
-              Hashtbl.replace justs_with_ppo just.w.label
-                ((just, ppo) :: existing);
-              Lwt.return_unit
-        )
-        sorted
-    in
-
-    let writes_with_justs =
-      Hashtbl.fold (fun k _ acc -> k :: acc) justs_with_ppo []
-    in
-
-    let* filtered =
-      Lwt_list.fold_left_s
-        (fun (acc : justification list) (w : int) ->
-          (* Filter covered justifications *)
-          let justs_with_ppo = Hashtbl.find justs_with_ppo w in
-          let indexed = List.mapi (fun i jp -> (i, jp)) justs_with_ppo in
-            let* (filtered : justification list) =
-              Lwt_list.filter_map_s
-                (fun (i, (just_x, ppo_x)) ->
-                  (* Check if any earlier justification covers this one *)
-                  let is_covered =
-                    List.exists
-                      (fun (j, (just_y, ppo_y)) ->
-                        j < i
-                        (* Only compare with earlier justifications, makes use of
-                        sorting by predicate length earlier *)
-                        && Justification.covers just_y just_x
-                      )
-                      indexed
-                  in
-                    if is_covered then Lwt.return_none
-                    else Lwt.return_some just_x
-                )
-                indexed
-            in
-              Lwt.return (acc @ filtered)
-        )
-        [] writes_with_justs
-    in
-
-    let result = USet.of_list filtered in
-      Logs.debug (fun m ->
-          m "Filtered down to %d justifications.\n%s" (USet.size result)
-            (String.concat "\n\t"
-               (List.map Justification.to_string (USet.values result))
-            )
-      );
-      Landmark.exit landmark;
-      Lwt.return result
-
 (** {1 Value Assignment Elaboration} *)
 
 module ValueAssignment = struct
@@ -351,29 +154,6 @@ module ValueAssignment = struct
               Lwt.return [ { just with w; d } ]
         | None -> Lwt.return [ just ]
 end
-
-(** [value_assign elab_ctx justs] performs value assignment elaboration.
-
-    For each justification, attempts to find a satisfying model and assigns
-    concrete values to symbolic write values where possible.
-
-    @param elab_ctx The elaboration context.
-    @param justs The set of justifications to elaborate.
-    @return Promise of justifications with assigned values. *)
-let value_assign elab_ctx justs =
-  let landmark = Landmark.register "Elaborations.value_assign" in
-    Landmark.enter landmark;
-    Logs.debug (fun m ->
-        m "Performing value assignment on %d justifications..." (USet.size justs)
-    );
-
-    let* results = close_under_elab justs (ValueAssignment.elab elab_ctx) in
-
-    Logs.debug (fun m ->
-        m "Completed value assignment on %d justifications." (USet.size results)
-    );
-    Landmark.exit landmark;
-    Lwt.return results
 
 (** {1 Forwarding Elaboration} *)
 
@@ -589,26 +369,6 @@ module Forwarding = struct
       let results = List.concat path_results in
         Lwt.return results
 end
-
-(** [forward elab_ctx justs] performs forwarding elaboration.
-
-    Extends justifications by adding valid forwarding and write-exclusion edges.
-    Each new edge is validated for consistency before being added.
-
-    @param elab_ctx The elaboration context.
-    @param justs The set of justifications to forward.
-    @return Promise of justifications with added forwarding edges. *)
-let forward elab_ctx justs =
-  let landmark = Landmark.register "Elaborations.forward" in
-    Landmark.enter landmark;
-    Logs.debug (fun m ->
-        m "Performing forwarding on %d justifications..." (USet.size justs)
-    );
-
-    let* out = close_under_elab justs (Forwarding.elab elab_ctx) in
-
-    Landmark.exit landmark;
-    Lwt.return out
 
 (** {1 Lifting Elaboration} *)
 
@@ -1277,26 +1037,6 @@ end = struct
         )
 end
 
-(** [lift elab_ctx justs] performs lifting elaboration on all pairs.
-
-    Applies the lifting elaboration to all pairs of justifications in the cross
-    product, combining justifications for conflicting writes.
-
-    @param elab_ctx The elaboration context.
-    @param justs The set of justifications to lift.
-    @return Promise of justifications including lifted results. *)
-let lift elab_ctx justs =
-  let landmark = Landmark.register "Elaborations.lift" in
-    Landmark.enter landmark;
-    Logs.debug (fun m -> m "Lifting %d justifications..." (USet.size justs));
-
-    let* out = close_under_elab_2 justs (Lifting.elab elab_ctx) in
-      Logs.debug (fun m ->
-          m "Lifting produced %d justifications." (USet.size out)
-      );
-      Landmark.exit landmark;
-      Lwt.return out
-
 (** {1 Weakening elaboration operations.} *)
 
 module Weakening = struct
@@ -1337,29 +1077,6 @@ module Weakening = struct
 
     Lwt.return [ { just with p = filtered_p } ]
 end
-
-(** [weaken elab_ctx justs] performs weakening elaboration.
-
-    Removes predicates from justifications that are implied by program-wide
-    guarantees (PWG), producing more general justifications.
-
-    @param elab_ctx The elaboration context.
-    @param justs The set of justifications to weaken.
-    @return Promise of weakened justifications. *)
-let weaken elab_ctx (justs : justification uset) : justification uset Lwt.t =
-  Logs.debug (fun m -> m "Starting weakening on justifications...");
-  if elab_ctx.structure.pwg = [] then (
-    Logs.debug (fun m -> m "No PWG predicates; skipping weakening.");
-    Lwt.return justs
-  )
-  else
-    let landmark = Landmark.register "Elaborations.weaken" in
-      Landmark.enter landmark;
-
-      (* TODO replace justifications instead of accumulating new ones *)
-      let* out = close_under_elab justs (Weakening.elab elab_ctx) in
-        Landmark.exit landmark;
-        Lwt.return out
 
 (** {1 Chained elaboration operations.} *)
 
