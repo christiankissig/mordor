@@ -82,15 +82,7 @@ module TestData = struct
 
   (* Mock context builder *)
   let make_context ?(structure = make_structure ()) () =
-    {
-      structure;
-      fj = USet.create ();
-      value_assign_seen = JustificationCache.create 0;
-      lifted_seen = JustificationPairCache.create 0;
-      forwarding_seen = JustificationCache.create 0;
-      weaken_seen = JustificationCache.create 0;
-      filter_seen = JustificationPairCache.create 0;
-    }
+    { structure; fj = USet.create () }
 
   (* Mock justification builder *)
   let make_justification ?(predicates = []) ?(fwd = USet.create ())
@@ -525,16 +517,7 @@ module LiftingTests = struct
                   (structure, events)
 
     (* Create an elaboration context from a structure *)
-    let create_elab_ctx structure =
-      {
-        structure;
-        fj = USet.create ();
-        value_assign_seen = JustificationCache.create 0;
-        lifted_seen = JustificationPairCache.create 0;
-        forwarding_seen = JustificationCache.create 0;
-        weaken_seen = JustificationCache.create 0;
-        filter_seen = JustificationPairCache.create 0;
-      }
+    let create_elab_ctx structure = { structure; fj = USet.create () }
 
     (* Predicate test cases *)
     type predicate_test_case = {

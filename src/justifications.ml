@@ -67,12 +67,7 @@ module Justification : sig
       @param j_x Potentially covered justification.
       @param ppo_x PPO relation for [j_x].
       @return [true] if [j_y] covers [j_x]. *)
-  val covers :
-    justification ->
-    (int * int) uset ->
-    justification ->
-    (int * int) uset ->
-    bool
+  val covers : justification -> justification -> bool
 
   (** [relabel ~relab just] relabels symbols in justification.
 
@@ -161,8 +156,7 @@ end = struct
       w = Event.relabel ~relab just.w;
     }
 
-  let covers (just_y : justification) (ppo_y : (int * int) uset)
-      (just_x : justification) (ppo_x : (int * int) uset) : bool =
+  let covers (just_y : justification) (just_x : justification) : bool =
     just_x.w.label = just_y.w.label
     && Option.equal Expr.equal just_x.w.loc just_y.w.loc
     && Option.equal Expr.equal just_x.w.wval just_y.w.wval

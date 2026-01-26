@@ -23,12 +23,6 @@ type context = {
   structure : symbolic_event_structure;
       (** The symbolic event structure being elaborated. *)
   fj : (int * int) USet.t;  (** Fork-join edges that constrain forwarding. *)
-  (* Caches to track seen justifications for elaborations *)
-  value_assign_seen : unit JustificationCache.t;
-  lifted_seen : unit JustificationPairCache.t;
-  forwarding_seen : unit JustificationCache.t;
-  weaken_seen : unit JustificationCache.t;
-  filter_seen : unit JustificationPairCache.t;
 }
 
 (** [pred elab_ctx ctx p ?ppo ()] computes the predecessor function.
@@ -248,7 +242,6 @@ let filter elab_ctx (justs : justification uset) =
     in
 
     (* Compute ppo for each justification once *)
-    (* TODO make hashtable on write event *)
     let justs_with_ppo = Hashtbl.create (List.length sorted) in
 
     let* () =
@@ -287,7 +280,7 @@ let filter elab_ctx (justs : justification uset) =
                         j < i
                         (* Only compare with earlier justifications, makes use of
                         sorting by predicate length earlier *)
-                        && Justification.covers just_y ppo_y just_x ppo_x
+                        && Justification.covers just_y just_x
                       )
                       indexed
                   in
@@ -374,10 +367,7 @@ let value_assign elab_ctx justs =
         m "Performing value assignment on %d justifications..." (USet.size justs)
     );
 
-    let* results =
-      close_under_elab ~cache:elab_ctx.value_assign_seen justs
-        (ValueAssignment.elab elab_ctx)
-    in
+    let* results = close_under_elab justs (ValueAssignment.elab elab_ctx) in
 
     Logs.debug (fun m ->
         m "Completed value assignment on %d justifications." (USet.size results)
@@ -615,10 +605,7 @@ let forward elab_ctx justs =
         m "Performing forwarding on %d justifications..." (USet.size justs)
     );
 
-    let* out =
-      close_under_elab ~cache:elab_ctx.forwarding_seen justs
-        (Forwarding.elab elab_ctx)
-    in
+    let* out = close_under_elab justs (Forwarding.elab elab_ctx) in
 
     Landmark.exit landmark;
     Lwt.return out
@@ -722,9 +709,7 @@ end = struct
       @param e2 Second event.
       @return Promise of [true] if equivalent. *)
   let is_relab_equiv elab_ctx relab p1 e1 p2 e2 =
-    let is_trace =
-      (e1.label = 5 && e2.label = 7) || (e1.label = 7 && e2.label = 5)
-    in
+    let is_trace = false in
       if is_trace then
         Logs.debug (fun m ->
             m "Checking relab equivalence between %d and %d" e1.label e2.label
@@ -851,9 +836,7 @@ end = struct
       @param e2 Second event.
       @return Promise of [true] if closed equivalence holds. *)
   let is_closed_relab_equiv elab_ctx statex relab pred_1 pred_2 p1 e1 p2 e2 =
-    let is_trace =
-      (e1.label = 5 && e2.label = 7) || (e1.label = 7 && e2.label = 5)
-    in
+    let is_trace = false in
     let rec aux p1 e1 p2 e2 =
       if is_trace then
         Logs.debug (fun m ->
@@ -1079,10 +1062,7 @@ end = struct
        predicates *)
     let landmark = Landmark.register "Elaborations.Lifting.elab" in
       Landmark.enter landmark;
-      let is_trace =
-        (just_1.w.label = 5 && just_2.w.label = 7)
-        || (just_1.w.label = 6 && just_2.w.label = 5)
-      in
+      let is_trace = false in
         if
           (not
              (USet.mem elab_ctx.structure.conflict
@@ -1159,10 +1139,6 @@ end = struct
                   generate_relabelings elab_ctx just_1 just_2 ppo_1 ppo_2 con_1
                     con_2
                 in
-                  Logs.debug (fun m ->
-                      m "Generated %d relabelings for justifications %d vs %d"
-                        (USet.size relabs) just_1.w.label just_2.w.label
-                  );
                   let* lifted =
                     Lwt_list.map_s
                       (fun relab ->
@@ -1314,10 +1290,7 @@ let lift elab_ctx justs =
     Landmark.enter landmark;
     Logs.debug (fun m -> m "Lifting %d justifications..." (USet.size justs));
 
-    let* out =
-      close_under_elab_2 ~cache:elab_ctx.lifted_seen justs
-        (Lifting.elab elab_ctx)
-    in
+    let* out = close_under_elab_2 justs (Lifting.elab elab_ctx) in
       Logs.debug (fun m ->
           m "Lifting produced %d justifications." (USet.size out)
       );
@@ -1384,75 +1357,119 @@ let weaken elab_ctx (justs : justification uset) : justification uset Lwt.t =
       Landmark.enter landmark;
 
       (* TODO replace justifications instead of accumulating new ones *)
-      let* out =
-        close_under_elab ~cache:elab_ctx.weaken_seen justs
-          (Weakening.elab elab_ctx)
-      in
+      let* out = close_under_elab justs (Weakening.elab elab_ctx) in
         Landmark.exit landmark;
         Lwt.return out
 
 (** {1 Chained elaboration operations.} *)
 
-(** [chain_elaborations elab_ctx pre_justs] performs chained elaborations.
-    Applies a sequence of elaboration operations (value assignment, lifting,
-    weakening, forwarding, and filtering) in a fixed-point manner until no new
-    justifications are produced. Each step closes the set of justifications
-    under the respective elaboration operation. A justification cache is used to
-    deduplicate the application of elaborations across iterations.
+(** [batch_elaborations elab_ctx pre_justs] performs batch elaborations.
+
+    Applies value assignment, forwarding, lifting, and weakening elaborations
+    iteratively until a fixed point is reached.
 
     @param elab_ctx The elaboration context.
-    @param pre_justs The initial set of justifications to elaborate.
-    @return Promise of the final set of elaborated justifications. *)
-let chain_elaborations elab_ctx pre_justs =
-  Logs.debug (fun m -> m "Starting elaborations...");
+    @param pre_justs The initial set of justifications.
+    @return Promise of justifications after batch elaborations. *)
+let batch_elaborations elab_ctx pre_justs =
+  let landmark = Landmark.register "Elaborations.batch_elaborations" in
+    Landmark.enter landmark;
 
-  let justification_set_equal s1 s2 =
-    USet.size s1 = USet.size s2
-    && USet.for_all
-         (fun j1 -> USet.exists (fun j2 -> Justification.equal j1 j2) s2)
-         s1
-  in
-
-  let* final_justs =
-    let rec fixed_point (justs : justification uset) =
+    let rec fixed_point (justs : justification uset)
+        (new_justs : justification uset) =
       Logs.debug (fun m ->
-          m "Fixed-point iteration with %d justifications:\n%s\n"
-            (USet.size justs)
-            (String.concat "\n\t"
-               (USet.values (USet.map Justification.to_string justs))
-            )
+          m "Batch elaborations iteration with %d justifications, %d new."
+            (USet.size justs) (USet.size new_justs)
       );
-      let* va = value_assign elab_ctx justs in
-        let* lift = lift elab_ctx va in
-          let* weak = weaken elab_ctx lift in
-            let* fwd = forward elab_ctx weak in
-              let* filtered = filter elab_ctx fwd in
 
-              let justs_str =
-                String.concat "\n\t"
-                  (List.map Justification.to_string (USet.values filtered))
+      let old_justs = USet.union justs new_justs in
+
+      let filter_justs new_elab_justs =
+        USet.filter
+          (fun just ->
+            (not (USet.mem old_justs just))
+            && not
+                 (USet.exists
+                    (fun just' -> Justification.covers just' just)
+                    old_justs
+                 )
+          )
+          new_elab_justs
+      in
+
+      let* new_va_justs =
+        USet.async_map (ValueAssignment.elab elab_ctx) new_justs
+      in
+      let new_va_justs =
+        USet.map USet.of_list new_va_justs |> USet.flatten |> filter_justs
+      in
+        Logs.debug (fun m ->
+            m "Value assignment produced %d new justifications."
+              (USet.size new_va_justs)
+        );
+
+        let* new_fwd_justs =
+          USet.async_map (Forwarding.elab elab_ctx) new_justs
+        in
+        let new_fwd_justs =
+          USet.map USet.of_list new_fwd_justs |> USet.flatten |> filter_justs
+        in
+          Logs.debug (fun m ->
+              m "Forwarding produced %d new justifications."
+                (USet.size new_fwd_justs)
+          );
+
+          let justs_to_lift =
+            URelation.cross new_justs new_justs
+            |> USet.union (URelation.cross new_justs justs)
+            |> USet.union (URelation.cross justs new_justs)
+          in
+            let* new_lift_justs =
+              USet.async_map
+                (fun (j1, j2) -> Lifting.elab elab_ctx j1 j2)
+                justs_to_lift
+            in
+            let new_lift_justs =
+              USet.map USet.of_list new_lift_justs
+              |> USet.flatten
+              |> filter_justs
+            in
+              Logs.debug (fun m ->
+                  m "Lifting produced %d new justifications."
+                    (USet.size new_lift_justs)
+              );
+
+              let* new_weaken_justs =
+                USet.async_map (Weakening.elab elab_ctx) new_justs
               in
-                if justification_set_equal filtered justs then (
+              let new_weaken_justs =
+                USet.map USet.of_list new_weaken_justs
+                |> USet.flatten
+                |> filter_justs
+              in
+                Logs.debug (fun m ->
+                    m "Weakening produced %d new justifications."
+                      (USet.size new_weaken_justs)
+                );
+
+                let new_justs = USet.create () in
+                let new_justs = USet.inplace_union new_justs new_va_justs in
+                let new_justs = USet.inplace_union new_justs new_fwd_justs in
+                let new_justs = USet.inplace_union new_justs new_lift_justs in
+                let new_justs = USet.inplace_union new_justs new_weaken_justs in
+
+                if USet.size new_justs = 0 then (
                   Logs.debug (fun m ->
-                      m "Fixed-point reached with %d justifications:\n\t%s"
-                        (USet.size filtered) justs_str
+                      m
+                        "Batch elaborations reached fixed point with %d \
+                         justifications."
+                        (USet.size old_justs)
                   );
-                  Lwt.return filtered
+                  Lwt.return old_justs
                 )
-                else (
-                  Logs.debug (fun m ->
-                      m "Continue elaborating with %d justifications:\n\t%s"
-                        (USet.size filtered) justs_str
-                  );
-                  fixed_point filtered
-                )
+                else fixed_point old_justs new_justs
     in
 
-    let* filtered_init = filter elab_ctx pre_justs in
-      fixed_point filtered_init
-  in
-    Logs.debug (fun m ->
-        m "Elaborations complete. Final justifications count: %d"
-          (USet.size final_justs)
-    );
-    Lwt.return final_justs
+    let* final_justs = fixed_point (USet.create ()) pre_justs in
+      Landmark.exit landmark;
+      Lwt.return final_justs

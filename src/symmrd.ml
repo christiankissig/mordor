@@ -62,17 +62,7 @@ let calculate_dependencies ?(include_rf = true)
   let fj = USet.union structure.fj init_ppo in
 
   (* Build context for elaborations *)
-  let elab_ctx : Elaborations.context =
-    {
-      structure;
-      fj;
-      value_assign_seen = JustificationCache.create 1000;
-      lifted_seen = JustificationPairCache.create 1000000;
-      forwarding_seen = JustificationCache.create 1000;
-      weaken_seen = JustificationCache.create 1000;
-      filter_seen = JustificationPairCache.create 1000;
-    }
-  in
+  let elab_ctx : Elaborations.context = { structure; fj } in
 
   Logs.debug (fun m -> m "Starting elaborations...");
 
@@ -83,7 +73,7 @@ let calculate_dependencies ?(include_rf = true)
          s1
   in
 
-  let* final_justs = Elaborations.chain_elaborations elab_ctx pre_justs in
+  let* final_justs = Elaborations.batch_elaborations elab_ctx pre_justs in
 
   Logs.debug (fun m ->
       m "Elaborations complete. Final justifications count: %d"
