@@ -531,6 +531,7 @@ module JustValidation = struct
       |> USet.of_list
       |> USet.flatten
     in
+    let elided = URelation.pi_2 delta in
 
     let*? () = (URelation.acyclic delta, "cyclic delta relation") in
 
@@ -541,7 +542,8 @@ module JustValidation = struct
     in
 
     let* satisfiable =
-      List.map (fun (just : justification) -> just.p) combo
+      List.filter (fun just -> not (USet.mem elided just.w.label)) combo
+      |> List.map (fun (just : justification) -> just.p)
       |> List.flatten
       |> List.append path.p
       |> List.map Expr.evaluate
@@ -1219,15 +1221,7 @@ end = struct
       let malloc_events = USet.intersection structure.malloc_events e in
       let free_events = USet.intersection structure.free_events e in
 
-      (* Compute dependency relation *)
       let justs = USet.of_list j_list in
-      let dp = USet.map (freeze_dp structure) justs |> USet.flatten in
-
-      Logs.debug (fun m ->
-          m "[freeze] Computed dependency relation dp with %d edges:\n %s"
-            (USet.size dp)
-            (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) dp)
-      );
 
       (* Compute combined fwd and we *)
       let fwd =
@@ -1240,6 +1234,20 @@ end = struct
           (fun acc just -> USet.inplace_union acc just.we)
           justs (USet.create ())
       in
+      let delta = USet.union fwd we in
+
+      (* Compute dependency relation *)
+      let unelided_justs =
+        USet.filter (fun j -> not (USet.mem elided j.w.label)) justs
+      in
+
+      let dp = USet.map (freeze_dp structure) unelided_justs |> USet.flatten in
+
+      Logs.debug (fun m ->
+          m "[freeze] Computed dependency relation dp with %d edges:\n %s"
+            (USet.size dp)
+            (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) dp)
+      );
 
       (* Create forwarding context *)
       let con = ForwardingContext.create ~fwd ~we () in
@@ -1377,6 +1385,7 @@ let compute_justification_combinations structure paths init_ppo statex
         USet.intersection path.path justifiable_events |> USet.values
       in
 
+      (* TODO no need to select justifications for elided events *)
       let%lwt js_combinations =
         ListMapCombinationBuilder.build_combinations justmap path_writes
           ~check_partial:(fun combo ?alternatives just ->
