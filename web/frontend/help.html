@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoRDor Syntax Reference</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background: #1e1e1e; 
+            color: #d4d4d4; 
+            line-height: 1.6;
+            padding: 2rem;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            background: #252526;
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+        }
+        header { 
+            background: #252526; 
+            border-bottom: 2px solid #0e639c; 
+            padding: 2rem; 
+        }
+        header h1 { 
+            font-size: 2rem; 
+            color: #cccccc; 
+            margin-bottom: 0.5rem;
+        }
+        header p { 
+            color: #6a6a6a; 
+            font-size: 1.1rem;
+        }
+        .content { 
+            padding: 2rem; 
+        }
+        h2 { 
+            color: #4ec9b0; 
+            font-size: 1.5rem; 
+            margin: 2rem 0 1rem 0; 
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #3e3e42;
+        }
+        h3 { 
+            color: #dcdcaa; 
+            font-size: 1.2rem; 
+            margin: 1.5rem 0 0.75rem 0; 
+        }
+        h4 { 
+            color: #ce9178; 
+            font-size: 1rem; 
+            margin: 1rem 0 0.5rem 0; 
+        }
+        p { 
+            margin-bottom: 1rem; 
+            color: #d4d4d4;
+        }
+        code { 
+            background: #1e1e1e; 
+            color: #ce9178; 
+            padding: 0.2rem 0.4rem; 
+            border-radius: 3px; 
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        pre { 
+            background: #1e1e1e; 
+            border: 1px solid #3e3e42; 
+            border-radius: 4px; 
+            padding: 1rem; 
+            overflow-x: auto; 
+            margin: 1rem 0;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        pre code { 
+            background: transparent; 
+            padding: 0;
+        }
+        .syntax-block { 
+            background: #2d2d30; 
+            border-left: 3px solid #0e639c; 
+            padding: 1rem; 
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        .syntax-block .title { 
+            color: #569cd6; 
+            font-weight: bold; 
+            margin-bottom: 0.5rem;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 1rem 0;
+            background: #2d2d30;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        th, td { 
+            padding: 0.75rem; 
+            text-align: left; 
+            border-bottom: 1px solid #3e3e42;
+        }
+        th { 
+            background: #1e1e1e; 
+            color: #4ec9b0; 
+            font-weight: 600;
+        }
+        tr:last-child td { 
+            border-bottom: none; 
+        }
+        tr:hover { 
+            background: #323233; 
+        }
+        .keyword { color: #569cd6; }
+        .string { color: #ce9178; }
+        .number { color: #b5cea8; }
+        .operator { color: #d4d4d4; }
+        .comment { color: #6a9955; }
+        .function { color: #dcdcaa; }
+        .variable { color: #9cdcfe; }
+        ul, ol { 
+            margin: 1rem 0 1rem 2rem; 
+        }
+        li { 
+            margin-bottom: 0.5rem; 
+        }
+        .note { 
+            background: #3c3c1e; 
+            border-left: 3px solid #dcdcaa; 
+            padding: 1rem; 
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        .note strong { 
+            color: #dcdcaa; 
+        }
+        .example { 
+            background: #1e1e2e; 
+            border-left: 3px solid #4ec9b0; 
+            padding: 1rem; 
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        .example-title { 
+            color: #4ec9b0; 
+            font-weight: bold; 
+            margin-bottom: 0.5rem;
+        }
+        .toc { 
+            background: #2d2d30; 
+            border: 1px solid #3e3e42; 
+            border-radius: 4px; 
+            padding: 1.5rem; 
+            margin: 1rem 0 2rem 0;
+        }
+        .toc h3 { 
+            margin-top: 0; 
+            color: #dcdcaa;
+        }
+        .toc ul { 
+            list-style: none; 
+            margin: 1rem 0;
+        }
+        .toc li { 
+            margin: 0.5rem 0; 
+        }
+        .toc a { 
+            color: #4ec9b0; 
+            text-decoration: none; 
+        }
+        .toc a:hover { 
+            color: #5fd4b8; 
+            text-decoration: underline; 
+        }
+        .section { 
+            scroll-margin-top: 2rem; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔮 MoRDor Syntax Reference</h1>
+            <p>Weak Memory Semantics - Litmus Test Language</p>
+        </header>
+        
+        <div class="content">
+            <div class="toc">
+                <h3>Table of Contents</h3>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#structure">Litmus Test Structure</a></li>
+                    <li><a href="#config">Configuration Section</a></li>
+                    <li><a href="#variables">Variables and Identifiers</a></li>
+                    <li><a href="#statements">Statements</a></li>
+                    <li><a href="#memory-ops">Memory Operations</a></li>
+                    <li><a href="#atomics">Atomic Operations</a></li>
+                    <li><a href="#control-flow">Control Flow</a></li>
+                    <li><a href="#expressions">Expressions</a></li>
+                    <li><a href="#assertions">Assertions</a></li>
+                    <li><a href="#examples">Complete Examples</a></li>
+                </ul>
+            </div>
+
+            <section id="overview" class="section">
+                <h2>Overview</h2>
+                <p>MoRDor is a language for specifying litmus tests to explore weak memory semantics. A litmus test consists of concurrent threads performing memory operations, followed by assertions about the possible outcomes.</p>
+                
+                <div class="note">
+                    <strong>Note:</strong> Comments are supported using C++-style <code>//</code> syntax. Comments extend from <code>//</code> to the end of the line.
+                </div>
+            </section>
+
+            <section id="structure" class="section">
+                <h2>Litmus Test Structure</h2>
+                <p>A complete litmus test has three optional parts:</p>
+                
+                <div class="syntax-block">
+                    <div class="title">Structure:</div>
+                    <pre><code><span class="comment">// Optional configuration</span>
+<span class="keyword">name</span> = TestName
+<span class="keyword">model</span> = rc11
+<span class="keyword">values</span> = {0, 1, 2}
+[initial conditions]
+[[constraints]]
+<span class="operator">%%</span>
+
+<span class="comment">// Program (required)</span>
+{ thread1_statements } ||| { thread2_statements }
+
+<span class="comment">// Optional assertion</span>
+<span class="operator">%%</span>
+<span class="keyword">allow</span> final_condition [model]</code></pre>
+                </div>
+            </section>
+
+            <section id="config" class="section">
+                <h2>Configuration Section</h2>
+                <p>The configuration section appears before the program and is terminated by <code>%%</code>.</p>
+                
+                <h3>Name Declaration</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="keyword">name</span> = StorBuffering
+<span class="keyword">name</span> = "Message Passing Test"</code></pre>
+                </div>
+
+                <h3>Model Selection</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="keyword">model</span> = rc11
+<span class="keyword">model</span> = c11
+<span class="keyword">model</span> = sc</code></pre>
+                </div>
+
+                <h3>Values Domain</h3>
+                <p>Specify the set of possible values for variables:</p>
+                <div class="syntax-block">
+                    <pre><code><span class="keyword">values</span> = {0, 1, 2, 3}
+<span class="keyword">values</span> = {0x0, 0x10, 0xFF}</code></pre>
+                </div>
+
+                <h3>Initial Conditions (De Facto)</h3>
+                <p>Specify initial variable values using square brackets:</p>
+                <div class="syntax-block">
+                    <pre><code>[x = 0]
+[y = 0]
+[ptr = 0]</code></pre>
+                </div>
+
+                <h3>Constraints</h3>
+                <p>Add constraints using double square brackets:</p>
+                <div class="syntax-block">
+                    <pre><code>[[x != y]]
+[[ptr != 0]]</code></pre>
+                </div>
+            </section>
+
+            <section id="variables" class="section">
+                <h2>Variables and Identifiers</h2>
+                
+                <h3>Registers</h3>
+                <p>Registers start with <code>r</code> followed by alphanumeric characters:</p>
+                <div class="syntax-block">
+                    <pre><code>r0, r1, r2, rax, rtmp, rResult</code></pre>
+                </div>
+
+                <h3>Global Variables</h3>
+                <p>Global variables start with a letter and contain alphanumeric characters:</p>
+                <div class="syntax-block">
+                    <pre><code>x, y, flag, data, pointer</code></pre>
+                </div>
+
+                <h3>AtLoc Variables</h3>
+                <p>Special variables prefixed with <code>@</code> for location references:</p>
+                <div class="syntax-block">
+                    <pre><code>@x, @thread1, @location</code></pre>
+                </div>
+
+                <h3>Labels</h3>
+                <p>Labels are enclosed in backticks and used to mark statements:</p>
+                <div class="syntax-block">
+                    <pre><code>`label1` r0 := x;
+`critical` *ptr := 1;</code></pre>
+                </div>
+            </section>
+
+            <section id="statements" class="section">
+                <h2>Statements</h2>
+                
+                <h3>Register Assignment</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="comment">// Register to register</span>
+r0 := r1;
+
+<span class="comment">// Address-of operator</span>
+r0 := &amp;x;</code></pre>
+                </div>
+
+                <h3>Skip Statement</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="keyword">skip</span>;</code></pre>
+                </div>
+
+                <h3>Parallel Threads</h3>
+                <p>Use <code>|||</code> to separate parallel threads:</p>
+                <div class="syntax-block">
+                    <pre><code>{ r0 := x; y := 1 } ||| { r1 := y; x := 1 }</code></pre>
+                </div>
+            </section>
+
+            <section id="memory-ops" class="section">
+                <h2>Memory Operations</h2>
+                
+                <h3>Loads</h3>
+                
+                <h4>From Global Variables</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Syntax</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>r0 := x</code></td>
+                            <td>Relaxed load from global x</td>
+                        </tr>
+                        <tr>
+                            <td><code>r0 := x.load()</code></td>
+                            <td>Explicit relaxed load</td>
+                        </tr>
+                        <tr>
+                            <td><code>r0 :rlx= x</code></td>
+                            <td>Relaxed load</td>
+                        </tr>
+                        <tr>
+                            <td><code>r0 :acq= x</code></td>
+                            <td>Acquire load</td>
+                        </tr>
+                        <tr>
+                            <td><code>r0 :sc= x</code></td>
+                            <td>Sequentially consistent load</td>
+                        </tr>
+                        <tr>
+                            <td><code>r0 :v= x</code></td>
+                            <td>Volatile relaxed load</td>
+                        </tr>
+                        <tr>
+                            <td><code>r0 :vacq= x</code></td>
+                            <td>Volatile acquire load</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>From Pointers</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Syntax</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>r0 := *ptr</code></td>
+                            <td>Relaxed pointer dereference</td>
+                        </tr>
+                        <tr>
+                            <td><code>r0 :rlx= *ptr</code></td>
+                            <td>Relaxed pointer load</td>
+                        </tr>
+                        <tr>
+                            <td><code>r0 :acq= *ptr</code></td>
+                            <td>Acquire pointer load</td>
+                        </tr>
+                        <tr>
+                            <td><code>r0 :v= *ptr</code></td>
+                            <td>Volatile pointer load</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Stores</h3>
+                
+                <h4>To Global Variables</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Syntax</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>x := 1</code></td>
+                            <td>Relaxed store to global x</td>
+                        </tr>
+                        <tr>
+                            <td><code>x.store(1)</code></td>
+                            <td>Explicit relaxed store</td>
+                        </tr>
+                        <tr>
+                            <td><code>x :rlx= 1</code></td>
+                            <td>Relaxed store</td>
+                        </tr>
+                        <tr>
+                            <td><code>x :rel= 1</code></td>
+                            <td>Release store</td>
+                        </tr>
+                        <tr>
+                            <td><code>x :sc= 1</code></td>
+                            <td>Sequentially consistent store</td>
+                        </tr>
+                        <tr>
+                            <td><code>x :v= 1</code></td>
+                            <td>Volatile relaxed store</td>
+                        </tr>
+                        <tr>
+                            <td><code>x :vrel= 1</code></td>
+                            <td>Volatile release store</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>To Pointers</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Syntax</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>*ptr := 1</code></td>
+                            <td>Relaxed pointer store</td>
+                        </tr>
+                        <tr>
+                            <td><code>*ptr :rlx= 1</code></td>
+                            <td>Relaxed pointer store</td>
+                        </tr>
+                        <tr>
+                            <td><code>*ptr :rel= 1</code></td>
+                            <td>Release pointer store</td>
+                        </tr>
+                        <tr>
+                            <td><code>*ptr :v= 1</code></td>
+                            <td>Volatile pointer store</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Memory Orders</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Keyword</th>
+                            <th>Aliases</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>nonatomic</code></td>
+                            <td><code>na</code></td>
+                            <td>Non-atomic access</td>
+                        </tr>
+                        <tr>
+                            <td><code>relaxed</code></td>
+                            <td><code>rlx</code></td>
+                            <td>Relaxed memory order</td>
+                        </tr>
+                        <tr>
+                            <td><code>acquire</code></td>
+                            <td><code>acq</code></td>
+                            <td>Acquire memory order</td>
+                        </tr>
+                        <tr>
+                            <td><code>release</code></td>
+                            <td><code>rel</code></td>
+                            <td>Release memory order</td>
+                        </tr>
+                        <tr>
+                            <td><code>relacq</code></td>
+                            <td></td>
+                            <td>Release-acquire combined</td>
+                        </tr>
+                        <tr>
+                            <td><code>sequentially_consistent</code></td>
+                            <td><code>sc</code></td>
+                            <td>Sequential consistency</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="atomics" class="section">
+                <h2>Atomic Operations</h2>
+                
+                <h3>Compare-and-Swap (CAS)</h3>
+                <p>Atomically compares a value at an address and swaps if equal:</p>
+                <div class="syntax-block">
+                    <div class="title">Syntax:</div>
+                    <pre><code>r0 := <span class="keyword">cas</span>(load_order, store_order, address, expected, desired)</code></pre>
+                </div>
+
+                <div class="example">
+                    <div class="example-title">Examples:</div>
+                    <pre><code><span class="comment">// Basic CAS</span>
+r0 := cas(relaxed, relaxed, x, 0, 1);
+
+<span class="comment">// With acquire/release</span>
+r1 := cas(acquire, release, ptr, r2, r3);
+
+<span class="comment">// Sequential consistency</span>
+r0 := cas(sc, sc, lock, 0, 1);</code></pre>
+                </div>
+
+                <h3>Fetch-and-Add (FADD)</h3>
+                <p>Atomically adds to a value and returns the old value:</p>
+                <div class="syntax-block">
+                    <div class="title">Syntax (with RMW mode):</div>
+                    <pre><code>r0 := <span class="keyword">fadd</span>(rmw_mode, load_order, store_order, address, operand)</code></pre>
+                    <div class="title">Syntax (default strong):</div>
+                    <pre><code>r0 := <span class="keyword">fadd</span>(load_order, store_order, address, operand)</code></pre>
+                </div>
+
+                <div class="example">
+                    <div class="example-title">Examples:</div>
+                    <pre><code><span class="comment">// Basic FADD</span>
+r0 := fadd(relaxed, relaxed, counter, 1);
+
+<span class="comment">// With strong semantics</span>
+r1 := fadd(strong, acquire, release, x, 5);
+
+<span class="comment">// Normal semantics</span>
+r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
+                </div>
+
+                <h3>Fences</h3>
+                <p>Memory fence/barrier operations:</p>
+                <div class="syntax-block">
+                    <pre><code><span class="keyword">fence</span>(relaxed);
+<span class="keyword">fence</span>(acquire);
+<span class="keyword">fence</span>(release);
+<span class="keyword">fence</span>(sc);</code></pre>
+                </div>
+
+                <h3>Locks</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="comment">// Global lock operations</span>
+<span class="keyword">lock</span> mutex;
+<span class="keyword">unlock</span> mutex;
+
+<span class="comment">// Default unnamed lock</span>
+<span class="keyword">lock</span>;
+<span class="keyword">unlock</span>;</code></pre>
+                </div>
+            </section>
+
+            <section id="control-flow" class="section">
+                <h2>Control Flow</h2>
+                
+                <h3>If-Else Statements</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="comment">// Single statement</span>
+<span class="keyword">if</span> (r0 = 1) r1 := 2;
+
+<span class="comment">// Block</span>
+<span class="keyword">if</span> (r0 != 0) {
+    r1 := x;
+    y := r1
+}
+
+<span class="comment">// With else</span>
+<span class="keyword">if</span> (r0 > 0) {
+    x := 1
+} <span class="keyword">else</span> {
+    x := 0
+}</code></pre>
+                </div>
+
+                <h3>While Loops</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="comment">// Single statement</span>
+<span class="keyword">while</span> (r0 < 10) r0 := r0 + 1;
+
+<span class="comment">// Block</span>
+<span class="keyword">while</span> (flag = 0) {
+    r0 := flag;
+    <span class="keyword">skip</span>
+}</code></pre>
+                </div>
+
+                <h3>Do-While Loops</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="keyword">do</span> {
+    r0 := r0 + 1;
+    x := r0
+} <span class="keyword">while</span> (r0 < 10)</code></pre>
+                </div>
+
+                <div class="note">
+                    <strong>Loop Semantics:</strong> MoRDor supports both step-counter semantics (unraveling loops a fixed number of times) and symbolic loop semantics. Configure this in the settings.
+                </div>
+            </section>
+
+            <section id="expressions" class="section">
+                <h2>Expressions</h2>
+                
+                <h3>Arithmetic Operators</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Operator</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>+</code></td>
+                            <td>Addition</td>
+                            <td><code>r0 + 1</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>-</code></td>
+                            <td>Subtraction / Negation</td>
+                            <td><code>r0 - 1</code>, <code>-r0</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>*</code></td>
+                            <td>Multiplication</td>
+                            <td><code>r0 * 2</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>/</code></td>
+                            <td>Division</td>
+                            <td><code>r0 / 2</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>%</code></td>
+                            <td>Modulo</td>
+                            <td><code>r0 % 4</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Comparison Operators</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Operator</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>=</code></td>
+                            <td>Equality</td>
+                            <td><code>r0 = 1</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>!=</code></td>
+                            <td>Inequality</td>
+                            <td><code>r0 != 0</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>&lt;</code></td>
+                            <td>Less than</td>
+                            <td><code>r0 &lt; 10</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>&gt;</code></td>
+                            <td>Greater than</td>
+                            <td><code>r0 &gt; 5</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>&lt;=</code></td>
+                            <td>Less than or equal</td>
+                            <td><code>r0 &lt;= 10</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>&gt;=</code></td>
+                            <td>Greater than or equal</td>
+                            <td><code>r0 &gt;= 0</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Logical Operators</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Operator</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>&&</code></td>
+                            <td>Logical AND</td>
+                            <td><code>r0 = 1 && r1 = 1</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>||</code></td>
+                            <td>Logical OR</td>
+                            <td><code>r0 = 0 || r1 = 0</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>!</code></td>
+                            <td>Logical NOT</td>
+                            <td><code>!(r0 = 0)</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Bitwise Operators</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Operator</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>&</code></td>
+                            <td>Bitwise AND / Address-of</td>
+                            <td><code>r0 & 0xFF</code>, <code>&x</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>|</code></td>
+                            <td>Bitwise OR</td>
+                            <td><code>r0 | 0x01</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>^</code></td>
+                            <td>Bitwise XOR</td>
+                            <td><code>r0 ^ r1</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>~</code></td>
+                            <td>Bitwise NOT</td>
+                            <td><code>~r0</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Set Operators</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Operator</th>
+                            <th>Aliases</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>in</code></td>
+                            <td><code>\in</code>, <code>∈</code></td>
+                            <td>Set membership</td>
+                        </tr>
+                        <tr>
+                            <td><code>notin</code></td>
+                            <td><code>\notin</code>, <code>∉</code></td>
+                            <td>Not in set</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Special Operators</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Operator</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>forall</code></td>
+                            <td>Universal quantifier</td>
+                            <td><code>forall (r0 in {0,1,2})</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>.</code></td>
+                            <td>Dot operator</td>
+                            <td><code>x.load()</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>,</code></td>
+                            <td>Tuple constructor</td>
+                            <td><code>(r0, r1)</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Literals</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="comment">// Decimal integers</span>
+0, 1, 42, 255
+
+<span class="comment">// Hexadecimal integers</span>
+0x0, 0x10, 0xFF, 0xDEADBEEF
+
+<span class="comment">// Strings</span>
+"message", "test name"
+
+<span class="comment">// Set literals (with dot or quote prefix)</span>
+.'eventset'
+'eventset'
+.name</code></pre>
+                </div>
+            </section>
+
+            <section id="assertions" class="section">
+                <h2>Assertions</h2>
+                <p>Assertions specify expected outcomes of litmus tests. They appear after the <code>%%</code> delimiter.</p>
+                
+                <h3>Simple Outcome Assertions</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="operator">%%</span>
+<span class="keyword">allow</span> r0 = 0 && r1 = 0
+
+<span class="operator">%%</span>
+<span class="keyword">forbid</span> r0 = 1 && r1 = 1</code></pre>
+                </div>
+
+                <h3>Model-Specific Assertions</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="operator">%%</span>
+<span class="keyword">allow</span> r0 = 0 && r1 = 0 [rc11]
+
+<span class="operator">%%</span>
+<span class="keyword">forbid</span> r0 = 1 && r1 = 1 [sc]</code></pre>
+                </div>
+
+                <h3>Chained Assertions</h3>
+                <p>Test the same program under different models:</p>
+                <div class="syntax-block">
+                    <pre><code><span class="operator">%%</span>
+~~> <span class="keyword">allow</span> [rc11] <span class="operator">%%</span>
+<span class="comment">// Another test definition here</span></code></pre>
+                </div>
+
+                <h3>Model-Only Assertions</h3>
+                <div class="syntax-block">
+                    <pre><code><span class="operator">%%</span>
+[rc11]
+
+<span class="operator">%%</span>
+[sc]</code></pre>
+                </div>
+            </section>
+
+            <section id="examples" class="section">
+                <h2>Complete Examples</h2>
+                
+                <h3>Store Buffering (SB)</h3>
+                <div class="example">
+                    <pre><code><span class="keyword">name</span> = SB
+<span class="keyword">model</span> = rc11
+[x = 0] [y = 0]
+<span class="operator">%%</span>
+
+{ r0 := x; y := 1 } ||| { r1 := y; x := 1 }
+
+<span class="operator">%%</span>
+<span class="keyword">allow</span> r0 = 0 && r1 = 0</code></pre>
+                </div>
+
+                <h3>Message Passing (MP)</h3>
+                <div class="example">
+                    <pre><code><span class="keyword">name</span> = MP
+<span class="keyword">model</span> = rc11
+[data = 0] [flag = 0]
+<span class="operator">%%</span>
+
+{
+    data := 1;
+    flag :rel= 1
+} ||| {
+    r0 :acq= flag;
+    r1 := data
+}
+
+<span class="operator">%%</span>
+<span class="keyword">forbid</span> r0 = 1 && r1 = 0</code></pre>
+                </div>
+
+                <h3>Load Buffering (LB)</h3>
+                <div class="example">
+                    <pre><code><span class="keyword">name</span> = LB
+<span class="keyword">model</span> = rc11
+[x = 0] [y = 0]
+<span class="operator">%%</span>
+
+{ r0 := x; y := r0 } ||| { r1 := y; x := r1 }
+
+<span class="operator">%%</span>
+<span class="keyword">allow</span> r0 = 1 && r1 = 1</code></pre>
+                </div>
+
+                <h3>CAS Example</h3>
+                <div class="example">
+                    <pre><code><span class="keyword">name</span> = CAS_Test
+<span class="keyword">model</span> = rc11
+[lock = 0]
+<span class="operator">%%</span>
+
+{
+    r0 := cas(acquire, release, lock, 0, 1);
+    <span class="keyword">if</span> (r0 = 0) {
+        <span class="comment">// Critical section</span>
+        lock :rel= 0
+    }
+} ||| {
+    r1 := cas(acquire, release, lock, 0, 1);
+    <span class="keyword">if</span> (r1 = 0) {
+        <span class="comment">// Critical section</span>
+        lock :rel= 0
+    }
+}
+
+<span class="operator">%%</span>
+<span class="keyword">forbid</span> r0 = 0 && r1 = 0</code></pre>
+                </div>
+
+                <h3>Pointer Operations</h3>
+                <div class="example">
+                    <pre><code><span class="keyword">name</span> = PointerTest
+<span class="keyword">model</span> = rc11
+[ptr = 0] [x = 0]
+<span class="operator">%%</span>
+
+{
+    ptr := <span class="keyword">malloc</span>(4);
+    *ptr := 42;
+    x := 1
+} ||| {
+    r0 := x;
+    <span class="keyword">if</span> (r0 = 1) {
+        r1 := *ptr
+    }
+}
+
+<span class="operator">%%</span>
+<span class="keyword">allow</span> r0 = 1 && r1 = 42</code></pre>
+                </div>
+
+                <h3>Loop Example</h3>
+                <div class="example">
+                    <pre><code><span class="keyword">name</span> = SpinLock
+<span class="keyword">model</span> = rc11
+[flag = 0]
+<span class="operator">%%</span>
+
+{
+    flag :rel= 1
+} ||| {
+    <span class="keyword">while</span> (flag = 0) {
+        r0 :acq= flag
+    };
+    r1 := flag
+}
+
+<span class="operator">%%</span>
+<span class="keyword">allow</span> r1 = 1</code></pre>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2>Quick Reference Card</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Syntax</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Comments</strong></td>
+                            <td><code>// comment</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Config delimiter</strong></td>
+                            <td><code>%%</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Thread separator</strong></td>
+                            <td><code>|||</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Statement separator</strong></td>
+                            <td><code>;</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Block delimiters</strong></td>
+                            <td><code>{ ... }</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Initial condition</strong></td>
+                            <td><code>[x = 0]</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Constraint</strong></td>
+                            <td><code>[[x != y]]</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Label</strong></td>
+                            <td><code>`label`</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Register</strong></td>
+                            <td><code>r0, r1, rax</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Global variable</strong></td>
+                            <td><code>x, flag, data</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>AtLoc variable</strong></td>
+                            <td><code>@location</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Assignment</strong></td>
+                            <td><code>:=</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Memory orders</strong></td>
+                            <td><code>:rlx=</code>, <code>:acq=</code>, <code>:rel=</code>, <code>:sc=</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Volatile</strong></td>
+                            <td><code>:v=</code>, <code>:vrlx=</code>, <code>:vacq=</code>, <code>:vrel=</code>, <code>:vsc=</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Pointer deref</strong></td>
+                            <td><code>*ptr</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Address-of</strong></td>
+                            <td><code>&x</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="section">
+                <h2>Additional Resources</h2>
+                <p>For more information about weak memory models and litmus testing:</p>
+                <ul>
+                    <li>RC11: The C11 Relaxed Memory Model</li>
+                    <li>C11 Standard: ISO/IEC 9899:2011</li>
+                    <li>Memory Model Papers and Research</li>
+                </ul>
+            </section>
+        </div>
+    </div>
+</body>
+</html>
