@@ -82,7 +82,9 @@ module TestData = struct
 
   (* Mock context builder *)
   let make_context ?(structure = make_structure ()) () =
-    { structure; fj = USet.create () }
+    let fj = USet.create () in
+    let op_trace = OpTrace.create 0 in
+      { structure; fj; op_trace }
 
   (* Mock justification builder *)
   let make_justification ?(predicates = []) ?(fwd = USet.create ())
@@ -482,7 +484,10 @@ module LiftingTests = struct
                   (structure, events)
 
     (* Create an elaboration context from a structure *)
-    let create_elab_ctx structure = { structure; fj = USet.create () }
+    let create_elab_ctx structure =
+      let fj = USet.create () in
+      let op_trace = OpTrace.create 0 in
+        { structure; fj; op_trace }
 
     (* Predicate test cases *)
     type predicate_test_case = {

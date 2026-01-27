@@ -15,6 +15,30 @@ open Justifications
 
 (** {1 Foundational Types} *)
 
+(** Elaboration operation for tracing. *)
+type op =
+  | PreJustification
+  | ValueAssignment of justification
+  | Forwarding of justification
+  | Lifting of justification * justification
+  | Weakening of justification
+
+(** Pretty print elaboration operation for tracing. *)
+let op_to_string = function
+  | PreJustification -> "PreJustification"
+  | ValueAssignment just ->
+      Printf.sprintf "ValueAssignment %s" (Justification.to_string just)
+  | Forwarding just ->
+      Printf.sprintf "Forwarding %s" (Justification.to_string just)
+  | Lifting (just1, just2) ->
+      Printf.sprintf "Lifting %s and %s"
+        (Justification.to_string just1)
+        (Justification.to_string just2)
+  | Weakening just ->
+      Printf.sprintf "Weakening %s" (Justification.to_string just)
+
+module OpTrace = Hashtbl.Make (JustificationCacheKey)
+
 (** Elaboration context containing the symbolic event structure and caches.
 
     Bundles together all the state needed during elaboration including the event
@@ -23,6 +47,9 @@ type context = {
   structure : symbolic_event_structure;
       (** The symbolic event structure being elaborated. *)
   fj : (int * int) USet.t;  (** Fork-join edges that constrain forwarding. *)
+  op_trace : op OpTrace.t;
+      (** Cache of operations performed on justifications to avoid redundancy.
+      *)
 }
 
 (** [pred elab_ctx ctx p ?ppo ()] computes the predecessor function.
@@ -124,7 +151,7 @@ module ValueAssignment = struct
       let* model = Solver.solve solver in
         match model with
         | Some bindings ->
-            let new_wval =
+            let wval =
               match just.w.wval with
               | Some (ESymbol s) -> (
                   match Solver.concrete_value bindings s with
@@ -145,12 +172,12 @@ module ValueAssignment = struct
               List.map Expr.get_symbols just.p |> List.flatten |> USet.of_list
             in
             let new_w_d =
-              Option.map Expr.get_symbols new_wval
+              Option.map Expr.get_symbols wval
               |> Option.value ~default:[]
               |> USet.of_list
             in
             let d = USet.union new_p_d new_w_d in
-            let w = { just.w with wval = new_wval } in
+            let w = { just.w with wval } in
               Lwt.return [ { just with w; d } ]
         | None -> Lwt.return [ just ]
 end
@@ -1050,7 +1077,7 @@ module Weakening = struct
     let con = ForwardingContext.create ~fwd:just.fwd ~we:just.we () in
 
     (* Filter predicates that are not implied by PWG *)
-    let* filtered_p =
+    let* p =
       Lwt_list.filter_p
         (fun x ->
           (* NOTE previously PWGs were remapped through the forwarding
@@ -1074,7 +1101,8 @@ module Weakening = struct
         just.p
     in
 
-    Lwt.return [ { just with p = filtered_p } ]
+    if List.length just.p = List.length p then Lwt.return []
+    else Lwt.return [ { just with p } ]
 end
 
 (** {1 Chained elaboration operations.} *)
@@ -1090,6 +1118,10 @@ end
 let batch_elaborations elab_ctx pre_justs =
   let landmark = Landmark.register "Elaborations.batch_elaborations" in
     Landmark.enter landmark;
+
+    USet.iter
+      (fun just -> OpTrace.add elab_ctx.op_trace just PreJustification |> ignore)
+      pre_justs;
 
     let rec fixed_point (justs : justification uset)
         (new_justs : justification uset) =
@@ -1114,7 +1146,18 @@ let batch_elaborations elab_ctx pre_justs =
       in
 
       let* new_va_justs =
-        USet.async_map (ValueAssignment.elab elab_ctx) new_justs
+        USet.async_map
+          (fun just ->
+            let* elaborated = ValueAssignment.elab elab_ctx just in
+              List.iter
+                (fun just' ->
+                  OpTrace.add elab_ctx.op_trace just' (ValueAssignment just)
+                  |> ignore
+                )
+                elaborated;
+              Lwt.return elaborated
+          )
+          new_justs
       in
       let new_va_justs =
         USet.map USet.of_list new_va_justs |> USet.flatten |> filter_justs
@@ -1125,7 +1168,18 @@ let batch_elaborations elab_ctx pre_justs =
         );
 
         let* new_fwd_justs =
-          USet.async_map (Forwarding.elab elab_ctx) new_justs
+          USet.async_map
+            (fun just ->
+              let* elaborated = Forwarding.elab elab_ctx just in
+                List.iter
+                  (fun just' ->
+                    OpTrace.add elab_ctx.op_trace just' (Forwarding just)
+                    |> ignore
+                  )
+                  elaborated;
+                Lwt.return elaborated
+            )
+            new_justs
         in
         let new_fwd_justs =
           USet.map USet.of_list new_fwd_justs |> USet.flatten |> filter_justs
@@ -1142,7 +1196,16 @@ let batch_elaborations elab_ctx pre_justs =
           in
             let* new_lift_justs =
               USet.async_map
-                (fun (j1, j2) -> Lifting.elab elab_ctx j1 j2)
+                (fun (j1, j2) ->
+                  let* elaborated = Lifting.elab elab_ctx j1 j2 in
+                    List.iter
+                      (fun just' ->
+                        OpTrace.add elab_ctx.op_trace just' (Lifting (j1, j2))
+                        |> ignore
+                      )
+                      elaborated;
+                    Lwt.return elaborated
+                )
                 justs_to_lift
             in
             let new_lift_justs =
@@ -1156,7 +1219,18 @@ let batch_elaborations elab_ctx pre_justs =
               );
 
               let* new_weaken_justs =
-                USet.async_map (Weakening.elab elab_ctx) new_justs
+                USet.async_map
+                  (fun just ->
+                    let* elaborated = Weakening.elab elab_ctx just in
+                      List.iter
+                        (fun just' ->
+                          OpTrace.add elab_ctx.op_trace just' (Weakening just)
+                          |> ignore
+                        )
+                        elaborated;
+                      Lwt.return elaborated
+                  )
+                  new_justs
               in
               let new_weaken_justs =
                 USet.map USet.of_list new_weaken_justs
@@ -1192,7 +1266,14 @@ let batch_elaborations elab_ctx pre_justs =
             (USet.size final_justs)
             (String.concat "\n"
                (List.map
-                  (fun j -> Printf.sprintf "\t%s" (Justification.to_string j))
+                  (fun just ->
+                    Printf.sprintf "\t%s - %s"
+                      (Justification.to_string just)
+                      (OpTrace.find_opt elab_ctx.op_trace just
+                      |> Option.map op_to_string
+                      |> Option.value ~default:""
+                      )
+                  )
                   (USet.values final_justs)
                )
             )
@@ -1225,7 +1306,8 @@ let generate_justifications structure init_ppo =
   let fj = USet.union structure.fj init_ppo in
 
   (* Build context for elaborations *)
-  let elab_ctx : context = { structure; fj } in
+  let op_trace = OpTrace.create 0 in
+  let elab_ctx : context = { structure; fj; op_trace } in
 
   Logs.debug (fun m -> m "Starting elaborations...");
 
