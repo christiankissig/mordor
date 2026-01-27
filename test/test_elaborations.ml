@@ -158,30 +158,25 @@ end
 
 let test_value_assign_operations () =
   let ctx = TestData.make_context () in
-  let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
+  let pred = EBinOp (EVar "v1", "=", ENum Z.one) in
 
   Lwt_main.run
-    ((* No variables *)
-     let just = TestData.make_justification 1 ~predicates:[ pred ] in
-       let* result1 = ValueAssignment.elab ctx just in
-         check int "value_assign preserves size" 1 (List.length result1);
+    ((* With variable *)
+     let w = TestData.make_event 1 ~wval:(Some (EVar "v1")) in
+     let just_var =
+       {
+         w;
+         p = [ pred ];
+         fwd = USet.create ();
+         we = USet.create ();
+         d = USet.create ();
+       }
+     in
+       let* result2 = ValueAssignment.elab ctx just_var in
+         check bool "value_assign processes variables" true
+           (List.length result2 > 0);
 
-         (* With variable *)
-         let w = TestData.make_event 1 ~wval:(Some (EVar "v1")) in
-         let just_var =
-           {
-             w;
-             p = [ pred ];
-             fwd = USet.create ();
-             we = USet.create ();
-             d = USet.create ();
-           }
-         in
-           let* result2 = ValueAssignment.elab ctx just_var in
-             check bool "value_assign processes variables" true
-               (List.length result2 > 0);
-
-             Lwt.return_unit
+         Lwt.return_unit
     )
 
 (** Forward-related tests *)

@@ -151,35 +151,38 @@ module ValueAssignment = struct
       let* model = Solver.solve solver in
         match model with
         | Some bindings ->
-            let wval =
-              match just.w.wval with
-              | Some (ESymbol s) -> (
-                  match Solver.concrete_value bindings s with
-                  | Some value -> Some (Expr.of_value value)
-                  | None -> just.w.wval
+            if Option.is_none just.w.wval then (
+              (* TODO this should not happen; all writes should have a wval *)
+              Logs.warn (fun m ->
+                  m "Found justification without wval %s"
+                    (Justification.to_string just)
+              );
+              Lwt.return []
+            )
+            else (
+              Logs.debug (fun m -> m "Value assignment model found");
+              let wval =
+                Option.get just.w.wval
+                |> Expr.evaluate ~env:(fun s ->
+                    Solver.concrete_value bindings s |> Option.map Expr.of_value
                 )
-              | Some (EVar v) -> (
-                  match Solver.concrete_value bindings v with
-                  | Some value -> Some (Expr.of_value value)
-                  | None -> just.w.wval
-                )
-              | _ -> just.w.wval
-            in
-            (* TODO this is shady and should instead track symbols
+              in
+                if Expr.equal (Option.get just.w.wval) wval then Lwt.return []
+                else
+                  (* TODO this is shady and should instead track symbols
                  symbols through the value assignment. However, this does agree
                  with the paper. *)
-            let new_p_d =
-              List.map Expr.get_symbols just.p |> List.flatten |> USet.of_list
-            in
-            let new_w_d =
-              Option.map Expr.get_symbols wval
-              |> Option.value ~default:[]
-              |> USet.of_list
-            in
-            let d = USet.union new_p_d new_w_d in
-            let w = { just.w with wval } in
-              Lwt.return [ { just with w; d } ]
-        | None -> Lwt.return [ just ]
+                  let new_p_d =
+                    List.map Expr.get_symbols just.p
+                    |> List.flatten
+                    |> USet.of_list
+                  in
+                  let new_w_d = Expr.get_symbols wval |> USet.of_list in
+                  let d = USet.union new_p_d new_w_d in
+                  let w = { just.w with wval = Some wval } in
+                    Lwt.return [ { just with w; d } ]
+            )
+        | None -> Lwt.return []
 end
 
 (** {1 Forwarding Elaboration} *)

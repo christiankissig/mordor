@@ -196,10 +196,13 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               in
                 interpret_threads threads
           | RegisterStore { register; expr } ->
-              let env' =
-                update_env env register
-                  (Expr.evaluate ~env:(Hashtbl.find_opt env) expr)
+              let expr_value = Expr.evaluate ~env:(Hashtbl.find_opt env) expr in
+              let expr_constraints = Expr.extract_constraints expr_value in
+              let phi =
+                expr_constraints @ phi
+                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
               in
+              let env' = update_env env register expr_value in
                 let* cont = recurse rest env' phi events in
                   Lwt.return cont
           | RegisterRefAssign { register; global } ->
@@ -207,13 +210,18 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let* cont = recurse rest env' phi events in
                   Lwt.return cont
           | GlobalStore { global; expr; assign } ->
-              let base_evt : event = Event.create Write 0 () in
+              let wval = Expr.evaluate ~env:(Hashtbl.find_opt env) expr in
+              let expr_constraints = Expr.extract_constraints wval in
+              let phi =
+                expr_constraints @ phi
+                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+              in
               let evt =
                 {
-                  base_evt with
+                  (Event.create Write 0 ()) with
                   id = Some (VVar global);
                   loc = Some (EVar global);
-                  wval = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) expr);
+                  wval = Some wval;
                   wmod = assign.mode;
                   volatile = assign.volatile;
                 }
@@ -223,12 +231,20 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   let* cont = recurse rest env phi events in
                     Lwt.return (SymbolicEventStructure.dot event' cont phi)
           | DerefStore { address; expr; assign } ->
-              let base_evt : event = Event.create Write 0 () in
+              let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
+              let wval = Expr.evaluate ~env:(Hashtbl.find_opt env) expr in
+              let expr_constraints =
+                Expr.extract_constraints wval @ Expr.extract_constraints loc
+              in
+              let phi =
+                expr_constraints @ phi
+                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+              in
               let evt =
                 {
-                  base_evt with
-                  loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
-                  wval = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) expr);
+                  (Event.create Write 0 ()) with
+                  loc = Some loc;
+                  wval = Some wval;
                   wmod = assign.mode;
                   volatile = assign.volatile;
                 }
@@ -239,10 +255,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
           | DerefLoad { register; address; load } ->
               let symbol = next_greek () in
               let rval = VSymbol symbol in
-              let base_evt : event = Event.create Read 0 () in
               let evt =
                 {
-                  base_evt with
+                  (Event.create Read 0 ()) with
                   loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
                   rval = Some rval;
                   rmod = load.mode;
@@ -258,10 +273,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
           | GlobalLoad { register; global; load } ->
               let symbol = next_greek () in
               let rval = VSymbol symbol in
-              let base_evt : event = Event.create Read 0 () in
               let evt =
                 {
-                  base_evt with
+                  (Event.create Read 0 ()) with
                   id = Some (VVar global);
                   loc = Some (EVar global);
                   rval = Some rval;
@@ -279,13 +293,19 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
           | Fadd
               { register; address; operand; rmw_mode; load_mode; assign_mode }
             ->
+              let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
+              let expr_constraints = Expr.extract_constraints loc in
+              let phi =
+                expr_constraints @ phi
+                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+              in
               let symbol = next_greek () in
               let rval = VSymbol symbol in
               let base_evt_load : event = Event.create Read 0 () in
               let evt_load =
                 {
                   base_evt_load with
-                  loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
+                  loc = Some loc;
                   rval = Some rval;
                   rmod = load_mode;
                   volatile = false;
@@ -300,7 +320,11 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   Expr.evaluate ~env:(Hashtbl.find_opt env)
                     (Expr.binop loaded_expr "+" operand)
                 in
-                let base_evt_store : event = Event.create Write 0 () in
+                let expr_constraints = Expr.extract_constraints result_expr in
+                let phi =
+                  expr_constraints @ phi
+                  |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+                in
                 (* if the operand evaluates to zero, this is a read-don't
                    modify-write *)
                 let is_rdmw =
@@ -309,9 +333,8 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 in
                 let evt_store =
                   {
-                    base_evt_store with
-                    loc =
-                      Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
+                    (Event.create Write 0 ()) with
+                    loc = Some loc;
                     wval = Some result_expr;
                     wmod = assign_mode;
                     volatile = false;
@@ -334,13 +357,18 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                       )
           | Cas { register; address; expected; desired; load_mode; assign_mode }
             ->
+              let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
+              let expr_constraints = Expr.extract_constraints loc in
+              let phi =
+                expr_constraints @ phi
+                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+              in
               let symbol = next_greek () in
               let rval = VSymbol symbol in
-              let base_evt_load : event = Event.create Read 0 () in
               let evt_load =
                 {
-                  base_evt_load with
-                  loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
+                  (Event.create Read 0 ()) with
+                  loc = Some loc;
                   rval = Some rval;
                   rmod = load_mode;
                   volatile = false;
@@ -354,15 +382,26 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let expected_expr =
                   Expr.evaluate ~env:(Hashtbl.find_opt env) expected
                 in
+                let expr_constraints = Expr.extract_constraints expected_expr in
+                let phi =
+                  expr_constraints @ phi
+                  |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+                in
                 let cond_expr = Expr.binop loaded_expr "=" expected_expr in
                 let base_evt_store : event = Event.create Write 0 () in
+                let wval =
+                  Some (Expr.evaluate ~env:(Hashtbl.find_opt env) desired)
+                in
+                let expr_constraints = Expr.extract_constraints desired in
+                let phi =
+                  expr_constraints @ phi
+                  |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+                in
                 let evt_store =
                   {
                     base_evt_store with
-                    loc =
-                      Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
-                    wval =
-                      Some (Expr.evaluate ~env:(Hashtbl.find_opt env) desired);
+                    loc = Some loc;
+                    wval;
                     wmod = assign_mode;
                     volatile = false;
                   }
@@ -397,6 +436,11 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               (* TODO prune semantically impossible branches against phi *)
               let cond_val =
                 Expr.evaluate ~env:(Hashtbl.find_opt env) condition
+              in
+              let expr_constraints = Expr.extract_constraints cond_val in
+              let phi =
+                expr_constraints @ phi
+                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
               in
               let new_then_phi =
                 if cond_val = EBoolean true then phi else cond_val :: phi

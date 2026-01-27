@@ -104,9 +104,10 @@ and Expr : sig
   val evaluate_conjunction : ?env:(string -> t option) -> t list -> t list
   val to_value : t -> value_type option
   val of_value : value_type -> t
-  val simplify_dnf : expr list list -> expr list list
-  val relabel : ?relab:(string -> string option) -> expr -> expr
-  val simplify_disjunction : expr list -> expr list -> expr list
+  val simplify_dnf : t list list -> t list list
+  val relabel : ?relab:(string -> string option) -> t -> t
+  val simplify_disjunction : t list -> t list -> t list
+  val extract_constraints : t -> t list
 end = struct
   type t = expr
 
@@ -353,17 +354,18 @@ end = struct
     match expr with
     | ENum _ -> expr
     | EBoolean _ -> expr
-    | ESymbol _ -> expr
-    | EVar v -> (
+    | ESymbol v | EVar v -> (
         match env v with
         | Some v_expr -> v_expr
         | None -> expr
       )
-    | EUnOp (op, rhs) when op = "!" -> (
+    | EUnOp ("!", rhs) -> (
         let r_val = evaluate ~env rhs in
           match r_val with
           | EBoolean b -> EBoolean (not b)
           | EUnOp ("!", r_val) -> r_val
+          (* NOTE debatable, but fits litmus tests *)
+          | ENum n when n = Z.zero -> ENum Z.one
           | EBinOp (l, op, r) -> (
               match op with
               | "=" -> EBinOp (l, "!=", r)
@@ -374,7 +376,7 @@ end = struct
               | ">=" -> EBinOp (l, "<", r)
               | _ -> EUnOp (op, r_val)
             )
-          | _ -> EUnOp (op, r_val)
+          | _ -> EUnOp ("!", r_val)
       )
     | EUnOp (op, rhs) ->
         let r_val = evaluate ~env rhs in
@@ -454,6 +456,10 @@ end = struct
             | EBoolean false, _ -> r_val
             | _ -> EBinOp (l_val, "||", r_val)
       )
+    | EBinOp (ENum n, "!=", EUnOp ("!", rhs)) when n = Z.zero ->
+        evaluate ~env (EBinOp (ENum Z.zero, "=", rhs))
+    | EBinOp (EUnOp ("!", lhs), "!=", ENum n) when n = Z.zero ->
+        evaluate ~env (EBinOp (lhs, "=", ENum n))
     | EBinOp (lhs, op, rhs) -> (
         let l_val = evaluate ~env lhs in
         let r_val = evaluate ~env rhs in
@@ -812,4 +818,18 @@ end = struct
       |> USet.to_list
       |> List.sort_uniq compare
       |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))
+
+  (** Extract constraints from an expression, e.g., for division by zero checks
+  *)
+  let extract_constraints expr =
+    let rec aux e =
+      match e with
+      | EBinOp (lhs, "/", rhs) -> [ EBinOp (rhs, "!=", ENum Z.zero) ]
+      | EBinOp (lhs, _, rhs) -> aux lhs @ aux rhs
+      | EUnOp (_, rhs) -> aux rhs
+      | EOr clauses ->
+          List.map (fun clause -> aux clause) clauses |> List.flatten
+      | _ -> []
+    in
+      aux expr
 end
