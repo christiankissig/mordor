@@ -167,7 +167,18 @@ module ValueAssignment = struct
                     Solver.concrete_value bindings s |> Option.map Expr.of_value
                 )
               in
-                if Expr.equal (Option.get just.w.wval) wval then Lwt.return []
+              let p =
+                Expr.evaluate_conjunction
+                  ~env:(fun s ->
+                    Solver.concrete_value bindings s |> Option.map Expr.of_value
+                  )
+                  just.p
+              in
+                if
+                  Expr.equal (Option.get just.w.wval) wval
+                  && List.length p = List.length just.p
+                  && List.equal Expr.equal p just.p
+                then Lwt.return []
                 else
                   (* TODO this is shady and should instead track symbols
                  symbols through the value assignment. However, this does agree
@@ -180,7 +191,7 @@ module ValueAssignment = struct
                   let new_w_d = Expr.get_symbols wval |> USet.of_list in
                   let d = USet.union new_p_d new_w_d in
                   let w = { just.w with wval = Some wval } in
-                    Lwt.return [ { just with w; d } ]
+                    Lwt.return [ { just with w; d; p } ]
             )
         | None -> Lwt.return []
 end
