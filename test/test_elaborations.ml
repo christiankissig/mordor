@@ -604,7 +604,7 @@ module LiftingTests = struct
             };
           expected_lifting_count = 1;
           expected_predicates = [ EBinOp (ESymbol "γ", "!=", ENum Z.zero) ];
-          expected_dependencies = [ "α"; "γ" ];
+          expected_dependencies = [ "γ" ];
           expected_write_label = 5;
         };
       ]

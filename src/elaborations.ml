@@ -246,9 +246,12 @@ module Forwarding = struct
   let we elab_ctx pred_fn ctx ppo_loc just =
     let write_events = elab_ctx.structure.write_events in
     let w_cross_w = URelation.cross write_events write_events in
-      USet.async_filter
-        (fun (e1, e2) -> fprime elab_ctx pred_fn ppo_loc just e1 e2)
-        w_cross_w
+      let* edges =
+        USet.async_filter
+          (fun (e1, e2) -> fprime elab_ctx pred_fn ppo_loc just e1 e2)
+          w_cross_w
+      in
+        Lwt.return (URelation.inverse edges)
 
   (** [elab elab_ctx just] performs forwarding elaboration on a justification.
 
@@ -311,14 +314,14 @@ module Forwarding = struct
                     let _we =
                       USet.filter
                         (fun (e1, e2) ->
-                          e1 > 0
+                          e2 > 0
                           (* && e2 <> just.w.label *)
                           (* NOTE JS disagrees with freeze definition *)
                           (* NOTE e1 and e2 are po before w, pulled forward from
                              freeze *)
-                          && USet.mem elab_ctx.structure.po (e1, just.w.label)
-                          && (e2 == just.w.label
-                             || USet.mem elab_ctx.structure.po (e2, just.w.label)
+                          && USet.mem elab_ctx.structure.po (e2, just.w.label)
+                          && (e1 == just.w.label
+                             || USet.mem elab_ctx.structure.po (e1, just.w.label)
                              )
                         )
                         _we
@@ -962,79 +965,123 @@ end = struct
                                   );
                                 Lwt.return None
                             | Some (distinguishing_predicate, disjunction) ->
-                                let* is_closed_relab_equiv_writes =
-                                  is_closed_relab_equiv elab_ctx statex relab
-                                    pred_1 pred_2 just_1.p just_1.w just_2.p
-                                    just_2.w
-                                in
-                                  if not is_closed_relab_equiv_writes then (
-                                    if is_trace then
-                                      Logs.debug (fun m ->
-                                          m
-                                            "Relabeling failed writes \
-                                             equivalence.\n\
-                                             \tW1: %d\n\
-                                             \tW2: %d"
-                                            just_1.w.label just_2.w.label
-                                      );
-                                    Lwt.return None
-                                  )
-                                  else
-                                    let* is_closed_relab_equiv_origins =
-                                      USet.async_for_all
-                                        (fun s ->
-                                          let o1 =
-                                            Hashtbl.find
-                                              elab_ctx.structure.origin s
-                                          in
-                                            match Hashtbl.find_opt relab s with
-                                            | Some s' ->
-                                                let o2 =
-                                                  Hashtbl.find
-                                                    elab_ctx.structure.origin s'
-                                                in
-                                                (* TODO looking up events by id
+                                if
+                                  List.length disjunction = List.length just_2.p
+                                  && List.equal Expr.equal disjunction just_2.p
+                                then (
+                                  if is_trace then
+                                    Logs.debug (fun m ->
+                                        m
+                                          "Relabeling did not yield \
+                                           distinguishing predicate.\n\
+                                           \tRelabeled P1: [%s]\n\
+                                           \tP2: [%s]"
+                                          (String.concat "; "
+                                             (List.map Expr.to_string
+                                                relabeled_just_1_p
+                                             )
+                                          )
+                                          (String.concat "; "
+                                             (List.map Expr.to_string just_2.p)
+                                          )
+                                    );
+                                  Lwt.return None
+                                )
+                                else
+                                  let* is_closed_relab_equiv_writes =
+                                    is_closed_relab_equiv elab_ctx statex relab
+                                      pred_1 pred_2 just_1.p just_1.w just_2.p
+                                      just_2.w
+                                  in
+                                    if not is_closed_relab_equiv_writes then (
+                                      if is_trace then
+                                        Logs.debug (fun m ->
+                                            m
+                                              "Relabeling failed writes \
+                                               equivalence.\n\
+                                               \tW1: %d\n\
+                                               \tW2: %d"
+                                              just_1.w.label just_2.w.label
+                                        );
+                                      Lwt.return None
+                                    )
+                                    else
+                                      let* is_closed_relab_equiv_origins =
+                                        USet.async_for_all
+                                          (fun s ->
+                                            let o1 =
+                                              Hashtbl.find
+                                                elab_ctx.structure.origin s
+                                            in
+                                              match
+                                                Hashtbl.find_opt relab s
+                                              with
+                                              | Some s' ->
+                                                  let o2 =
+                                                    Hashtbl.find
+                                                      elab_ctx.structure.origin
+                                                      s'
+                                                  in
+                                                  (* TODO looking up events by id
                                                    misses effect of value
                                                    assignment elaboration *)
-                                                let e1 =
-                                                  Hashtbl.find
-                                                    elab_ctx.structure.events o1
-                                                in
-                                                let e2 =
-                                                  Hashtbl.find
-                                                    elab_ctx.structure.events o2
-                                                in
-                                                  is_closed_relab_equiv elab_ctx
-                                                    statex relab pred_1 pred_2
-                                                    just_1.p e1 just_2.p e2
-                                            | None -> Lwt.return true
+                                                  let e1 =
+                                                    Hashtbl.find
+                                                      elab_ctx.structure.events
+                                                      o1
+                                                  in
+                                                  let e2 =
+                                                    Hashtbl.find
+                                                      elab_ctx.structure.events
+                                                      o2
+                                                  in
+                                                    is_closed_relab_equiv
+                                                      elab_ctx statex relab
+                                                      pred_1 pred_2 just_1.p e1
+                                                      just_2.p e2
+                                              | None -> Lwt.return true
+                                          )
+                                          just_1.d
+                                      in
+                                        if not is_closed_relab_equiv_origins
+                                        then (
+                                          if is_trace then
+                                            Logs.debug (fun m ->
+                                                m
+                                                  "Relabeling failed origins \
+                                                   equivalence.\n\
+                                                   \tW1: %d\n\
+                                                   \tW2: %d"
+                                                  just_1.w.label just_2.w.label
+                                            );
+                                          Lwt.return None
                                         )
-                                        just_1.d
-                                    in
-                                      if not is_closed_relab_equiv_origins then (
-                                        if is_trace then
-                                          Logs.debug (fun m ->
-                                              m
-                                                "Relabeling failed origins \
-                                                 equivalence.\n\
-                                                 \tW1: %d\n\
-                                                 \tW2: %d"
-                                                just_1.w.label just_2.w.label
-                                          );
-                                        Lwt.return None
-                                      )
-                                      else
-                                        Lwt.return_some
-                                          {
-                                            p = disjunction;
-                                            (* fwd and we need to be of just_2 as
+                                        else
+                                          let new_p_d =
+                                            List.map Expr.get_symbols
+                                              disjunction
+                                            |> List.flatten
+                                            |> USet.of_list
+                                          in
+                                          let new_w_d =
+                                            Option.map Expr.get_symbols
+                                              just_2.w.wval
+                                            |> Option.value ~default:[]
+                                            |> USet.of_list
+                                          in
+                                          let d = USet.union new_p_d new_w_d in
+
+                                          Lwt.return_some
+                                            {
+                                              p = disjunction;
+                                              (* fwd and we need to be of just_2 as
                                          we're checking if delta is on path
                                          while generating executions *)
-                                            fwd = just_2.fwd;
-                                            we = just_2.we;
-                                            d = just_2.d;
-                                            w = just_2.w;
-                                          }
+                                              fwd = just_2.fwd;
+                                              we = just_2.we;
+                                              d;
+                                              w = just_2.w;
+                                            }
                           in
                             Landmark.exit inner_landmark;
                             result
