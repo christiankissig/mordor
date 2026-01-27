@@ -375,6 +375,7 @@ let () =
   @@ Dream.router
        [
          Dream.get "/" (Dream.from_filesystem "web/frontend" "index.html");
+         Dream.get "/help/" (Dream.from_filesystem "web/frontend" "help.html");
          Dream.get "/static/**" (Dream.static "web/frontend/static");
          Dream.get "/health" health_handler;
          Dream.get "/api/visualize/stream" visualize_sse_handler;
