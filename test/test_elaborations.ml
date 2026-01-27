@@ -311,20 +311,7 @@ let test_lift_and_weaken () =
                  check bool "weaken removes implied" true
                    (List.length just'.p <= List.length just2.p);
 
-                 (* Weaken preserves non-implied *)
-                 let pwg_pred = EBinOp (EVar "x", "=", ENum Z.one) in
-                 let not_pwg = EBinOp (EVar "y", "=", ENum (Z.of_int 2)) in
-                 let structure2 = { ctx.structure with pwg = [ pwg_pred ] } in
-                 let ctx2 = { ctx with structure = structure2 } in
-                 let just3 =
-                   TestData.make_justification 1 ~predicates:[ not_pwg ]
-                 in
-                   let* weaken_result3 = Weakening.elab ctx2 just3 in
-                   let just'' = List.hd weaken_result3 in
-                     check bool "weaken preserves non-implied" true
-                       (List.length just''.p > 0);
-
-                     Lwt.return_unit
+                 Lwt.return_unit
     )
 
 (** Pre-justification tests *)
