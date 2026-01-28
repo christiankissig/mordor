@@ -34,6 +34,7 @@ class TestRunner {
                     <button class="btn-primary" id="run-all-tests">▶ Run All Tests</button>
                     <button class="btn-secondary" id="refresh-tests">🔄 Refresh</button>
                     <button class="btn-secondary" id="clear-results">🗑️ Clear Results</button>
+                    <button class="btn-secondary" id="view-summary" style="display: none;">📊 View Summary</button>
                     <div class="test-stats">
                         <span id="test-count">0 tests</span>
                         <span id="test-passed" class="stat-passed">0 passed</span>
@@ -117,6 +118,11 @@ class TestRunner {
         // Clear results
         document.getElementById('clear-results').addEventListener('click', () => {
             this.clearResults();
+        });
+
+        // View summary button
+        document.getElementById('view-summary').addEventListener('click', () => {
+            this.showOverview();
         });
 
         // Search/filter tests
@@ -396,6 +402,16 @@ class TestRunner {
                 </div>
             </div>
         `;
+
+        // Add click handlers for result items
+        overview.querySelectorAll('.result-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const testPath = item.getAttribute('data-test');
+                if (testPath) {
+                    this.showTestDetail(testPath);
+                }
+            });
+        });
     }
 
     renderResultsList() {
@@ -406,7 +422,7 @@ class TestRunner {
             });
 
         return results.map(([test, result]) => `
-            <div class="result-item ${result.success ? 'success' : 'failed'}" data-test="${test}">
+            <div class="result-item ${result.success ? 'success' : 'failed'}" data-test="${test}" style="cursor: pointer;">
                 <span class="result-icon">${result.success ? '✓' : '✗'}</span>
                 <span class="result-name">${this.getTestName(test)}</span>
                 <span class="result-summary">${this.formatResultSummary(result)}</span>
@@ -423,6 +439,14 @@ class TestRunner {
         document.getElementById('test-passed').textContent = `${passed} passed`;
         document.getElementById('test-failed').textContent = `${failed} failed`;
         document.getElementById('test-running').textContent = `${running} running`;
+
+        // Show/hide View Summary button based on whether results exist
+        const viewSummaryBtn = document.getElementById('view-summary');
+        if (Object.keys(this.results).length > 0) {
+            viewSummaryBtn.style.display = 'inline-block';
+        } else {
+            viewSummaryBtn.style.display = 'none';
+        }
     }
 
     clearResults() {
