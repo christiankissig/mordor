@@ -287,20 +287,20 @@ let quick_check exprs =
   let solver = create exprs in
     check solver
 
-let quick_check_cache = Hashtbl.create 256
+let quick_check_cache = ConjunctionCache.create 256
 
 let quick_check_cached exprs =
   let landmark = Landmark.register "quick_check_cached" in
     Landmark.enter landmark;
+    (* TODO exprs should already be normalized *)
     let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
-    let key = String.concat ";" (List.map Expr.to_string exprs) in
-      match Hashtbl.find_opt quick_check_cache key with
+      match ConjunctionCache.find_opt quick_check_cache exprs with
       | Some result ->
           Landmark.exit landmark;
           Lwt.return result
       | None ->
           let* result = quick_check exprs in
-            Hashtbl.add quick_check_cache key result;
+            ConjunctionCache.add quick_check_cache exprs result;
             Landmark.exit landmark;
             Lwt.return result
 

@@ -833,3 +833,14 @@ end = struct
     in
       aux expr
 end
+
+(** Cache key for conjunction indexed caches. *)
+module ConjunctionCacheKey = struct
+  type t = Expr.t list
+
+  let hash exprs = Hashtbl.hash (List.map hash_expr exprs)
+  let equal exprs1 exprs2 = List.equal Expr.equal exprs1 exprs2
+end
+
+(** Conjunction indexed cache. *)
+module ConjunctionCache = Hashtbl.Make (ConjunctionCacheKey)
