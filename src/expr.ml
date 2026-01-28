@@ -395,6 +395,8 @@ end = struct
     | EBinOp (lhs, "-", rhs) -> (
         let l_val = evaluate ~env lhs in
         let r_val = evaluate ~env rhs in
+        if Expr.equal l_val r_val then ENum Z.zero
+        else
           match (l_val, r_val) with
           | EBinOp (l1, "+", r1), r2 when Expr.equal r1 r2 -> l1
           | EBinOp (l1, "+", r1), r2 when Expr.equal l1 r2 -> r1
