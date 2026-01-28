@@ -108,6 +108,7 @@ and Expr : sig
   val relabel : ?relab:(string -> string option) -> t -> t
   val simplify_disjunction : t list -> t list -> t list
   val extract_constraints : t -> t list
+  val apply_constraints : t -> t
 end = struct
   type t = expr
 
@@ -830,6 +831,26 @@ end = struct
       | EOr clauses ->
           List.map (fun clause -> aux clause) clauses |> List.flatten
       | _ -> []
+    in
+      aux expr
+
+  (** [apply_constraints expr] Applies the implicit constraints from
+      extract_constraints above and applies them in place instead of handing
+      down the constraints to the value assignment elaboration as that still
+      leaves the constraints in the path predicates.
+
+      In an expression of the form 1/!x there is an implicit constraint that x =
+      0, as otherwise the semantics of the expression and thus the behaviour of
+      the program is undefined (DivByZero). This function applies this
+      constraints and normalises the expression to 1. *)
+  let apply_constraints expr =
+    let rec aux e =
+      match e with
+      | EBinOp (lhs, "/", EUnOp ("!", rhs)) -> aux lhs
+      | EBinOp (lhs, op, rhs) -> EBinOp (aux lhs, op, aux rhs)
+      | EUnOp (op, rhs) -> EUnOp (op, aux rhs)
+      | EOr clauses -> EOr (List.map aux clauses)
+      | _ -> e
     in
       aux expr
 end

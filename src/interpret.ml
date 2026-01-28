@@ -196,11 +196,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               in
                 interpret_threads threads
           | RegisterStore { register; expr } ->
-              let expr_value = Expr.evaluate ~env:(Hashtbl.find_opt env) expr in
-              let expr_constraints = Expr.extract_constraints expr_value in
-              let phi =
-                expr_constraints @ phi
-                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+              let expr_value =
+                Expr.evaluate ~env:(Hashtbl.find_opt env) expr
+                |> Expr.apply_constraints
               in
               let env' = update_env env register expr_value in
                 let* cont = recurse rest env' phi events in
@@ -210,11 +208,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let* cont = recurse rest env' phi events in
                   Lwt.return cont
           | GlobalStore { global; expr; assign } ->
-              let wval = Expr.evaluate ~env:(Hashtbl.find_opt env) expr in
-              let expr_constraints = Expr.extract_constraints wval in
-              let phi =
-                expr_constraints @ phi
-                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+              let wval =
+                Expr.evaluate ~env:(Hashtbl.find_opt env) expr
+                |> Expr.apply_constraints
               in
               let evt =
                 {
@@ -232,13 +228,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                     Lwt.return (SymbolicEventStructure.dot event' cont phi)
           | DerefStore { address; expr; assign } ->
               let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-              let wval = Expr.evaluate ~env:(Hashtbl.find_opt env) expr in
-              let expr_constraints =
-                Expr.extract_constraints wval @ Expr.extract_constraints loc
-              in
-              let phi =
-                expr_constraints @ phi
-                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+              let wval =
+                Expr.evaluate ~env:(Hashtbl.find_opt env) expr
+                |> Expr.apply_constraints
               in
               let evt =
                 {
@@ -294,11 +286,6 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               { register; address; operand; rmw_mode; load_mode; assign_mode }
             ->
               let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-              let expr_constraints = Expr.extract_constraints loc in
-              let phi =
-                expr_constraints @ phi
-                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
-              in
               let symbol = next_greek () in
               let rval = VSymbol symbol in
               let base_evt_load : event = Event.create Read 0 () in
@@ -319,11 +306,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let result_expr =
                   Expr.evaluate ~env:(Hashtbl.find_opt env)
                     (Expr.binop loaded_expr "+" operand)
-                in
-                let expr_constraints = Expr.extract_constraints result_expr in
-                let phi =
-                  expr_constraints @ phi
-                  |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+                  |> Expr.apply_constraints
                 in
                 (* if the operand evaluates to zero, this is a read-don't
                    modify-write *)
@@ -358,11 +341,6 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
           | Cas { register; address; expected; desired; load_mode; assign_mode }
             ->
               let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-              let expr_constraints = Expr.extract_constraints loc in
-              let phi =
-                expr_constraints @ phi
-                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
-              in
               let symbol = next_greek () in
               let rval = VSymbol symbol in
               let evt_load =
@@ -382,26 +360,17 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let expected_expr =
                   Expr.evaluate ~env:(Hashtbl.find_opt env) expected
                 in
-                let expr_constraints = Expr.extract_constraints expected_expr in
-                let phi =
-                  expr_constraints @ phi
-                  |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
-                in
                 let cond_expr = Expr.binop loaded_expr "=" expected_expr in
                 let base_evt_store : event = Event.create Write 0 () in
                 let wval =
-                  Some (Expr.evaluate ~env:(Hashtbl.find_opt env) desired)
-                in
-                let expr_constraints = Expr.extract_constraints desired in
-                let phi =
-                  expr_constraints @ phi
-                  |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+                  Expr.evaluate ~env:(Hashtbl.find_opt env) desired
+                  |> Expr.apply_constraints
                 in
                 let evt_store =
                   {
                     base_evt_store with
                     loc = Some loc;
-                    wval;
+                    wval = Some wval;
                     wmod = assign_mode;
                     volatile = false;
                   }
@@ -436,11 +405,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               (* TODO prune semantically impossible branches against phi *)
               let cond_val =
                 Expr.evaluate ~env:(Hashtbl.find_opt env) condition
-              in
-              let expr_constraints = Expr.extract_constraints cond_val in
-              let phi =
-                expr_constraints @ phi
-                |> Expr.evaluate_conjunction ~env:(Hashtbl.find_opt env)
+                |> Expr.apply_constraints
               in
               let new_then_phi =
                 if cond_val = EBoolean true then phi else cond_val :: phi
