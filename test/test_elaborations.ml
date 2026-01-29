@@ -61,8 +61,8 @@ module TestData = struct
       rmw;
       lo = USet.create ();
       restrict = Hashtbl.create 10;
+      defacto = Hashtbl.create 10;
       cas_groups = Hashtbl.create 10;
-      pwg = [];
       fj = USet.create ();
       p = Hashtbl.create 10;
       constraints = [];
@@ -271,13 +271,7 @@ let test_forward_operations () =
        let* result2 = Forwarding.elab ctx just in
          check bool "forward produces results" true (List.length result2 >= 0);
 
-         (* With pwg *)
-         let structure = { ctx.structure with pwg = [ pred ] } in
-         let ctx_pwg = { ctx with structure } in
-           let* result3 = Forwarding.elab ctx_pwg just in
-             check bool "forward with pwg" true (List.length result3 >= 0);
-
-             Lwt.return_unit
+         Lwt.return_unit
     )
 
 (** Lift, weaken, strengthen tests *)
@@ -298,15 +292,18 @@ let test_lift_and_weaken () =
            check int "weaken no pwg" 1 (List.length weaken_result1);
 
            (* Weaken with pwg *)
-           let structure = { ctx.structure with pwg = [ pred ] } in
-           let ctx_pwg = { ctx with structure } in
-             let* weaken_result2 = Weakening.elab ctx_pwg just2 in
-               check bool "weaken with pwg" true (List.length weaken_result2 > 0);
-               let just' = List.hd weaken_result2 in
-                 check bool "weaken removes implied" true
-                   (List.length just'.p <= List.length just2.p);
+           let defacto = Hashtbl.create 10 in
+             Hashtbl.add defacto 1 [ pred ];
+             let structure = { ctx.structure with defacto } in
+             let elab_ctx = { ctx with structure } in
+               let* weaken_result2 = Weakening.elab elab_ctx just2 in
+                 check bool "weaken with defacto" true
+                   (List.length weaken_result2 > 0);
+                 let just' = List.hd weaken_result2 in
+                   check bool "weaken removes implied" true
+                     (List.length just'.p <= List.length just2.p);
 
-                 Lwt.return_unit
+                   Lwt.return_unit
     )
 
 (** Pre-justification tests *)

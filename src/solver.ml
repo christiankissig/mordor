@@ -37,6 +37,17 @@ let rec value_to_z3 context = function
       if b then Z3.Boolean.mk_true context.ctx
       else Z3.Boolean.mk_false context.ctx
 
+and to_bitvec context expr bitwidth =
+  if Z3.BitVector.is_bv expr then expr
+  else if Z3.Boolean.is_bool expr then
+    (* Convert boolean to bitvector: true -> 1, false -> 0 *)
+    let zero_bv = Z3.BitVector.mk_numeral context.ctx "0" bitwidth in
+    let one_bv = Z3.BitVector.mk_numeral context.ctx "1" bitwidth in
+      Z3.Boolean.mk_ite context.ctx expr one_bv zero_bv
+  else
+    (* Integer to bitvector *)
+    Z3.Arithmetic.Integer.mk_int2bv context.ctx bitwidth expr
+
 (** Convert expression to Z3 *)
 and expr_to_z3 context = function
   | ENum n -> Z3.Arithmetic.Integer.mk_numeral_s context.ctx (Z.to_string n)
@@ -49,7 +60,17 @@ and expr_to_z3 context = function
       let l = expr_to_z3 context lhs in
       let r = expr_to_z3 context rhs in
         match op with
-        | "=" -> Z3.Boolean.mk_eq context.ctx l r
+        | "=" ->
+            (* Handle bitvector vs integer comparison *)
+            if Z3.BitVector.is_bv l && not (Z3.BitVector.is_bv r) then
+              let bitwidth = Z3.BitVector.get_size (Z3.Expr.get_sort l) in
+              let r_bv = to_bitvec context r bitwidth in
+                Z3.Boolean.mk_eq context.ctx l r_bv
+            else if Z3.BitVector.is_bv r && not (Z3.BitVector.is_bv l) then
+              let bitwidth = Z3.BitVector.get_size (Z3.Expr.get_sort r) in
+              let l_bv = to_bitvec context l bitwidth in
+                Z3.Boolean.mk_eq context.ctx l_bv r
+            else Z3.Boolean.mk_eq context.ctx l r
         | "!=" ->
             Z3.Boolean.mk_not context.ctx (Z3.Boolean.mk_eq context.ctx l r)
         | "<" -> Z3.Arithmetic.mk_lt context.ctx l r
@@ -60,6 +81,20 @@ and expr_to_z3 context = function
         | "-" -> Z3.Arithmetic.mk_sub context.ctx [ l; r ]
         | "*" -> Z3.Arithmetic.mk_mul context.ctx [ l; r ]
         | "/" -> Z3.Arithmetic.mk_div context.ctx l r
+        | "&" ->
+            let bitwidth = 64 in
+            let l_bv = to_bitvec context l bitwidth in
+            let r_bv = to_bitvec context r bitwidth in
+            let result_bv = Z3.BitVector.mk_and context.ctx l_bv r_bv in
+              (* Convert back to integer *)
+              Z3.BitVector.mk_bv2int context.ctx result_bv false
+        | "|" ->
+            let bitwidth = 64 in
+            let l_bv = to_bitvec context l bitwidth in
+            let r_bv = to_bitvec context r bitwidth in
+            let result_bv = Z3.BitVector.mk_or context.ctx l_bv r_bv in
+              (* Convert back to integer *)
+              Z3.BitVector.mk_bv2int context.ctx result_bv false
         | "&&" -> Z3.Boolean.mk_and context.ctx [ l; r ]
         | "||" -> Z3.Boolean.mk_or context.ctx [ l; r ]
         | "=>" -> Z3.Boolean.mk_implies context.ctx l r

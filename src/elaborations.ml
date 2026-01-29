@@ -269,9 +269,12 @@ module Forwarding = struct
   let elab elab_ctx just =
     (* Determine paths to check: if available check P or P with program wide
        guarantees. *)
+    let defacto =
+      Hashtbl.find_opt elab_ctx.structure.defacto just.w.label
+      |> Option.value ~default:[]
+    in
     let ps =
-      if elab_ctx.structure.pwg <> [] then
-        [ just.p; just.p @ elab_ctx.structure.pwg ]
+      if List.length defacto > 0 then [ just.p; just.p @ defacto ]
       else [ just.p ]
     in
       (* Map over each path *)
@@ -1137,7 +1140,12 @@ module Weakening = struct
           (* Create formula: And(remapped_pwg) ∧ Not(x) *)
           (* If SAT, then x is not implied by pwg, so keep it *)
           let not_x = Expr.inverse x in
-          let formula = not_x :: elab_ctx.structure.pwg in
+          let defacto =
+            Hashtbl.find_opt elab_ctx.structure.defacto just.w.label
+            |> Option.value ~default:[]
+          in
+          (* defacto implies x *)
+          let formula = not_x :: defacto in
           let solver = Solver.create formula in
             let* result = Solver.check solver in
               match result with
@@ -1297,17 +1305,28 @@ let batch_elaborations elab_ctx pre_justs =
                 let new_justs = USet.inplace_union new_justs new_fwd_justs in
                 let new_justs = USet.inplace_union new_justs new_lift_justs in
                 let new_justs = USet.inplace_union new_justs new_weaken_justs in
-
-                if USet.size new_justs = 0 then (
                   Logs.debug (fun m ->
-                      m
-                        "Batch elaborations reached fixed point with %d \
-                         justifications."
-                        (USet.size old_justs)
+                      m "Total new justifications this iteration: %d"
+                        (USet.size new_justs)
                   );
-                  Lwt.return old_justs
-                )
-                else fixed_point old_justs new_justs
+                  let new_justs =
+                    USet.filter (fun j -> not (USet.mem old_justs j)) new_justs
+                  in
+                    Logs.debug (fun m ->
+                        m "After filtering covered justifications: %d"
+                          (USet.size new_justs)
+                    );
+
+                    if USet.size new_justs = 0 then (
+                      Logs.debug (fun m ->
+                          m
+                            "Batch elaborations reached fixed point with %d \
+                             justifications."
+                            (USet.size old_justs)
+                      );
+                      Lwt.return old_justs
+                    )
+                    else fixed_point old_justs new_justs
     in
 
     let* final_justs = fixed_point (USet.create ()) pre_justs in

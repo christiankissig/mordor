@@ -127,8 +127,8 @@ type symbolic_event_structure = {
   rmw : (int * int) uset;
   lo : (int * int) uset;
   restrict : (int, expr list) Hashtbl.t;
+  defacto : (int, expr list) Hashtbl.t;
   cas_groups : (int, int list * expr list uset) Hashtbl.t;
-  pwg : expr list;
   fj : (int * int) uset;
   p : (int, (string, expr) Hashtbl.t) Hashtbl.t;
   constraints : expr list;

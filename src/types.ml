@@ -196,9 +196,10 @@ type symbolic_event_structure = {
   rmw : (int * int) uset; [@printer pp_int_urel] (* Read-modify-write pairs *)
   lo : (int * int) uset; [@printer pp_int_urel] (* Lock order *)
   restrict : (int, expr list) Hashtbl.t; [@opaque] (* Event restrictions *)
+  defacto : (int, expr list) Hashtbl.t; [@opaque]
+      (* De-facto constraints per event *)
   cas_groups : (int, int list * expr list uset) Hashtbl.t; [@opaque]
       (* CAS groupings *)
-  pwg : expr list; (* Per-write guarantees *)
   fj : (int * int) uset; [@printer pp_int_urel] (* Fork-join edges *)
   p : (int, (string, expr) Hashtbl.t) Hashtbl.t; [@printer pp_structure_p]
       (* Register state per event

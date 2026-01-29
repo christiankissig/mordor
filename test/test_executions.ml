@@ -49,11 +49,11 @@ module TestData = struct
       events;
       po;
       restrict = Hashtbl.create 4;
+      defacto = Hashtbl.create 4;
       cas_groups = Hashtbl.create 4;
       po_iter = USet.create ();
       rmw = USet.create ();
       lo = USet.create ();
-      pwg = [];
       fj = USet.create ();
       p = Hashtbl.create 4;
       constraints = [];

@@ -483,12 +483,10 @@ module TestSymbolicEventStructure = struct
   let test_program_wide_guarantee () =
     (* Use the create helper from Types module *)
     let ses = SymbolicEventStructure.create () in
-    let ses =
-      { ses with pwg = [ EBinOp (ESymbol "x", "≤", ENum (Z.of_int 100)) ] }
-    in
-
-    check int "pwg_length" 1 (List.length ses.pwg);
-    Printf.printf "PASS: Program-wide guarantee\n"
+    let defacto = Hashtbl.create 10 in
+      Hashtbl.add defacto 1 [ EBinOp (ESymbol "x", "≤", ENum (Z.of_int 100)) ];
+      let ses = { ses with defacto } in
+        ()
 
   let suite =
     [

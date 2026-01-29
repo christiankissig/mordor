@@ -82,12 +82,13 @@ rule token = parse
   | "]]"                  { Parser.RDBRACKET }
   | "|||"                 { Parser.PARALLEL }
   | "||"                  { Parser.OR }
+  | "&"                   { Parser.BITAND }
   | "&&"                  { Parser.AND }
   | "in"                  { Parser.IN }
-  | "\\in"                  { Parser.IN }
+  | "\\in"                { Parser.IN }
   | "∈"                   { Parser.IN }
   | "notin"               { Parser.NOTIN }
-  | "\\notin"               { Parser.NOTIN }
+  | "\\notin"             { Parser.NOTIN }
   | "∉"                   { Parser.NOTIN }
   | "forall"              { Parser.FORALL }
 

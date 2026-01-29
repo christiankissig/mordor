@@ -62,14 +62,14 @@ let test_next_zh () =
 
 (** Test events collection creation *)
 let test_create_events () =
-  let events = create_events () in
+  let events = create_events [] in
     Alcotest.(check int) "initial label is 1" 0 events.label;
     Alcotest.(check int) "events table is empty" 0 (Hashtbl.length events.events)
 
 (** Test adding events *)
 let test_add_event () =
   reset_counters ();
-  let events = create_events () in
+  let events = create_events [] in
   let evt = Event.create Read 0 () in
   let env = Hashtbl.create 16 in
   let added_evt =
@@ -82,7 +82,7 @@ let test_add_event () =
 
 let test_add_multiple_events () =
   reset_counters ();
-  let events = create_events () in
+  let events = create_events [] in
   let evt1 = Event.create Read 0 () in
   let evt2 = Event.create Write 0 () in
   let env = Hashtbl.create 16 in
@@ -106,15 +106,14 @@ let test_empty_structure () =
     Alcotest.(check int) "empty lo" 0 (USet.size s.lo);
     Alcotest.(check int) "empty fj" 0 (USet.size s.fj);
     (* Alcotest.(check int) "empty p" 0 (Hashtbl.size s.p); TODO *)
-    Alcotest.(check int) "empty constraints" 0 (List.length s.constraints);
-    Alcotest.(check int) "empty pwg" 0 (List.length s.pwg)
+    Alcotest.(check int) "empty constraints" 0 (List.length s.constraints)
 
 (** Test SymbolicEventStructure.dot operation *)
 let test_dot () =
   let s = SymbolicEventStructure.create () in
   let s' = { s with e = USet.of_list [ 2; 3 ] } in
   let evt = Event.create Read 1 () in
-  let result = SymbolicEventStructure.dot evt s' [] in
+  let result = SymbolicEventStructure.dot evt s' [] [] in
     Alcotest.(check bool) "event 1 in result" true (USet.mem result.e 1);
     Alcotest.(check bool) "event 2 in result" true (USet.mem result.e 2);
     Alcotest.(check bool) "event 3 in result" true (USet.mem result.e 3);
@@ -176,7 +175,7 @@ let test_cross () =
 let test_interpret_empty_statements =
   run_lwt (fun () ->
       let env = Hashtbl.create 16 in
-      let events = create_events () in
+      let events = create_events [] in
         let* result = interpret_statements [] env [] events in
           Alcotest.(check int) "only terminal event" 1 (USet.size result.e);
           Lwt.return_unit
@@ -187,7 +186,7 @@ let test_interpret_global_store =
   run_lwt (fun () ->
       reset_counters ();
       let env = Hashtbl.create 16 in
-      let events = create_events () in
+      let events = create_events [] in
       let mode = Types.SC in
       let expr = ENum Z.zero in
       let stmt =
@@ -209,7 +208,7 @@ let test_interpret_global_load =
   run_lwt (fun () ->
       reset_counters ();
       let env = Hashtbl.create 16 in
-      let events = create_events () in
+      let events = create_events [] in
       let mode = Types.SC in
       let stmt =
         GlobalLoad
@@ -228,7 +227,7 @@ let test_interpret_fence =
   run_lwt (fun () ->
       reset_counters ();
       let env = Hashtbl.create 16 in
-      let events = create_events () in
+      let events = create_events [] in
       let mode = Types.SC in
       let stmt = Ir.Fence { mode } in
         let* result =
@@ -247,7 +246,7 @@ let test_interpret_multiple_statements =
   run_lwt (fun () ->
       reset_counters ();
       let env = Hashtbl.create 16 in
-      let events = create_events () in
+      let events = create_events [] in
       let stmts =
         List.map make_ir_node
           [

@@ -11,7 +11,7 @@ module SymbolicEventStructure : sig
   val create : unit -> t
 
   (** Prefix symbolic operation with event *)
-  val dot : event -> t -> expr list -> t
+  val dot : event -> t -> expr list -> expr list -> t
 
   (** Disjoint union of two symbolic event structures; intended for branching.
   *)

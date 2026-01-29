@@ -16,7 +16,7 @@ open Types
 %token <Z.t> INT
 %token <string> REGISTER ATLOC GLOBAL STRING BACKTICK
 %token QUOTE PLUS MINUS STAR SLASH RARROW
-%token AND OR PERCENT NEQ GEQ GT LEQ LT ASSIGN EQ
+%token BITAND AND OR PERCENT NEQ GEQ GT LEQ LT ASSIGN EQ
 %token LPAREN RPAREN LBRACE RBRACE LDBRACKET RDBRACKET
 %token LBRACKET RBRACKET SEMICOLON COMMA BANG DOT
 %token AMPERSAND CARET PIPE TILDE IN NOTIN FORALL PARALLEL
@@ -471,6 +471,7 @@ expr:
   | e1=expr STAR e2=expr { EBinOp (e1, "*", e2) }
   | e1=expr SLASH e2=expr { EBinOp (e1, "/", e2) }
   | e1=expr PERCENT e2=expr { EBinOp (e1, "%", e2) }
+  | e1=expr BITAND e2=expr { EBinOp (e1, "&", e2) }
   | e1=expr AND e2=expr { EBinOp (e1, "&&", e2) }
   | e1=expr OR e2=expr { EBinOp (e1, "||", e2) }
   | e1=expr PIPE e2=expr { EBinOp (e1, "|", e2) }
