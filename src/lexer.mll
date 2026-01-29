@@ -82,7 +82,6 @@ rule token = parse
   | "]]"                  { Parser.RDBRACKET }
   | "|||"                 { Parser.PARALLEL }
   | "||"                  { Parser.OR }
-  | "&"                   { Parser.BITAND }
   | "&&"                  { Parser.AND }
   | "in"                  { Parser.IN }
   | "\\in"                { Parser.IN }
