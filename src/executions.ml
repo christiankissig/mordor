@@ -283,13 +283,26 @@ module ReadFromValidation = struct
   let env_rf structure rf =
     USet.map
       (fun (w, r) ->
-        (* TODO this look-up logic is contrived *)
-        let w_val = vale structure w r in
-          match get_val structure r with
-          | Some r_val -> Expr.evaluate (Expr.binop w_val "=" r_val)
-          | None -> failwith ("Read event " ^ string_of_int r ^ " has no value!")
+        if w = 0 then None
+        else
+          (* TODO w_val should be retrieved from justification to account for
+           elaborations *)
+          let w_val = vale structure w r in
+            match get_val structure r with
+            | Some r_val -> Some (Expr.evaluate (Expr.binop w_val "=" r_val))
+            | None ->
+                failwith ("Read event " ^ string_of_int r ^ " has no value!")
       )
       rf
+    (* TODO replace with filter_map *)
+    |> fun constraints ->
+    USet.fold
+      (fun (acc : expr uset) (expr_opt : expr option) ->
+        match expr_opt with
+        | Some expr -> USet.add acc expr
+        | None -> acc
+      )
+      constraints (USet.create ())
 
   (** [check_rf structure rf] computes location equality constraints.
 
@@ -301,14 +314,25 @@ module ReadFromValidation = struct
   let check_rf structure rf =
     USet.map
       (fun (w, r) ->
-        (* TODO this look-up logic is contrived *)
-        let w_loc = loce structure w r in
-          match get_loc structure r with
-          | Some r_loc -> Expr.evaluate (Expr.binop w_loc "=" r_loc)
-          | None ->
-              failwith ("Read event " ^ string_of_int r ^ " has no location!")
+        if w = 0 then None
+        else
+          (* TODO this look-up logic is contrived *)
+          let w_loc = loce structure w r in
+            match get_loc structure r with
+            | Some r_loc -> Some (Expr.evaluate (Expr.binop w_loc "=" r_loc))
+            | None ->
+                failwith ("Read event " ^ string_of_int r ^ " has no location!")
       )
       rf
+    (* TODO replace with filter_map *)
+    |> fun constraints ->
+    USet.fold
+      (fun (acc : expr uset) (expr_opt : expr option) ->
+        match expr_opt with
+        | Some expr -> USet.add acc expr
+        | None -> acc
+      )
+      constraints (USet.create ())
 
   (** [adjacent_same_location_allocation_events structure path rhb p] finds
       adjacent allocations at same location.
@@ -845,7 +869,8 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
   let landmark = Landmark.register "compute_path_rf" in
     Landmark.enter landmark;
     let write_events =
-      USet.set_minus (USet.intersection structure.write_events path.path) elided
+      USet.intersection structure.write_events path.path |> fun e ->
+      USet.set_minus e elided |> fun e -> USet.add e 0 (* include init write *)
     in
     let read_events =
       USet.set_minus (USet.intersection structure.read_events path.path) elided
@@ -894,17 +919,21 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
               in
                 (* Check that loc(w) = loc(r) is satisfiable *)
                 let* loc_eq =
-                  match (get_loc structure w, get_loc structure r) with
-                  | Some loc_w, Some loc_r ->
-                      Solver.expoteq ~state:preds loc_w loc_r
-                  | _ ->
-                      Logs.debug (fun m ->
-                          m
-                            "[compute_path_rf] Edge (%d->%d) rejected: missing \
-                             location"
-                            w r
-                      );
-                      Lwt.return false
+                  if w = 0 then
+                    (* init write: skip location check *)
+                    Lwt.return true
+                  else
+                    match (get_loc structure w, get_loc structure r) with
+                    | Some loc_w, Some loc_r ->
+                        Solver.expoteq ~state:preds loc_w loc_r
+                    | _ ->
+                        Logs.debug (fun m ->
+                            m
+                              "[compute_path_rf] Edge (%d->%d) rejected: \
+                               missing location"
+                              w r
+                        );
+                        Lwt.return false
                 in
                   let*? () =
                     if not loc_eq then
@@ -982,78 +1011,30 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
                        combo size %d"
                       r w (List.length combo)
                 );
-                let new_combo_inv =
-                  URelation.inverse (USet.of_list (pair :: combo))
-                in
-                let env_rf =
-                  ReadFromValidation.env_rf structure new_combo_inv
-                in
-                let check_rf =
-                  ReadFromValidation.check_rf structure new_combo_inv
-                in
-                let combined_preds =
-                  USet.of_list p_combined
-                  |> USet.inplace_union env_rf
-                  |> USet.inplace_union check_rf
-                  |> USet.values
-                in
-                  let* result = Solver.is_sat_cached combined_preds in
-                    if not result then begin
-                      Logs.debug (fun m ->
-                          m
-                            "[compute_path_rf] Partial combo rejected (unsat): \
-                             edge (%d->%d), combo size %d"
-                            r w (List.length combo)
-                      );
-                      (* Log the problematic constraints *)
-                      let r_val = get_val structure r in
-                      let w_val = get_val structure w in
-                      let w_val_for_r = vale structure w r in
-                        Logs.debug (fun m ->
-                            m
-                              "  Read %d expects value: %s, Write %d has \
-                               value: %s, vale(w,r): %s"
-                              r
-                              ( match r_val with
-                              | Some v -> Expr.to_string v
-                              | None -> "None"
-                              )
-                              w
-                              ( match w_val with
-                              | Some v -> Expr.to_string v
-                              | None -> "None"
-                              )
-                              (Expr.to_string w_val_for_r)
-                        );
-                        Logs.debug (fun m ->
-                            m "  env_rf constraints: [%s]"
-                              (String.concat "; "
-                                 (List.map Expr.to_string (USet.values env_rf))
-                              )
-                        );
-                        let p_combined_sample =
-                          let rec take n lst =
-                            match (n, lst) with
-                            | 0, _ | _, [] -> []
-                            | n, x :: xs -> x :: take (n - 1) xs
-                          in
-                            take 5 p_combined
-                        in
-                          Logs.debug (fun m ->
-                              m "  p_combined constraints (first 5): [%s]"
-                                (String.concat "; "
-                                   (List.map Expr.to_string p_combined_sample)
-                                )
-                          )
-                    end;
-                    Logs.debug (fun m ->
-                        m
-                          "[compute_path_rf] Partial combo %s: edge (%d->%d), \
-                           combo size %d"
-                          (if result then "accepted" else "rejected")
-                          r w (List.length combo)
-                    );
-                    Lwt.return result
+                (* discard the combination if we have alternatives to reading
+                   from init *)
+                if
+                  w = 0
+                  && Option.map (fun alts -> List.length alts > 1) alternatives
+                     |> Option.value ~default:false
+                then Lwt.return false
+                else
+                  let new_combo_inv =
+                    URelation.inverse (USet.of_list (pair :: combo))
+                  in
+                  let env_rf =
+                    ReadFromValidation.env_rf structure new_combo_inv
+                  in
+                  let check_rf =
+                    ReadFromValidation.check_rf structure new_combo_inv
+                  in
+                  let combined_preds =
+                    USet.of_list p_combined
+                    |> USet.inplace_union env_rf
+                    |> USet.inplace_union check_rf
+                    |> USet.values
+                  in
+                    Solver.is_sat_cached combined_preds
             )
             (USet.values read_events) ()
         in
