@@ -118,7 +118,7 @@ type event = {
 
 (** {1 Symbolic Event Structure} *)
 
-(** Symbolic event structure representing program execution *)
+(** Symbolic event structure *)
 type symbolic_event_structure = {
   e : int uset;
   events : (int, event) Hashtbl.t;
@@ -182,7 +182,7 @@ type symbolic_execution = {
   dp : (int * int) uset; (* Dependencies *)
   ppo : (int * int) uset; (* Preserved program order *)
   ex_rmw : (int * int) uset; (* RMW pairs *)
-  ex_p : expr list; [@opaque] (* Predicates *)
+  ex_p : expr list; (* Predicates *)
   fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer
   mappings *)

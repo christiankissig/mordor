@@ -109,6 +109,7 @@ and Expr : sig
   val simplify_disjunction : t list -> t list -> t list
   val extract_constraints : t -> t list
   val apply_constraints : t -> t
+  val extract_variables : t -> string list
 end = struct
   type t = expr
 
@@ -855,6 +856,18 @@ end = struct
       | _ -> e
     in
       aux expr
+
+  let extract_variables expr =
+    let rec aux e =
+      match e with
+      | EVar v -> [ v ]
+      | EBinOp (lhs, _, rhs) -> aux lhs @ aux rhs
+      | EUnOp (_, rhs) -> aux rhs
+      | EOr clauses ->
+          List.map (fun clause -> aux clause) clauses |> List.flatten
+      | _ -> []
+    in
+      aux expr |> List.sort_uniq String.compare
 end
 
 (** Cache key for conjunction indexed caches. *)

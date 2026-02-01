@@ -60,6 +60,10 @@ let string_of_outcome = function
     Handles evaluation of assertions containing set membership tests like
     [(e1, e2) in .rf] which check if a pair exists in a relation. *)
 module SetOperations = struct
+  let is_set_operation = function
+    | EBinOp (_, "in", _) | EBinOp (_, "notin", _) -> true
+    | _ -> false
+
   (** [has_set_operation expr] checks if expression uses set operations.
 
       Recursively searches for ["in"] or ["notin"] operators.
@@ -67,12 +71,13 @@ module SetOperations = struct
       @param expr The expression to check.
       @return [true] if expression contains set membership tests. *)
   let rec has_set_operation expr =
-    match expr with
-    | EBinOp (_, "in", _) | EBinOp (_, "notin", _) -> true
-    | EBinOp (e1, _, e2) -> has_set_operation e1 || has_set_operation e2
-    | EUnOp (_, e) -> has_set_operation e
-    | EOr lst -> List.exists has_set_operation lst
-    | _ -> false
+    if is_set_operation expr then true
+    else
+      match expr with
+      | EBinOp (e1, _, e2) -> has_set_operation e1 || has_set_operation e2
+      | EUnOp (_, e) -> has_set_operation e
+      | EOr lst -> List.exists has_set_operation lst
+      | _ -> false
 
   (** [eval_tuple expr] evaluates tuple expression to event pair.
 
@@ -114,10 +119,7 @@ module SetOperations = struct
         eval_set_expr e1 structure execution
         || eval_set_expr e2 structure execution
     | EUnOp ("!", e) -> not (eval_set_expr e structure execution)
-    | _ ->
-        failwith
-          "Cannot evaluate expression as set membership: expected 'in' or \
-           'notin' operator"
+    | _ -> true
 end
 
 (** {1 JSON Serialization} *)
@@ -533,13 +535,43 @@ module ConditionChecker = struct
       @param rf_conditions RF equality constraints.
       @param execution The execution.
       @return Promise of [true] if satisfiable. *)
-  let check_with_solver cond_expr rf_conditions execution =
-    (* Instantiate condition expression with final register environment *)
-    let inst_cond_expr =
-      Expr.evaluate ~env:(Hashtbl.find_opt execution.final_env) cond_expr
+  let check_with_solver cond_expr rf_conditions structure execution =
+    let cond_expr =
+      Expr.evaluate_conjunction [ cond_expr ]
+      |> List.filter (fun conjunct ->
+          not (SetOperations.is_set_operation conjunct)
+      )
     in
-    let cond_expr_and_rf_conditions = inst_cond_expr :: rf_conditions in
-      Solver.is_sat cond_expr_and_rf_conditions
+
+    let writes = Execution.get_writes_in_rhb_order structure execution in
+
+    (* Instantiate condition expression with final register environment *)
+    let last_writes_to_variables = Hashtbl.create (List.length writes) in
+      (* NOTE this is tightly coupled to uniqueness of global variable addresses
+  and the syntax of .lit files - i.e. explicit global variable stores. *)
+      List.iter
+        (fun w ->
+          let event = Hashtbl.find structure.events w in
+            match event.loc with
+            | Some (EVar var) -> (
+                match event.wval with
+                | Some wval -> Hashtbl.replace last_writes_to_variables var wval
+                | None -> ()
+              )
+            | _ -> ()
+        )
+        writes;
+      let inst_cond_expr =
+        List.map
+          (Expr.evaluate ~env:(Hashtbl.find_opt execution.final_env))
+          cond_expr
+        (* TODO replace with memory state; see note above *)
+        |> List.map
+             (Expr.evaluate ~env:(Hashtbl.find_opt last_writes_to_variables))
+      in
+      let cond_expr_and_rf_conditions = inst_cond_expr @ rf_conditions in
+        let* is_sat = Solver.is_sat cond_expr_and_rf_conditions in
+          Lwt.return is_sat
 
   (** [check_condition cond_expr structure execution] checks if condition holds.
 
@@ -553,9 +585,13 @@ module ConditionChecker = struct
     let rf_conditions =
       ExecutionAnalysis.build_rf_conditions structure execution
     in
-      if SetOperations.has_set_operation cond_expr then
+      let* set_valid =
         check_with_set_operations cond_expr rf_conditions structure execution
-      else check_with_solver cond_expr rf_conditions execution
+      in
+        let* solver_valid =
+          check_with_solver cond_expr rf_conditions structure execution
+        in
+          Lwt.return (set_valid && solver_valid)
 end
 
 (** {1 Refinement Checking} *)

@@ -31,7 +31,20 @@ open Uset
     Provides comparison, hashing, and subsumption checking for executions.
     Executions that are subsumed by others can be filtered out to reduce
     redundancy in the final result set. *)
-module Execution = struct
+module Execution : sig
+  type t = symbolic_execution
+
+  val equal : t -> t -> bool
+  val hash : t -> int
+  val contains : t -> t -> bool
+  val to_string : t -> string
+
+  val get_relation :
+    string -> symbolic_event_structure -> symbolic_execution -> (int * int) uset
+
+  val get_writes_in_rhb_order :
+    symbolic_event_structure -> symbolic_execution -> int list
+end = struct
   (** The execution type. *)
   type t = symbolic_execution
 
@@ -111,6 +124,31 @@ module Execution = struct
             m "Unknown or unsupported relation: %s, returning empty" name
         );
         USet.create ()
+
+  (** [get_writes_in_rhb_inv_order structure execution] gets writes in RHB^-1
+      order.
+
+      Computes the reads-happen-before (RHB) relation as the union of DP, PPO,
+      and RF, takes its inverse and transitive closure, and returns the write
+      events in the execution sorted according to this inverse RHB order.
+
+      @param structure The event structure.
+      @param execution The execution.
+      @return List of write events sorted by RHB^-1 order. *)
+  let get_writes_in_rhb_order (structure : symbolic_event_structure)
+      (execution : symbolic_execution) =
+    let dp_ppo = USet.union execution.dp execution.ppo in
+    let rhb = USet.union dp_ppo execution.rf |> URelation.transitive_closure in
+    let write_events =
+      USet.intersection structure.write_events execution.e |> USet.values
+    in
+      List.sort
+        (fun w1 w2 ->
+          if USet.mem rhb (w1, w2) then -1
+          else if USet.mem rhb (w2, w1) then 1
+          else 0
+        )
+        write_events
 end
 
 (** Cache key type for executions. *)

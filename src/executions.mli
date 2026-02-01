@@ -11,6 +11,8 @@ module Execution : sig
 
   val get_relation :
     string -> symbolic_event_structure -> symbolic_execution -> (int * int) uset
+
+  val get_writes_in_rhb_order : symbolic_event_structure -> t -> int list
 end
 
 (** {1 Main Execution Generation} *)
