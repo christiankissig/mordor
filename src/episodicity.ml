@@ -1,17 +1,22 @@
-(** Episodicity Analysis Module
+(** {1 Episodicity Analysis Module}
 
     This module implements episodicity checks for loops based on Definition 4.1.
-    A loop is episodic if it satisfies four conditions: 1. Registers only
-    accessed if written to ⊑-before within same iteration or before loop 2.
-    Reads must read from: (a) same-iteration writes, (b) cross-thread writes, or
-    (c) read-don't-modify RMWs derived from such writes 3. Branching conditions
-    don't constrain symbols read before the loop 4. Events from prior iterations
-    are ordered before later iterations by (ppo ∪ dp)*
+    A loop is episodic if it satisfies four conditions:
+
+    + Registers only accessed if written to ⊑-before within same iteration or
+      before loop
+    + Reads must read from: (a) same-iteration writes, (b) cross-thread writes,
+      or (c) read-don't-modify RMWs derived from such writes
+    + Branching conditions don't constrain symbols read before the loop
+    + Events from prior iterations are ordered before later iterations by (ppo ∪
+      dp)*
 
     Where:
     - ⊑ is sequenced-before (program order)
     - ⪯ is ppo (preserved program order)
-    - dp is semantic dependency (from justification freezing) *)
+    - dp is semantic dependency (from justification freezing)
+
+    @author Mordor Team *)
 
 open Context
 open Eventstructures
@@ -22,21 +27,36 @@ open Types
 open Uset
 open Lwt.Syntax
 
-(** Note: We work with ir_node (Context.ir_node) which is ir_node_ann Ir.ir_node
-    The annotations contain loop_ctx, thread_ctx, etc. *)
+(** Note: We work with ir_node (Context.ir_node) which is ir_node_ann
+    Ir.ir_node. The annotations contain loop_ctx, thread_ctx, etc. *)
 
-(** {1 Episodcity Cache} *)
+(** {1 Types} *)
+
+(** Cache for episodicity analysis containing symbolic and concrete event
+    structures.
+
+    This cache stores precomputed event structures and executions to avoid
+    redundant computation during episodicity checking. *)
 type episodicity_cache = {
   mutable symbolic_structure : symbolic_event_structure;
+      (** Event structure with symbolic loop semantics *)
   mutable symbolic_source_spans : (int, source_span) Hashtbl.t;
+      (** Source span mapping for symbolic events *)
   mutable three_structure : symbolic_event_structure;
+      (** Event structure with 3-step counter semantics *)
   mutable three_source_spans : (int, source_span) Hashtbl.t;
+      (** Source span mapping for 3-step events *)
   mutable three_executions : symbolic_execution list;
+      (** List of concrete executions with 3 iterations *)
 }
 
 (** {1 Event Structure Utilities} *)
 
-(** Get all events in a specific loop from the symbolic event structure *)
+(** Get all events in a specific loop from the symbolic event structure.
+
+    @param structure The symbolic event structure to query
+    @param loop_id The identifier of the loop
+    @return A set of event labels that belong to the specified loop *)
 let get_events_in_loop (structure : symbolic_event_structure) (loop_id : int) :
     int uset =
   USet.filter
@@ -49,13 +69,26 @@ let get_events_in_loop (structure : symbolic_event_structure) (loop_id : int) :
 
 (** {1 Condition 1: Register Access Restriction (Syntactic)} *)
 
-(** Check if a register is written before it's read within a loop body *)
+(** Check if a register is written before it's read within a loop body.
+
+    This implements Condition 1 of episodicity: registers are only accessed if
+    they have been written to ⊑-before within the same iteration or before the
+    loop starts.
+
+    @param loop_body The list of IR nodes representing the loop body
+    @return A condition result indicating satisfaction and any violations *)
 let check_register_accesses_in_loop (loop_body : ir_node list) :
     condition_result =
   let violations = ref [] in
   let satisfied = ref true in
   let written_before_read = USet.create () in
   let must_not_write = USet.create () in
+
+  (* Recursively traverse IR nodes to check register accesses.
+
+     @param nodes The list of IR nodes to traverse
+     @param written_before_read Set of registers written before current point
+     @param must_not_write Set of registers that must not be written *)
   let rec traverse_nodes (nodes : ir_node list) written_before_read
       must_not_write =
     match nodes with
@@ -64,6 +97,7 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
         let stmt = node.stmt in
           match stmt with
           | Threads { threads } ->
+              (* Each thread gets independent copies of register sets *)
               List.iter
                 (fun thread ->
                   traverse_nodes thread
@@ -98,6 +132,7 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
                 USet.set_minus read_regs written_before_read
                 |> USet.union must_not_write
               in
+                (* Each branch gets independent copies *)
                 traverse_nodes (then_body @ rest)
                   (USet.clone written_before_read)
                   (USet.clone must_not_write);
@@ -153,7 +188,12 @@ let check_register_accesses_in_loop (loop_body : ir_node list) :
     traverse_nodes loop_body written_before_read must_not_write;
     { satisfied = !satisfied; violations = !violations }
 
-(** Condition 1: Registers only accessed if written to ⊑-before *)
+(** Check Condition 1: Registers only accessed if written to ⊑-before.
+
+    @param program The complete program as a list of IR nodes
+    @param cache The episodicity cache (unused in this check)
+    @param loop_id The identifier of the loop to check
+    @return A condition result indicating satisfaction and any violations *)
 let check_condition1_register_access (program : ir_node list) cache
     (loop_id : int) : condition_result =
   let violations = ref [] in
@@ -173,12 +213,26 @@ let check_condition1_register_access (program : ir_node list) cache
 
 (** {1 Condition 2: Memory Read Sources (Semantic)} *)
 
-(** Get the origin event for a symbol *)
+(** Get the origin event for a symbol.
+
+    @param structure The symbolic event structure
+    @param symbol The symbol name to look up
+    @return The event label that introduced this symbol, if any *)
 let get_symbol_origin (structure : symbolic_event_structure) (symbol : string) :
     int option =
   Hashtbl.find_opt structure.origin symbol
 
-(** Condition 2: Reads must read from valid sources *)
+(** Check Condition 2: Reads must read from valid sources.
+
+    Valid sources are:
+    - Same-iteration writes (⊑-before the read)
+    - Cross-thread writes
+    - Read-don't-modify RMWs derived from such writes
+
+    @param cache The episodicity cache containing event structures
+    @param loop_id The identifier of the loop to check
+    @return
+      A condition result (async) indicating satisfaction and any violations *)
 let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
     =
   let structure = cache.symbolic_structure in
@@ -193,6 +247,7 @@ let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
     let* () =
       USet.iter_async
         (fun read_event ->
+          (* Find writes to same location not ⊑-before the read *)
           let* writes_in_loop_not_before_read =
             USet.async_filter
               (fun write_event ->
@@ -210,6 +265,7 @@ let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
                       in
                         let* same_loc = Solver.expoteq ?state wloc rloc in
                           if same_loc then
+                            (* Only invalid if not a read-don't-modify RMW *)
                             Lwt.return
                               (not (Events.is_rdmw structure write_event))
                           else Lwt.return false
@@ -217,9 +273,9 @@ let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
               )
               writes_in_loop
           in
+            (* Record violations for invalid write sources *)
             USet.iter
               (fun write_event ->
-                (* Check if write_event is a valid source for read_event *)
                 let violation =
                   WriteConditionViolation
                     (WriteFromPreviousIteration
@@ -245,7 +301,16 @@ let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
 
 (** {1 Condition 3: Branch Condition Symbols (Syntactic + Origin Tracking)} *)
 
-(** Condition 3: Branch conditions don't constrain pre-loop symbols *)
+(** Check Condition 3: Branch conditions don't constrain pre-loop symbols.
+
+    This ensures that branching conditions within the loop don't constrain
+    symbols that were read before the loop started, maintaining iteration
+    independence.
+
+    @param program The complete program as a list of IR nodes
+    @param cache The episodicity cache containing event structures
+    @param loop_id The identifier of the loop to check
+    @return A condition result indicating satisfaction and any violations *)
 let check_condition3_branch_conditions (program : ir_node list) cache
     (loop_id : int) : condition_result =
   let structure = cache.symbolic_structure in
@@ -255,16 +320,19 @@ let check_condition3_branch_conditions (program : ir_node list) cache
   in
     USet.iter
       (fun event ->
+        (* Get predicates (branch conditions) for this event *)
         let event_preds =
           Hashtbl.find_opt structure.restrict event
           |> Option.value ~default:[]
           |> USet.of_list
         in
+        (* Find events before the loop *)
         let events_before_loop =
           USet.set_minus
             (SymbolicEventStructure.events_po_before structure event)
             events_in_loop
         in
+        (* Get predicates from before the loop *)
         let preds =
           USet.map
             (fun e ->
@@ -275,11 +343,13 @@ let check_condition3_branch_conditions (program : ir_node list) cache
           |> USet.flatten
           |> USet.set_minus event_preds
         in
+        (* Extract symbols from predicates *)
         let symbols =
           USet.map Expr.get_symbols preds
           |> USet.map USet.of_list
           |> USet.flatten
         in
+        (* Find symbols that originated before the loop *)
         let symbols_read_before_loop =
           USet.filter
             (fun sym ->
@@ -289,6 +359,7 @@ let check_condition3_branch_conditions (program : ir_node list) cache
             )
             symbols
         in
+          (* Record violations for constrained pre-loop symbols *)
           USet.iter
             (fun sym ->
               let violation =
@@ -311,7 +382,17 @@ let check_condition3_branch_conditions (program : ir_node list) cache
 
 (** {1 Condition 4: Inter-iteration Ordering (Semantic)} *)
 
-(** Condition 4: Events from prior iterations ordered before later iterations *)
+(** Check Condition 4: Events from prior iterations ordered before later
+    iterations.
+
+    This checks that all events from iteration i are ordered before all events
+    from iteration i+1 by the transitive closure of (ppo ∪ dp), ensuring proper
+    happens-before relationships across iterations.
+
+    @param cache
+      The episodicity cache containing event structures and executions
+    @param loop_id The identifier of the loop to check
+    @return A condition result indicating satisfaction and any violations *)
 let check_condition4_iteration_ordering cache (loop_id : int) : condition_result
     =
   let violations = ref [] in
@@ -320,6 +401,7 @@ let check_condition4_iteration_ordering cache (loop_id : int) : condition_result
   let events_in_loop =
     SymbolicEventStructure.events_in_loop structure loop_id
   in
+  (* Group events by iteration number *)
   let events_by_iteration = Hashtbl.create 10 in
     USet.iter
       (fun event ->
@@ -334,6 +416,7 @@ let check_condition4_iteration_ordering cache (loop_id : int) : condition_result
       )
       events_in_loop;
 
+    (* Compute (ppo ∪ dp)* for the loop *)
     let delta_loop = URelation.cross events_in_loop events_in_loop in
     let dp_ppo =
       List.map (fun exec -> USet.union exec.dp exec.ppo) cache.three_executions
@@ -344,6 +427,7 @@ let check_condition4_iteration_ordering cache (loop_id : int) : condition_result
     let unordered_events = ref [] in
     let satisfied = ref true in
 
+    (* Check ordering between consecutive iterations *)
     Hashtbl.iter
       (fun iter events_curr ->
         let next_iter = iter + 1 in
@@ -376,12 +460,16 @@ let check_condition4_iteration_ordering cache (loop_id : int) : condition_result
       )
       events_by_iteration;
 
-    (* Check ordering between iterations *)
     { satisfied = !satisfied; violations = !violations }
 
 (** {1 Main Episodicity Check} *)
 
-(** Check if a specific loop is episodic *)
+(** Check if a specific loop is episodic by verifying all four conditions.
+
+    @param ctx The Mordor context containing the program
+    @param cache The episodicity cache with precomputed structures
+    @param loop_id The identifier of the loop to check
+    @return An optional loop episodicity result, or None if analysis fails *)
 let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
     loop_episodicity_result option Lwt.t =
   match ctx.program_stmts with
@@ -410,7 +498,17 @@ let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
           }
   | _ -> Lwt.return_none
 
-(** Main episodicity testing function called from pipeline *)
+(** Main episodicity testing function called from the analysis pipeline.
+
+    This function:
+    + Collects all loop IDs from the program
+    + Generates symbolic and concrete (3-iteration) event structures
+    + Computes dependencies for the concrete executions
+    + Checks episodicity for each loop
+    + Stores results in the context
+
+    @param lwt_ctx The Mordor context wrapped in Lwt
+    @return The updated Mordor context with episodicity results *)
 let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
     match ctx.program_stmts with
@@ -426,6 +524,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
           }
         in
 
+        (* Generate symbolic event structure *)
         let* symbolic_structure, symbolic_source_spans =
           SymbolicLoopSemantics.interpret lwt_ctx
         in
@@ -433,9 +532,11 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
               m "Symbolic event structure with symbolic loop semantics.\n%s\n\n"
                 (show_symbolic_event_structure symbolic_structure)
           );
+          (* Generate 3-iteration event structure *)
           let* three_structure, three_source_spans =
             StepCounterSemantics.interpret ~step_counter:3 lwt_ctx
           in
+            (* Compute dependencies for 3-iteration executions *)
             let* _, three_executions =
               Symmrd.calculate_dependencies ~include_rf:false three_structure
                 ~exhaustive:true ~restrictions:coherence_restrictions
@@ -541,13 +642,20 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
 
 (** {1 Query Functions} *)
 
-(** Check if a specific loop is episodic *)
+(** Check if a specific loop is episodic.
+
+    @param ctx The Mordor context containing analysis results
+    @param loop_id The identifier of the loop to query
+    @return Some true if episodic, Some false if not, None if not analyzed *)
 let is_loop_episodic (ctx : mordor_ctx) (loop_id : int) : bool option =
   match ctx.is_episodic with
   | Some table -> Hashtbl.find_opt table loop_id
   | None -> None
 
-(** Get all episodic loops *)
+(** Get all episodic loops from the analysis results.
+
+    @param ctx The Mordor context containing analysis results
+    @return A list of loop IDs that are episodic *)
 let get_episodic_loops (ctx : mordor_ctx) : int list =
   match ctx.is_episodic with
   | Some table ->
@@ -556,7 +664,10 @@ let get_episodic_loops (ctx : mordor_ctx) : int list =
         table []
   | None -> []
 
-(** Get all non-episodic loops *)
+(** Get all non-episodic loops from the analysis results.
+
+    @param ctx The Mordor context containing analysis results
+    @return A list of loop IDs that are not episodic *)
 let get_non_episodic_loops (ctx : mordor_ctx) : int list =
   match ctx.is_episodic with
   | Some table ->
@@ -565,6 +676,14 @@ let get_non_episodic_loops (ctx : mordor_ctx) : int list =
         table []
   | None -> []
 
+(** Send episodicity results via a callback function.
+
+    Serializes the episodicity results to JSON and sends them using the provided
+    send function.
+
+    @param send_func Function to send the JSON string (async)
+    @param ctx The Mordor context wrapped in Lwt
+    @return The unmodified Mordor context *)
 let send_episodicity_results (send_func : string -> unit Lwt.t)
     (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = ctx in
