@@ -220,14 +220,10 @@ module FreezeResult = struct
       @return [true] if [fr1] contains [fr2]. *)
   let contains fr1 fr2 =
     USet.equal fr2.e fr1.e
+    && USet.equal fr1.rf fr2.rf
     && USet.subset fr2.dp fr1.dp
     && USet.subset fr2.ppo fr1.ppo
-    && USet.subset fr2.rf fr1.rf
-    && not
-         (USet.equal fr1.rf fr2.rf
-         && USet.equal fr1.ppo fr2.ppo
-         && USet.equal fr1.dp fr2.dp
-         )
+    && not (USet.equal fr1.ppo fr2.ppo && USet.equal fr1.dp fr2.dp)
 end
 
 (** Cache key type for freeze results. *)
@@ -523,8 +519,8 @@ module JustValidation = struct
         && USet.subset just.we we
         && List.exists
              (fun alt ->
-               alt != just
-               && just.w = alt.w (*given*)
+               alt != just (* physical inequality *)
+               && just.w = alt.w (* given by inputs *)
                && USet.subset alt.fwd fwd
                && USet.subset alt.we we
                && USet.equal just.d alt.d
@@ -549,11 +545,12 @@ module JustValidation = struct
           && USet.subset just.we we
           && List.exists
                (fun alt ->
-                 alt != just
-                 && just.w = alt.w (*given*)
+                 alt != just (* physical inequality *)
+                 && just.w = alt.w (* given by inputs *)
                  && USet.subset alt.fwd fwd
                  && USet.subset alt.we we
                  && USet.subset alt.d just.d
+                 (* alt.p is a subset of just.p *)
                  && List.for_all
                       (fun expr ->
                         List.exists (fun expr2 -> Expr.equal expr expr2) just.p
@@ -657,7 +654,7 @@ end
     @param rf Read-from relation to validate.
     @return Promise of [Some freeze_result] if valid, [None] otherwise. *)
 let instantiate_execution (structure : symbolic_event_structure) path dp ppo
-    j_list (pp : expr list) p_combined rf =
+    j_list (pp : expr list) p_combined rf elided =
   let landmark = Landmark.register "instantiate_execution" in
     Landmark.enter landmark;
 
@@ -684,7 +681,14 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
       )
     in
 
-    let e = path.path in
+    (* remove elided events from execution *)
+    let e = USet.set_minus path.path elided in
+    let e_squared = URelation.cross e e in
+
+    (* Filter dp and ppo to execution events only *)
+    let dp = USet.intersection dp e_squared in
+    let ppo = USet.intersection ppo e_squared in
+
     let po = USet.intersection structure.po (URelation.cross e e) in
     let read_events = USet.intersection structure.read_events e in
     let write_events = USet.intersection structure.write_events e in
@@ -723,6 +727,7 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
           (USet.size delta)
     );
 
+    (* TODO this should be given by generation *)
     let*? () =
       (ReadFromValidation.check_rf_elided rf delta, "RF fails RF elided check")
     in
@@ -1218,8 +1223,10 @@ end = struct
       Logs.debug (fun m ->
           m
             "[freeze] Starting freeze for path with %d events, %d \
-             justifications, %d elided events"
+             justifications, %d elided events\n\
+             %s"
             (USet.size path.path) (List.length j_list) (USet.size elided)
+            (String.concat "\n\t" (List.map Justification.to_string j_list))
       );
 
       (* let* _ = Lwt.return_unit in *)
@@ -1349,7 +1356,7 @@ end = struct
               List.map
                 (fun rf ->
                   instantiate_execution structure path dp ppo j_list path.p
-                    p_combined rf
+                    p_combined rf elided
                 )
                 all_rf
             in
@@ -1623,8 +1630,9 @@ let generate_executions ?(include_rf = true)
               id := !id + 1;
 
               Logs.debug (fun m ->
-                  m "Generated execution with %d events, %d RF edges"
+                  m "Generated execution with %d events, %d RF edges:\n%s"
                     (USet.size exec.e) (USet.size exec.rf)
+                    (show_symbolic_execution exec)
               );
 
               Landmark.exit landmark;
@@ -1680,7 +1688,7 @@ let generate_executions ?(include_rf = true)
             (fun (i, fr1) ->
               let is_contained =
                 List.exists
-                  (fun (j, fr2) -> i <> j && FreezeResult.contains fr2 fr1
+                  (fun (j, fr2) -> i <> j && FreezeResult.contains fr1 fr2
                   ) (* Is fr1 contained by fr2? *)
                   indexed_list
               in

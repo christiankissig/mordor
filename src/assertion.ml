@@ -536,6 +536,11 @@ module ConditionChecker = struct
       @param execution The execution.
       @return Promise of [true] if satisfiable. *)
   let check_with_solver cond_expr rf_conditions structure execution =
+    Logs.debug (fun m ->
+        m "Checking condition with solver: %s\n%s" (show_expr cond_expr)
+          (show_symbolic_execution execution)
+    );
+
     let cond_expr =
       Expr.evaluate_conjunction [ cond_expr ]
       |> List.filter (fun conjunct ->
@@ -571,6 +576,7 @@ module ConditionChecker = struct
       in
       let cond_expr_and_rf_conditions = inst_cond_expr @ rf_conditions in
         let* is_sat = Solver.is_sat cond_expr_and_rf_conditions in
+          Logs.debug (fun m -> m "Solver result: %b" is_sat);
           Lwt.return is_sat
 
   (** [check_condition cond_expr structure execution] checks if condition holds.

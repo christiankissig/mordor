@@ -147,7 +147,11 @@ module ValueAssignment = struct
       @return Promise of justifications with assigned values. *)
   let elab elab_ctx just =
     let fwd_ctx = ForwardingContext.create ~fwd:just.fwd ~we:just.we () in
-    let solver = Solver.create (just.p @ fwd_ctx.psi) in
+    let defacto =
+      Hashtbl.find_opt elab_ctx.structure.defacto just.w.label
+      |> Option.value ~default:[]
+    in
+    let solver = Solver.create (just.p @ fwd_ctx.psi @ defacto) in
       let* model = Solver.solve solver in
         match model with
         | Some bindings ->
