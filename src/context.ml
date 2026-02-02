@@ -1,28 +1,87 @@
+(** {1 Context Module}
+
+    This module defines the core types and configuration structures used
+    throughout the Mordor verification tool, including:
+    - IR (Intermediate Representation) node annotations
+    - Configuration options for analysis
+    - Pipeline context that flows through verification stages
+    - Memory model configurations
+
+    @author Mordor Team *)
+
 open Ast
 open Types
 open Uset
 
+(** {1 Intermediate Representation Annotations} *)
+
+(** Annotations attached to each IR node during parsing and interpretation.
+
+    These annotations track contextual information needed for analysis:
+    - Source code location for error reporting
+    - Thread context for concurrent programs
+    - Loop context for episodicity analysis *)
 type ir_node_ann = {
-  source_span : source_span option;
-  thread_ctx : thread_ctx option;
-  loop_ctx : loop_ctx option;
+  source_span : source_span option;  (** Location in the original source code *)
+  thread_ctx : thread_ctx option;  (** Which thread this node belongs to *)
+  loop_ctx : loop_ctx option;  (** Loop nesting and iteration information *)
 }
 
+(** IR statement with annotations. *)
 type ir_stmt = ir_node_ann Ir.ir_stmt
+
+(** IR node with annotations. *)
 type ir_node = ir_node_ann Ir.ir_node
+
+(** IR assertion with annotations. *)
 type ir_assertion = ir_node_ann Ir.ir_assertion
+
+(** Complete litmus test with annotations. *)
 type ir_litmus = ir_node_ann Ir.ir_litmus
 
-(** configuration options *)
+(** {1 Configuration Options} *)
 
-type output_mode = Json | Html | Dot | Isa
+(** Output format for visualizations and exports. *)
+type output_mode =
+  | Json  (** JSON format for machine-readable output *)
+  | Html  (** HTML format for interactive visualizations *)
+  | Dot  (** GraphViz DOT format for graph rendering *)
+  | Isa  (** Isabelle/HOL format for theorem prover *)
 
+(** Loop interpretation semantics mode.
+
+    Controls how loops are handled during symbolic execution and verification:
+
+    - {b Symbolic}: Represents loops symbolically without unrolling. Used for
+      episodicity checking where we need to reason about arbitrary iterations.
+      Creates symbolic event structures where loop iterations are parameterized.
+    - {b FiniteStepCounter}: Unrolls all loops a fixed number of times globally.
+      All loops in the program execute exactly [step_counter] iterations. Used
+      for bounded model checking with a single iteration bound.
+    - {b StepCounterPerLoop}: Each loop can have its own iteration bound. Allows
+      fine-grained control over loop unrolling per loop construct. Default mode
+      with 2 iterations per loop.
+    - {b Generic}: Standard loop handling without special semantics. Falls back
+      to default interpretation strategy.
+
+    Example usage:
+    {[
+      (* Bounded verification with 3 iterations *)
+      { options with loop_semantics = FiniteStepCounter; step_counter = 3 }
+        (* Episodicity checking with symbolic loops *)
+        { options with loop_semantics = Symbolic }
+    ]} *)
 type loop_semantics =
-  | Symbolic
-  | FiniteStepCounter
-  | StepCounterPerLoop
-  | Generic
+  | Symbolic  (** Symbolic representation for unbounded reasoning *)
+  | FiniteStepCounter  (** Global iteration bound for all loops *)
+  | StepCounterPerLoop  (** Per-loop iteration bounds *)
+  | Generic  (** Default interpretation strategy *)
 
+(** Parse output mode string from command line.
+
+    @param s String representation (case-insensitive)
+    @return The corresponding output_mode
+    @raise Exit with error message if invalid *)
 let parse_output_mode s =
   match String.lowercase_ascii s with
   | "json" -> Json
@@ -34,19 +93,38 @@ let parse_output_mode s =
         "Error: Invalid output mode '%s' (must be json, html, dot, or isa)\n" s;
       exit 1
 
+(** Analysis configuration options.
+
+    These options control various aspects of the verification process:
+    - Memory model selection
+    - Analysis depth and exhaustiveness
+    - Loop handling
+    - Undefined behavior detection *)
 type options = {
   mutable model : string;
-  mutable dependencies : bool;
+      (** Memory consistency model name (e.g., "rc11", "imm", "power") *)
+  mutable dependencies : bool;  (** Whether to compute dependency relations *)
   mutable exhaustive : bool;
-  mutable forcerc11 : bool;
+      (** Whether to explore all possible executions exhaustively *)
+  mutable forcerc11 : bool;  (** Force RC11 memory model constraints *)
   mutable forceimm : bool;
-  mutable forcenocoh : bool;
+      (** Force IMM (Intermediate Memory Model) constraints *)
+  mutable forcenocoh : bool;  (** Disable coherence checking *)
   mutable coherent : string;
-  mutable ubopt : bool;
-  mutable loop_semantics : loop_semantics;
+      (** Coherence model to use (e.g., "imm", "rc11", "rc11c") *)
+  mutable ubopt : bool;  (** Enable undefined behavior optimizations *)
+  mutable loop_semantics : loop_semantics;  (** Loop interpretation mode *)
   mutable step_counter : int;
+      (** Number of loop iterations for bounded analysis *)
 }
 
+(** Default configuration options.
+
+    Provides sensible defaults:
+    - Step counter per loop with 2 iterations
+    - Dependencies enabled
+    - No exhaustive exploration
+    - No undefined behavior optimizations *)
 let default_options =
   {
     model = "undefined";
@@ -63,37 +141,69 @@ let default_options =
 
 (** {1 Types for Checked Executions} *)
 
+(** Reason for use-after-free undefined behavior.
+
+    A set of (write_event, read_event) pairs where reads access freed memory. *)
 type uaf_ub_reason = (int * int) uset
+
+(** Reason for unsequenced data race undefined behavior.
+
+    A set of (event1, event2) pairs that race on the same location. *)
 type upd_ub_reason = (int * int) uset
-type ub_reason = UAF of uaf_ub_reason | UPD of upd_ub_reason
+
+(** Unified undefined behavior reason. *)
+type ub_reason =
+  | UAF of uaf_ub_reason  (** Use-after-free *)
+  | UPD of upd_ub_reason  (** Unsequenced data race *)
+
+(** List of undefined behavior reasons per event. *)
 type ub_reasons = (int * ub_reason) list
 
+(** Information about a checked execution.
+
+    Records whether an execution satisfies assertions and any undefined behavior
+    detected. *)
 type execution_info = {
-  exec_id : int;
-  satisfied : bool;
-  ub_reasons : ub_reason list;
+  exec_id : int;  (** Unique execution identifier *)
+  satisfied : bool;  (** Whether assertions are satisfied *)
+  ub_reasons : ub_reason list;  (** List of undefined behaviors found *)
 }
 
 (** {1 Types for Episodicity Tests} *)
 
+(** Violation of Condition 1: Register access restriction.
+
+    Occurs when a register is read before being written in the same iteration.
+*)
 type register_condition_violation =
   | RegisterReadBeforeWrite of string (* register name *) * source_span option
 [@@deriving show, yojson]
 
+(** Violation of Condition 2: Memory read sources.
+
+    Occurs when a read accesses a write from a previous iteration that is not
+    properly ordered. *)
 type write_condition_violation =
   | WriteFromPreviousIteration of
       string (* location expression as string *)
-      * source_span option
-      (*read source span *)
+      * source_span option (* read source span *)
       * source_span option (* write source span *)
 [@@deriving show, yojson]
 
+(** Violation of Condition 3: Branch condition symbols.
+
+    Occurs when a branch condition constrains symbols read before the loop. *)
 type branch_condition_violation =
   | BranchConstraintsSymbol of
-      string (* symbol name *) * int (* symbol origin
-  *) * source_span option
+      string (* symbol name *)
+      * int (* symbol origin event *)
+      * source_span option
 [@@deriving show, yojson]
 
+(** Violation of Condition 4: Inter-iteration ordering.
+
+    Occurs when events from iteration i are not properly ordered before events
+    from iteration i+1 by (ppo ∪ dp)*. *)
 type loop_condition_violation =
   | LoopIterationOrderingViolation of
       int (* iteration *)
@@ -101,7 +211,9 @@ type loop_condition_violation =
       * source_span option (* to source span *)
 [@@deriving show, yojson]
 
-(** Episodicity violation types *)
+(** Unified episodicity violation type.
+
+    Represents any of the four episodicity conditions that can be violated. *)
 type episodicity_violation =
   | RegisterConditionViolation of register_condition_violation
   | WriteConditionViolation of write_condition_violation
@@ -109,67 +221,107 @@ type episodicity_violation =
   | LoopConditionViolation of loop_condition_violation
 [@@deriving show, yojson]
 
-(** Result of episodicity check for a single condition *)
+(** Result of checking a single episodicity condition.
+
+    Contains whether the condition is satisfied and details of any violations.
+*)
 type condition_result = {
-  satisfied : bool;
-  violations : episodicity_violation list;
+  satisfied : bool;  (** Whether the condition holds *)
+  violations : episodicity_violation list;  (** List of violations found *)
 }
 [@@deriving show, yojson]
 
-(** Complete episodicity analysis result for a loop *)
+(** Complete episodicity analysis result for a single loop.
+
+    Contains results for all four conditions and overall episodicity
+    determination. *)
 type loop_episodicity_result = {
-  loop_id : int;
-  condition1 : condition_result; (* Register access *)
-  condition2 : condition_result; (* Memory read sources *)
-  condition3 : condition_result; (* Branch conditions *)
-  condition4 : condition_result; (* Inter-iteration ordering *)
-  is_episodic : bool;
+  loop_id : int;  (** Loop identifier *)
+  condition1 : condition_result;  (** Register access restriction *)
+  condition2 : condition_result;  (** Memory read sources *)
+  condition3 : condition_result;  (** Branch conditions *)
+  condition4 : condition_result;  (** Inter-iteration ordering *)
+  is_episodic : bool;  (** Whether loop is episodic (all conditions satisfied) *)
 }
 [@@deriving show, yojson]
 
+(** Summary of episodicity results for all loops in a program. *)
 type loop_episodicity_result_summary = {
-  type_ : string; [@key "type"]
+  type_ : string; [@key "type"]  (** Result type identifier *)
   loop_episodicity_results : loop_episodicity_result list;
+      (** Results for each loop *)
 }
 [@@deriving show, yojson]
 
-(** context for pipeline *)
+(** {1 Pipeline Context} *)
+
+(** Main context that flows through the verification pipeline.
+
+    This record accumulates results from each stage of analysis:
+    + {b Parsing}: Converts litmus test to IR
+    + {b Interpretation}: Generates symbolic event structure
+    + {b Dependencies}: Computes dependency relations
+    + {b Verification}: Checks assertions and undefined behavior
+    + {b Episodicity}: Analyzes loop properties (optional)
+
+    Each stage reads from and writes to this context, creating a pipeline of
+    transformations. *)
 type mordor_ctx = {
-  (* pipeline config *)
-  options : options;
-  (* inputs *)
-  mutable litmus_name : string;
-  mutable litmus_file : string option;
-  mutable litmus : string option;
-  (* parser *)
+  (* Pipeline configuration *)
+  options : options;  (** Analysis configuration *)
+  (* Inputs *)
+  mutable litmus_name : string;  (** Name of the litmus test *)
+  mutable litmus_file : string option;  (** Source file path *)
+  mutable litmus : string option;  (** Raw litmus test source *)
+  (* Parser outputs *)
   mutable litmus_constraints : expr list option;
+      (** Constraints from the litmus test *)
   mutable litmus_defacto : expr list option;
-  mutable program_stmts : ir_node list option;
-  mutable assertions : ir_assertion option;
-  (* event structures *)
-  step_counter : int;
+      (** De facto constraints (implementation-specific) *)
+  mutable program_stmts : ir_node list option;  (** Parsed IR statements *)
+  mutable assertions : ir_assertion option;  (** Assertions to verify *)
+  (* Event structures *)
+  step_counter : int;  (** Loop iteration bound *)
   mutable events : (int, event) Hashtbl.t option;
+      (** Event table mapping labels to events *)
   mutable structure : symbolic_event_structure option;
+      (** Symbolic event structure *)
   mutable source_spans : event_source_code_span option;
-  (* justifications *)
+      (** Source code locations for events *)
+  (* Justifications *)
   mutable justifications : justification USet.t option;
-  (* executions *)
+      (** Justification relations (for RC11/promising semantics) *)
+  (* Executions *)
   mutable executions : symbolic_execution USet.t option;
-  (* futures *)
+      (** Set of possible executions *)
+  (* Futures *)
   mutable futures : future USet.t option;
-  (* visualisation *)
-  mutable output : string option;
-  output_mode : output_mode;
-  output_file : string;
-  (* verification results could be added here *)
+      (** Future states in symbolic execution *)
+  (* Visualization *)
+  mutable output : string option;  (** Generated output *)
+  output_mode : output_mode;  (** Output format *)
+  output_file : string;  (** Output file path *)
+  (* Verification results *)
   mutable valid : bool option;
+      (** Whether the program is valid (assertions satisfied) *)
   mutable undefined_behaviour : bool option;
+      (** Whether undefined behavior was detected *)
   mutable checked_executions : execution_info list option;
-  (* episodicity per loop index *)
+      (** Detailed execution checking results *)
+  (* Episodicity results *)
   mutable is_episodic : (int, bool) Hashtbl.t option;
+      (** Per-loop episodicity determination *)
   mutable episodicity_results : loop_episodicity_result_summary option;
+      (** Detailed episodicity analysis results *)
 }
 
+(** Create a new pipeline context with given configuration.
+
+    @param options Analysis configuration options
+    @param output_mode Output format (default: Json)
+    @param output_file Output file path (default: "stdout")
+    @param step_counter Loop iteration bound (default: 2)
+    @return A fresh context with no analysis results *)
 let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     ?(step_counter = 2) () =
   {
@@ -198,10 +350,27 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     episodicity_results = None;
   }
 
-(** {1 Model Options} *)
+(** {1 Memory Model Options} *)
 
-type model_options = { coherent : string option; ubopt : bool }
+(** Configuration specific to a memory model.
 
+    Different models may require different coherence models and have different
+    undefined behavior semantics. *)
+type model_options = {
+  coherent : string option;  (** Coherence model to use (e.g., "imm", "rc11") *)
+  ubopt : bool;  (** Whether this model uses undefined behavior optimizations *)
+}
+
+(** Predefined configurations for known memory models.
+
+    This table maps model names to their appropriate settings:
+    - {b Power}: IBM POWER architecture with IMM coherence
+    - {b RC11}: Repaired C11 memory model
+    - {b IMM}: Intermediate Memory Model
+    - {b Promising}: Promising semantics with IMM coherence
+    - etc.
+
+    Models with "UB" suffix enable undefined behavior optimizations. *)
 let model_options_table : (string, model_options) Hashtbl.t =
   let tbl = Hashtbl.create 20 in
     Hashtbl.add tbl "power" { coherent = Some "imm"; ubopt = false };
@@ -222,9 +391,14 @@ let model_options_table : (string, model_options) Hashtbl.t =
     Hashtbl.add tbl "_" { coherent = None; ubopt = false };
     tbl
 
+(** Look up model options by name.
+
+    @param name Model name (case-insensitive)
+    @return Model options if found *)
 let get_model_options name =
   Hashtbl.find_opt model_options_table (String.lowercase_ascii name)
 
+(** List of all supported memory model names. *)
 let model_names =
   [
     "Power";
@@ -245,6 +419,13 @@ let model_names =
     "_";
   ]
 
+(** Apply model-specific options to a context.
+
+    Sets the memory model and adjusts coherence settings based on the model's
+    requirements.
+
+    @param ctx The context to update
+    @param model Model name to apply *)
 let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
   ctx.options.model <- model;
   Logs.info (fun m -> m "applying model options for model %s" model);
