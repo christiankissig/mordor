@@ -2,7 +2,7 @@ open Format
 open Pretty
 open Uset
 
-(** Basic types *)
+(** {1 Basic types} *)
 
 type 'a uset = 'a USet.t
 
@@ -61,28 +61,6 @@ let pp_event_type fmt typ =
     )
 
 let show_event_type typ = Format.asprintf "%a" pp_event_type typ
-
-(** Unicode symbols *)
-module Unicode = struct
-  let wedge = "\u{2227}"
-  let vee = "\u{2228}"
-  let region = "\u{1d63}"
-  let emptyset = "\u{2205}"
-  let top = "\u{22a4}"
-  let cap = "\u{2229}"
-  let cup = "\u{222a}"
-  let dunion = "\u{2294}"
-  let in_ = "\u{2208}"
-  let notin = "\u{2209}"
-  let rhd = "\u{25B7}"
-  let perp = "\u{22a5}"
-  let vdash = "\u{22a2}"
-  let disjoint = "\u{2a02}"
-  let forall = "\u{2200}"
-  let exists = "\u{2203}"
-  let langle = "\u{27e8}"
-  let rangle = "\u{27e9}"
-end
 
 (** Greek alphabet for symbolic values *)
 let greek_alpha = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"

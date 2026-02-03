@@ -3,18 +3,6 @@ open Events
 open Types
 open Uset
 
-(** Test Unicode module *)
-let test_unicode_symbols () =
-  Alcotest.(check string) "wedge symbol" "\u{2227}" Unicode.wedge;
-  Alcotest.(check string) "vee symbol" "\u{2228}" Unicode.vee;
-  Alcotest.(check string) "emptyset symbol" "\u{2205}" Unicode.emptyset;
-  Alcotest.(check string) "top symbol" "\u{22a4}" Unicode.top;
-  Alcotest.(check string) "cap symbol" "\u{2229}" Unicode.cap;
-  Alcotest.(check string) "cup symbol" "\u{222a}" Unicode.cup;
-  Alcotest.(check string) "in symbol" "\u{2208}" Unicode.in_;
-  Alcotest.(check string) "notin symbol" "\u{2209}" Unicode.notin;
-  Alcotest.(check string) "perp symbol" "\u{22a5}" Unicode.perp
-
 (** Test greek_alpha *)
 let test_greek_alpha () =
   Alcotest.(check bool)
@@ -143,7 +131,6 @@ let test_expr_binop () =
 let suite =
   ( "Types",
     [
-      Alcotest.test_case "Unicode symbols" `Quick test_unicode_symbols;
       Alcotest.test_case "Greek alphabet" `Quick test_greek_alpha;
       Alcotest.test_case "Chinese numerals" `Quick test_zh_alpha;
       Alcotest.test_case "Make event" `Quick test_make_event;

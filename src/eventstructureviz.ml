@@ -15,6 +15,11 @@ open Types
 open Uset
 open Lwt.Syntax
 
+let ( <|> ) opt1 opt2 =
+  match opt1 with
+  | Some _ -> opt1
+  | None -> opt2
+
 (** {1 Type Definitions} *)
 
 module EventStructureViz = struct
@@ -689,13 +694,9 @@ module EventStructureViz = struct
     in
 
     let value =
-      match evt.rval with
-      | Some rval -> Some (Value.to_string rval)
-      | None -> (
-          match evt.wval with
-          | Some wval -> Some (Expr.to_string wval)
-          | None -> None
-        )
+      Option.map Value.to_string evt.rval
+      <|> Option.map Expr.to_string evt.wval
+      <|> Option.map Expr.to_string evt.cond
     in
 
     let constraints =

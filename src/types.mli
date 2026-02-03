@@ -34,30 +34,6 @@ type event_type =
 (** Convert mode to string, returning empty string for Relaxed *)
 val mode_to_string_or : mode -> string
 
-(** {1 Unicode Symbols} *)
-
-(** Unicode symbols for mathematical notation *)
-module Unicode : sig
-  val wedge : string
-  val vee : string
-  val region : string
-  val emptyset : string
-  val top : string
-  val cap : string
-  val cup : string
-  val dunion : string
-  val in_ : string
-  val notin : string
-  val rhd : string
-  val perp : string
-  val vdash : string
-  val disjoint : string
-  val forall : string
-  val exists : string
-  val langle : string
-  val rangle : string
-end
-
 (** {1 Symbolic Alphabets} *)
 
 (** Greek alphabet for symbolic values *)
