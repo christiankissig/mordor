@@ -4,6 +4,7 @@ open Uset
 open Algorithms
 open Alcotest
 open Coherence
+open Eventstructures
 open Executions
 open Expr
 open Lwt.Syntax
@@ -208,32 +209,7 @@ let test_imm_coherent_simple () =
   let rf = USet.create () in
   let restrict = Hashtbl.create 10 in
   let (structure : symbolic_event_structure) =
-    {
-      e;
-      events;
-      po;
-      po_iter = USet.create ();
-      restrict;
-      defacto = Hashtbl.create 10;
-      rmw = USet.create ();
-      lo = USet.create ();
-      cas_groups = Hashtbl.create 10;
-      fj = USet.create ();
-      p = Hashtbl.create 10;
-      constraints = [];
-      conflict = USet.create ();
-      origin = Hashtbl.create 10;
-      loop_indices = Hashtbl.create 10;
-      thread_index = Hashtbl.create 10;
-      write_events = USet.create ();
-      read_events = USet.create ();
-      rlx_write_events = USet.create ();
-      rlx_read_events = USet.create ();
-      fence_events = USet.create ();
-      malloc_events = USet.create ();
-      free_events = USet.create ();
-      terminal_events = USet.create ();
-    }
+    { (SymbolicEventStructure.create ()) with e; events; po; restrict }
   in
   let (execution : symbolic_execution) =
     {
@@ -270,32 +246,7 @@ let test_rc11_coherent_simple () =
   let rf = USet.create () in
   let restrict = Hashtbl.create 10 in
   let structure =
-    {
-      e;
-      events;
-      po;
-      po_iter = USet.create ();
-      restrict;
-      defacto = Hashtbl.create 10;
-      rmw = USet.create ();
-      lo = USet.create ();
-      cas_groups = Hashtbl.create 10;
-      fj = USet.create ();
-      p = Hashtbl.create 10;
-      constraints = [];
-      conflict = USet.create ();
-      origin = Hashtbl.create 10;
-      loop_indices = Hashtbl.create 10;
-      thread_index = Hashtbl.create 10;
-      write_events = USet.create ();
-      read_events = USet.create ();
-      rlx_write_events = USet.create ();
-      rlx_read_events = USet.create ();
-      fence_events = USet.create ();
-      malloc_events = USet.create ();
-      free_events = USet.create ();
-      terminal_events = USet.create ();
-    }
+    { (SymbolicEventStructure.create ()) with e; events; po; restrict }
   in
   let execution =
     {
@@ -332,32 +283,7 @@ let test_rc11c_coherent_simple () =
   let rf = uset_of_list [ (1, 2) ] in
   let restrict = Hashtbl.create 10 in
   let structure =
-    {
-      e;
-      events;
-      po;
-      po_iter = USet.create ();
-      restrict;
-      defacto = Hashtbl.create 10;
-      rmw = USet.create ();
-      lo = USet.create ();
-      cas_groups = Hashtbl.create 10;
-      fj = USet.create ();
-      p = Hashtbl.create 10;
-      constraints = [];
-      conflict = USet.create ();
-      origin = Hashtbl.create 10;
-      loop_indices = Hashtbl.create 10;
-      thread_index = Hashtbl.create 10;
-      write_events = USet.create ();
-      read_events = USet.create ();
-      rlx_write_events = USet.create ();
-      rlx_read_events = USet.create ();
-      fence_events = USet.create ();
-      malloc_events = USet.create ();
-      free_events = USet.create ();
-      terminal_events = USet.create ();
-    }
+    { (SymbolicEventStructure.create ()) with e; events; po; restrict }
   in
   let execution =
     {
@@ -400,32 +326,7 @@ let test_imm_coherent_rmw () =
   let rmw = uset_of_list [ (1, 2) ] in
   let restrict = Hashtbl.create 10 in
   let structure =
-    {
-      e;
-      events;
-      po;
-      po_iter = USet.create ();
-      restrict;
-      defacto = Hashtbl.create 10;
-      rmw = USet.create ();
-      lo = USet.create ();
-      cas_groups = Hashtbl.create 10;
-      fj = USet.create ();
-      p = Hashtbl.create 10;
-      constraints = [];
-      conflict = USet.create ();
-      origin = Hashtbl.create 10;
-      loop_indices = Hashtbl.create 10;
-      thread_index = Hashtbl.create 10;
-      write_events = USet.create ();
-      read_events = USet.create ();
-      rlx_write_events = USet.create ();
-      rlx_read_events = USet.create ();
-      fence_events = USet.create ();
-      malloc_events = USet.create ();
-      free_events = USet.create ();
-      terminal_events = USet.create ();
-    }
+    { (SymbolicEventStructure.create ()) with e; events; po; restrict }
   in
   let execution =
     {
@@ -458,32 +359,7 @@ let test_cache_types () =
   let rf = USet.create () in
   let restrict = Hashtbl.create 10 in
   let structure =
-    {
-      e;
-      events;
-      po;
-      po_iter = USet.create ();
-      restrict;
-      defacto = Hashtbl.create 10;
-      rmw = USet.create ();
-      lo = USet.create ();
-      cas_groups = Hashtbl.create 10;
-      fj = USet.create ();
-      p = Hashtbl.create 10;
-      constraints = [];
-      conflict = USet.create ();
-      origin = Hashtbl.create 10;
-      loop_indices = Hashtbl.create 10;
-      thread_index = Hashtbl.create 10;
-      write_events = USet.create ();
-      read_events = USet.create ();
-      rlx_write_events = USet.create ();
-      rlx_read_events = USet.create ();
-      fence_events = USet.create ();
-      malloc_events = USet.create ();
-      free_events = USet.create ();
-      terminal_events = USet.create ();
-    }
+    { (SymbolicEventStructure.create ()) with e; events; po; restrict }
   in
   let execution =
     {

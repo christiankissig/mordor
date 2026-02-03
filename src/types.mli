@@ -138,6 +138,7 @@ type symbolic_event_structure = {
   rlx_write_events : int uset;
   rlx_read_events : int uset;
   fence_events : int uset;
+  branch_events : int uset;
   malloc_events : int uset;
   free_events : int uset;
   terminal_events : int uset;

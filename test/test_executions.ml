@@ -45,32 +45,7 @@ module TestData = struct
   let make_structure ?(events = basic_events ())
       ?(e = USet.of_list [ 1; 2; 3; 4 ])
       ?(po = USet.of_list [ (1, 2); (2, 3); (3, 4) ]) () =
-    {
-      e;
-      events;
-      po;
-      restrict = Hashtbl.create 4;
-      defacto = Hashtbl.create 4;
-      cas_groups = Hashtbl.create 4;
-      po_iter = USet.create ();
-      rmw = USet.create ();
-      lo = USet.create ();
-      fj = USet.create ();
-      p = Hashtbl.create 4;
-      constraints = [];
-      conflict = USet.create ();
-      origin = Hashtbl.create 4;
-      loop_indices = Hashtbl.create 4;
-      thread_index = Hashtbl.create 4;
-      write_events = USet.create ();
-      read_events = USet.create ();
-      rlx_write_events = USet.create ();
-      rlx_read_events = USet.create ();
-      fence_events = USet.create ();
-      malloc_events = USet.create ();
-      free_events = USet.create ();
-      terminal_events = USet.create ();
-    }
+    { (SymbolicEventStructure.create ()) with events; e; po }
 
   let make_justification ?p ?d ?fwd ?we w_event =
     {

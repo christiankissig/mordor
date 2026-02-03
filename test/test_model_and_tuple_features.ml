@@ -1,6 +1,7 @@
 open Alcotest
 open Assertion
 open Context
+open Eventstructures
 open Executions
 open Ir
 open Types
@@ -90,33 +91,7 @@ module TestSetMembership = struct
       }
 
   (** Helper to create minimal structure *)
-  let make_test_structure () =
-    {
-      e = USet.create ();
-      events = Hashtbl.create 0;
-      po = USet.create ();
-      po_iter = USet.create ();
-      rmw = USet.create ();
-      lo = USet.create ();
-      restrict = Hashtbl.create 0;
-      defacto = Hashtbl.create 0;
-      cas_groups = Hashtbl.create 0;
-      fj = USet.create ();
-      p = Hashtbl.create 0;
-      constraints = [];
-      conflict = USet.create ();
-      origin = Hashtbl.create 0;
-      loop_indices = Hashtbl.create 0;
-      thread_index = Hashtbl.create 0;
-      write_events = USet.create ();
-      read_events = USet.create ();
-      rlx_write_events = USet.create ();
-      rlx_read_events = USet.create ();
-      fence_events = USet.create ();
-      malloc_events = USet.create ();
-      free_events = USet.create ();
-      terminal_events = USet.create ();
-    }
+  let make_test_structure () = SymbolicEventStructure.create ()
 
   (** {2 has_set_operation Tests} *)
 

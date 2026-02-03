@@ -475,6 +475,18 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                     recurse (then_body @ rest) env new_then_phi events
                   in
 
+                  let defacto =
+                    List.map
+                      (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                      events.defacto
+                  in
+                  let branch_event =
+                    { (Event.create Branch 0 ()) with cond = Some cond_val }
+                  in
+                  let branch_event' =
+                    add_event events branch_event env annotation
+                  in
+
                   match else_body with
                   | Some eb -> (
                       let else_structure events =
@@ -488,8 +500,11 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                           let* then_structure = then_structure events in
                             let* else_structure = else_structure events in
                               Lwt.return
-                                (SymbolicEventStructure.plus then_structure
-                                   else_structure
+                                (SymbolicEventStructure.dot branch_event'
+                                   (SymbolicEventStructure.plus then_structure
+                                      else_structure
+                                   )
+                                   phi defacto
                                 )
                     )
                   | None -> (
@@ -502,8 +517,11 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                               recurse rest env new_else_phi events
                             in
                               Lwt.return
-                                (SymbolicEventStructure.plus then_structure
-                                   rest_structure
+                                (SymbolicEventStructure.dot branch_event'
+                                   (SymbolicEventStructure.plus then_structure
+                                      rest_structure
+                                   )
+                                   phi defacto
                                 )
                     )
             )

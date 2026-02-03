@@ -520,30 +520,16 @@ module TestWriteCondition = struct
         Hashtbl.add loop_indices mod_write.label [ 0 ];
         let symbolic_structure =
           {
+            (SymbolicEventStructure.create ()) with
             e = e_set;
             events;
             po;
-            po_iter = USet.create ();
-            rmw = USet.create ();
-            lo = USet.create ();
-            restrict = Hashtbl.create 0;
-            defacto = Hashtbl.create 0;
-            cas_groups = Hashtbl.create 0;
             read_events = USet.of_list [ read.label ];
             write_events = USet.of_list [ init_write.label; mod_write.label ];
             rlx_read_events = USet.of_list [ read.label ];
             rlx_write_events = USet.of_list [ mod_write.label ];
-            fence_events = USet.create ();
             malloc_events = USet.of_list [ alloc.label ];
-            free_events = USet.create ();
-            terminal_events = USet.create ();
-            fj = USet.create ();
-            p = Hashtbl.create 0;
-            constraints = [];
-            conflict = USet.create ();
-            origin = Hashtbl.create 0;
             loop_indices;
-            thread_index = Hashtbl.create 0;
           }
         in
         let symbolic_source_spans = Hashtbl.create 0 in

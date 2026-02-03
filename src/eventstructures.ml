@@ -29,6 +29,7 @@ module SymbolicEventStructure = struct
       rlx_write_events = USet.create ();
       rlx_read_events = USet.create ();
       fence_events = USet.create ();
+      branch_events = USet.create ();
       malloc_events = USet.create ();
       free_events = USet.create ();
       terminal_events = USet.create ();
@@ -85,6 +86,11 @@ module SymbolicEventStructure = struct
             USet.union structure.fence_events (USet.singleton event.label)
           else structure.fence_events
         );
+      branch_events =
+        ( if event.typ = Branch then
+            USet.union structure.branch_events (USet.singleton event.label)
+          else structure.branch_events
+        );
       malloc_events =
         ( if event.typ = Malloc then
             USet.union structure.malloc_events (USet.singleton event.label)
@@ -135,6 +141,7 @@ module SymbolicEventStructure = struct
           rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
           rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
           fence_events = USet.union a.fence_events b.fence_events;
+          branch_events = USet.union a.branch_events b.branch_events;
           malloc_events = USet.union a.malloc_events b.malloc_events;
           free_events = USet.union a.free_events b.free_events;
           terminal_events = USet.union a.terminal_events b.terminal_events;
@@ -170,6 +177,7 @@ module SymbolicEventStructure = struct
           rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
           rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
           fence_events = USet.union a.fence_events b.fence_events;
+          branch_events = USet.union a.branch_events b.branch_events;
           malloc_events = USet.union a.malloc_events b.malloc_events;
           free_events = USet.union a.free_events b.free_events;
           terminal_events = USet.union a.terminal_events b.terminal_events;
@@ -204,7 +212,9 @@ let rec cartesian = function
 (** Generate maximal conflict-free sets of events as paths through the symbolic
     event structure. *)
 let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
-  let po_intransitive = URelation.transitive_reduction structure.po in
+  let e = USet.set_minus structure.e structure.branch_events in
+  let po = USet.intersection structure.po (URelation.cross e e) in
+  let po_intransitive = URelation.transitive_reduction po in
   let po_tree = URelation.adjacency_map po_intransitive in
 
   (*Partition neighbours into groups where each group is mutually in conflict *)

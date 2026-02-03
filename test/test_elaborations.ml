@@ -56,30 +56,14 @@ module TestData = struct
       ?(read_events = USet.of_list [ 2 ]) ?(malloc_events = USet.create ())
       ?(rmw = USet.create ()) () =
     {
+      (SymbolicEventStructure.create ()) with
       e;
       events;
       po;
-      po_iter = USet.create ();
       rmw;
-      lo = USet.create ();
-      restrict = Hashtbl.create 10;
-      defacto = Hashtbl.create 10;
-      cas_groups = Hashtbl.create 10;
-      fj = USet.create ();
-      p = Hashtbl.create 10;
-      constraints = [];
-      conflict = USet.create ();
-      origin = Hashtbl.create 10;
-      loop_indices = Hashtbl.create 10;
-      thread_index = Hashtbl.create 10;
       write_events;
       read_events;
-      rlx_write_events = USet.create ();
-      rlx_read_events = USet.create ();
-      fence_events = USet.create ();
       malloc_events;
-      free_events = USet.create ();
-      terminal_events = USet.create ();
     }
 
   (* Mock context builder *)
