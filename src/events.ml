@@ -220,52 +220,6 @@ end = struct
     }
 end
 
-(** Events container/manager *)
-module EventsContainer = struct
-  type t = { mutable events : (int, event) Hashtbl.t; mutable next_label : int }
-
-  let create () = { events = Hashtbl.create 16; next_label = 1 }
-
-  let add t ?label e =
-    let label =
-      match label with
-      | Some l -> l
-      | None ->
-          let l = t.next_label in
-            t.next_label <- l + 1;
-            l
-    in
-    let e = { e with label } in
-      Hashtbl.replace t.events label e;
-      (* Update next_label to be at least label + 1 *)
-      t.next_label <- max t.next_label (label + 1);
-      e
-
-  let get t label = Hashtbl.find_opt t.events label
-
-  let get_exn t label =
-    match get t label with
-    | Some e -> e
-    | None -> failwith (sprintf "Event %d not found" label)
-
-  let all t =
-    let result = USet.create () in
-      Hashtbl.iter (fun label _ -> USet.add result label |> ignore) t.events;
-      result
-
-  let clone t =
-    let new_t = create () in
-      new_t.next_label <- t.next_label;
-      Hashtbl.iter
-        (fun label e -> Hashtbl.replace new_t.events label (Event.clone e))
-        t.events;
-      new_t
-
-  let rewrite t label new_event =
-    Hashtbl.replace t.events label new_event;
-    t
-end
-
 let get_loc structure event_id =
   let events = structure.events in
     Hashtbl.find_opt events event_id

@@ -141,75 +141,6 @@ let test_event_equality () =
   check bool "different id" false (Event.equal e1 e3);
   check bool "different label" false (Event.equal e1 e4)
 
-(** Test EventsContainer *)
-let test_container_create () =
-  let c = EventsContainer.create () in
-    check int "initial next_label" 1 c.next_label
-
-let test_container_add () =
-  let c = EventsContainer.create () in
-  let e1 = make_test_event Read 0 in
-  let e1' = EventsContainer.add c e1 in
-
-  check int "auto assigned label" 1 e1'.label;
-  check int "next_label incremented" 2 c.next_label;
-
-  let e2 = make_test_event Write 0 in
-  let e2' = EventsContainer.add c ~label:10 e2 in
-    check int "explicit label" 10 e2'.label;
-    check int "next_label updated" 11 c.next_label
-
-let test_container_get () =
-  let c = EventsContainer.create () in
-  let e = make_test_event Read 0 in
-  let e' = EventsContainer.add c e in
-
-  match EventsContainer.get c e'.label with
-  | Some retrieved ->
-      check bool "retrieved event matches" true (Event.equal e' retrieved)
-  | None -> fail "event not found"
-
-let test_container_all () =
-  let c = EventsContainer.create () in
-  let _ = EventsContainer.add c (make_test_event Read 0) in
-  let _ = EventsContainer.add c (make_test_event Write 0) in
-  let _ = EventsContainer.add c (make_test_event Fence 0) in
-
-  let all = EventsContainer.all c in
-    check int "all returns 3 events" 3 (USet.size all)
-
-let test_container_clone () =
-  let c1 = EventsContainer.create () in
-  let _ = EventsContainer.add c1 (make_test_event Read 0) in
-  let _ = EventsContainer.add c1 (make_test_event Write 0) in
-
-  let c2 = EventsContainer.clone c1 in
-    check int "cloned size matches"
-      (USet.size (EventsContainer.all c1))
-      (USet.size (EventsContainer.all c2));
-    check int "cloned next_label matches" c1.next_label c2.next_label;
-
-    (* Add to original, shouldn't affect clone *)
-    let _ = EventsContainer.add c1 (make_test_event Fence 0) in
-      check bool "clone unaffected by add" true
-        (USet.size (EventsContainer.all c1) > USet.size (EventsContainer.all c2))
-
-let test_container_rewrite () =
-  let c = EventsContainer.create () in
-  let e = EventsContainer.add c (make_read 0 "x" "v1" Relaxed) in
-  let new_e = make_read e.label "y" "v2" Acquire in
-
-  let _ = EventsContainer.rewrite c e.label new_e in
-
-  match EventsContainer.get c e.label with
-  | Some retrieved ->
-      check bool "rewritten event has new id" true
-        ( match retrieved.id with
-        | Some (VVar "y") -> true
-        | _ -> false
-        )
-  | None -> fail "event not found after rewrite"
-
 (** Test suite *)
 let suite =
   ( "Events",
@@ -225,11 +156,5 @@ let suite =
       test_case "clone_event" `Quick test_clone_event;
       test_case "event_to_string" `Quick test_event_to_string;
       test_case "event_equality" `Quick test_event_equality;
-      test_case "container_create" `Quick test_container_create;
-      test_case "container_add" `Quick test_container_add;
-      test_case "container_get" `Quick test_container_get;
-      test_case "container_all" `Quick test_container_all;
-      test_case "container_clone" `Quick test_container_clone;
-      test_case "container_rewrite" `Quick test_container_rewrite;
     ]
   )
