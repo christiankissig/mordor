@@ -323,47 +323,25 @@ let check_condition3_branch_conditions (program : ir_node list) cache
     let events_in_loop =
       SymbolicEventStructure.events_in_loop structure loop_id
     in
+    let branch_events_in_loop =
+      USet.intersection events_in_loop structure.branch_events
+    in
       Logs.debug (fun m ->
           m "  Found %d events in loop" (USet.size events_in_loop)
       );
       USet.iter
-        (fun event ->
+        (fun e ->
           (* Get predicates (branch conditions) for this event *)
-          let event_preds =
-            Hashtbl.find_opt structure.restrict event
-            |> Option.value ~default:[]
-            |> USet.of_list
+          let cond =
+            Hashtbl.find_opt structure.events e |> Option.get |> fun event ->
+            event.cond |> Option.value ~default:(EBoolean true)
           in
-          (* Find events before the loop *)
-          let events_before_loop =
-            USet.set_minus
-              (SymbolicEventStructure.events_po_before structure event)
-              events_in_loop
-          in
-          (* Get predicates from before the loop *)
-          let preds =
-            USet.map
-              (fun e ->
-                Hashtbl.find_opt structure.restrict e
-                |> Option.value ~default:[]
-              )
-              events_before_loop
-            |> USet.map USet.of_list
-            |> USet.flatten
-            |> USet.set_minus event_preds
-          in
-          (* Extract symbols from predicates *)
-          let symbols =
-            USet.map Expr.get_symbols preds
-            |> USet.map USet.of_list
-            |> USet.flatten
-          in
-          (* Find symbols that originated before the loop *)
+          let symbols = Expr.get_symbols cond |> USet.of_list in
           let symbols_read_before_loop =
             USet.filter
               (fun sym ->
                 match Hashtbl.find_opt structure.origin sym with
-                | Some origin_event -> USet.mem events_before_loop origin_event
+                | Some origin_event -> not (USet.mem events_in_loop origin_event)
                 | None -> false
               )
               symbols
@@ -372,7 +350,7 @@ let check_condition3_branch_conditions (program : ir_node list) cache
                 m
                   "  Event %d: Found %d branch condition symbols read before \
                    loop"
-                  event
+                  e
                   (USet.size symbols_read_before_loop)
             );
             (* Record violations for constrained pre-loop symbols *)
@@ -384,7 +362,7 @@ let check_condition3_branch_conditions (program : ir_node list) cache
                        ( sym,
                          Hashtbl.find_opt structure.origin sym
                          |> Option.value ~default:(-1),
-                         Hashtbl.find_opt cache.symbolic_source_spans event
+                         Hashtbl.find_opt cache.symbolic_source_spans e
                        )
                     )
                 in
