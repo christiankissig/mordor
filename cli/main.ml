@@ -209,22 +209,39 @@ module Display = struct
   let print_results (lwt_ctx : mordor_ctx Lwt.t) =
     let* ctx = lwt_ctx in
       Printf.printf "=== Verification Results ===\n";
-      ( match ctx.valid with
-      | None -> Printf.printf "Valid: Unknown\n"
-      | Some valid -> Printf.printf "Valid: %b\n" valid
+      ( match ctx.structure with
+      | None -> ()
+      | Some structure -> Printf.printf "Events: %d\n" (USet.size structure.e)
       );
-      ( match ctx.undefined_behaviour with
-      | None -> Printf.printf "Undefined Behavior: Unknown\n"
-      | Some ub -> Printf.printf "Undefined Behavior: %b\n" ub
+      ( match ctx.is_episodic with
+      | None -> ()
+      | Some is_episodic ->
+          Printf.printf "Episodic: %s\n"
+            (Hashtbl.fold
+               (fun loop_index res acc ->
+                 acc ^ Printf.sprintf "%d: %b; " loop_index res
+               )
+               is_episodic ""
+            )
+      );
+      ( match ctx.episodicity_results with
+      | None -> ()
+      | Some results ->
+          Printf.printf "Episodicity Results: %s\n"
+            (show_loop_episodicity_result_summary results)
       );
       ( match ctx.executions with
-      | None -> Printf.printf "Executions: Unknown\n"
+      | None -> ()
       | Some executions ->
           Printf.printf "Executions: %d\n" (USet.size executions)
       );
-      ( match ctx.structure with
-      | None -> Printf.printf "Events: Unknown\n"
-      | Some structure -> Printf.printf "Events: %d\n" (USet.size structure.e)
+      ( match ctx.valid with
+      | None -> ()
+      | Some valid -> Printf.printf "Valid: %b\n" valid
+      );
+      ( match ctx.undefined_behaviour with
+      | None -> ()
+      | Some ub -> Printf.printf "Undefined Behavior: %b\n" ub
       );
       Printf.printf "===========================\n";
       flush stdout;
