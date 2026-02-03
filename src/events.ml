@@ -154,7 +154,7 @@ end = struct
         | Unlock -> Option.fold ~none:"" ~some:Value.to_string e.id
         | Fence -> sprintf "F%s" (mode_to_string_or e.fmod)
         | Branch ->
-            sprintf "B%s" (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
+            sprintf "B %s" (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
         | Malloc ->
             sprintf "Alloc %s %s"
               (Option.fold ~none:"_" ~some:Value.to_string e.rval)
