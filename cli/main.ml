@@ -513,8 +513,8 @@ module CLI = struct
       run_mode = Config.Samples;
       output_mode = None;
       output_file = None;
-      step_counter = None;
-      loop_semantics = Generic;
+      step_counter = Some 2;
+      loop_semantics = FiniteStepCounter;
       recursive = false;
       litmus_dir = "litmus_tests";
     }

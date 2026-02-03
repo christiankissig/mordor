@@ -1,3 +1,5 @@
+open Format
+open Pretty
 open Uset
 
 (** Basic types *)
@@ -185,6 +187,17 @@ let pp_structure_p fmt p =
        )
     )
 
+(** Pretty printer for origin hashtable *)
+let pp_origin fmt origin = pp_hashtbl pp_print_string pp_print_int fmt origin
+
+(** Pretty printer for loop_indices hashtable *)
+let pp_loop_indices fmt loop_indices =
+  pp_hashtbl pp_print_int pp_int_list fmt loop_indices
+
+(** Pretty printer for thread_index hashtable *)
+let pp_thread_index fmt thread_index =
+  pp_hashtbl pp_print_int pp_print_int fmt thread_index
+
 (** Symbolic Event Structures *)
 type symbolic_event_structure = {
   e : int uset; [@printer pp_int_uset] (* Set of event IDs *)
@@ -206,10 +219,11 @@ type symbolic_event_structure = {
   *)
   constraints : expr list; (* Constraints *)
   conflict : (int * int) uset; [@printer pp_int_urel] (* Conflict relation *)
-  origin : (string, int) Hashtbl.t; [@opaque] (* Origin mapping for symbols *)
-  loop_indices : (int, int list) Hashtbl.t; [@opaque]
+  origin : (string, int) Hashtbl.t; [@printer pp_origin]
+      (* Origin mapping for symbols *)
+  loop_indices : (int, int list) Hashtbl.t; [@printer pp_loop_indices]
       (* Mapping from events to their loop indices *)
-  thread_index : (int, int) Hashtbl.t; [@opaque]
+  thread_index : (int, int) Hashtbl.t; [@printer pp_thread_index]
   (* Mapping from events to their thread indices *)
   (* cached event filters *)
   write_events : int uset; [@printer pp_int_uset]
