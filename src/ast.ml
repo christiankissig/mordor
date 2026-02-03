@@ -178,35 +178,35 @@ let rec stmt_to_string stmt =
   | SGlobalStore { global; expr; assign } ->
       Printf.sprintf "SGlobalStore %s := %s with mode %s and volatile %b" global
         (expr_to_string expr)
-        (Types.mode_to_string assign.mode)
+        (Types.show_mode assign.mode)
         assign.volatile
   | SGlobalLoad { register; global; load } ->
       Printf.sprintf "SGlobalLoad %s := load %s with mode %s and volatile %b"
         register global
-        (Types.mode_to_string load.mode)
+        (Types.show_mode load.mode)
         load.volatile
   | SLoad { register; address; load } ->
       Printf.sprintf "SLoad %s from address %s with mode %s and volatile %b"
         register (expr_to_string address)
-        (Types.mode_to_string load.mode)
+        (Types.show_mode load.mode)
         load.volatile
   | SStore { address; expr; assign } ->
       Printf.sprintf "SStore *%s := %s with mode %s and volatile %b"
         (expr_to_string address) (expr_to_string expr)
-        (Types.mode_to_string assign.mode)
+        (Types.show_mode assign.mode)
         assign.volatile
   | SCAS { register; address; expected; desired; load_mode; assign_mode } ->
       Printf.sprintf "SCAS %s, %s, %s, %s with load mode %s and assign mode %s"
         register (expr_to_string address) (expr_to_string expected)
         (expr_to_string desired)
-        (Types.mode_to_string load_mode)
-        (Types.mode_to_string assign_mode)
+        (Types.show_mode load_mode)
+        (Types.show_mode assign_mode)
   | SFADD { register; address; operand; rmw_mode; load_mode; assign_mode } ->
       Printf.sprintf
         "SFADD %s, %s, %s with rmw_mode %s and load mode %s and assign mode %s"
         register (expr_to_string address) (expr_to_string operand) rmw_mode
-        (Types.mode_to_string load_mode)
-        (Types.mode_to_string assign_mode)
+        (Types.show_mode load_mode)
+        (Types.show_mode assign_mode)
   | SIf { condition; then_body; else_body } -> (
       "SIf "
       ^ expr_to_string condition
@@ -226,7 +226,7 @@ let rec stmt_to_string stmt =
         (String.concat "; " (List.map to_string body))
         (expr_to_string condition)
   | SFence { mode } ->
-      Printf.sprintf "SFence with mode %s" (Types.mode_to_string mode)
+      Printf.sprintf "SFence with mode %s" (Types.show_mode mode)
   | SLock { global } ->
       Printf.sprintf "SLock with global %s"
         ( match global with

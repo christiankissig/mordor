@@ -18,6 +18,7 @@ module TestUtil = struct
       loc = Some (ENum (Z.of_int label));
       rval = Some (VSymbol (Printf.sprintf "r%d" label));
       wval = Some (ESymbol (Printf.sprintf "w%d" label));
+      cond = None;
       rmod = Relaxed;
       wmod = Relaxed;
       fmod = Relaxed;

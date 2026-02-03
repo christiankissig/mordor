@@ -169,18 +169,18 @@ let rec to_string ~ann_to_string (node : 'a ir_node) : string =
         Printf.sprintf "Reg Ref Assign %s := &%s" register global
     | GlobalStore { global; expr; assign } ->
         Printf.sprintf "Store %s := %s with mode %s" global (Expr.to_string expr)
-          (Types.mode_to_string assign.mode)
+          (Types.show_mode assign.mode)
     | GlobalLoad { register; global; load } ->
         Printf.sprintf "%s := Load %s with mode %s" register global
-          (Types.mode_to_string load.mode)
+          (Types.show_mode load.mode)
     | DerefStore { address; expr; assign } ->
         Printf.sprintf "Store *%s := %s with mode %s" (Expr.to_string address)
           (Expr.to_string expr)
-          (Types.mode_to_string assign.mode)
+          (Types.show_mode assign.mode)
     | DerefLoad { register; address; load } ->
         Printf.sprintf "%s := Load *%s with mode %s" register
           (Expr.to_string address)
-          (Types.mode_to_string load.mode)
+          (Types.show_mode load.mode)
     | If { condition; then_body; else_body } ->
         let then_str = String.concat "; " (List.map to_string then_body) in
         let else_str =
@@ -199,7 +199,7 @@ let rec to_string ~ann_to_string (node : 'a ir_node) : string =
         let body_str = String.concat "; " (List.map to_string body) in
           Printf.sprintf "Do { %s } While (%s)" body_str
             (Expr.to_string condition)
-    | Fence { mode } -> Printf.sprintf "Fence(%s)" (Types.mode_to_string mode)
+    | Fence { mode } -> Printf.sprintf "Fence(%s)" (Types.show_mode mode)
     | Lock { global } -> (
         match global with
         | Some g -> Printf.sprintf "Lock(%s)" g
@@ -216,15 +216,15 @@ let rec to_string ~ann_to_string (node : 'a ir_node) : string =
           "%s := CAS(%s, %s, %s) with load mode %s and assign mode\n        %s"
           register (Expr.to_string address) (Expr.to_string expected)
           (Expr.to_string desired)
-          (Types.mode_to_string load_mode)
-          (Types.mode_to_string assign_mode)
+          (Types.show_mode load_mode)
+          (Types.show_mode assign_mode)
     | Fadd { register; address; operand; rmw_mode; load_mode; assign_mode } ->
         Printf.sprintf
           "%s := FADD(%s, %s) with rmw mode %s and load mode %s and assign \
            mode %s"
           register (Expr.to_string address) (Expr.to_string operand) rmw_mode
-          (Types.mode_to_string load_mode)
-          (Types.mode_to_string assign_mode)
+          (Types.show_mode load_mode)
+          (Types.show_mode assign_mode)
     | RegMalloc { register; size } ->
         Printf.sprintf "%s := MALLOC(%s)" register (Expr.to_string size)
     | GlobalMalloc { global; size } ->

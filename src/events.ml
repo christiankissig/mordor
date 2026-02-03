@@ -7,10 +7,6 @@ open Uset
 
 (** Mode utility functions *)
 module ModeOps = struct
-  let to_string_or = function
-    | Relaxed -> ""
-    | m -> show_mode m
-
   let checked_read = function
     | Relaxed -> Relaxed
     | Acquire -> Acquire
@@ -87,14 +83,6 @@ module Event : sig
   val is_mem_func : event -> bool
   val is_lock_unlock : event -> bool
   val is_ordering : event -> bool
-  val get_id : event -> Value.t
-  val get_wval : event -> Expr.t
-  val get_rval : event -> Value.t
-  val has_id : event -> bool
-  val has_val : event -> bool
-  val has_wval : event -> bool
-  val has_rval : event -> bool
-  val event_order : event -> mode
   val get_symbols : event -> string USet.t
   val relabel : relab:(string -> string option) -> event -> event
 end = struct
@@ -115,59 +103,6 @@ end = struct
   let is_lock_unlock e = is_lock e || is_unlock e
   let is_ordering e = is_lock_unlock e || is_fence e
 
-  (** Event field accessors with validation *)
-  let has_id e =
-    match e.typ with
-    | Read | Write | Malloc | Free -> true
-    | _ -> false
-
-  let has_val e =
-    match e.typ with
-    | Read | Write | Malloc -> true
-    | _ -> false
-
-  let has_wval e =
-    match e.typ with
-    | Write | Malloc -> true
-    | _ -> false
-
-  let has_rval e =
-    match e.typ with
-    | Read | Malloc -> true
-    | _ -> false
-
-  let get_id e =
-    if has_id e then
-      match e.id with
-      | Some id -> id
-      | None -> failwith (sprintf "Event %d does not have an id" e.label)
-    else failwith (sprintf "Event %d type does not support id" e.label)
-
-  let get_wval e =
-    if has_wval e then
-      match e.wval with
-      | Some v -> v
-      | None -> failwith (sprintf "Event %d does not have a wval" e.label)
-    else failwith (sprintf "Event %d type does not support wval" e.label)
-
-  let get_rval e =
-    if has_rval e then
-      match e.rval with
-      | Some v -> v
-      | None -> failwith (sprintf "Event %d does not have an rval" e.label)
-    else failwith (sprintf "Event %d type does not support rval" e.label)
-
-  (** Get event ordering mode *)
-  let event_order e =
-    match e.typ with
-    | Read -> e.rmod
-    | Write -> e.wmod
-    | Fence -> e.fmod
-    | Init -> Acquire
-    | Terminal -> Release
-    | Lock | Unlock -> Relaxed
-    | Malloc | Free -> Relaxed
-
   (** Create event with specialized initialization *)
   let create typ label ?id ?loc ?rval ?wval ?(rmod = Relaxed) ?(wmod = Relaxed)
       ?(fmod = Relaxed) ?(volatile = false) ?strong ?lhs ?rhs ?pc () =
@@ -179,6 +114,7 @@ end = struct
         loc = None;
         rval = None;
         wval = None;
+        cond = None;
         rmod = Relaxed;
         wmod = Relaxed;
         fmod = Relaxed;
@@ -207,18 +143,18 @@ end = struct
         | Init -> "Init"
         | Terminal -> "Terminal"
         | Read ->
-            sprintf "R%s %s %s"
-              (ModeOps.to_string_or e.rmod)
+            sprintf "R%s %s %s" (mode_to_string_or e.rmod)
               (Option.fold ~none:"_" ~some:Expr.to_string e.loc)
               (Option.fold ~none:"_" ~some:Value.to_string e.rval)
         | Write ->
-            sprintf "W%s %s %s"
-              (ModeOps.to_string_or e.wmod)
+            sprintf "W%s %s %s" (mode_to_string_or e.wmod)
               (Option.fold ~none:"_" ~some:Expr.to_string e.loc)
               (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
         | Lock -> Option.fold ~none:"" ~some:Value.to_string e.id
         | Unlock -> Option.fold ~none:"" ~some:Value.to_string e.id
-        | Fence -> sprintf "F%s" (ModeOps.to_string_or e.fmod)
+        | Fence -> sprintf "F%s" (mode_to_string_or e.fmod)
+        | Branch ->
+            sprintf "B%s" (Option.fold ~none:"_" ~some:Expr.to_string e.cond)
         | Malloc ->
             sprintf "Alloc %s %s"
               (Option.fold ~none:"_" ~some:Value.to_string e.rval)
@@ -311,38 +247,6 @@ module EventsContainer = struct
     match get t label with
     | Some e -> e
     | None -> failwith (sprintf "Event %d not found" label)
-
-  (** Map events matching criteria to a USet of their labels *)
-  let map t event_labels ?typ ?mode ?mode_op ?second_mode () =
-    let result = USet.create () in
-      USet.iter
-        (fun label ->
-          match get t label with
-          | None -> ()
-          | Some e ->
-              let type_match =
-                match typ with
-                | None -> true
-                | Some t -> e.typ = t
-              in
-              let mode_match =
-                match (mode, mode_op) with
-                | None, _ -> true
-                | Some m, None -> Event.event_order e = m
-                | Some m, Some ">" -> ModeOps.mode_le m (Event.event_order e)
-                | Some _, Some op ->
-                    failwith (sprintf "ModeOp '%s' not supported" op)
-              in
-              let second_mode_match =
-                match second_mode with
-                | None -> true
-                | Some sm -> e.strong = Some sm
-              in
-                if type_match && mode_match && second_mode_match then
-                  USet.add result label |> ignore
-        )
-        event_labels;
-      result
 
   let all t =
     let result = USet.create () in

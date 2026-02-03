@@ -45,6 +45,7 @@ let make_event _ typ rmod wmod fmod strong rval wval id_opt =
     strong;
     rval;
     wval;
+    cond = None;
     label = 0;
     volatile = false;
     is_rdmw = false;

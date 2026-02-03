@@ -44,15 +44,13 @@ let test_make_event_types () =
   let read_evt = Event.create Read 1 () in
   let write_evt = Event.create Write 2 () in
   let fence_evt = Event.create Fence 3 () in
-    Alcotest.(check string)
-      "Read event type" "R"
-      (event_type_to_string read_evt.typ);
+    Alcotest.(check string) "Read event type" "R" (show_event_type read_evt.typ);
     Alcotest.(check string)
       "Write event type" "W"
-      (event_type_to_string write_evt.typ);
+      (show_event_type write_evt.typ);
     Alcotest.(check string)
       "Fence event type" "F"
-      (event_type_to_string fence_evt.typ)
+      (show_event_type fence_evt.typ)
 
 (** Test make_func *)
 let test_make_func_empty () =

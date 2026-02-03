@@ -413,7 +413,7 @@ module EventStructureViz = struct
 
       (* Build label *)
       let label_lines =
-        [ Printf.sprintf "e%d: %s" v.V.id (event_type_to_string evt.typ) ]
+        [ Printf.sprintf "e%d: %s" v.V.id (show_event_type evt.typ) ]
       in
 
       let label_lines =
@@ -524,7 +524,7 @@ module EventStructureViz = struct
             in
               {
                 id = v.Vertex.id;
-                type_ = event_type_to_string evt.typ;
+                type_ = show_event_type evt.typ;
                 label = evt.label;
                 isRoot = v.Vertex.id = 0;
                 location;

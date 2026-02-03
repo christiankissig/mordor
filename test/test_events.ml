@@ -23,10 +23,10 @@ let make_fence label fmod = Event.create Fence label ~fmod ()
 
 (** Test ModeOps *)
 let test_mode_to_string_or () =
-  check string "relaxed is empty" "" (Events.ModeOps.to_string_or Relaxed);
-  check string "acquire" "acq" (Events.ModeOps.to_string_or Acquire);
-  check string "release" "rel" (Events.ModeOps.to_string_or Release);
-  check string "sc" "sc" (Events.ModeOps.to_string_or SC)
+  check string "relaxed is empty" "" (Types.mode_to_string_or Relaxed);
+  check string "acquire" "acq" (Types.mode_to_string_or Acquire);
+  check string "release" "rel" (Types.mode_to_string_or Release);
+  check string "sc" "sc" (Types.mode_to_string_or SC)
 
 let test_mode_checked_read () =
   check bool "relaxed ok" true (Events.ModeOps.checked_read Relaxed = Relaxed);
@@ -87,70 +87,6 @@ let test_event_predicates () =
     )
     cases;
   ()
-
-(** Test event field accessors *)
-let test_has_fields () =
-  let read_ev = make_test_event Read 1 in
-  let write_ev = make_test_event Write 2 in
-  let fence_ev = make_test_event Fence 3 in
-  let malloc_ev = make_test_event Malloc 5 in
-
-  check bool "read has_id" true (Event.has_id read_ev);
-  check bool "write has_id" true (Event.has_id write_ev);
-  check bool "fence not has_id" false (Event.has_id fence_ev);
-
-  check bool "read has_val" true (Event.has_val read_ev);
-  check bool "fence not has_val" false (Event.has_val fence_ev);
-
-  check bool "read has_rval" true (Event.has_rval read_ev);
-  check bool "write not has_rval" false (Event.has_rval write_ev);
-
-  check bool "write has_wval" true (Event.has_wval write_ev);
-  check bool "read not has_wval" false (Event.has_wval read_ev);
-
-  check bool "malloc has_id" true (Event.has_id malloc_ev);
-  check bool "malloc has_rval" true (Event.has_rval malloc_ev);
-  check bool "malloc has_wval" true (Event.has_wval malloc_ev)
-
-let test_get_fields () =
-  let read_ev = make_read 1 "x" "v1" Relaxed in
-  let write_ev = make_write 2 "y" "v2" Release in
-
-  check bool "get_id read" true
-    ( match Event.get_id read_ev with
-    | VVar "x" -> true
-    | _ -> false
-    );
-  check bool "get_rval read" true
-    ( match Event.get_rval read_ev with
-    | VSymbol "v1" -> true
-    | _ -> false
-    );
-  check bool "get_id write" true
-    ( match Event.get_id write_ev with
-    | VVar "y" -> true
-    | _ -> false
-    );
-  check bool "get_wval write" true
-    ( match Event.get_wval write_ev with
-    | ESymbol "v2" -> true
-    | _ -> false
-    );
-
-  let fence_ev = make_test_event Fence 3 in
-    check_raises "get_id on fence fails"
-      (Failure "Event 3 type does not support id") (fun () ->
-        Event.get_id fence_ev |> ignore
-    )
-
-let test_event_order () =
-  let read_ev = make_read 1 "x" "v" Acquire in
-  let write_ev = make_write 2 "y" "v" Release in
-  let fence_ev = make_fence 3 SC in
-
-  check bool "read order is acquire" true (Event.event_order read_ev = Acquire);
-  check bool "write order is release" true (Event.event_order write_ev = Release);
-  check bool "fence order is sc" true (Event.event_order fence_ev = SC)
 
 (** Test event creation *)
 let test_event_creation () =
@@ -242,36 +178,6 @@ let test_container_all () =
   let all = EventsContainer.all c in
     check int "all returns 3 events" 3 (USet.size all)
 
-let test_container_map_filter () =
-  let c = EventsContainer.create () in
-  let e1 = EventsContainer.add c (make_read 0 "x" "v1" Relaxed) in
-  let _e2 = EventsContainer.add c (make_write 0 "y" "v2" Release) in
-  let e3 = EventsContainer.add c (make_read 0 "z" "v3" Acquire) in
-  let _e4 = EventsContainer.add c (make_fence 0 SC) in
-
-  let all_labels = EventsContainer.all c in
-
-  (* Filter only reads *)
-  let reads = EventsContainer.map c all_labels ~typ:Read () in
-    check int "map finds 2 reads" 2 (USet.size reads);
-    check bool "contains e1" true (USet.mem reads e1.label);
-    check bool "contains e3" true (USet.mem reads e3.label);
-
-    (* Filter only writes *)
-    let writes = EventsContainer.map c all_labels ~typ:Write () in
-      check int "map finds 1 write" 1 (USet.size writes);
-
-      (* Filter by mode *)
-      let acquire_events = EventsContainer.map c all_labels ~mode:Acquire () in
-        check int "map finds 1 acquire" 1 (USet.size acquire_events);
-
-        (* Filter by mode with ordering *)
-        let relaxed_or_higher =
-          EventsContainer.map c all_labels ~mode:Relaxed ~mode_op:">" ()
-        in
-          check bool "relaxed or higher includes all" true
-            (USet.size relaxed_or_higher >= 3)
-
 let test_container_clone () =
   let c1 = EventsContainer.create () in
   let _ = EventsContainer.add c1 (make_test_event Read 0) in
@@ -298,8 +204,8 @@ let test_container_rewrite () =
   match EventsContainer.get c e.label with
   | Some retrieved ->
       check bool "rewritten event has new id" true
-        ( match Event.get_id retrieved with
-        | VVar "y" -> true
+        ( match retrieved.id with
+        | Some (VVar "y") -> true
         | _ -> false
         )
   | None -> fail "event not found after rewrite"
@@ -313,9 +219,6 @@ let suite =
       test_case "mode_checked_write" `Quick test_mode_checked_write;
       test_case "mode_ordering" `Quick test_mode_ordering;
       test_case "event_predicates" `Quick test_event_predicates;
-      test_case "has_fields" `Quick test_has_fields;
-      test_case "get_fields" `Quick test_get_fields;
-      test_case "event_order" `Quick test_event_order;
       test_case "basic_creation" `Quick test_event_creation;
       test_case "fence_creation" `Quick test_fence_creation;
       test_case "malloc_creation" `Quick test_malloc_creation;
@@ -326,7 +229,6 @@ let suite =
       test_case "container_add" `Quick test_container_add;
       test_case "container_get" `Quick test_container_get;
       test_case "container_all" `Quick test_container_all;
-      test_case "container_map_filter" `Quick test_container_map_filter;
       test_case "container_clone" `Quick test_container_clone;
       test_case "container_rewrite" `Quick test_container_rewrite;
     ]

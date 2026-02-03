@@ -19,25 +19,20 @@ type mode =
 type event_type =
   | Read
   | Write
+  | Malloc
+  | Free
   | Lock
   | Unlock
   | Fence
+  | Branch
   | Init
   | Terminal
-  | Malloc
-  | Free
 [@@deriving show]
 
 (** {1 Conversion Functions} *)
 
-(** Convert mode to string representation *)
-val mode_to_string : mode -> string
-
 (** Convert mode to string, returning empty string for Relaxed *)
 val mode_to_string_or : mode -> string
-
-(** Convert event type to string representation *)
-val event_type_to_string : event_type -> string
 
 (** {1 Unicode Symbols} *)
 
@@ -107,6 +102,7 @@ type event = {
   loc : expr option;
   rval : value_type option;
   wval : expr option;
+  cond : expr option;
   rmod : mode;
   wmod : mode;
   fmod : mode;

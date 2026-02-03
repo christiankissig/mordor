@@ -36,16 +36,31 @@ let show_mode mode = Format.asprintf "%a" pp_mode mode
 type event_type =
   | Read
   | Write
+  | Malloc
+  | Free
   | Lock
   | Unlock
   | Fence
+  | Branch
   | Init
   | Terminal
-    (* Terminal events used to capture the terminal state of the
-  program outside of memory-effectful events, e.g. register state *)
-  | Malloc
-  | Free
-[@@deriving show]
+
+let pp_event_type fmt typ =
+  Format.fprintf fmt "%s"
+    ( match typ with
+    | Read -> "R"
+    | Write -> "W"
+    | Malloc -> "A"
+    | Free -> "D"
+    | Lock -> "L"
+    | Unlock -> "U"
+    | Fence -> "F"
+    | Branch -> "B"
+    | Init -> "I"
+    | Terminal -> "T"
+    )
+
+let show_event_type typ = Format.asprintf "%a" pp_event_type typ
 
 (** Unicode symbols *)
 module Unicode = struct
@@ -76,42 +91,6 @@ let greek_alpha = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖ�
 let zh_alpha = "一二三四五六七八九十"
 
 (** Pretty-printers *)
-
-let pp_z fmt z = Format.fprintf fmt "%s" (Z.to_string z)
-
-let pp_int_uset fmt uset =
-  Format.fprintf fmt "{%s}"
-    (String.concat ", " (List.map string_of_int (USet.to_list uset)))
-
-let pp_int_urel fmt uset =
-  Format.fprintf fmt "{%s}"
-    (String.concat ", "
-       (List.map
-          (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
-          (USet.to_list uset)
-       )
-    )
-
-let pp_string_uset fmt uset =
-  Format.fprintf fmt "{%s}"
-    (String.concat ", "
-       (List.map (fun a -> Printf.sprintf "%s" a) (USet.to_list uset))
-    )
-
-let event_type_to_string typ =
-  match typ with
-  | Read -> "R"
-  | Write -> "W"
-  | Lock -> "L"
-  | Unlock -> "U"
-  | Fence -> "F"
-  | Init -> "I"
-  | Terminal -> "T"
-  | Malloc -> "A"
-  | Free -> "D"
-
-let pp_event_type fmt typ = Format.fprintf fmt "%s" (event_type_to_string typ)
-let mode_to_string m = show_mode m
 
 let mode_to_string_or = function
   | Relaxed -> ""
@@ -161,6 +140,7 @@ type event = {
   loc : expr option;
   rval : value_type option;
   wval : expr option;
+  cond : expr option;
   rmod : mode;
   wmod : mode;
   fmod : mode;

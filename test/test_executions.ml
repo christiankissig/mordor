@@ -20,6 +20,7 @@ module TestData = struct
       loc = Option.map Expr.of_value id_val;
       rval;
       wval;
+      cond = None;
       rmod = Normal;
       wmod = Normal;
       fmod = Normal;

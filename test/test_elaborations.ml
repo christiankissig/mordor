@@ -14,14 +14,16 @@ open Uset
 module TestData = struct
   (* Event builder with sensible defaults *)
   let make_event ?(id = Some (VNumber Z.zero)) ?(loc = Some (ENum Z.zero))
-      ?(typ = Write) ?(wval = None) ?(wmod = Relaxed) ?(volatile = false)
-      ?(rval = None) ?(rmod = Relaxed) ?(fmod = Relaxed) label =
+      ?(typ = Write) ?(wval = None) ?(cond = None) ?(wmod = Relaxed)
+      ?(volatile = false) ?(rval = None) ?(rmod = Relaxed) ?(fmod = Relaxed)
+      label =
     {
       label;
       id;
       loc;
       typ;
       wval;
+      cond;
       wmod;
       volatile;
       rval;
