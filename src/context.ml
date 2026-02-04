@@ -159,6 +159,51 @@ type ub_reason =
 (** List of undefined behavior reasons per event. *)
 type ub_reasons = (int * ub_reason) list
 
+(** {1 Assertion Instance Tracking} *)
+
+(** Information about a set membership test in an assertion.
+
+    For expressions like [(w,r) in .rf], tracks:
+    - The relation name (.rf, .co, etc.)
+    - The event pair being tested
+    - Whether the pair was found in the relation *)
+type set_membership_info = {
+  relation_name : string;  (** Name of the relation (e.g., "rf", "co") *)
+  event_pair : int * int;  (** Pair of event IDs tested *)
+  member : bool;  (** Whether the pair is in the relation *)
+}
+
+(** Detailed information about an assertion instance.
+
+    Tracks what was evaluated and the result for a specific assertion check:
+    - The instantiated expression after substitution
+    - Set membership tests performed
+    - The evaluation result *)
+type assertion_instance_detail = {
+  instantiated_expr : expr option;  (** Expression after substitution *)
+  set_memberships : set_membership_info list;  (** Set operations evaluated *)
+  result : bool;  (** Whether the assertion held *)
+}
+
+(** Result of checking an assertion against a single execution.
+
+    An assertion can be:
+    - {b Witnessed}: For allow assertions, an execution satisfies the condition
+    - {b Contradicted}: For forbid assertions, an execution violates the condition
+    - {b Confirmed}: For allow assertions, all executions satisfy the condition
+    - {b Refuted}: For forbid assertions, all executions avoid the condition *)
+type assertion_instance =
+  | Witnessed of {
+      exec_id : int;  (** Execution that witnessed the assertion *)
+      detail : assertion_instance_detail;  (** Details of what was witnessed *)
+    }  (** Allow assertion satisfied by this execution *)
+  | Contradicted of {
+      exec_id : int;  (** Execution that contradicted the assertion *)
+      detail : assertion_instance_detail;  (** Details of the contradiction *)
+    }  (** Forbid assertion violated by this execution *)
+  | Confirmed  (** Assertion holds for all executions (for allow) *)
+  | Refuted  (** Assertion avoided by all executions (for forbid) *)
+
 (** Information about a checked execution.
 
     Records whether an execution satisfies assertions and any undefined behavior
@@ -308,6 +353,8 @@ type mordor_ctx = {
       (** Whether undefined behavior was detected *)
   mutable checked_executions : execution_info list option;
       (** Detailed execution checking results *)
+  mutable assertion_instances : assertion_instance list option;
+      (** Detailed assertion instance tracking *)
   (* Episodicity results *)
   mutable is_episodic : (int, bool) Hashtbl.t option;
       (** Per-loop episodicity determination *)
@@ -346,6 +393,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     valid = None;
     undefined_behaviour = None;
     checked_executions = None;
+    assertion_instances = None;
     is_episodic = None;
     episodicity_results = None;
   }
