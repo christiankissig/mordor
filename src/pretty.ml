@@ -1,6 +1,10 @@
 open Format
 open Uset
 
+(** Pretty-print an integer *)
+let pp_int fmt i = Format.fprintf fmt "%d" i
+
+(** Pretty-print a Z.t integer *)
 let pp_z fmt z = Format.fprintf fmt "%s" (Z.to_string z)
 
 let pp_int_uset fmt uset =
@@ -39,3 +43,27 @@ let pp_int_list fmt lst =
   fprintf fmt "[@[%a@]]"
     (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp_print_int)
     lst
+
+(** Pretty-print a ternary relation (set of triples) *)
+let pp_ternary_relation pp_a pp_b pp_c fmt rel =
+  Format.fprintf fmt "@[<hv 2>{";
+  let first = ref true in
+    USet.iter
+      (fun (a, b, c) ->
+        if !first then first := false else Format.fprintf fmt ";@,";
+        Format.fprintf fmt "(@[%a,@ %a,@ %a@])" pp_a a pp_b b pp_c c
+      )
+      rel;
+    Format.fprintf fmt "}@]"
+
+(** Pretty-print a ternary relation with compact notation *)
+let pp_ternary_relation_compact pp_a pp_b pp_c fmt rel =
+  Format.fprintf fmt "{@[<hov 2>";
+  let first = ref true in
+    USet.iter
+      (fun (a, b, c) ->
+        if !first then first := false else Format.fprintf fmt ";@ ";
+        Format.fprintf fmt "(%a,%a,%a)" pp_a a pp_b b pp_c c
+      )
+      rel;
+    Format.fprintf fmt "@]}"

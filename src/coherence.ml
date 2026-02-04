@@ -111,13 +111,13 @@ module IMM : MEMORY_MODEL = struct
     let landmark = Landmark.register "IMM.build_cache" in
       Landmark.enter landmark;
 
-      let ({ e; rf; ex_rmw; _ } : symbolic_execution) = execution in
+      let ({ e; rf; rmw; _ } : symbolic_execution) = execution in
       let ({ po; restrict; _ } : symbolic_event_structure) = structure in
       let _E = e in
 
       let rf = USet.clone rf in
       let po = USet.clone po in
-      let rmw = USet.clone ex_rmw in
+      let rmw = USet.clone rmw in
 
       let thread_internal_restriction x = USet.intersection x po in
       let thread_external_restriction x = USet.set_minus x po in
@@ -458,12 +458,12 @@ end) : MEMORY_MODEL = struct
     let landmark = Landmark.register "RC11.build_cache" in
       Landmark.enter landmark;
 
-      let ({ e; rf; ex_rmw; _ } : symbolic_execution) = execution in
+      let ({ e; rf; rmw; _ } : symbolic_execution) = execution in
       let ({ po; _ } : symbolic_event_structure) = structure in
       let _E = e in
 
       let rf = USet.clone rf in
-      let rmw = USet.clone ex_rmw in
+      let rmw = USet.clone rmw in
       let sb = USet.clone po in
 
       (* rs = [W];[po ∩ loc]?;[W_rlx⁺];(rf;rmw)⁺? *)
@@ -671,10 +671,10 @@ module Undefined : MEMORY_MODEL = struct
   let build_cache (execution : symbolic_execution)
       (structure : symbolic_event_structure) (events : (int, event) Hashtbl.t)
       (loc_restrict : (int * int) uset -> (int * int) uset) : cache =
-    if USet.size execution.ex_rmw > 0 then
+    if USet.size execution.rmw > 0 then
       {
         rfi = Some (URelation.inverse execution.rf);
-        rmw = Some execution.ex_rmw;
+        rmw = Some execution.rmw;
       }
     else { rfi = None; rmw = None }
 

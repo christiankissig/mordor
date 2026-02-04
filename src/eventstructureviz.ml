@@ -30,17 +30,16 @@ module EventStructureViz = struct
       Represents a node in the event structure graph. Each vertex encapsulates
       an event along with its constraints and optional source code location. *)
   module Vertex = struct
-    (** Type representing a vertex in the event structure graph.
+    (** Type representing a vertex in the event structure graph.*)
 
-        @field id Unique identifier for the event
-        @field event The event data structure containing operation details
-        @field constraints List of symbolic constraints restricting this event
-        @field source_span Optional source code location for debugging *)
     type t = {
-      id : int;
+      id : int;  (** id Unique identifier for the event *)
       event : event;
+          (** event The event data structure containing operation details *)
       constraints : expr list;
+          (** constraints List of symbolic constraints restricting this event *)
       source_span : source_span option; [@default None]
+          (** source_span Optional source code location for debugging *)
     }
 
     (** [compare v1 v2] compares two vertices by their ID.
@@ -109,74 +108,71 @@ module EventStructureViz = struct
 
       This structure contains all information needed to render a node in a
       web-based visualization, including the event data, source location, and
-      constraint information.
+      constraint information.*)
 
-      @field id Unique event identifier
-      @field type_ Event type (e.g., "Read", "Write", "Fence")
-      @field label Event label number
-      @field isRoot Whether this is the root/initial event
-      @field location Optional memory location string
-      @field value Optional read/write value
-      @field constraints List of constraint strings
-      @field source_start_line Optional starting line in source code
-      @field source_start_col Optional starting column in source code
-      @field source_end_line Optional ending line in source code
-      @field source_end_col Optional ending column in source code *)
   type json_node = {
-    id : int;
+    id : int;  (** id Unique event identifier *)
     type_ : string; [@key "type"]
-    label : int;
-    isRoot : bool;
+        (** type_ Event type (e.g., "Read", "Write", "Fence") *)
+    label : int;  (** label Event label number *)
+    isRoot : bool;  (** isRoot Whether this is the root/initial event *)
     location : string option; [@default None]
+        (** location Optional memory location string *)
     value : string option; [@default None]
+        (** value Optional read/write value *)
     constraints : string list; [@default []]
+        (** constraints List of constraint strings *)
     source_start_line : int option; [@default None]
+        (** source_start_line Optional starting line in source code *)
     source_start_col : int option; [@default None]
+        (** source_start_col Optional starting column in source code *)
     source_end_line : int option; [@default None]
+        (** source_end_line Optional ending line in source code *)
     source_end_col : int option; [@default None]
+        (** source_end_col Optional ending column in source code *)
   }
   [@@deriving yojson]
 
-  (** JSON representation of a graph edge.
+  (** JSON representation of a graph edge. *)
 
-      @field source Source vertex ID
-      @field target Target vertex ID
-      @field type_ Edge type string (e.g., "po", "rf", "dp") *)
-  type json_edge = { source : int; target : int; type_ : string [@key "type"] }
-  [@@deriving yojson]
-
-  (** JSON representation of a complete graph.
-
-      @field nodes List of all nodes in the graph
-      @field edges List of all edges in the graph *)
-  type json_graph = { nodes : json_node list; edges : json_edge list }
-  [@@deriving yojson]
-
-  (** Message wrapper for streaming graph data via web server.
-
-      @field type_ Message type identifier
-      @field graph The graph data
-      @field index Optional execution index number
-      @field preds Optional predicate string
-      @field is_valid Optional validity status
-      @field undefined_behaviour Optional undefined behaviour information *)
-  type graph_message = {
+  type json_edge = {
+    source : int;  (** source Source vertex ID *)
+    target : int;  (** target Target vertex ID *)
     type_ : string; [@key "type"]
-    graph : json_graph;
-    index : int option; [@default None]
-    preds : string option; [@default None]
-    is_valid : bool option; [@default None]
-    undefined_behaviour : Yojson.Safe.t option; [@default None]
+        (** type_ Edge type string (e.g., "po", "rf", "dp") *)
   }
   [@@deriving yojson]
 
-  (** Completion message sent after processing all executions.
+  (** JSON representation of a complete graph. *)
+  type json_graph = {
+    nodes : json_node list;  (** nodes List of all nodes in the graph *)
+    edges : json_edge list;  (** edges List of all edges in the graph *)
+  }
+  [@@deriving yojson]
 
-      @field type_ Message type (should be "complete")
-      @field total_executions Total number of executions processed *)
+  (** Message wrapper for streaming graph data via web server. *)
+
+  type graph_message = {
+    type_ : string; [@key "type"]  (** type_ Message type identifier *)
+    graph : json_graph;  (** graph The graph data *)
+    index : int option; [@default None]
+        (** index Optional execution index number *)
+    preds : string option; [@default None]
+        (** preds Optional predicate string *)
+    is_valid : bool option; [@default None]
+        (** is_valid Optional validity status *)
+    undefined_behaviour : Yojson.Safe.t option; [@default None]
+        (** undefined_behaviour Optional undefined behaviour information *)
+  }
+  [@@deriving yojson]
+
+  (** Completion message sent after processing all executions. *)
+
   type complete_message = {
     type_ : string; [@key "type"]
+        (** type_ Message type (should be "complete") *)
     total_executions : int;
+        (** total_executions Total number of executions processed *)
   }
   [@@deriving yojson]
 
@@ -326,7 +322,8 @@ module EventStructureViz = struct
             (* Process each relation type with transitive reduction *)
             process_relation `DP (URelation.transitive_reduction exec.dp);
             process_relation `PPO (URelation.transitive_reduction exec.ppo);
-            process_relation `RF (URelation.transitive_reduction exec.rf)
+            process_relation `RF (URelation.transitive_reduction exec.rf);
+            process_relation `RMW (URelation.transitive_reduction exec.rmw)
           )
           execs;
 
@@ -344,6 +341,7 @@ module EventStructureViz = struct
                     | `DP -> (src, dst, DP preds_str)
                     | `PPO -> (src, dst, PPO preds_str)
                     | `RF -> (src, dst, RF preds_str)
+                    | `RMW -> (src, dst, RMW)
                   in
                     result_edges := USet.add !result_edges edge
                 )
@@ -389,7 +387,6 @@ module EventStructureViz = struct
       add_edges_from_relation g vertex_map po_reduced PO;
 
       (* Add other structural edges *)
-      add_edges_from_relation g vertex_map structure.rmw RMW;
       add_edges_from_relation g vertex_map structure.lo LO;
       add_edges_from_relation g vertex_map structure.fj FJ;
 
@@ -500,6 +497,7 @@ module EventStructureViz = struct
       add_dep_edges exec.dp (fun p -> DP p);
       add_dep_edges exec.ppo (fun p -> PPO p);
       add_dep_edges exec.rf (fun p -> RF p);
+      add_dep_edges exec.rmw (fun _ -> RMW);
 
       g
 

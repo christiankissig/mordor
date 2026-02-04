@@ -147,11 +147,10 @@ let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr
     @param er The label of the read event.
     @param ew The label of the write event.
     @return A new event structure with the RMW edge added. *)
-let add_rmw_edge (structure : symbolic_event_structure) (er : int) (ew : int) =
-  {
-    structure with
-    rmw = USet.add (structure : symbolic_event_structure).rmw (er, ew);
-  }
+let add_rmw_edge (structure : symbolic_event_structure) (er : int) (cond : expr)
+    (ew : int) =
+  USet.add structure.rmw (er, cond, ew) |> ignore;
+  structure
 
 (** {1 Statement Interpretation} *)
 
@@ -370,7 +369,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                             )
                             phi defacto
                          )
-                         event_load'.label event_store'.label
+                         event_load'.label (EBoolean true) event_store'.label
                       )
           | Cas { register; address; expected; desired; load_mode; assign_mode }
             ->
@@ -435,7 +434,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                                  (SymbolicEventStructure.dot event_store'
                                     cont_succ phi_succ defacto
                                  )
-                                 event_load'.label event_store'.label
+                                 event_load'.label cond_expr event_store'.label
                               )
                               cont_fail
                            )

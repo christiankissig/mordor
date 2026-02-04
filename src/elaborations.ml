@@ -146,7 +146,10 @@ module ValueAssignment = struct
       @param just The justification to elaborate.
       @return Promise of justifications with assigned values. *)
   let elab elab_ctx just =
-    let fwd_ctx = ForwardingContext.create ~fwd:just.fwd ~we:just.we () in
+    let structure = elab_ctx.structure in
+    let fwd_ctx =
+      ForwardingContext.create ~structure ~fwd:just.fwd ~we:just.we ()
+    in
     let defacto =
       Hashtbl.find_opt elab_ctx.structure.defacto just.w.label
       |> Option.value ~default:[]
@@ -286,7 +289,8 @@ module Forwarding = struct
         Lwt_list.map_p
           (fun p ->
             let fwd_ctx =
-              ForwardingContext.create ~fwd:just.fwd ~we:just.we ()
+              ForwardingContext.create ~structure:elab_ctx.structure
+                ~fwd:just.fwd ~we:just.we ()
             in
               let* ppo = ForwardingContext.ppo fwd_ctx p in
                 let* ppo_loc = ForwardingContext.ppo_loc fwd_ctx p in
@@ -345,7 +349,8 @@ module Forwarding = struct
                         Lwt.return_true
                       else
                         let con =
-                          ForwardingContext.create ~fwd:new_fwd ~we:new_we ()
+                          ForwardingContext.create ~structure:elab_ctx.structure
+                            ~fwd:new_fwd ~we:new_we ()
                         in
                           ForwardingContext.check con
                     in
@@ -381,8 +386,9 @@ module Forwarding = struct
                         List.map
                           (fun (edge, new_fwd, new_we) ->
                             let con =
-                              ForwardingContext.create ~fwd:new_fwd ~we:new_we
-                                ()
+                              ForwardingContext.create
+                                ~structure:elab_ctx.structure ~fwd:new_fwd
+                                ~we:new_we ()
                             in
                               ForwardingContext.remap_just con just
                           )
@@ -393,8 +399,9 @@ module Forwarding = struct
                         List.map
                           (fun (edge, new_fwd, new_we) ->
                             let con =
-                              ForwardingContext.create ~fwd:new_fwd ~we:new_we
-                                ()
+                              ForwardingContext.create
+                                ~structure:elab_ctx.structure ~fwd:new_fwd
+                                ~we:new_we ()
                             in
                               ForwardingContext.remap_just con just
                           )
@@ -895,10 +902,12 @@ end = struct
 
           (* Create forwarding contexts *)
           let con_1 =
-            ForwardingContext.create ~fwd:just_1.fwd ~we:just_1.we ()
+            ForwardingContext.create ~structure:elab_ctx.structure
+              ~fwd:just_1.fwd ~we:just_1.we ()
           in
           let con_2 =
-            ForwardingContext.create ~fwd:just_2.fwd ~we:just_2.we ()
+            ForwardingContext.create ~structure:elab_ctx.structure
+              ~fwd:just_2.fwd ~we:just_2.we ()
           in
 
           (* Compute ppo for both justifications *)

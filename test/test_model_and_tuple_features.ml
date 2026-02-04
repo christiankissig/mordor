@@ -81,7 +81,7 @@ module TestSetMembership = struct
         id = 0;
         e = USet.create ();
         rf = USet.create ();
-        ex_rmw = USet.create ();
+        rmw = USet.create ();
         dp = USet.create ();
         ppo;
         ex_p = [];

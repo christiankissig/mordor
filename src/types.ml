@@ -148,6 +148,9 @@ let pp_structure_p fmt p =
 (** Pretty printer for origin hashtable *)
 let pp_origin fmt origin = pp_hashtbl pp_print_string pp_print_int fmt origin
 
+(** Pretty printer for read-modify-write relation *)
+let pp_rmw = pp_ternary_relation pp_int pp_expr pp_int
+
 (** Pretty printer for loop_indices hashtable *)
 let pp_loop_indices fmt loop_indices =
   pp_hashtbl pp_print_int pp_int_list fmt loop_indices
@@ -164,13 +167,11 @@ type symbolic_event_structure = {
   po : (int * int) uset; [@printer pp_int_urel] (* Program order relation *)
   po_iter : (int * int) uset; [@printer pp_int_urel]
       (* Program order across loop iterations *)
-  rmw : (int * int) uset; [@printer pp_int_urel] (* Read-modify-write pairs *)
+  rmw : (int * expr * int) uset; [@printer pp_rmw] (* Read-modify-write pairs *)
   lo : (int * int) uset; [@printer pp_int_urel] (* Lock order *)
   restrict : (int, expr list) Hashtbl.t; [@opaque] (* Event restrictions *)
   defacto : (int, expr list) Hashtbl.t; [@opaque]
       (* De-facto constraints per event *)
-  cas_groups : (int, int list * expr list uset) Hashtbl.t; [@opaque]
-      (* CAS groupings *)
   fj : (int * int) uset; [@printer pp_int_urel] (* Fork-join edges *)
   p : (int, (string, expr) Hashtbl.t) Hashtbl.t; [@printer pp_structure_p]
       (* Register state per event
@@ -236,7 +237,7 @@ type symbolic_execution = {
   rf : (int * int) uset; [@printer pp_int_urel]
   dp : (int * int) uset; [@printer pp_int_urel]
   ppo : (int * int) uset; [@printer pp_int_urel]
-  ex_rmw : (int * int) uset; [@printer pp_int_urel]
+  rmw : (int * int) uset; [@printer pp_int_urel]
   ex_p : expr list; [@printer pp_expr_list]
   fix_rf_map : (string, expr) Hashtbl.t; [@printer pp_fix_rf_map]
   pointer_map : (int, value_type) Hashtbl.t option; [@opaque]

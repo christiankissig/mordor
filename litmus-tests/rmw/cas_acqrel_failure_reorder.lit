@@ -1,0 +1,32 @@
+name = "CAS-AcqRel-Failure-Reorder"
+
+%%
+
+// This test checks whether memory operations can reorder over a failed 
+// acquire-release CAS operation. 
+//
+// Thread 0: Performs a store to x, then attempts a CAS on flag that will 
+//           fail (expects 1 but flag is 0), then stores to y.
+//
+// Thread 1: Reads y, then reads x.
+//
+// If the failed CAS does not prevent reordering, the stores to x and y 
+// in Thread 0 can be reordered, allowing Thread 1 to observe y=1 but x=0.
+// This outcome should be ALLOWED if failed CAS with acq/rel doesn't 
+// impose ordering constraints.
+
+x := 0;
+{
+  x :rlx= 1;
+  rexp := CAS(acquire, release, flag, 1, 2);
+  y :rlx= 1
+}
+|||
+{
+  ry := y;
+  rx := x
+}
+
+%%
+
+allow (ry = 1 && rx = 0)

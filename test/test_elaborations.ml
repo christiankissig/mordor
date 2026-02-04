@@ -632,8 +632,8 @@ module LiftingTests = struct
     let just_2 = TestData.create_justification events test_case.just_2_spec in
     let ppo_1 = USet.of_list [] in
     let ppo_2 = USet.of_list [] in
-    let con_1 = ForwardingContext.create () in
-    let con_2 = ForwardingContext.create () in
+    let con_1 = ForwardingContext.create ~structure () in
+    let con_2 = ForwardingContext.create ~structure () in
 
     Lwt_main.run
       (let* relabelings =

@@ -96,11 +96,10 @@ type symbolic_event_structure = {
   events : (int, event) Hashtbl.t;
   po : (int * int) uset;
   po_iter : (int * int) uset;
-  rmw : (int * int) uset;
+  rmw : (int * expr * int) uset;
   lo : (int * int) uset;
   restrict : (int, expr list) Hashtbl.t;
   defacto : (int, expr list) Hashtbl.t;
-  cas_groups : (int, int list * expr list uset) Hashtbl.t;
   fj : (int * int) uset;
   p : (int, (string, expr) Hashtbl.t) Hashtbl.t;
   constraints : expr list;
@@ -154,7 +153,7 @@ type symbolic_execution = {
   rf : (int * int) uset; (* Reads-from relation *)
   dp : (int * int) uset; (* Dependencies *)
   ppo : (int * int) uset; (* Preserved program order *)
-  ex_rmw : (int * int) uset; (* RMW pairs *)
+  rmw : (int * int) uset; (* RMW pairs *)
   ex_p : expr list; (* Predicates *)
   fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer

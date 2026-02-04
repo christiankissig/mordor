@@ -118,7 +118,7 @@ end = struct
     | ".po" -> structure.po
     | ".rf" -> execution.rf
     | ".dp" -> execution.dp
-    | ".rmw" -> execution.ex_rmw
+    | ".rmw" -> execution.rmw
     | _ ->
         Logs.warn (fun m ->
             m "Unknown or unsupported relation: %s, returning empty" name
@@ -703,11 +703,16 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
     let*? () =
       (ReadFromValidation.rf_respects_ppo rf ppo, "RF edges do not respect PPO")
     in
-    (* Filter RMW pairs *)
-    let rmw_filtered =
-      (* TODO does this make sense if RMW pair lies out side of execution? *)
-      USet.filter (fun (f, t) -> USet.mem e f || USet.mem e t) structure.rmw
+
+    (* Filter RMW relation to execution events and predicates only *)
+    let* rmw_filtered =
+      USet.async_filter
+        (fun (er, expr, ew) ->
+          Solver.exeq ~state:p_combined expr (EBoolean true)
+        )
+        structure.rmw
     in
+    let rmw = USet.map (fun (er, _, ew) -> (er, ew)) rmw_filtered in
 
     (* Check 1.1: Various consistency checks *)
     let delta =
@@ -875,7 +880,7 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
                   dp;
                   ppo;
                   rf;
-                  rmw = rmw_filtered;
+                  rmw;
                   pp = execution_predicates;
                   conds = [ EBoolean true ];
                 }
@@ -1148,7 +1153,7 @@ end = struct
         Lwt_list.map_s
           (fun just ->
             let just_con =
-              ForwardingContext.create ~fwd:just.fwd ~we:just.we ()
+              ForwardingContext.create ~structure ~fwd:just.fwd ~we:just.we ()
             in
               let* ppo_j = ForwardingContext.ppo just_con just.p in
 
@@ -1276,7 +1281,7 @@ end = struct
       );
 
       (* Create forwarding context *)
-      let con = ForwardingContext.create ~fwd ~we () in
+      let con = ForwardingContext.create ~structure ~fwd ~we () in
 
       (* Combine predicates *)
       let p_combined =
@@ -1463,7 +1468,7 @@ let generate_executions ?(include_rf = true)
     Landmark.enter landmark;
 
     (* let* _ = Lwt.return_unit in *)
-    Logs.debug(fun m ->
+    Logs.debug (fun m ->
         m "Generating executions for structure with %d events:\n%s"
           (USet.size structure.e)
           (Hashtbl.fold
@@ -1511,7 +1516,7 @@ let generate_executions ?(include_rf = true)
               (fun acc j -> USet.inplace_union acc j.we)
               (USet.create ()) just_combo
           in
-          let con = ForwardingContext.create ~fwd ~we () in
+          let con = ForwardingContext.create ~structure ~fwd ~we () in
           let j_remapped =
             List.map (fun j -> ForwardingContext.remap_just con j) just_combo
           in
@@ -1524,7 +1529,7 @@ let generate_executions ?(include_rf = true)
             Freeze.freeze structure path j_remapped init_ppo statex ~elided
               ~constraints ~include_rf
           in
-            Logs.debug(fun m ->
+            Logs.debug (fun m ->
                 m
                   "Computed %d freeze results with %d justifications over path \
                    with %d events"
@@ -1618,7 +1623,7 @@ let generate_executions ?(include_rf = true)
                   rf = freeze_res.rf;
                   dp = freeze_res.dp;
                   ppo = freeze_res.ppo;
-                  ex_rmw = freeze_res.rmw;
+                  rmw = freeze_res.rmw;
                   ex_p = freeze_res.pp;
                   fix_rf_map = final_map;
                   pointer_map = None;
@@ -1723,13 +1728,13 @@ let generate_executions ?(include_rf = true)
         |> Lwt_stream.to_list
       in
 
-      Logs.debug(fun m ->
+      Logs.debug (fun m ->
           m "Generated %d freeze results before minimization"
             (List.length freeze_results)
       );
 
       let minimal_freeze_results = keep_minimal_freeze_results freeze_results in
-        Logs.debug(fun m ->
+        Logs.debug (fun m ->
             m "Minimized to %d freeze results"
               (List.length minimal_freeze_results)
         );

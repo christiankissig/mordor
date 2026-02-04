@@ -750,8 +750,8 @@ let main () =
     (* Load test programs based on run mode *)
     let tests = FileIO.load_tests config.Config.run_mode in
 
-      (* Execute the command *)
-      Pipeline.execute config tests
+    (* Execute the command *)
+    Pipeline.execute config tests
 
 (** Program entry point.
 

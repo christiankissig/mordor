@@ -430,6 +430,13 @@ let check_condition4_iteration_ordering cache (loop_id : int) : condition_result
         let next_iter = iter + 1 in
           match Hashtbl.find_opt events_by_iteration next_iter with
           | Some events_next ->
+              Logs.debug (fun m ->
+                  m
+                    "  Checking ordering between iterations %d and %d: %d x %d \
+                     event pairs"
+                    iter next_iter (USet.size events_curr)
+                    (USet.size events_next)
+              );
               USet.iter
                 (fun e_curr ->
                   USet.iter
@@ -574,7 +581,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
 
                         (* Log violations for each condition *)
                         if not result.condition1.satisfied then
-                          Logs.info(fun m ->
+                          Logs.info (fun m ->
                               m "  Condition 1 violations: %s"
                                 (String.concat "; "
                                    (List.map show_episodicity_violation
@@ -583,7 +590,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                                 )
                           );
                         if not result.condition2.satisfied then
-                          Logs.info(fun m ->
+                          Logs.info (fun m ->
                               m "  Condition 2 violations: %s"
                                 (String.concat "; "
                                    (List.map show_episodicity_violation
@@ -592,7 +599,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                                 )
                           );
                         if not result.condition3.satisfied then
-                          Logs.info(fun m ->
+                          Logs.info (fun m ->
                               m "  Condition 3 violations: %s"
                                 (String.concat "; "
                                    (List.map show_episodicity_violation
@@ -601,7 +608,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                                 )
                           );
                         if not result.condition4.satisfied then
-                          Logs.info(fun m ->
+                          Logs.info (fun m ->
                               m "  Condition 4 violations: %s"
                                 (String.concat "; "
                                    (List.map show_episodicity_violation
@@ -613,7 +620,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                           result :: !loop_episodicity_results;
                         Lwt.return_unit
                     | None ->
-                        Logs.info(fun m ->
+                        Logs.info (fun m ->
                             m "Loop %d: Could not analyze" loop_id
                         );
                         Hashtbl.add is_episodic_table loop_id false;

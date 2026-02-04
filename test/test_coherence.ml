@@ -64,7 +64,7 @@ let make_empty_execution () =
     id = 0;
     e = USet.create ();
     rf = USet.create ();
-    ex_rmw = USet.create ();
+    rmw = USet.create ();
     dp = USet.create ();
     ppo = USet.create ();
     ex_p = [];
@@ -216,7 +216,7 @@ let test_imm_coherent_simple () =
       id = 0;
       e;
       rf;
-      ex_rmw = USet.create ();
+      rmw = USet.create ();
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];
@@ -253,7 +253,7 @@ let test_rc11_coherent_simple () =
       id = 0;
       e;
       rf;
-      ex_rmw = USet.create ();
+      rmw = USet.create ();
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];
@@ -290,7 +290,7 @@ let test_rc11c_coherent_simple () =
       id = 0;
       e;
       rf;
-      ex_rmw = USet.create ();
+      rmw = USet.create ();
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];
@@ -333,7 +333,7 @@ let test_imm_coherent_rmw () =
       id = 0;
       e;
       rf;
-      ex_rmw = rmw;
+      rmw = rmw;
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];
@@ -366,7 +366,7 @@ let test_cache_types () =
       id = 0;
       e;
       rf;
-      ex_rmw = USet.create ();
+      rmw = USet.create ();
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];

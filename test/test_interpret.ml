@@ -143,7 +143,7 @@ let test_plus_with_relations () =
       (SymbolicEventStructure.create ()) with
       e = USet.of_list [ 1 ];
       po = USet.of_list [ (1, 2) ];
-      rmw = USet.of_list [ (1, 3) ];
+      rmw = USet.of_list [ (1, EBoolean true, 3) ];
     }
   in
   let s2 =
@@ -151,7 +151,7 @@ let test_plus_with_relations () =
       (SymbolicEventStructure.create ()) with
       e = USet.of_list [ 4 ];
       po = USet.of_list [ (4, 5) ];
-      rmw = USet.of_list [ (4, 6) ];
+      rmw = USet.of_list [ (4, EBoolean true, 6) ];
     }
   in
   let result = SymbolicEventStructure.plus s1 s2 in

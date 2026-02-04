@@ -150,7 +150,9 @@ module DataProviders = struct
   let empty_structure_data = [ (USet.create (), USet.create ()) ]
 
   let program_order_data = [ ([ 1; 2; 3 ], [ (1, 2); (2, 3) ]) ]
-  let rmw_pairs_data = [ ([ 1; 2; 3; 4 ], [ (1, 2); (3, 4) ]) ]
+
+  let rmw_pairs_data =
+    [ ([ 1; 2; 3; 4 ], [ (1, EBoolean true, 2); (3, EBoolean true, 4) ]) ]
 
   (** Data for TestCoherence *)
   let semicolon_composition_data =

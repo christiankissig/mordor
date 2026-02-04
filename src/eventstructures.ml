@@ -16,7 +16,6 @@ module SymbolicEventStructure = struct
       lo = USet.create ();
       restrict = Hashtbl.create 16;
       defacto = Hashtbl.create 16;
-      cas_groups = Hashtbl.create 16;
       fj = USet.create ();
       p = Hashtbl.create 16;
       constraints = [];
@@ -53,7 +52,6 @@ module SymbolicEventStructure = struct
       lo = structure.lo;
       restrict = structure.restrict;
       defacto = structure.defacto;
-      cas_groups = structure.cas_groups;
       fj = structure.fj;
       p = structure.p;
       constraints = structure.constraints;
@@ -123,7 +121,6 @@ module SymbolicEventStructure = struct
           lo = USet.union a.lo b.lo;
           restrict;
           defacto;
-          cas_groups = a.cas_groups;
           fj = USet.union a.fj b.fj;
           p = Hashtbl.create 0;
           (* TODO value not needed here *)
@@ -162,7 +159,6 @@ module SymbolicEventStructure = struct
           lo = USet.union a.lo b.lo;
           restrict;
           defacto;
-          cas_groups = a.cas_groups;
           fj = USet.union a.fj b.fj;
           p = Hashtbl.create 0;
           (* TODO value not needed here *)

@@ -51,9 +51,6 @@ module State = struct
 
   (** Volatile PPO component. *)
   let ppo_volA : (int * int) uset ref = ref (USet.create ())
-
-  (** Read-modify-write PPO component. *)
-  let ppo_rmwA : (int * int) uset ref = ref (USet.create ())
 end
 
 (** {1 Context Classification} *)
@@ -231,7 +228,6 @@ let update_po po =
   State.ppo_loc_base := USet.intersection !State.ppo_loc_baseA po;
   State.ppo_sync := USet.intersection !State.ppo_syncA po;
   State.ppo_base := USet.union !State.ppo_volA !State.ppo_syncA;
-  State.ppo_base := USet.inplace_union !State.ppo_base !State.ppo_rmwA;
   State.ppo_base := USet.inplace_union !State.ppo_base !State.ppo_loc_eqA;
   State.ppo_base := USet.intersection !State.ppo_base po;
   FwdCache.clear ()
@@ -265,138 +261,117 @@ type init_params = {
     @param params Initialization parameters.
     @return Promise that completes when initialization is done. *)
 let init params =
-  let* _ = Lwt.return_unit in
+  let landmark = Landmark.register "ForwardingContext.init" in
+    Landmark.enter landmark;
+    State.e := params.init_structure.e;
+    let rmw = params.init_structure.rmw in
+      State.structure := params.init_structure;
+      State.val_fn := params.init_val;
 
-  State.e := params.init_structure.e;
-  let rmw = params.init_structure.rmw in
-    State.structure := params.init_structure;
-    State.val_fn := params.init_val;
+      ignore (USet.clear goodcon);
+      ignore (USet.clear badcon);
 
-    ignore (USet.clear goodcon);
-    ignore (USet.clear badcon);
+      let po = params.init_structure.po in
 
-    let po = params.init_structure.po in
-
-    (* Filter events by mode *)
-    let filter_by_mode events mode_fn =
-      USet.filter
-        (fun e ->
-          try
-            let ev = Hashtbl.find !State.structure.events e in
-              mode_fn ev
-          with Not_found ->
-            (* Event ID in E but not in events hashtable - skip it *)
-            false
-        )
-        events
-    in
-
-    (* Event type filters *)
-    let is_read ev = ev.typ = Read in
-    let is_write ev = ev.typ = Write in
-    let is_fence ev = ev.typ = Fence in
-    let is_malloc ev = ev.typ = Malloc in
-    let is_free ev = ev.typ = Free in
-
-    let r = filter_by_mode !State.e is_read in
-    let w = filter_by_mode !State.e is_write in
-    let f = filter_by_mode !State.e is_fence in
-
-    let e_vol =
-      USet.filter
-        (fun e ->
-          try (Hashtbl.find !State.structure.events e).volatile
-          with Not_found -> false
-        )
-        !State.e
-    in
-
-    let po_nf =
-      USet.filter
-        (fun (from, to_) ->
-          try
-            let from_ev = Hashtbl.find !State.structure.events from in
-            let to_ev = Hashtbl.find !State.structure.events to_ in
-              from_ev.typ <> Fence && to_ev.typ <> Fence
-          with Not_found -> false
-        )
-        po
-    in
-
-    (* Mode filters *)
-    let filter_order events mode =
-      USet.filter
-        (fun e ->
-          let ev = Hashtbl.find !State.structure.events e in
-            match ev.typ with
-            | Read -> ev.rmod = mode
-            | Write -> ev.wmod = mode
-            | Fence -> ev.fmod = mode
-            | _ -> false
-        )
-        events
-    in
-
-    let w_rel = USet.union (filter_order w Release) (filter_order w SC) in
-    let r_acq = USet.union (filter_order r Acquire) (filter_order r SC) in
-    let f_rel = filter_order f Release in
-    let f_acq = filter_order f Acquire in
-    let f_sc = filter_order f SC in
-
-    (* Volatile ppo *)
-    State.ppo_volA := USet.intersection (URelation.cross e_vol e_vol) po_nf;
-
-    (* Synchronization ppo *)
-    let e_squared = URelation.cross !State.e !State.e in
-    let semicolon r1 r2 =
-      let result =
-        USet.create ()
-        (*16*)
-      in
-        USet.iter
-          (fun (a, b) ->
-            USet.iter
-              (fun (c, d) -> if b = c then USet.add result (a, d) |> ignore)
-              r2
+      (* Filter events by mode *)
+      let filter_by_mode events mode_fn =
+        USet.filter
+          (fun e ->
+            try
+              let ev = Hashtbl.find !State.structure.events e in
+                mode_fn ev
+            with Not_found ->
+              (* Event ID in E but not in events hashtable - skip it *)
+              false
           )
-          r1;
-        result
-    in
+          events
+      in
 
-    let w_rel_sq = URelation.cross w_rel w_rel in
-    let r_acq_sq = URelation.cross r_acq r_acq in
-    let f_sc_sq = URelation.cross f_sc f_sc in
-    let f_rel_sq = URelation.cross f_rel f_rel in
-    let f_acq_sq = URelation.cross f_acq f_acq in
-    let e_minus_r = USet.set_minus !State.e r in
-    let e_minus_w = USet.set_minus !State.e w in
+      (* Event type filters *)
+      let is_read ev = ev.typ = Read in
+      let is_write ev = ev.typ = Write in
+      let is_fence ev = ev.typ = Fence in
+      let is_malloc ev = ev.typ = Malloc in
+      let is_free ev = ev.typ = Free in
 
-    State.ppo_syncA := semicolon e_squared w_rel_sq;
-    State.ppo_syncA :=
-      USet.inplace_union !State.ppo_syncA (semicolon r_acq_sq e_squared);
-    State.ppo_syncA :=
-      USet.inplace_union !State.ppo_syncA
-        (semicolon e_squared (semicolon f_sc_sq e_squared));
-    State.ppo_syncA :=
-      USet.inplace_union !State.ppo_syncA
-        (semicolon e_squared
-           (semicolon f_rel_sq (URelation.cross e_minus_r e_minus_r))
-        );
-    State.ppo_syncA :=
-      USet.inplace_union !State.ppo_syncA
-        (semicolon
-           (URelation.cross e_minus_w e_minus_w)
-           (semicolon f_acq_sq e_squared)
-        );
-    State.ppo_syncA := USet.intersection !State.ppo_syncA po_nf;
+      let r = filter_by_mode !State.e is_read in
+      let w = filter_by_mode !State.e is_write in
+      let f = filter_by_mode !State.e is_fence in
 
-    (* RMW ppo *)
-    (* TODO fix RMW *)
-    let rmw_inv = URelation.inverse rmw in
-      State.ppo_rmwA :=
-        USet.union
-          (semicolon !State.ppo_syncA rmw_inv)
-          (semicolon rmw_inv !State.ppo_syncA);
+      let e_vol =
+        USet.filter
+          (fun e ->
+            try (Hashtbl.find !State.structure.events e).volatile
+            with Not_found -> false
+          )
+          !State.e
+      in
+
+      let po_nf =
+        USet.filter
+          (fun (from, to_) ->
+            try
+              let from_ev = Hashtbl.find !State.structure.events from in
+              let to_ev = Hashtbl.find !State.structure.events to_ in
+                from_ev.typ <> Fence && to_ev.typ <> Fence
+            with Not_found -> false
+          )
+          po
+      in
+
+      (* Mode filters *)
+      let filter_order events mode =
+        USet.filter
+          (fun e ->
+            let ev = Hashtbl.find !State.structure.events e in
+              match ev.typ with
+              | Read -> ev.rmod = mode
+              | Write -> ev.wmod = mode
+              | Fence -> ev.fmod = mode
+              | _ -> false
+          )
+          events
+      in
+
+      let w_rel = USet.union (filter_order w Release) (filter_order w SC) in
+      let r_acq = USet.union (filter_order r Acquire) (filter_order r SC) in
+      let f_rel = filter_order f Release in
+      let f_acq = filter_order f Acquire in
+      let f_sc = filter_order f SC in
+
+      (* Volatile ppo *)
+      State.ppo_volA := USet.intersection (URelation.cross e_vol e_vol) po_nf;
+
+      (* Synchronization ppo *)
+      let e_squared = URelation.cross !State.e !State.e in
+      let semicolon r1 r2 = URelation.compose [ r1; r2 ] in
+
+      let w_rel_sq = URelation.cross w_rel w_rel in
+      let r_acq_sq = URelation.cross r_acq r_acq in
+      let f_sc_sq = URelation.cross f_sc f_sc in
+      let f_rel_sq = URelation.cross f_rel f_rel in
+      let f_acq_sq = URelation.cross f_acq f_acq in
+      let e_minus_r = USet.set_minus !State.e r in
+      let e_minus_w = USet.set_minus !State.e w in
+
+      State.ppo_syncA := semicolon e_squared w_rel_sq;
+      State.ppo_syncA :=
+        USet.inplace_union !State.ppo_syncA (semicolon r_acq_sq e_squared);
+      State.ppo_syncA :=
+        USet.inplace_union !State.ppo_syncA
+          (semicolon e_squared (semicolon f_sc_sq e_squared));
+      State.ppo_syncA :=
+        USet.inplace_union !State.ppo_syncA
+          (semicolon e_squared
+             (semicolon f_rel_sq (URelation.cross e_minus_r e_minus_r))
+          );
+      State.ppo_syncA :=
+        USet.inplace_union !State.ppo_syncA
+          (semicolon
+             (URelation.cross e_minus_w e_minus_w)
+             (semicolon f_acq_sq e_squared)
+          );
+      State.ppo_syncA := USet.intersection !State.ppo_syncA po_nf;
 
       (* Location-based ppo; TODO filter by if in events hash table? *)
       State.ppo_loc_baseA := USet.clone po_nf;
@@ -422,6 +397,7 @@ let init params =
         );
 
         update_po po;
+        Landmark.exit landmark;
         Lwt.return_unit
 
 (** {1 Forwarding Context Type} *)
@@ -433,6 +409,7 @@ module ForwardingContext : sig
       write-exclusion edges (writes being elided by later writes), along with
       derived information like value equalities and remapping tables. *)
   type t = {
+    structure : symbolic_event_structure;  (** Symbolic event structure *)
     fwd : (int * int) uset;
         (** Forwarding edges: [(e1, e2)] means [e2] reads from [e1]. *)
     we : (int * int) uset;
@@ -448,15 +425,21 @@ module ForwardingContext : sig
         (** Event remapping table after applying context. *)
   }
 
-  (** [create ?fwd ?we ()] creates a new forwarding context.
+  (** [create ~structure ?fwd ?we ()] creates a new forwarding context.
 
       Builds derived information including value equalities, constraints, and
       the event remapping table.
 
+      @param structure The symbolic event structure.
       @param fwd Optional forwarding edge set (default: empty).
       @param we Optional write-exclusion edge set (default: empty).
       @return A new forwarding context. *)
-  val create : ?fwd:(int * int) uset -> ?we:(int * int) uset -> unit -> t
+  val create :
+    structure:symbolic_event_structure ->
+    ?fwd:(int * int) uset ->
+    ?we:(int * int) uset ->
+    unit ->
+    t
 
   (** [remap ctx e] remaps a single event through the context.
 
@@ -567,6 +550,7 @@ end = struct
       write-exclusion edges (writes being elided by later writes), along with
       derived information like value equalities and remapping tables. *)
   type t = {
+    structure : symbolic_event_structure;  (** Symbolic event structure *)
     fwd : (int * int) uset;
         (** Forwarding edges: [(e1, e2)] means [e2] reads from [e1]. *)
     we : (int * int) uset;
@@ -590,7 +574,7 @@ end = struct
       @param fwd Optional forwarding edge set (default: empty).
       @param we Optional write-exclusion edge set (default: empty).
       @return A new forwarding context. *)
-  let create ?(fwd = USet.create ()) ?(we = USet.create ()) () =
+  let create ~structure ?(fwd = USet.create ()) ?(we = USet.create ()) () =
     let landmark = Landmark.register "ForwardingContext.create" in
       Landmark.enter landmark;
       let fwdwe = USet.union fwd we in
@@ -621,8 +605,9 @@ end = struct
         URelation.inverse fwdwe |> URelation.to_map |> map_transitive_closure
       in
 
-      Landmark.exit landmark;
-      { fwd; we; valmap; psi; fwdwe; remap_map }
+      let ctx = { structure; fwd; we; valmap; psi; fwdwe; remap_map } in
+        Landmark.exit landmark;
+        ctx
 
   (** {1 Remapping Operations} *)
 
@@ -738,10 +723,37 @@ end = struct
                   )
                   base
             in
-            let u = USet.union !State.ppo_base result in
-            let remapped = remap_rel ctx u in
-              Landmark.exit landmark;
-              Lwt.return (cache_set ctx "ppo" p remapped)
+
+            (* RMW ppo *)
+            let* rmw_filtered =
+              USet.async_filter
+                (fun (er, expr, ew) ->
+                  Solver.exeq ~state:predicates expr (EBoolean true)
+                )
+                ctx.structure.rmw
+            in
+            let rmw_inv = USet.map (fun (er, _, ew) -> (ew, er)) rmw_filtered in
+              Logs.debug (fun m ->
+                  m "RMW filtered: %s"
+                    (String.concat ", "
+                       (USet.values rmw_inv
+                       |> List.map (fun (e1, e2) ->
+                           Printf.sprintf "(%d,%d)" e1 e2
+                       )
+                       )
+                    )
+              );
+              let rmw_ppo =
+                USet.union
+                  (URelation.compose [ !State.ppo_sync; rmw_inv ])
+                  (URelation.compose [ rmw_inv; !State.ppo_sync ])
+              in
+              let result = USet.inplace_union result rmw_ppo in
+              let result = USet.inplace_union result !State.ppo_base in
+
+              let remapped = remap_rel ctx result in
+                Landmark.exit landmark;
+                Lwt.return (cache_set ctx "ppo" p remapped)
 
   (** [ppo_loc ctx predicates] computes location-based PPO.
 
