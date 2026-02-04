@@ -1463,7 +1463,7 @@ let generate_executions ?(include_rf = true)
     Landmark.enter landmark;
 
     (* let* _ = Lwt.return_unit in *)
-    Logs.info (fun m ->
+    Logs.debug(fun m ->
         m "Generating executions for structure with %d events:\n%s"
           (USet.size structure.e)
           (Hashtbl.fold
@@ -1524,7 +1524,7 @@ let generate_executions ?(include_rf = true)
             Freeze.freeze structure path j_remapped init_ppo statex ~elided
               ~constraints ~include_rf
           in
-            Logs.info (fun m ->
+            Logs.debug(fun m ->
                 m
                   "Computed %d freeze results with %d justifications over path \
                    with %d events"
@@ -1723,13 +1723,13 @@ let generate_executions ?(include_rf = true)
         |> Lwt_stream.to_list
       in
 
-      Logs.info (fun m ->
+      Logs.debug(fun m ->
           m "Generated %d freeze results before minimization"
             (List.length freeze_results)
       );
 
       let minimal_freeze_results = keep_minimal_freeze_results freeze_results in
-        Logs.info (fun m ->
+        Logs.debug(fun m ->
             m "Minimized to %d freeze results"
               (List.length minimal_freeze_results)
         );

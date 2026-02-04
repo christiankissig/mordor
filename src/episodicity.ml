@@ -337,6 +337,9 @@ let check_condition3_branch_conditions (program : ir_node list) cache
             event.cond |> Option.value ~default:(EBoolean true)
           in
           let symbols = Expr.get_symbols cond |> USet.of_list in
+          (* TODO this is too restrictive, we only need to check if the
+             branching condition constraints the symbol, not whether it contains
+             the symbol. *)
           let symbols_read_before_loop =
             USet.filter
               (fun sym ->
@@ -571,7 +574,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
 
                         (* Log violations for each condition *)
                         if not result.condition1.satisfied then
-                          Logs.warn (fun m ->
+                          Logs.info(fun m ->
                               m "  Condition 1 violations: %s"
                                 (String.concat "; "
                                    (List.map show_episodicity_violation
@@ -580,7 +583,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                                 )
                           );
                         if not result.condition2.satisfied then
-                          Logs.warn (fun m ->
+                          Logs.info(fun m ->
                               m "  Condition 2 violations: %s"
                                 (String.concat "; "
                                    (List.map show_episodicity_violation
@@ -589,7 +592,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                                 )
                           );
                         if not result.condition3.satisfied then
-                          Logs.warn (fun m ->
+                          Logs.info(fun m ->
                               m "  Condition 3 violations: %s"
                                 (String.concat "; "
                                    (List.map show_episodicity_violation
@@ -598,7 +601,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                                 )
                           );
                         if not result.condition4.satisfied then
-                          Logs.warn (fun m ->
+                          Logs.info(fun m ->
                               m "  Condition 4 violations: %s"
                                 (String.concat "; "
                                    (List.map show_episodicity_violation
@@ -610,7 +613,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                           result :: !loop_episodicity_results;
                         Lwt.return_unit
                     | None ->
-                        Logs.warn (fun m ->
+                        Logs.info(fun m ->
                             m "Loop %d: Could not analyze" loop_id
                         );
                         Hashtbl.add is_episodic_table loop_id false;

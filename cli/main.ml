@@ -504,6 +504,7 @@ module CLI = struct
     mutable loop_semantics : loop_semantics;  (** Loop interpretation mode *)
     mutable recursive : bool;  (** Recursive directory scanning *)
     mutable litmus_dir : string;  (** Directory for litmus tests *)
+    mutable log_level : Logs.level option;  (** Logging level *)
   }
 
   (** Create initial parse state with defaults. *)
@@ -517,6 +518,7 @@ module CLI = struct
       loop_semantics = FiniteStepCounter;
       recursive = false;
       litmus_dir = "litmus_tests";
+      log_level = None;
     }
 
   (** Convert parse state to immutable configuration.
@@ -607,6 +609,23 @@ module CLI = struct
         Arg.String (fun s -> state.output_file <- Some s),
         " Output file path (default: stdout)"
       );
+      (* Logging levels *)
+      ( "--debug",
+        Arg.Unit (fun () -> state.log_level <- Some Logs.Debug),
+        " Set log level to Debug (most verbose)"
+      );
+      ( "--info",
+        Arg.Unit (fun () -> state.log_level <- Some Logs.Info),
+        " Set log level to Info"
+      );
+      ( "--warning",
+        Arg.Unit (fun () -> state.log_level <- Some Logs.Warning),
+        " Set log level to Warning"
+      );
+      ( "--error",
+        Arg.Unit (fun () -> state.log_level <- Some Logs.Error),
+        " Set log level to Error (least verbose)"
+      );
       (* Loop semantics - these are mutually exclusive *)
       ( "--symbolic-loop-semantics",
         Arg.Unit (fun () -> state.loop_semantics <- Symbolic),
@@ -663,14 +682,14 @@ module CLI = struct
       Uses the Arg module to parse command-line flags and options, then converts
       the mutable parse state to an immutable config.
 
-      @return A complete configuration object
+      @return A tuple of (configuration, log_level option)
       @raise Exit on parse errors or invalid arguments *)
   let parse_args () =
     let state = initial_state () in
     let anon_fun arg = parse_command state arg in
       try
         Arg.parse (specs state) anon_fun usage_msg;
-        to_config state
+        (to_config state, state.log_level)
       with Failure msg ->
         Printf.eprintf "Error: %s\n\n" msg;
         Arg.usage (specs state) usage_msg;
@@ -685,8 +704,8 @@ module Logging = struct
       Configures the Logs library to output with timestamps in the format:
       [HH:MM:SS.mmm] LEVEL: message
 
-      Sets the default log level to Debug for verbose output during analysis. *)
-  let setup () =
+      @param level Optional log level; defaults to Debug if not specified *)
+  let setup ?(level = Logs.Debug) () =
     (* Custom header formatter with millisecond timestamps.
 
        @param ppf Format printer
@@ -701,7 +720,7 @@ module Logging = struct
     in
     let reporter = Logs_fmt.reporter ~pp_header () in
       Logs.set_reporter reporter;
-      Logs.set_level (Some Logs.Debug)
+      Logs.set_level (Some level)
 end
 
 (** {1 Main Entry Point} *)
@@ -709,30 +728,33 @@ end
 (** Main function that orchestrates the entire program execution.
 
     Execution flow:
-    + Print banner
     + Parse command-line arguments into configuration
+    + Setup logging with the specified log level
+    + Print banner
     + Load test programs based on run mode
     + Execute the requested command
     + Display results
 
     @return Unit wrapped in Lwt *)
 let main () =
-  Printf.printf "MoRDor - Symbolic Modular Relaxed Dependencies\n";
-  flush stdout;
-
   (* Parse command-line arguments *)
-  let config = CLI.parse_args () in
+  let config, log_level = CLI.parse_args () in
 
-  (* Load test programs based on run mode *)
-  let tests = FileIO.load_tests config.Config.run_mode in
+  (* Setup logging with the specified level *)
+  let level = Option.value log_level ~default:Logs.Debug in
+    Logging.setup ~level ();
 
-  (* Execute the command *)
-  Pipeline.execute config tests
+    Printf.printf "MoRDor - Symbolic Modular Relaxed Dependencies\n";
+    flush stdout;
+
+    (* Load test programs based on run mode *)
+    let tests = FileIO.load_tests config.Config.run_mode in
+
+      (* Execute the command *)
+      Pipeline.execute config tests
 
 (** Program entry point.
 
-    Sets up logging and runs the main function in the Lwt runtime. All async
-    operations are handled by Lwt's cooperative threading. *)
-let () =
-  Logging.setup ();
-  Lwt_main.run (main ())
+    Runs the main function in the Lwt runtime. All async operations are handled
+    by Lwt's cooperative threading. *)
+let () = Lwt_main.run (main ())
