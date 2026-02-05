@@ -39,14 +39,23 @@
                 <div class="panel-header">
                     <h2>
                       Litmus Source
-                      [<a href="/help/" target=”_blank”>?</a>]
-                    </h2>                    
-                    <select id="examples" style="padding:0.3rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px;">
-                        <option value="">-- Select Example --</option>
-                        <option value="sb">Store Buffering (SB)</option>
-                        <option value="mp">Message Passing (MP)</option>
-                        <option value="lb">Load Buffering (LB)</option>
-                    </select>
+                      [<a href="/help/" target="_blank">?</a>]
+                    </h2>
+                    <div class="panel-header-controls">
+                        <div class="file-input-wrapper">
+                            <input type="file" id="file-input" accept=".lit" />
+                            <label for="file-input" class="file-input-label" title="Open litmus file">
+                                📁 Open
+                            </label>
+                        </div>
+                        <select id="examples" style="padding:0.3rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px;">
+                            <option value="">-- Select Example --</option>
+                            <option value="sb">Store Buffering (SB)</option>
+                            <option value="mp">Message Passing (MP)</option>
+                            <option value="lb">Load Buffering (LB)</option>
+                        </select>
+                    </div>
+
                 </div>
                 <div class="editor-container">
                     <div class="editor-wrapper">
@@ -198,6 +207,37 @@
         
         // Initialize Test Runner
         const testRunner = new TestRunner();
+        
+        // File input handler
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const content = event.target.result;
+                const textarea = document.getElementById('litmus-input');
+                textarea.value = content;
+                
+                // Trigger input event to update syntax highlighting
+                const inputEvent = new Event('input', { bubbles: true });
+                textarea.dispatchEvent(inputEvent);
+                
+                // Log the file load
+                const logDiv = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                logDiv.innerHTML = `<div class="log-entry success"><span class="log-time">${timestamp}</span>Loaded file: ${file.name}</div>` + logDiv.innerHTML;
+            };
+            reader.onerror = function() {
+                const logDiv = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                logDiv.innerHTML = `<div class="log-entry error"><span class="log-time">${timestamp}</span>Error reading file: ${file.name}</div>` + logDiv.innerHTML;
+            };
+            reader.readAsText(file);
+            
+            // Reset the input so the same file can be loaded again
+            e.target.value = '';
+        });
         
         // Test Runner button handler
         document.getElementById('test-runner-btn').addEventListener('click', () => {
