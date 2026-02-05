@@ -33,6 +33,7 @@ class GraphVisualizer {
         this.highlightMarker = null; // Store current highlight element
         this.loops = []; // Store loop information
         this.episodicityResults = {}; // Store episodicity results by loop_id
+        this.assertionResults = null; // Store assertion results
         
         // Settings
         this.settings = {
@@ -396,6 +397,142 @@ class GraphVisualizer {
         return type.replace(/([A-Z])/g, ' $1').trim();
     }
     
+    renderAssertions() {
+        const assertionsContent = document.getElementById('assertions-content');
+        
+        if (!this.assertionResults) {
+            assertionsContent.innerHTML = '<p style="padding: 1rem; color: #6a6a6a;">No assertion results available.</p>';
+            return;
+        }
+        
+        let html = '';
+        
+        // Add overall validity status
+        const validityClass = this.assertionResults.valid ? 'valid' : 'invalid';
+        const validityIcon = this.assertionResults.valid ? '✓' : '✗';
+        const validityText = this.assertionResults.valid ? 'Valid' : 'Invalid';
+        
+        html += `
+            <div class="assertion-validity ${validityClass}">
+                <span class="assertion-validity-icon">${validityIcon}</span>
+                <span><strong>Overall Validity:</strong> ${validityText}</span>
+            </div>
+        `;
+        
+        // Render each assertion instance
+        html += '<div style="max-height: 400px; overflow-y: auto;">';
+        
+        if (this.assertionResults.instances && this.assertionResults.instances.length > 0) {
+            this.assertionResults.instances.forEach((instance, index) => {
+                const [type, data] = instance;
+                const detail = data.detail;
+                const execId = data.exec_id;
+                
+                // Determine the type and styling
+                let typeClass = type.toLowerCase();
+                let typeIcon = '';
+                switch(type) {
+                    case 'Witnessed':
+                        typeIcon = '✓';
+                        break;
+                    case 'Contradicted':
+                        typeIcon = '✗';
+                        break;
+                    case 'Confirmed':
+                        typeIcon = '✓✓';
+                        break;
+                    case 'Refuted':
+                        typeIcon = '✗✗';
+                        break;
+                }
+                
+                html += `
+                    <div class="assertion-item" data-exec-id="${execId}">
+                        <div class="assertion-header">
+                            <span class="assertion-type ${typeClass}">${typeIcon} ${type}</span>
+                            <span class="assertion-exec-id">Execution ${execId}</span>
+                        </div>
+                `;
+                
+                // Show instantiated expression if available
+                if (detail.instantiated_expr) {
+                    html += `
+                        <div class="assertion-expr">${this.escapeHtml(detail.instantiated_expr)}</div>
+                    `;
+                }
+                
+                // Show result
+                const resultClass = detail.result ? 'true' : 'false';
+                const resultIcon = detail.result ? '✓' : '✗';
+                html += `
+                    <div class="assertion-result ${resultClass}">
+                        <span class="assertion-result-icon">${resultIcon}</span>
+                        <span>Result: ${detail.result ? 'True' : 'False'}</span>
+                    </div>
+                `;
+                
+                // Show set memberships if any
+                if (detail.set_memberships && detail.set_memberships.length > 0) {
+                    html += `
+                        <div class="assertion-memberships">
+                            <div class="assertion-memberships-title">Set Memberships:</div>
+                    `;
+                    
+                    detail.set_memberships.forEach(membership => {
+                        const memberClass = membership.member ? 'true' : 'false';
+                        const memberIcon = membership.member ? '∈' : '∉';
+                        const [evt1, evt2] = membership.event_pair;
+                        
+                        html += `
+                            <div class="membership-item">
+                                <span class="membership-pair">(${evt1}, ${evt2})</span>
+                                <span class="membership-relation">.${membership.relation_name}</span>
+                                <span class="membership-result ${memberClass}">${memberIcon}</span>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+            });
+        } else {
+            html += '<p style="padding: 1rem; color: #6a6a6a;">No assertion instances to display.</p>';
+        }
+        
+        html += '</div>';
+        
+        assertionsContent.innerHTML = html;
+        
+        // Add click listeners to assertion items to navigate to execution
+        const assertionItems = assertionsContent.querySelectorAll('.assertion-item');
+        assertionItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const execId = parseInt(item.getAttribute('data-exec-id'));
+                // Navigate to the execution (exec_id + 1 since index 0 is event structure)
+                if (execId >= 0 && execId < this.graphs.length) {
+                    this.navigateTo(execId);
+                }
+            });
+            
+            // Visual feedback on hover
+            item.addEventListener('mouseenter', () => {
+                item.style.background = '#2d2d30';
+            });
+            
+            item.addEventListener('mouseleave', () => {
+                item.style.background = '';
+            });
+        });
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
     openSettingsModal() {
         // Populate current settings
         document.getElementById('show-uaf').checked = this.settings.showUAF;
@@ -712,6 +849,7 @@ class GraphVisualizer {
         this.executionCount = 0;
         this.loops = [];
         this.episodicityResults = {};
+        this.assertionResults = null;
 
         // Update UI
         document.getElementById('status').textContent = 'Processing...';
@@ -772,6 +910,14 @@ class GraphVisualizer {
                     }
                     // Re-render loops to show episodicity information
                     this.renderLoops();
+                } else if (data.valid !== undefined || data.instances !== undefined) {
+                    // Handle assertion results message
+                    this.log('Received assertion results');
+                    this.assertionResults = {
+                        valid: data.valid,
+                        instances: data.instances || []
+                    };
+                    this.renderAssertions();
                 } else if (data.type === 'event_structure') {
                     this.log('Received event structure');
                     this.graphs.push(data.graph);

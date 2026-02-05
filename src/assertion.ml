@@ -1393,3 +1393,33 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
             m "Event structure or executions not available for assertion check."
         );
         Lwt.return ctx
+
+(** {1 Send Assertion Results} *)
+
+(** Message format for sending assertion results. *)
+type assertion_results_message = {
+  valid : bool;
+  instances : assertion_instance list;
+}
+[@@deriving yojson]
+
+(** [step_send_assertion_results lwt_ctx ~send_data] sends assertion results.
+
+    Pipeline step that serializes assertion results to JSON and sends them to
+    the client.
+
+    @param lwt_ctx The verification context (as promise).
+    @param send_data Function to send string data (returns promise).
+    @return Unchanged context after sending results. *)
+let step_send_assertion_results ~(send_data : string -> unit Lwt.t)
+    (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  let%lwt ctx = lwt_ctx in
+    match (ctx.valid, ctx.assertion_instances) with
+    | Some valid, Some instances ->
+        let message = { valid; instances } in
+        let result_json =
+          Yojson.Safe.to_string (assertion_results_message_to_yojson message)
+        in
+        let%lwt () = send_data result_json in
+          Lwt.return ctx
+    | _ -> Lwt.return ctx

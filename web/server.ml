@@ -1,4 +1,8 @@
-(** Mordor Web Server *)
+(** {1 Mordor Web Server}
+
+    A web server for visualizing program execution graphs and running litmus
+    tests. Provides Server-Sent Events (SSE) streaming for real-time
+    visualization and a REST API for test execution. *)
 
 open Lwt.Syntax
 open Context
@@ -6,6 +10,28 @@ open Types
 open Source_info
 open Test_runner_api
 
+(** {2 Visualization Functions} *)
+
+(** [visualize_to_stream program options step_counter stream] processes a litmus
+    test program through the analysis pipeline and streams results as JSON via
+    SSE.
+
+    @param program The litmus test program source code as a string
+    @param options Configuration options for the analysis
+    @param step_counter The maximum number of loop iterations to execute
+    @param stream The Dream SSE stream to write results to
+    @return
+      A promise that resolves to the final context after all analysis steps
+
+    The function performs the following pipeline:
+    - Parses the litmus test program
+    - Sends loop information
+    - Interprets the program
+    - Generates and sends event structure graphs
+    - Tests episodicity properties
+    - Calculates dependencies
+    - Checks assertions
+    - Sends execution graphs *)
 let visualize_to_stream program options step_counter stream =
   let context = make_context options ~output_mode:Json ~step_counter () in
     context.litmus <- Some program;
@@ -26,15 +52,38 @@ let visualize_to_stream program options step_counter stream =
       |> Episodicity.send_episodicity_results send_data
       |> Symmrd.step_calculate_dependencies
       |> Assertion.step_check_assertions
+      |> Assertion.step_send_assertion_results ~send_data
       |> Eventstructureviz.step_send_execution_graphs ~send_data
     in
 
     Lwt.return ctx
 
+(** [sse_data json_obj] formats a JSON object as an SSE data message.
+
+    @param json_obj The JSON object to format
+    @return A string in SSE format: "data: <json>\n\n" *)
 let sse_data json_obj =
   let json_str = Yojson.Basic.to_string json_obj in
     Printf.sprintf "data: %s\n\n" json_str
 
+(** {2 HTTP Request Handlers} *)
+
+(** [visualize_sse_handler request] handles SSE requests for program
+    visualization.
+
+    Accepts query parameters:
+    - [program]: The litmus test source code
+    - [loop_semantics]: The loop execution semantics ("symbolic",
+      "step-counter", or default)
+    - [steps]: Number of loop iterations (default: 2, ignored for symbolic
+      semantics)
+
+    @param request The HTTP request from Dream
+    @return An SSE stream response that sends visualization updates in real-time
+
+    The handler establishes an SSE connection and streams status updates
+    ("parsing", "interpreting", "visualizing") followed by visualization data.
+    Errors are caught and sent as SSE error messages. *)
 let visualize_sse_handler request =
   let program = Dream.query request "program" |> Option.value ~default:"" in
 
@@ -123,13 +172,28 @@ let visualize_sse_handler request =
         )
     )
 
+(** [health_handler request] provides a simple health check endpoint.
+
+    @param request The HTTP request (unused)
+    @return A JSON response with status "ok" *)
 let health_handler _request = Dream.json "{\"status\": \"ok\"}"
 
-(* Test Runner API *)
+(** {2 Test Runner API}
+
+    Module providing test discovery, execution, and source retrieval for litmus
+    tests. *)
 module TestRunner = struct
+  (** Directory containing litmus test files *)
   let litmus_dir = "litmus-tests"
+
+  (** Path to the CLI executable used for running tests *)
   let cli_executable = "_build/default/cli/main.exe"
 
+  (** [read_litmus_files dir] recursively discovers all .lit files in a
+      directory.
+
+      @param dir The root directory to search
+      @return A list of file paths to litmus test files *)
   let read_litmus_files dir =
     let rec read_dir_recursive path =
       try
@@ -148,13 +212,26 @@ module TestRunner = struct
     in
       read_dir_recursive dir
 
+  (** Results from parsing the CLI verification output *)
   type verification_result = {
-    valid : bool option;
+    valid : bool option;  (** Whether the test passed validation *)
     undefined_behaviour : bool option;
-    executions : int option;
-    events : int option;
+        (** Whether undefined behavior was detected *)
+    executions : int option;  (** Number of executions found *)
+    events : int option;  (** Number of events in the execution *)
   }
 
+  (** [parse_verification_output output_lines] extracts verification results
+      from the CLI output.
+
+      Recognizes lines in the format:
+      - "Valid: true" or "Valid: false"
+      - "Undefined Behavior: true" or "Undefined Behavior: false"
+      - "Executions: <number>"
+      - "Events: <number>"
+
+      @param output_lines The output from the CLI as a list of strings
+      @return A [verification_result] record with parsed values *)
   let parse_verification_output output_lines =
     let result =
       {
@@ -217,6 +294,12 @@ module TestRunner = struct
     in
       process_lines result output_lines
 
+  (** [run_cli_on_file filepath] executes the CLI tool on a single test file.
+
+      @param filepath Path to the litmus test file
+      @return
+        A tuple [(exit_code, output_lines)] where exit_code is 0 for success and
+        output_lines is the command output as a string list *)
   let run_cli_on_file filepath =
     let cmd =
       Printf.sprintf "%s run --single \"%s\" 2>&1" cli_executable filepath
@@ -238,6 +321,13 @@ module TestRunner = struct
         in
           (status, List.rev !output)
 
+  (** [list_tests_handler request] handles GET requests to list all available
+      tests.
+
+      @param request The HTTP request (unused)
+      @return A JSON response with format: [{"tests": ["path1", "path2", ...]}]
+
+      Returns HTTP 500 on error with: [{"error": "<message>"}] *)
   let list_tests_handler _request =
     try
       let tests = read_litmus_files litmus_dir in
@@ -250,6 +340,21 @@ module TestRunner = struct
         Dream.json ~status:`Internal_Server_Error
           (Yojson.Basic.to_string (`Assoc [ ("error", `String error) ]))
 
+  (** [run_test_handler request] handles POST requests to run a specific test.
+
+      Expects JSON body: [{"test": "path/to/test.lit"}]
+
+      @param request The HTTP request containing the test path in JSON body
+      @return
+        A JSON response with test results including:
+        - [success]: Overall test success (exit code 0 and valid result)
+        - [exit_code]: The CLI exit code
+        - [output]: Raw CLI output
+        - [parsed]: Whether output was successfully parsed
+        - [valid], [undefined_behaviour], [executions], [events]: Parsed results
+
+      Returns HTTP 500 on error with:
+      [{"success": false, "error": "<message>", "output": "<message>"}] *)
   let run_test_handler request =
     let* body = Dream.body request in
       try
@@ -317,6 +422,19 @@ module TestRunner = struct
                )
             )
 
+  (** [get_test_source_handler request] handles GET requests to retrieve test
+      source code.
+
+      Expects query parameter: [test=path/to/test.lit]
+
+      @param request The HTTP request with [test] query parameter
+      @return A JSON response with format: [{"source": "<file contents>"}]
+
+      Returns:
+      - HTTP 400 if [test] parameter is missing:
+        [{"error": "Missing 'test' parameter"}]
+      - HTTP 404 if file not found: [{"error": "<system error>"}]
+      - HTTP 500 on other errors: [{"error": "<message>"}] *)
   let get_test_source_handler request =
     try
       let test_path = Dream.query request "test" |> Option.value ~default:"" in
@@ -350,7 +468,12 @@ module TestRunner = struct
             (Yojson.Basic.to_string (`Assoc [ ("error", `String error) ]))
 end
 
-(* Setup logging *)
+(** {2 Server Setup and Configuration} *)
+
+(** [setup_logs ()] configures the logging system with timestamps.
+
+    Sets up a custom log reporter that includes microsecond-precision timestamps
+    in the format [HH:MM:SS.mmm]. Sets the log level to Debug. *)
 let setup_logs () =
   let pp_header ppf (l, h) =
     let timestamp = Unix.gettimeofday () in
@@ -364,6 +487,27 @@ let setup_logs () =
     Logs.set_reporter reporter;
     Logs.set_level (Some Logs.Debug)
 
+(** {2 Main Server Entry Point}
+
+    Starts the Mordor web server with the following endpoints:
+
+    {b Static Content:}
+    - [GET /] - Main application page (index.html)
+    - [GET /help/] - Help documentation (help.html)
+    - [GET /static/**] - Static assets (CSS, JS, images)
+
+    {b Health Check:}
+    - [GET /health] - Returns [{"status": "ok"}]
+
+    {b Visualization API:}
+    - [GET /api/visualize/stream] - SSE endpoint for program visualization
+
+    {b Test Runner API:}
+    - [GET /api/tests/list] - List all available litmus tests
+    - [POST /api/tests/run] - Run a specific test
+    - [GET /api/tests/source] - Get source code of a test
+
+    The server listens on port 8080 on all interfaces (0.0.0.0). *)
 let () =
   setup_logs ();
   Printexc.record_backtrace true;
