@@ -952,6 +952,56 @@ let step_send_event_structure_graph ~(send_data : string -> unit Lwt.t)
       );
       Lwt.return ctx
 
+(** [send_single_execution_graph ~send_data ~build_exec_graph checked_executions
+     i exec] sends a single execution graph as a JSON message.
+
+    @param send_data Function to send JSON data to the client
+    @param build_exec_graph Function to build a graph for the given execution
+    @param checked_executions Hash table of checked execution info for validity
+    @param i Index of the execution (0-based)
+    @param exec The symbolic execution to visualize *)
+let send_single_execution_graph ~send_data ~build_exec_graph checked_executions
+    i exec =
+  let exec_graph = build_exec_graph exec in
+  let graph_json = EventStructureViz.to_json exec_graph in
+  let graph_obj =
+    Yojson.Safe.from_string graph_json
+    |> EventStructureViz.json_graph_of_yojson
+    |> Result.get_ok
+  in
+
+  let exec_info_opt : execution_info option =
+    Hashtbl.find_opt checked_executions exec.id
+  in
+  let exec_preds_string =
+    String.concat ", " (List.map Expr.to_string exec.ex_p)
+  in
+  let is_valid : bool option =
+    match exec_info_opt with
+    | Some info -> Some info.satisfied
+    | None -> None
+  in
+  let undefined_behaviour =
+    Option.map (fun info -> ub_reasons_to_yojson info.ub_reasons) exec_info_opt
+  in
+
+  (* Create and send message *)
+  let message =
+    EventStructureViz.
+      {
+        type_ = "execution";
+        graph = graph_obj;
+        index = Some (i + 1);
+        preds = Some exec_preds_string;
+        is_valid;
+        undefined_behaviour;
+      }
+  in
+  let exec_message =
+    Yojson.Safe.to_string (EventStructureViz.graph_message_to_yojson message)
+  in
+    send_data exec_message
+
 (** [step_send_execution_graphs lwt_ctx ~send_data] sends individual execution
     graphs via the web server.
 
@@ -979,11 +1029,15 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
 
   match ctx.structure with
   | Some structure ->
-      (* Get PO relation for execution graphs *)
-      let po_reduced = URelation.transitive_reduction structure.po in
-
       (* Process executions *)
       let* () =
+        (* Get PO relation for execution graphs *)
+        let po_reduced = URelation.transitive_reduction structure.po in
+        let build_exec_graph exec =
+          EventStructureViz.build_execution_graph structure exec source_spans
+            po_reduced
+        in
+
         match ctx.executions with
         | Some execs ->
             let exec_list = USet.to_list execs in
@@ -1010,52 +1064,8 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
               (* Send each execution graph *)
               let* () =
                 Lwt_list.iteri_s
-                  (fun i exec ->
-                    let exec_graph =
-                      EventStructureViz.build_execution_graph structure exec
-                        source_spans po_reduced
-                    in
-                    let graph_json = EventStructureViz.to_json exec_graph in
-                    let graph_obj =
-                      Yojson.Safe.from_string graph_json
-                      |> EventStructureViz.json_graph_of_yojson
-                      |> Result.get_ok
-                    in
-
-                    let exec_info_opt : execution_info option =
-                      Hashtbl.find_opt checked_executions exec.id
-                    in
-                    let exec_preds_string =
-                      String.concat ", " (List.map Expr.to_string exec.ex_p)
-                    in
-                    let is_valid : bool option =
-                      match exec_info_opt with
-                      | Some info -> Some info.satisfied
-                      | None -> None
-                    in
-                    let undefined_behaviour =
-                      Option.map
-                        (fun info -> ub_reasons_to_yojson info.ub_reasons)
-                        exec_info_opt
-                    in
-
-                    (* Create and send message *)
-                    let message =
-                      EventStructureViz.
-                        {
-                          type_ = "execution";
-                          graph = graph_obj;
-                          index = Some (i + 1);
-                          preds = Some exec_preds_string;
-                          is_valid;
-                          undefined_behaviour;
-                        }
-                    in
-                    let exec_message =
-                      Yojson.Safe.to_string
-                        (EventStructureViz.graph_message_to_yojson message)
-                    in
-                      send_data exec_message
+                  (send_single_execution_graph ~send_data ~build_exec_graph
+                     checked_executions
                   )
                   exec_list
               in

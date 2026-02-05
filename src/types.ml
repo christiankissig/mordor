@@ -82,18 +82,32 @@ type value_type =
   | VBoolean of bool
 [@@deriving show]
 
-let pp_esymbol fmt sym = Format.fprintf fmt "%s" sym
-
 (** Expression representation *)
 type expr =
   | EBinOp of expr * string * expr
   | EUnOp of string * expr
   | EOr of expr list
   | EVar of string
-  | ESymbol of string [@printer pp_esymbol]
+  | ESymbol of string
   | EBoolean of bool
   | ENum of Z.t [@printer pp_z] [@hash fun z -> Hashtbl.hash (Z.to_string z)]
-[@@deriving show, hash]
+[@@deriving hash]
+
+let rec pp_expr fmt expr =
+  match expr with
+  | EBinOp (e1, op, e2) ->
+      Format.fprintf fmt "(%a %s %a)" pp_expr e1 op pp_expr e2
+  | EUnOp (op, e) -> Format.fprintf fmt "(%s %a)" op pp_expr e
+  | EOr exprs ->
+      Format.fprintf fmt "(%a)"
+        (pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt " || ") pp_expr)
+        exprs
+  | EVar v -> Format.fprintf fmt "%s" v
+  | ESymbol s -> Format.fprintf fmt "%s" s
+  | EBoolean b -> Format.fprintf fmt "%b" b
+  | ENum n -> Format.fprintf fmt "%a" pp_z n
+
+let show_expr expr = Format.asprintf "%a" pp_expr expr
 
 (** Event types *)
 

@@ -283,15 +283,7 @@ end = struct
             EUnOp (op, new_rhs)
       | e -> e
 
-  let rec to_string = function
-    | ENum n -> Z.to_string n
-    | EBoolean b -> string_of_bool b
-    | ESymbol s -> s
-    | EVar v -> v
-    | EBinOp (lhs, op, rhs) ->
-        Printf.sprintf "(%s %s %s)" (to_string lhs) op (to_string rhs)
-    | EUnOp (op, rhs) -> Printf.sprintf "%s(%s)" op (to_string rhs)
-    | EOr clauses -> List.map to_string clauses |> String.concat " ∨ "
+  let to_string = show_expr
 
   let rec flatten = function
     | EBinOp (lhs, "&&", rhs) ->
