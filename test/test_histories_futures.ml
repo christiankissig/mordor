@@ -12,8 +12,7 @@ let make_test_exec e rf dp ppo rmw ex_p fix_rf_map pointer_map final_env :
 
 (* Helper to create minimal test execution with just events and relations *)
 let make_simple_exec events rf dp ppo =
-  make_test_exec events rf dp ppo
-    (USet.create ()) (* rmw *)
+  make_test_exec events rf dp ppo (USet.create ()) (* rmw *)
     [] (* ex_p *)
     (Hashtbl.create 10) (* fix_rf_map *)
     None (* pointer_map *)

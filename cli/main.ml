@@ -239,6 +239,12 @@ module Display = struct
       | None -> ()
       | Some valid -> Printf.printf "Valid: %b\n" valid
       );
+      ( match ctx.assertion_instances with
+      | None -> ()
+      | Some instances ->
+          Printf.printf "Assertion Instances: %s\n"
+            (String.concat "\n\t" (List.map show_assertion_instance instances))
+      );
       ( match ctx.undefined_behaviour with
       | None -> ()
       | Some ub -> Printf.printf "Undefined Behavior: %b\n" ub

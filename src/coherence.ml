@@ -672,10 +672,7 @@ module Undefined : MEMORY_MODEL = struct
       (structure : symbolic_event_structure) (events : (int, event) Hashtbl.t)
       (loc_restrict : (int * int) uset -> (int * int) uset) : cache =
     if USet.size execution.rmw > 0 then
-      {
-        rfi = Some (URelation.inverse execution.rf);
-        rmw = Some execution.rmw;
-      }
+      { rfi = Some (URelation.inverse execution.rf); rmw = Some execution.rmw }
     else { rfi = None; rmw = None }
 
   (** Check coherence *)

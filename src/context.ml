@@ -10,6 +10,7 @@
     @author Mordor Team *)
 
 open Ast
+open Pretty
 open Types
 open Uset
 
@@ -141,20 +142,36 @@ let default_options =
 
 (** {1 Types for Checked Executions} *)
 
+let expr_to_yojson expr = [%to_yojson: string] (show_expr expr)
+
+let expr_of_yojson json =
+  match [%of_yojson: string] json with
+  | Ok s ->
+      Ok (EVar s)
+      (* Placeholder: actual parsing of expression from string needed *)
+  | Error e -> Error e
+
 (** Reason for use-after-free undefined behavior.
 
     A set of (write_event, read_event) pairs where reads access freed memory. *)
 type uaf_ub_reason = (int * int) uset
+
+let uaf_ub_reason_to_yojson = pair_int_uset_to_yojson
+let uaf_ub_reason_of_yojson = pair_int_uset_of_yojson
 
 (** Reason for unsequenced data race undefined behavior.
 
     A set of (event1, event2) pairs that race on the same location. *)
 type upd_ub_reason = (int * int) uset
 
+let upd_ub_reason_to_yojson = pair_int_uset_to_yojson
+let upd_ub_reason_of_yojson = pair_int_uset_of_yojson
+
 (** Unified undefined behavior reason. *)
 type ub_reason =
-  | UAF of uaf_ub_reason  (** Use-after-free *)
-  | UPD of upd_ub_reason  (** Unsequenced data race *)
+  | UAF of uaf_ub_reason [@printer pp_int_urel]  (** Use-after-free *)
+  | UPD of upd_ub_reason [@printer pp_int_urel]  (** Unsequenced data race *)
+[@@deriving show, yojson]
 
 (** List of undefined behavior reasons per event. *)
 type ub_reasons = (int * ub_reason) list
@@ -172,6 +189,7 @@ type set_membership_info = {
   event_pair : int * int;  (** Pair of event IDs tested *)
   member : bool;  (** Whether the pair is in the relation *)
 }
+[@@deriving show, yojson]
 
 (** Detailed information about an assertion instance.
 
@@ -184,12 +202,14 @@ type assertion_instance_detail = {
   set_memberships : set_membership_info list;  (** Set operations evaluated *)
   result : bool;  (** Whether the assertion held *)
 }
+[@@deriving show, yojson]
 
 (** Result of checking an assertion against a single execution.
 
     An assertion can be:
     - {b Witnessed}: For allow assertions, an execution satisfies the condition
-    - {b Contradicted}: For forbid assertions, an execution violates the condition
+    - {b Contradicted}: For forbid assertions, an execution violates the
+      condition
     - {b Confirmed}: For allow assertions, all executions satisfy the condition
     - {b Refuted}: For forbid assertions, all executions avoid the condition *)
 type assertion_instance =
@@ -203,6 +223,7 @@ type assertion_instance =
     }  (** Forbid assertion violated by this execution *)
   | Confirmed  (** Assertion holds for all executions (for allow) *)
   | Refuted  (** Assertion avoided by all executions (for forbid) *)
+[@@deriving show, yojson]
 
 (** Information about a checked execution.
 
@@ -213,6 +234,7 @@ type execution_info = {
   satisfied : bool;  (** Whether assertions are satisfied *)
   ub_reasons : ub_reason list;  (** List of undefined behaviors found *)
 }
+[@@deriving show, yojson]
 
 (** {1 Types for Episodicity Tests} *)
 

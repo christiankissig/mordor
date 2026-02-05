@@ -1053,12 +1053,6 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
           ListMapCombinationBuilder.build_combinations all_rf_inv_map
             ~check_partial:(fun combo ?alternatives pair ->
               let r, w = pair in
-                Logs.debug (fun m ->
-                    m
-                      "[compute_path_rf] Testing partial combo: edge (%d->%d), \
-                       combo size %d"
-                      r w (List.length combo)
-                );
                 (* discard the combination if we have alternatives to reading
                    from init *)
                 if

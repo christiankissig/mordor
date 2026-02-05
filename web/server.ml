@@ -367,7 +367,7 @@ let setup_logs () =
 let () =
   setup_logs ();
   Printexc.record_backtrace true;
-  Printf.printf "🔮 Mordor Web - Graph Visualization & Test Runner\n";
+  Printf.printf "Mordor Web - Graph Visualization & Test Runner\n";
   Printf.printf "🌐 http://localhost:8080\n\n";
 
   Dream.run ~interface:"0.0.0.0" ~port:8080

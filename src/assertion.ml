@@ -128,7 +128,6 @@ end
 
 (** Helper functions for tracking assertion instances and their details. *)
 module AssertionInstanceTracking = struct
-
   (** [extract_set_memberships expr structure execution] extracts all set
       membership tests from an expression and their results.
 
@@ -143,17 +142,21 @@ module AssertionInstanceTracking = struct
         let rel = Execution.get_relation set_name structure execution in
         let is_member = USet.mem rel pair in
         let result = if op = "in" then is_member else not is_member in
-        [{
-          Context.relation_name = set_name;
-          event_pair = pair;
-          member = result;
-        }]
+          [
+            {
+              Context.relation_name = set_name;
+              event_pair = pair;
+              member = result;
+            };
+          ]
     | EBinOp (e1, _, e2) ->
-        extract_set_memberships e1 structure execution @
-        extract_set_memberships e2 structure execution
+        extract_set_memberships e1 structure execution
+        @ extract_set_memberships e2 structure execution
     | EUnOp (_, e) -> extract_set_memberships e structure execution
     | EOr lst ->
-        List.concat_map (fun e -> extract_set_memberships e structure execution) lst
+        List.concat_map
+          (fun e -> extract_set_memberships e structure execution)
+          lst
     | _ -> []
 
   (** [create_instance_detail expr structure execution result] creates detailed
@@ -171,15 +174,14 @@ module AssertionInstanceTracking = struct
       | Some expr -> extract_set_memberships expr structure execution
       | None -> []
     in
-    { Context.instantiated_expr; set_memberships; result }
+      { Context.instantiated_expr; set_memberships; result }
 
   (** [create_witnessed exec_id detail] creates a witnessed assertion instance.
 
       @param exec_id Execution ID that witnessed the assertion.
       @param detail Details of what was witnessed.
       @return Witnessed assertion instance. *)
-  let create_witnessed exec_id detail =
-    Context.Witnessed { exec_id; detail }
+  let create_witnessed exec_id detail = Context.Witnessed { exec_id; detail }
 
   (** [create_contradicted exec_id detail] creates a contradicted assertion
       instance.
@@ -946,7 +948,8 @@ module PerExecutionChecker = struct
       @param structure The event structure.
       @param execution The execution.
       @param already_satisfied Mutable reference tracking satisfaction.
-      @return Promise of [(satisfied, ub_reasons, instance_detail_opt)] tuple. *)
+      @return Promise of [(satisfied, ub_reasons, instance_detail_opt)] tuple.
+  *)
   let check_outcome_assertion outcome condition structure execution
       already_satisfied =
     (* Determine if this is a UB assertion *)
@@ -998,7 +1001,7 @@ module PerExecutionChecker = struct
                 AssertionInstanceTracking.create_instance_detail
                   (Some cond_expr) structure execution final_satisfied
               in
-              Lwt.return (!already_satisfied, !ub_reasons, Some detail)
+                Lwt.return (!already_satisfied, !ub_reasons, Some detail)
 
   (** [check assertion execution structure already_satisfied ~exhaustive] checks
       single execution.
@@ -1031,8 +1034,13 @@ module AssertionChecker = struct
       @param valid Optional validity value (default: true).
       @return Empty assertion result. *)
   let empty_result ?(valid = true) () =
-    { valid; ub = false; ub_reasons = []; checked_executions = None;
-      assertion_instances = None }
+    {
+      valid;
+      ub = false;
+      ub_reasons = [];
+      checked_executions = None;
+      assertion_instances = None;
+    }
 
   (** [run_ub_validation_on_execution structure execution] validates one
       execution.
@@ -1117,7 +1125,8 @@ module AssertionChecker = struct
       @param assertion The assertion to check.
       @param executions List of executions.
       @param structure The event structure.
-      @return Promise of [(satisfied, ub_reasons, results, instances)] quadruple. *)
+      @return
+        Promise of [(satisfied, ub_reasons, results, instances)] quadruple. *)
   let process_executions assertion executions structure =
     let ub_reasons = ref [] in
     let satisfied = ref false in
@@ -1147,34 +1156,34 @@ module AssertionChecker = struct
               }
               :: !execution_results;
 
-            (* Track assertion instance *)
-            (match detail_opt with
+            (* Track assertion instance only for executions that witness/contradict *)
+            ( match detail_opt with
             | Some detail ->
-                let instance =
-                  if outcome = Allow && exec_satisfied then
-                    (* Allow assertion witnessed *)
-                    AssertionInstanceTracking.create_witnessed
-                      execution.id detail
-                  else if outcome = Forbid && exec_satisfied then
-                    (* Forbid assertion contradicted *)
-                    AssertionInstanceTracking.create_contradicted
-                      execution.id detail
-                  else
-                    (* No witnessing/contradiction *)
-                    if outcome = Allow then
-                      Context.Refuted
-                    else
-                      Context.Confirmed
-                in
-                assertion_instances := instance :: !assertion_instances
-            | None -> ());
+                if outcome = Allow && exec_satisfied then
+                  (* Allow assertion witnessed by this execution *)
+                  let instance =
+                    AssertionInstanceTracking.create_witnessed execution.id
+                      detail
+                  in
+                    assertion_instances := instance :: !assertion_instances
+                else if outcome = Forbid && exec_satisfied then
+                  (* Forbid assertion contradicted by this execution *)
+                  let instance =
+                    AssertionInstanceTracking.create_contradicted execution.id
+                      detail
+                  in
+                    assertion_instances := instance :: !assertion_instances
+                  (* Otherwise: execution doesn't witness/contradict, don't track it *)
+            | None -> ()
+            );
 
             Lwt.return ()
         )
         executions
     in
 
-    Lwt.return (!satisfied, !ub_reasons, !execution_results, !assertion_instances)
+    Lwt.return
+      (!satisfied, !ub_reasons, !execution_results, !assertion_instances)
 
   (** [compute_validity outcome is_ub_assertion satisfied expected ub]
       determines final validity.

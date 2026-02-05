@@ -333,7 +333,7 @@ let test_imm_coherent_rmw () =
       id = 0;
       e;
       rf;
-      rmw = rmw;
+      rmw;
       dp = USet.create ();
       ppo = USet.create ();
       ex_p = [];

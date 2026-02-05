@@ -67,3 +67,11 @@ let pp_ternary_relation_compact pp_a pp_b pp_c fmt rel =
       )
       rel;
     Format.fprintf fmt "@]}"
+
+let pair_int_uset_to_yojson uset =
+  [%to_yojson: (int * int) list] (USet.values uset)
+
+let pair_int_uset_of_yojson json =
+  match [%of_yojson: (int * int) list] json with
+  | Ok lst -> Ok (USet.of_list lst)
+  | Error e -> Error e
