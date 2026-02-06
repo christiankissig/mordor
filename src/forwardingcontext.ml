@@ -31,10 +31,7 @@ module PpoCache : sig
   val clear : t -> unit
 
   val get :
-    t ->
-    (int * int) uset * (int * int) uset ->
-    expr list ->
-    ppo_cache_value option
+    t -> (int * int) uset * (int * int) uset -> expr list -> ppo_cache_value
 
   val get_subset :
     t ->
@@ -91,7 +88,9 @@ end = struct
       @return Cached value or empty value if not found. *)
   let get cache con predicates =
     let key = { con; predicates } in
-      Hashtbl.find_opt cache.exact key
+      match Hashtbl.find_opt cache.exact key with
+      | Some v -> v
+      | None -> { ppo = None; ppo_loc = None }
 
   (** [get_subset con predicates] finds cached entry with subset predicates.
 
@@ -531,7 +530,7 @@ module ForwardingContext : sig
       @param ctx The forwarding context.
       @param predicates The predicate list.
       @return Cached value or empty value if not found. *)
-  val cache_get : t -> expr list -> ppo_cache_value option
+  val cache_get : t -> expr list -> ppo_cache_value
 
   (** [cache_get_subset ctx predicates] retrieves subset cache match.
 
@@ -682,10 +681,10 @@ end = struct
       let es_ctx = ctx.es_ctx in
       let p = predicates @ ctx.psi in
       let cached = cache_get ctx p in
-        match cached with
+        match cached.ppo with
         | Some v ->
             Landmark.exit landmark;
-            Lwt.return (Option.value v.ppo ~default:(USet.create ()))
+            Lwt.return v
         | _ ->
             let* result =
               let sub = cache_get_subset ctx p in
@@ -753,10 +752,10 @@ end = struct
         |> List.sort Expr.compare
       in
       let cached = cache_get ctx p in
-        match cached with
+        match cached.ppo_loc with
         | Some v ->
             Landmark.exit landmark;
-            Lwt.return (Option.value v.ppo_loc ~default:(USet.create ()))
+            Lwt.return v
         | None ->
             (* Get base ppo_alias from cache or compute it *)
             let* ppo_alias =

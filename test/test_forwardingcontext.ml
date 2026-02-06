@@ -270,8 +270,8 @@ let test_cache_initially_empty () =
 
   let ctx = ForwardingContext.create forwardingcontext_state () in
   let cached = ForwardingContext.cache_get ctx [] in
-    Alcotest.(check bool)
-      "Cache empty - record found" true (Option.is_none cached)
+    Alcotest.(check bool) "Cache empty - no ppo" true (cached.ppo = None);
+    Alcotest.(check bool) "Cache empty - no ppo_loc" true (cached.ppo_loc = None)
 
 let test_cache_set_and_get () =
   let structure = TestUtil.make_structure () in
@@ -284,11 +284,8 @@ let test_cache_set_and_get () =
     let _ = ForwardingContext.cache_set_ppo ctx [] test_set in
     let cached = ForwardingContext.cache_get ctx [] in
 
-    match cached with
-    | Some s ->
-        Alcotest.(check int)
-          "Cached ppo size" 1
-          (Option.value ~default:(USet.create ()) s.ppo |> USet.size)
+    match cached.ppo with
+    | Some s -> Alcotest.(check int) "Cached ppo size" 1 (USet.size s)
     | None -> Alcotest.fail "Expected cached value"
 
 let test_cache_different_predicates () =
@@ -310,11 +307,11 @@ let test_cache_different_predicates () =
       let cached1 = ForwardingContext.cache_get ctx pred1 in
       let cached2 = ForwardingContext.cache_get ctx pred2 in
 
-      match (cached1, cached2) with
+      match (cached1.ppo, cached2.ppo) with
       | Some s1, Some s2 ->
           Alcotest.(check bool)
             "Different cache entries" true
-            (not (Option.equal USet.equal s1.ppo s2.ppo))
+            (not (USet.equal s1 s2))
       | _ -> Alcotest.fail "Expected cached values"
 
 (** Test good/bad context tracking *)
