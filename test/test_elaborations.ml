@@ -70,7 +70,10 @@ module TestData = struct
   let make_context ?(structure = make_structure ()) () =
     let fj = USet.create () in
     let op_trace = OpTrace.create 0 in
-      { structure; fj; op_trace }
+    let forwardingcontext_state =
+      Forwardingcontext.EventStructureContext.create structure
+    in
+      { forwardingcontext_state; structure; fj; op_trace }
 
   (* Mock justification builder *)
   let make_justification ?(predicates = []) ?(fwd = USet.create ())
@@ -196,7 +199,7 @@ let test_fprime_operations () =
 let test_fwd_operations () =
   let ctx = TestData.make_context () in
   let pred_fn _e = USet.create () in
-  let fwd_ctx = ForwardingContext.create () in
+  let fwd_ctx = ForwardingContext.create ctx.forwardingcontext_state in
   let just = TestData.make_justification 3 in
   let ppo_loc = USet.of_list [ (1, 2) ] in
 
@@ -227,7 +230,7 @@ let test_fwd_operations () =
 let test_we_operations () =
   let ctx = TestData.make_context () in
   let pred_fn _e = USet.create () in
-  let we_ctx = ForwardingContext.create () in
+  let we_ctx = ForwardingContext.create ctx.forwardingcontext_state in
   let just = TestData.make_justification 4 in
   let ppo_loc = USet.of_list [ (1, 3) ] in
 
@@ -452,7 +455,10 @@ module LiftingTests = struct
     let create_elab_ctx structure =
       let fj = USet.create () in
       let op_trace = OpTrace.create 0 in
-        { structure; fj; op_trace }
+      let forwardingcontext_state =
+        Forwardingcontext.EventStructureContext.create structure
+      in
+        { forwardingcontext_state; structure; fj; op_trace }
 
     (* Predicate test cases *)
     type predicate_test_case = {
@@ -632,8 +638,11 @@ module LiftingTests = struct
     let just_2 = TestData.create_justification events test_case.just_2_spec in
     let ppo_1 = USet.of_list [] in
     let ppo_2 = USet.of_list [] in
-    let con_1 = ForwardingContext.create ~structure () in
-    let con_2 = ForwardingContext.create ~structure () in
+    let forwardingcontext_state =
+      Forwardingcontext.EventStructureContext.create structure
+    in
+    let con_1 = ForwardingContext.create forwardingcontext_state () in
+    let con_2 = ForwardingContext.create forwardingcontext_state () in
 
     Lwt_main.run
       (let* relabelings =

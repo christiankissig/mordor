@@ -10,16 +10,12 @@ open Uset
 (** Calculate dependencies and justifications *)
 
 let calculate_dependencies ?(include_rf = true)
-    (structure : symbolic_event_structure) ~exhaustive ~restrictions =
+    (structure : symbolic_event_structure)
+    (forwardingcontext_state : Forwardingcontext.event_structure_context)
+    ~exhaustive ~restrictions =
   let e_set = structure.e in
   let events = structure.events in
   let po = structure.po in
-
-  (* Initialize ForwardingContext *)
-  let* () =
-    Forwardingcontext.init
-      { init_structure = structure; init_val = Events.get_val structure }
-  in
 
   (* Initialize initial PPO relation - relates all initial events and terminal
      events to other events along po-edges. *)
@@ -38,7 +34,10 @@ let calculate_dependencies ?(include_rf = true)
   (* TODO discern in subsequent computation *)
   let init_ppo = USet.union init_ppo terminal_ppo in
 
-  let* final_justs = Elaborations.generate_justifications structure init_ppo in
+  let* final_justs =
+    Elaborations.generate_justifications structure forwardingcontext_state
+      init_ppo
+  in
 
   Logs.debug (fun m ->
       m "Elaborations complete. Final justifications count: %d"
@@ -99,8 +98,8 @@ let calculate_dependencies ?(include_rf = true)
 
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions ~include_rf structure final_justs statex init_ppo
-      ~restrictions
+    generate_executions ~include_rf structure forwardingcontext_state
+      final_justs statex init_ppo ~restrictions
   in
 
   Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));
@@ -125,14 +124,23 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
   in
     match ctx.structure with
     | Some structure ->
-        let* justs, executions =
-          calculate_dependencies structure
-            ~exhaustive:(ctx.options.exhaustive || false)
-            ~restrictions:coherence_restrictions
+        let forwardingcontext_state =
+          Forwardingcontext.EventStructureContext.create structure
         in
-          ctx.justifications <- Some justs;
-          ctx.executions <- Some (USet.of_list executions);
-          Lwt.return ctx
+          ctx.forwardingcontext_state <- Some forwardingcontext_state;
+
+          let* () =
+            Forwardingcontext.EventStructureContext.init forwardingcontext_state
+          in
+
+          let* justs, executions =
+            calculate_dependencies structure forwardingcontext_state
+              ~exhaustive:(ctx.options.exhaustive || false)
+              ~restrictions:coherence_restrictions
+          in
+            ctx.justifications <- Some justs;
+            ctx.executions <- Some (USet.of_list executions);
+            Lwt.return ctx
     | _ ->
         Logs.err (fun m ->
             m "Program statements or litmus constraints not available."

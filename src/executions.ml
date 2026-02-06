@@ -974,35 +974,12 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
                     match (get_loc structure w, get_loc structure r) with
                     | Some loc_w, Some loc_r ->
                         Solver.expoteq ~state:preds loc_w loc_r
-                    | _ ->
-                        Logs.debug (fun m ->
-                            m
-                              "[compute_path_rf] Edge (%d->%d) rejected: \
-                               missing location"
-                              w r
-                        );
-                        Lwt.return false
+                    | _ -> Lwt.return false
                 in
-                  let*? () =
-                    if not loc_eq then
-                      Logs.debug (fun m ->
-                          m
-                            "[compute_path_rf] Edge (%d->%d) rejected: \
-                             locations not equal"
-                            w r
-                      );
-                    (loc_eq, "RF locs not equal")
-                  in
+                  let*? () = (loc_eq, "RF locs not equal") in
                     (* Check that writes are not shadowed for read-from *)
                     let* has_dslwb = dslwb structure w r in
                       let*? () =
-                        if has_dslwb then
-                          Logs.debug (fun m ->
-                              m
-                                "[compute_path_rf] Edge (%d->%d) rejected: \
-                                 shadowed (dslwb)"
-                                w r
-                          );
                         (not has_dslwb, "RF edge is shadowed (dslwb)")
                       in
                         Landmark.exit landmark;
@@ -1010,11 +987,6 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
           )
           w_cross_r_minus_po
       in
-
-      Logs.debug (fun m ->
-          m "[compute_path_rf] After loc/shadow filtering: %d valid RF edges"
-            (USet.size all_rf)
-      );
 
       let dp_ppo = USet.union dp ppo in
       let dp_ppo_tc = URelation.transitive_closure dp_ppo in
@@ -1026,29 +998,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
         USet.filter (fun (r, w) -> not (USet.mem dp_ppo_tc (r, w))) all_rf_inv
       in
 
-      Logs.debug (fun m ->
-          m
-            "[compute_path_rf] After cycle filtering: %d edges (removed %d \
-             that would create immediate cycles)"
-            (USet.size all_rf_inv)
-            (USet.size all_rf_inv_before_cycle - USet.size all_rf_inv)
-      );
-
-      Logs.debug (fun m ->
-          m "  Found %d initial RF edges for path: %s" (USet.size all_rf_inv)
-            (String.concat ", "
-               (List.map
-                  (fun (r, w) -> Printf.sprintf "(%d->%d)" r w)
-                  (USet.values all_rf_inv)
-               )
-            )
-      );
-
       let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
-        Logs.debug (fun m ->
-            m "[compute_path_rf] Building combinations for %d reads"
-              (Hashtbl.length all_rf_inv_map)
-        );
         let* rf_candidates =
           ListMapCombinationBuilder.build_combinations all_rf_inv_map
             ~check_partial:(fun combo ?alternatives pair ->
@@ -1090,6 +1040,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
 module Freeze : sig
   val freeze :
     symbolic_event_structure ->
+    Forwardingcontext.event_structure_context ->
     path_info ->
     justification list ->
     (int * int) USet.t ->
@@ -1137,7 +1088,8 @@ end = struct
       @param p_combined Combined predicates.
       @param init_ppo Initial PPO edges.
       @return Pair (PPO, PPO_loc) of ppo relations. *)
-  let freeze_ppo structure path j_list con p_combined init_ppo =
+  let freeze_ppo structure forwardingcontext_state path j_list con p_combined
+      init_ppo =
     let landmark = Landmark.register "freeze_ppo" in
       Landmark.enter landmark;
       let e_squared = URelation.cross path.path path.path in
@@ -1147,7 +1099,8 @@ end = struct
         Lwt_list.map_s
           (fun just ->
             let just_con =
-              ForwardingContext.create ~structure ~fwd:just.fwd ~we:just.we ()
+              ForwardingContext.create forwardingcontext_state ~fwd:just.fwd
+                ~we:just.we ()
             in
               let* ppo_j = ForwardingContext.ppo just_con just.p in
 
@@ -1214,7 +1167,7 @@ end = struct
       @param constraints Additional constraints.
       @param include_rf Whether to compute RF relations (false for testing).
       @return Promise of list of valid freeze results. *)
-  let freeze (structure : symbolic_event_structure) path j_list init_ppo statex
+  let freeze structure forwardingcontext_state path j_list init_ppo statex
       ~elided ~constraints ~include_rf =
     let landmark = Landmark.register "Executions.freeze" in
       Landmark.enter landmark;
@@ -1275,7 +1228,7 @@ end = struct
       );
 
       (* Create forwarding context *)
-      let con = ForwardingContext.create ~structure ~fwd ~we () in
+      let con = ForwardingContext.create forwardingcontext_state ~fwd ~we () in
 
       (* Combine predicates *)
       let p_combined =
@@ -1327,7 +1280,8 @@ end = struct
         );
         let*? () = (combined_p_sat, "predicates unsatisfiable") in
           let* ppo, ppo_loc =
-            freeze_ppo structure path j_list con p_combined init_ppo
+            freeze_ppo structure forwardingcontext_state path j_list con
+              p_combined init_ppo
           in
 
           let* all_fr =
@@ -1456,8 +1410,9 @@ let compute_justification_combinations structure paths init_ppo statex
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
 let generate_executions ?(include_rf = true)
-    (structure : symbolic_event_structure) (justs : justification uset) statex
-    init_ppo ~restrictions =
+    (structure : symbolic_event_structure)
+    (forwardingcontext_state : Forwardingcontext.event_structure_context)
+    (justs : justification uset) statex init_ppo ~restrictions =
   let landmark = Landmark.register "generate_executions" in
     Landmark.enter landmark;
 
@@ -1510,7 +1465,9 @@ let generate_executions ?(include_rf = true)
               (fun acc j -> USet.inplace_union acc j.we)
               (USet.create ()) just_combo
           in
-          let con = ForwardingContext.create ~structure ~fwd ~we () in
+          let con =
+            ForwardingContext.create forwardingcontext_state ~fwd ~we ()
+          in
           let j_remapped =
             List.map (fun j -> ForwardingContext.remap_just con j) just_combo
           in
@@ -1520,8 +1477,8 @@ let generate_executions ?(include_rf = true)
           in
 
           let* freeze_results =
-            Freeze.freeze structure path j_remapped init_ppo statex ~elided
-              ~constraints ~include_rf
+            Freeze.freeze structure forwardingcontext_state path j_remapped
+              init_ppo statex ~elided ~constraints ~include_rf
           in
             Logs.debug (fun m ->
                 m

@@ -46,6 +46,7 @@ module OpTrace = Hashtbl.Make (JustificationCacheKey)
 type context = {
   structure : symbolic_event_structure;
       (** The symbolic event structure being elaborated. *)
+  forwardingcontext_state : Forwardingcontext.event_structure_context;
   fj : (int * int) USet.t;  (** Fork-join edges that constrain forwarding. *)
   op_trace : op OpTrace.t;
       (** Cache of operations performed on justifications to avoid redundancy.
@@ -148,7 +149,8 @@ module ValueAssignment = struct
   let elab elab_ctx just =
     let structure = elab_ctx.structure in
     let fwd_ctx =
-      ForwardingContext.create ~structure ~fwd:just.fwd ~we:just.we ()
+      ForwardingContext.create elab_ctx.forwardingcontext_state ~fwd:just.fwd
+        ~we:just.we ()
     in
     let defacto =
       Hashtbl.find_opt elab_ctx.structure.defacto just.w.label
@@ -289,7 +291,7 @@ module Forwarding = struct
         Lwt_list.map_p
           (fun p ->
             let fwd_ctx =
-              ForwardingContext.create ~structure:elab_ctx.structure
+              ForwardingContext.create elab_ctx.forwardingcontext_state
                 ~fwd:just.fwd ~we:just.we ()
             in
               let* ppo = ForwardingContext.ppo fwd_ctx p in
@@ -343,14 +345,21 @@ module Forwarding = struct
 
                     (* Filter edge function *)
                     let filtedge (edge, new_fwd, new_we) =
-                      if Forwardingcontext.is_bad new_fwd new_we then
-                        Lwt.return_false
-                      else if Forwardingcontext.is_good new_fwd new_we then
-                        Lwt.return_true
+                      if
+                        Forwardingcontext.ContextCache.is_bad
+                          elab_ctx.forwardingcontext_state.context_cache new_fwd
+                          new_we
+                      then Lwt.return_false
+                      else if
+                        Forwardingcontext.ContextCache.is_good
+                          elab_ctx.forwardingcontext_state.context_cache new_fwd
+                          new_we
+                      then Lwt.return_true
                       else
                         let con =
-                          ForwardingContext.create ~structure:elab_ctx.structure
-                            ~fwd:new_fwd ~we:new_we ()
+                          ForwardingContext.create
+                            elab_ctx.forwardingcontext_state ~fwd:new_fwd
+                            ~we:new_we ()
                         in
                           ForwardingContext.check con
                     in
@@ -387,7 +396,7 @@ module Forwarding = struct
                           (fun (edge, new_fwd, new_we) ->
                             let con =
                               ForwardingContext.create
-                                ~structure:elab_ctx.structure ~fwd:new_fwd
+                                elab_ctx.forwardingcontext_state ~fwd:new_fwd
                                 ~we:new_we ()
                             in
                               ForwardingContext.remap_just con just
@@ -400,7 +409,7 @@ module Forwarding = struct
                           (fun (edge, new_fwd, new_we) ->
                             let con =
                               ForwardingContext.create
-                                ~structure:elab_ctx.structure ~fwd:new_fwd
+                                elab_ctx.forwardingcontext_state ~fwd:new_fwd
                                 ~we:new_we ()
                             in
                               ForwardingContext.remap_just con just
@@ -902,11 +911,11 @@ end = struct
 
           (* Create forwarding contexts *)
           let con_1 =
-            ForwardingContext.create ~structure:elab_ctx.structure
+            ForwardingContext.create elab_ctx.forwardingcontext_state
               ~fwd:just_1.fwd ~we:just_1.we ()
           in
           let con_2 =
-            ForwardingContext.create ~structure:elab_ctx.structure
+            ForwardingContext.create elab_ctx.forwardingcontext_state
               ~fwd:just_2.fwd ~we:just_2.we ()
           in
 
@@ -1140,7 +1149,10 @@ module Weakening = struct
       @param just The justification to weaken.
       @return Promise of list of weakened justifications. *)
   let elab elab_ctx just =
-    let con = ForwardingContext.create ~fwd:just.fwd ~we:just.we () in
+    let con =
+      ForwardingContext.create elab_ctx.forwardingcontext_state ~fwd:just.fwd
+        ~we:just.we ()
+    in
 
     (* Filter predicates that are not implied by PWG *)
     let* p =
@@ -1371,7 +1383,7 @@ let batch_elaborations elab_ctx pre_justs =
     @param structure The event structure.
     @param init_ppo Initial PPO relations.
     @return Promise of generated justifications. *)
-let generate_justifications structure init_ppo =
+let generate_justifications structure forwardingcontext_state init_ppo =
   let po = structure.po in
   let events = structure.events in
 
@@ -1389,7 +1401,9 @@ let generate_justifications structure init_ppo =
 
   (* Build context for elaborations *)
   let op_trace = OpTrace.create 0 in
-  let elab_ctx : context = { structure; fj; op_trace } in
+  let elab_ctx : context =
+    { forwardingcontext_state; structure; fj; op_trace }
+  in
 
   Logs.debug (fun m -> m "Starting elaborations...");
 
