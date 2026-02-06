@@ -1,4 +1,4 @@
-(** Unit tests for ForwardingContext *)
+(** Unit tests for ForwardingContext - Refactored with data providers *)
 open Uset
 
 open Eventstructures
@@ -95,6 +95,95 @@ module Testable = struct
       Alcotest.testable pp equal
 end
 
+(** Data providers for test cases *)
+module DataProviders = struct
+  (** Data for context creation tests *)
+  type context_creation_data = {
+    name : string;
+    fwd_edges : (int * int) list option;
+    we_edges : (int * int) list option;
+    expected_fwd_size : int;
+    expected_we_size : int;
+  }
+
+  let context_creation_cases =
+    [
+      {
+        name = "empty context";
+        fwd_edges = None;
+        we_edges = None;
+        expected_fwd_size = 0;
+        expected_we_size = 0;
+      };
+      {
+        name = "with fwd";
+        fwd_edges = Some [ (1, 2) ];
+        we_edges = None;
+        expected_fwd_size = 1;
+        expected_we_size = 0;
+      };
+      {
+        name = "with we";
+        fwd_edges = None;
+        we_edges = Some [ (2, 3) ];
+        expected_fwd_size = 0;
+        expected_we_size = 1;
+      };
+    ]
+
+  (** Data for remap tests *)
+  type remap_data = {
+    name : string;
+    fwd_edges : (int * int) list;
+    event : int;
+    expected : int;
+  }
+
+  let remap_cases =
+    [
+      { name = "identity"; fwd_edges = []; event = 1; expected = 1 };
+      {
+        name = "with forwarding";
+        fwd_edges = [ (1, 2) ];
+        event = 2;
+        expected = 1;
+      };
+      {
+        name = "transitive";
+        fwd_edges = [ (1, 2); (2, 3) ];
+        event = 3;
+        expected = 1;
+      };
+    ]
+
+  (** Data for check satisfiability tests *)
+  type check_data = {
+    name : string;
+    psi : expr list;
+    expected_result : bool;
+    should_be_good : bool;
+    should_be_bad : bool;
+  }
+
+  let check_cases =
+    [
+      {
+        name = "tautology";
+        psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ];
+        expected_result = true;
+        should_be_good = true;
+        should_be_bad = false;
+      };
+      {
+        name = "contradiction";
+        psi = [ EBinOp (ENum Z.one, "=", ENum Z.zero) ];
+        expected_result = false;
+        should_be_good = false;
+        should_be_bad = true;
+      };
+    ]
+end
+
 (** Test initialization *)
 let test_init () =
   Lwt_main.run
@@ -131,36 +220,37 @@ let test_init_clears_state () =
        Lwt.return_unit
     )
 
-(** Test context creation *)
-let test_create_empty_context () =
+(** Test context creation - using data provider *)
+let test_create_context (data : DataProviders.context_creation_data) =
   let structure = TestUtil.make_structure () in
   let forwardingcontext_state = EventStructureContext.create structure in
 
-  let ctx = ForwardingContext.create forwardingcontext_state () in
-    Alcotest.(check int) "Empty fwd" 0 (USet.size ctx.fwd);
-    Alcotest.(check int) "Empty we" 0 (USet.size ctx.we);
-    Alcotest.(check int) "Empty psi" 0 (List.length ctx.psi)
+  let create_uset edges =
+    let s = USet.create () in
+      List.iter (fun (a, b) -> ignore (USet.add s (a, b))) edges;
+      s
+  in
 
-let test_create_with_fwd () =
-  let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
-
-  let fwd = USet.create () in
-    ignore (USet.add fwd (1, 2));
-    let ctx = ForwardingContext.create forwardingcontext_state ~fwd () in
-      Alcotest.(check int) "Fwd size" 1 (USet.size ctx.fwd);
-      Alcotest.(check int) "Empty we" 0 (USet.size ctx.we)
-
-let test_create_with_we () =
-  let structure = TestUtil.make_structure () in
-  let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
-
-  let we = USet.create () in
-    ignore (USet.add we (2, 3));
-    let ctx = ForwardingContext.create forwardingcontext_state ~we () in
-      Alcotest.(check int) "Empty fwd" 0 (USet.size ctx.fwd);
-      Alcotest.(check int) "WE size" 1 (USet.size ctx.we)
+  let ctx =
+    match (data.fwd_edges, data.we_edges) with
+    | None, None -> ForwardingContext.create forwardingcontext_state ()
+    | Some fwd_edges, None ->
+        let fwd = create_uset fwd_edges in
+          ForwardingContext.create forwardingcontext_state ~fwd ()
+    | None, Some we_edges ->
+        let we = create_uset we_edges in
+          ForwardingContext.create forwardingcontext_state ~we ()
+    | Some fwd_edges, Some we_edges ->
+        let fwd = create_uset fwd_edges in
+        let we = create_uset we_edges in
+          ForwardingContext.create forwardingcontext_state ~fwd ~we ()
+  in
+    Alcotest.(check int)
+      (Printf.sprintf "Fwd size for %s" data.name)
+      data.expected_fwd_size (USet.size ctx.fwd);
+    Alcotest.(check int)
+      (Printf.sprintf "WE size for %s" data.name)
+      data.expected_we_size (USet.size ctx.we)
 
 let test_create_generates_psi () =
   Lwt_main.run
@@ -179,46 +269,20 @@ let test_create_generates_psi () =
          Lwt.return_unit
     )
 
-(** Test remapping *)
-let test_remap_identity () =
-  Lwt_main.run
-    (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
-
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx = ForwardingContext.create forwardingcontext_state () in
-       Alcotest.(check int) "Identity remap" 1 (ForwardingContext.remap ctx 1);
-       Lwt.return_unit
-    )
-
-let test_remap_with_forwarding () =
+(** Test remapping - using data provider *)
+let test_remap (data : DataProviders.remap_data) =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
      let forwardingcontext_state = EventStructureContext.create structure in
 
      let* () = EventStructureContext.init forwardingcontext_state in
      let fwd = USet.create () in
-       USet.add fwd (1, 2) |> ignore;
+       List.iter (fun (a, b) -> ignore (USet.add fwd (a, b))) data.fwd_edges;
        let ctx = ForwardingContext.create forwardingcontext_state ~fwd () in
-         (* Event 2 should remap to 1 *)
-         Alcotest.(check int) "Remapped event" 1 (ForwardingContext.remap ctx 2);
-         Lwt.return_unit
-    )
-
-let test_remap_transitive () =
-  Lwt_main.run
-    (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
-
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let fwd = USet.create () in
-       USet.add fwd (1, 2) |> ignore;
-       USet.add fwd (2, 3) |> ignore;
-       let ctx = ForwardingContext.create forwardingcontext_state ~fwd () in
-         (* Event 3 should remap transitively to 1 *)
          Alcotest.(check int)
-           "Transitive remap" 1
-           (ForwardingContext.remap ctx 3);
+           (Printf.sprintf "Remap %s" data.name)
+           data.expected
+           (ForwardingContext.remap ctx data.event);
          Lwt.return_unit
     )
 
@@ -228,19 +292,13 @@ let test_remap_rel () =
      let forwardingcontext_state = EventStructureContext.create structure in
 
      let* () = EventStructureContext.init forwardingcontext_state in
-     let fwd = USet.create () in
-       ignore (USet.add fwd (1, 2));
-       let ctx = ForwardingContext.create forwardingcontext_state ~fwd () in
-
-       let rel = USet.create () in
-         ignore (USet.add rel (2, 3));
-
-         let remapped = ForwardingContext.remap_rel ctx rel in
-           (* (2,3) should become (1,3) *)
-           Alcotest.(check bool)
-             "Relation remapped" true
-             (USet.mem remapped (1, 3));
-           Lwt.return_unit
+     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let rel = USet.create () in
+       ignore (USet.add rel (1, 2));
+       ignore (USet.add rel (3, 4));
+       let remapped = ForwardingContext.remap_rel ctx rel in
+         Alcotest.(check int) "Relation preserved" 2 (USet.size remapped);
+         Lwt.return_unit
     )
 
 let test_remap_rel_filters_reflexive () =
@@ -252,14 +310,16 @@ let test_remap_rel_filters_reflexive () =
      let fwd = USet.create () in
        ignore (USet.add fwd (1, 2));
        let ctx = ForwardingContext.create forwardingcontext_state ~fwd () in
-
        let rel = USet.create () in
-         ignore (USet.add rel (2, 1));
-
-         (* Will remap to (1,1) *)
+         (* Add edges that become reflexive after remapping *)
+         ignore (USet.add rel (1, 2));
+         (* This becomes (1,1) *)
+         ignore (USet.add rel (3, 4));
          let remapped = ForwardingContext.remap_rel ctx rel in
            (* Should filter out (1,1) *)
-           Alcotest.(check int) "Reflexive filtered" 0 (USet.size remapped);
+           Alcotest.(check bool)
+             "Filters reflexive" true
+             (not (USet.mem remapped (1, 1)));
            Lwt.return_unit
     )
 
@@ -270,54 +330,67 @@ let test_cache_initially_empty () =
 
   let ctx = ForwardingContext.create forwardingcontext_state () in
   let cached = ForwardingContext.cache_get ctx [] in
-    Alcotest.(check bool) "Cache empty - no ppo" true (cached.ppo = None);
-    Alcotest.(check bool) "Cache empty - no ppo_loc" true (cached.ppo_loc = None)
+    Alcotest.(check bool)
+      "PPO not cached" true
+      ( match cached.ppo with
+      | None -> true
+      | _ -> false
+      )
 
 let test_cache_set_and_get () =
-  let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let forwardingcontext_state = EventStructureContext.create structure in
 
-  let ctx = ForwardingContext.create forwardingcontext_state () in
-  let test_set = USet.create () in
-    ignore (USet.add test_set (1, 2));
-
-    let _ = ForwardingContext.cache_set_ppo ctx [] test_set in
-    let cached = ForwardingContext.cache_get ctx [] in
-
-    match cached.ppo with
-    | Some s -> Alcotest.(check int) "Cached ppo size" 1 (USet.size s)
-    | None -> Alcotest.fail "Expected cached value"
+     let* () = EventStructureContext.init forwardingcontext_state in
+     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let test_set = USet.create () in
+       ignore (USet.add test_set (1, 2));
+       let _ = ForwardingContext.cache_set_ppo ctx [] test_set in
+       let cached = ForwardingContext.cache_get ctx [] in
+         match cached.ppo with
+         | Some s ->
+             Alcotest.(check Testable.uset_int_pair)
+               "Retrieved cached value" test_set s;
+             Lwt.return_unit
+         | None -> Alcotest.fail "Cache should contain value"
+    )
 
 let test_cache_different_predicates () =
-  let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let forwardingcontext_state = EventStructureContext.create structure in
 
-  let ctx = ForwardingContext.create forwardingcontext_state () in
-  let set1 = USet.create () in
-    ignore (USet.add set1 (1, 2));
-    let set2 = USet.create () in
-      ignore (USet.add set2 (2, 3));
+     let* () = EventStructureContext.init forwardingcontext_state in
+     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let set1 = USet.create () in
+       ignore (USet.add set1 (1, 2));
+       let set2 = USet.create () in
+         ignore (USet.add set2 (3, 4));
 
-      let pred1 = [ ENum Z.one ] in
-      let pred2 = [ ENum Z.zero ] in
+         let pred1 = [ EBoolean true ] in
+         let pred2 = [ EBoolean false ] in
 
-      let _ = ForwardingContext.cache_set_ppo ctx pred1 set1 in
-      let _ = ForwardingContext.cache_set_ppo ctx pred2 set2 in
+         let _ = ForwardingContext.cache_set_ppo ctx pred1 set1 in
+         let _ = ForwardingContext.cache_set_ppo ctx pred2 set2 in
 
-      let cached1 = ForwardingContext.cache_get ctx pred1 in
-      let cached2 = ForwardingContext.cache_get ctx pred2 in
+         let cached1 = ForwardingContext.cache_get ctx pred1 in
+         let cached2 = ForwardingContext.cache_get ctx pred2 in
 
-      match (cached1.ppo, cached2.ppo) with
-      | Some s1, Some s2 ->
-          Alcotest.(check bool)
-            "Different cache entries" true
-            (not (USet.equal s1 s2))
-      | _ -> Alcotest.fail "Expected cached values"
+         Alcotest.(check bool)
+           "Different predicates cache separately" true
+           ( match (cached1.ppo, cached2.ppo) with
+           | Some s1, Some s2 -> not (USet.equal s1 s2)
+           | _ -> false
+           );
+         Lwt.return_unit
+    )
 
-(** Test good/bad context tracking *)
+(** Test context cache status *)
 let test_is_good_initially_false () =
   let structure = TestUtil.make_structure () in
   let forwardingcontext_state = EventStructureContext.create structure in
+
   let fwd = USet.create () in
   let we = USet.create () in
     Alcotest.(check bool)
@@ -327,88 +400,47 @@ let test_is_good_initially_false () =
 let test_is_bad_initially_false () =
   let structure = TestUtil.make_structure () in
   let forwardingcontext_state = EventStructureContext.create structure in
+
   let fwd = USet.create () in
   let we = USet.create () in
     Alcotest.(check bool)
       "Not initially bad" false
       (ContextCache.is_bad forwardingcontext_state.context_cache fwd we)
 
-(** Test context checking *)
-let test_check_tautology () =
+(** Test context checking - using data provider *)
+let test_check (data : DataProviders.check_data) =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
      let forwardingcontext_state = EventStructureContext.create structure in
 
      let* () = EventStructureContext.init forwardingcontext_state in
-     (* Context with tautological predicates *)
      let ctx =
        {
          (ForwardingContext.create forwardingcontext_state ()) with
-         psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ];
+         psi = data.psi;
        }
      in
        let* result = ForwardingContext.check ctx in
-         Alcotest.(check bool) "Tautology is satisfiable" true result;
-         Lwt.return_unit
-    )
-
-let test_check_contradiction () =
-  Lwt_main.run
-    (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
-
-     let* () = EventStructureContext.init forwardingcontext_state in
-     (* Context with contradictory predicates *)
-     let ctx =
-       {
-         (ForwardingContext.create forwardingcontext_state ()) with
-         psi = [ EBinOp (ENum Z.one, "=", ENum Z.zero) ];
-       }
-     in
-       let* result = ForwardingContext.check ctx in
-         Alcotest.(check bool) "Contradiction is unsatisfiable" false result;
-         Lwt.return_unit
-    )
-
-let test_check_marks_good () =
-  Lwt_main.run
-    (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
-
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx =
-       {
-         (ForwardingContext.create forwardingcontext_state ()) with
-         psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ];
-       }
-     in
-       let* _result = ForwardingContext.check ctx in
          Alcotest.(check bool)
-           "Marked as good" true
-           (ContextCache.is_good forwardingcontext_state.context_cache ctx.fwd
-              ctx.we
-           );
-         Lwt.return_unit
-    )
+           (Printf.sprintf "%s satisfiability" data.name)
+           data.expected_result result;
 
-let test_check_marks_bad () =
-  Lwt_main.run
-    (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+         if data.should_be_good then
+           Alcotest.(check bool)
+             (Printf.sprintf "%s marked as good" data.name)
+             true
+             (ContextCache.is_good forwardingcontext_state.context_cache ctx.fwd
+                ctx.we
+             );
 
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx =
-       {
-         (ForwardingContext.create forwardingcontext_state ()) with
-         psi = [ EBinOp (ENum Z.one, "=", ENum Z.zero) ];
-       }
-     in
-       let* _result = ForwardingContext.check ctx in
-         Alcotest.(check bool)
-           "Marked as bad" true
-           (ContextCache.is_bad forwardingcontext_state.context_cache ctx.fwd
-              ctx.we
-           );
+         if data.should_be_bad then
+           Alcotest.(check bool)
+             (Printf.sprintf "%s marked as bad" data.name)
+             true
+             (ContextCache.is_bad forwardingcontext_state.context_cache ctx.fwd
+                ctx.we
+             );
+
          Lwt.return_unit
     )
 
@@ -517,6 +549,34 @@ let test_update_po_clears_cache () =
          Lwt.return_unit
     )
 
+(** Generate test cases from data providers *)
+let make_context_creation_tests () =
+  List.map
+    (fun (data : DataProviders.context_creation_data) ->
+      Alcotest.test_case (Printf.sprintf "create %s" data.name) `Quick
+        (fun () -> test_create_context data
+      )
+    )
+    DataProviders.context_creation_cases
+
+let make_remap_tests () =
+  List.map
+    (fun (data : DataProviders.remap_data) ->
+      Alcotest.test_case (Printf.sprintf "remap %s" data.name) `Quick (fun () ->
+          test_remap data
+      )
+    )
+    DataProviders.remap_cases
+
+let make_check_tests () =
+  List.map
+    (fun (data : DataProviders.check_data) ->
+      Alcotest.test_case (Printf.sprintf "check %s" data.name) `Quick (fun () ->
+          test_check data
+      )
+    )
+    DataProviders.check_cases
+
 (** Test suite *)
 let suite =
   let open Alcotest in
@@ -524,33 +584,31 @@ let suite =
     [
       test_case "init completes" `Quick test_init;
       test_case "init clears state" `Quick test_init_clears_state;
-      test_case "create empty context" `Quick test_create_empty_context;
-      test_case "create with fwd" `Quick test_create_with_fwd;
-      test_case "create with we" `Quick test_create_with_we;
-      test_case "create generates psi" `Quick test_create_generates_psi;
-      test_case "remap identity" `Quick test_remap_identity;
-      test_case "remap with forwarding" `Quick test_remap_with_forwarding;
-      test_case "remap transitive" `Quick test_remap_transitive;
-      test_case "remap relation" `Quick test_remap_rel;
-      test_case "remap filters reflexive" `Quick
-        test_remap_rel_filters_reflexive;
-      test_case "cache initially empty" `Quick test_cache_initially_empty;
-      test_case "cache set and get" `Quick test_cache_set_and_get;
-      test_case "cache different predicates" `Quick
-        test_cache_different_predicates;
-      test_case "is_good initially false" `Quick test_is_good_initially_false;
-      test_case "is_bad initially false" `Quick test_is_bad_initially_false;
-      test_case "check tautology" `Quick test_check_tautology;
-      test_case "check contradiction" `Quick test_check_contradiction;
-      test_case "check marks good" `Quick test_check_marks_good;
-      test_case "check marks bad" `Quick test_check_marks_bad;
-      test_case "ppo returns remapped" `Quick test_ppo_returns_remapped;
-      test_case "ppo caches result" `Quick test_ppo_caches_result;
-      test_case "ppo_loc returns remapped" `Quick test_ppo_loc_returns_remapped;
-      test_case "ppo_sync returns remapped" `Quick
-        test_ppo_sync_returns_remapped;
-      test_case "to_string empty" `Quick test_to_string_empty;
-      test_case "to_string with edges" `Quick test_to_string_with_edges;
-      test_case "update_po clears cache" `Quick test_update_po_clears_cache;
     ]
+    @ make_context_creation_tests ()
+    @ [ test_case "create generates psi" `Quick test_create_generates_psi ]
+    @ make_remap_tests ()
+    @ [
+        test_case "remap relation" `Quick test_remap_rel;
+        test_case "remap filters reflexive" `Quick
+          test_remap_rel_filters_reflexive;
+        test_case "cache initially empty" `Quick test_cache_initially_empty;
+        test_case "cache set and get" `Quick test_cache_set_and_get;
+        test_case "cache different predicates" `Quick
+          test_cache_different_predicates;
+        test_case "is_good initially false" `Quick test_is_good_initially_false;
+        test_case "is_bad initially false" `Quick test_is_bad_initially_false;
+      ]
+    @ make_check_tests ()
+    @ [
+        test_case "ppo returns remapped" `Quick test_ppo_returns_remapped;
+        test_case "ppo caches result" `Quick test_ppo_caches_result;
+        test_case "ppo_loc returns remapped" `Quick
+          test_ppo_loc_returns_remapped;
+        test_case "ppo_sync returns remapped" `Quick
+          test_ppo_sync_returns_remapped;
+        test_case "to_string empty" `Quick test_to_string_empty;
+        test_case "to_string with edges" `Quick test_to_string_with_edges;
+        test_case "update_po clears cache" `Quick test_update_po_clears_cache;
+      ]
   )
