@@ -13,32 +13,77 @@ open Types
 open Uset
 
 (** {1 Event Structure Context} *)
+
+(** Cache key for PPO computation.
+
+    Combines the forwarding context (fwd, we) with predicate constraints to
+    uniquely identify a PPO computation request. *)
 type ppo_cache_key = {
   con : (int * int) uset * (int * int) uset;
-  predicates : expr list;
+      (** The context pair: (forwarding edges, write-exclusion edges). *)
+  predicates : expr list;  (** Additional predicate constraints. *)
 }
 
+(** Cached PPO computation result.
+
+    Stores both standard PPO and location-based PPO. Either or both may be
+    [None] if not yet computed for this cache entry. *)
 type ppo_cache_value = {
-  ppo : (int * int) uset option;
-  ppo_loc : (int * int) uset option;
+  ppo : (int * int) uset option;  (** Standard PPO relation. *)
+  ppo_loc : (int * int) uset option;  (** Location-based PPO relation. *)
 }
 
-(** PPO computation cache. *)
+(** PPO computation cache.
+
+    Caches preserved program order (PPO) computations to avoid redundant solver
+    queries. Provides both exact-match and subset-based lookups. *)
 module PpoCache : sig
+  (** Cache type. *)
   type t
 
+  (** [create ()] creates a new empty cache. *)
   val create : unit -> t
+
+  (** [clear cache] clears all cached entries.
+
+      Should be called when the underlying program order changes. *)
   val clear : t -> unit
 
+  (** [get cache con predicates] retrieves exact cache match.
+
+      @param cache The PPO cache.
+      @param con The forwarding context (fwd, we).
+      @param predicates The predicate list.
+      @return Cached value or empty value if not found. *)
   val get :
     t -> (int * int) uset * (int * int) uset -> expr list -> ppo_cache_value
 
+  (** [get_subset cache con predicates] finds cached entry with subset
+      predicates.
+
+      Searches for cached entries where the cached predicates are a subset of
+      the query predicates. Returns the entry with the largest PPO.
+
+      @param cache The PPO cache.
+      @param con The forwarding context.
+      @param predicates The predicate list.
+      @return [Some value] if matching entry found, [None] otherwise. *)
   val get_subset :
     t ->
     (int * int) uset * (int * int) uset ->
     expr list ->
     ppo_cache_value option
 
+  (** [set_ppo cache con predicates value] stores PPO in cache.
+
+      Updates the cache with a computed PPO relation for the given context and
+      predicates.
+
+      @param cache The PPO cache.
+      @param con The forwarding context.
+      @param predicates The predicate list.
+      @param value The computed PPO relation.
+      @return The value that was stored. *)
   val set_ppo :
     t ->
     (int * int) uset * (int * int) uset ->
@@ -46,6 +91,16 @@ module PpoCache : sig
     (int * int) uset ->
     (int * int) uset
 
+  (** [set_ppo_loc cache con predicates value] stores location-based PPO in
+      cache.
+
+      Updates the cache with a computed location-based PPO relation.
+
+      @param cache The PPO cache.
+      @param con The forwarding context.
+      @param predicates The predicate list.
+      @param value The computed location-based PPO relation.
+      @return The value that was stored. *)
   val set_ppo_loc :
     t ->
     (int * int) uset * (int * int) uset ->
@@ -53,11 +108,15 @@ module PpoCache : sig
     (int * int) uset ->
     (int * int) uset
 
+  (** [size cache] returns the number of cached entries.
+
+      @param cache The PPO cache.
+      @return Number of entries in the exact-match cache. *)
   val size : t -> int
 end = struct
   type t = {
     exact : (ppo_cache_key, ppo_cache_value) Hashtbl.t;
-        (** Exact-match cache mapping keys to computed values. was cache *)
+        (** Exact-match cache mapping keys to computed values. *)
     by_context :
       ( (int * int) uset * (int * int) uset,
         (expr list * ppo_cache_value) list
@@ -66,40 +125,22 @@ end = struct
         (** Context-indexed cache for subset lookups.
 
             Groups cache entries by context, allowing lookup of entries whose
-            predicates are subsets of a query. was cache_con *)
+            predicates are subsets of a query. *)
   }
 
   let create () =
     { exact = Hashtbl.create 256; by_context = Hashtbl.create 256 }
 
-  (** [clear ()] clears both caches.
-
-      Should be called when the underlying program order changes.
-
-      TODO redundant? *)
   let clear cache =
     Hashtbl.clear cache.exact;
     Hashtbl.clear cache.by_context
 
-  (** [get con predicates] retrieves cached value for exact match.
-
-      @param con The forwarding context (fwd, we).
-      @param predicates The predicate list.
-      @return Cached value or empty value if not found. *)
   let get cache con predicates =
     let key = { con; predicates } in
       match Hashtbl.find_opt cache.exact key with
       | Some v -> v
       | None -> { ppo = None; ppo_loc = None }
 
-  (** [get_subset con predicates] finds cached entry with subset predicates.
-
-      Searches for cached entries where the cached predicates are a subset of
-      the query predicates. Returns the entry with the largest PPO.
-
-      @param con The forwarding context.
-      @param predicates The predicate list.
-      @return [Some value] if matching entry found, [None] otherwise. *)
   let get_subset cache con predicates =
     match Hashtbl.find_opt cache.by_context con with
     | None -> None
@@ -134,6 +175,17 @@ end = struct
                 Some v
       )
 
+  (** [set_field cache con predicates field value] internal helper for updating
+      cache fields.
+
+      Updates either the ppo or ppo_loc field in the cache entry.
+
+      @param cache The PPO cache.
+      @param con The forwarding context.
+      @param predicates The predicate list.
+      @param field Function to update the desired field.
+      @param value The new value.
+      @return The value that was stored. *)
   let set_field cache con predicates field value =
     let key = { con; predicates } in
     let current =
@@ -172,18 +224,52 @@ end
     Tracks which (fwd, we) contexts have been proven satisfiable (good) or
     unsatisfiable (bad) to avoid redundant solver queries. *)
 module ContextCache : sig
+  (** Cache type. *)
   type t
 
+  (** [create ()] creates a new empty context cache. *)
   val create : unit -> t
+
+  (** [clear cache] clears all cached context validity results.
+
+      @param cache The context cache. *)
   val clear : t -> unit
+
+  (** [is_good cache fwd we] checks if context is known satisfiable.
+
+      @param cache The context cache.
+      @param fwd The forwarding edges.
+      @param we The write-exclusion edges.
+      @return [true] if previously proven satisfiable. *)
   val is_good : t -> (int * int) uset -> (int * int) uset -> bool
+
+  (** [is_bad cache fwd we] checks if context is known unsatisfiable.
+
+      @param cache The context cache.
+      @param fwd The forwarding edges.
+      @param we The write-exclusion edges.
+      @return [true] if previously proven unsatisfiable. *)
   val is_bad : t -> (int * int) uset -> (int * int) uset -> bool
+
+  (** [mark_good cache fwd we] records that context is satisfiable.
+
+      @param cache The context cache.
+      @param fwd The forwarding edges.
+      @param we The write-exclusion edges. *)
   val mark_good : t -> (int * int) uset -> (int * int) uset -> unit
+
+  (** [mark_bad cache fwd we] records that context is unsatisfiable.
+
+      @param cache The context cache.
+      @param fwd The forwarding edges.
+      @param we The write-exclusion edges. *)
   val mark_bad : t -> (int * int) uset -> (int * int) uset -> unit
 end = struct
   type t = {
     good : ((int * int) uset * (int * int) uset) uset;
+        (** Set of satisfiable contexts. *)
     bad : ((int * int) uset * (int * int) uset) uset;
+        (** Set of unsatisfiable contexts. *)
   }
 
   let create () = { good = USet.create (); bad = USet.create () }
@@ -201,42 +287,67 @@ end
 (** Precomputed PPO relations.
 
     These are templates computed once for the event structure and used as
-    starting points for context-specific PPO computation. *)
+    starting points for context-specific PPO computation. They represent various
+    aspects of preserved program order under different memory models. *)
 type ppo_relations = {
   ppo_loc_base : (int * int) uset;
-      (** Base location-based preserved program order. *)
-  ppo_base : (int * int) uset;  (** Base preserved program order. *)
-  ppo_sync : (int * int) uset;  (** Synchronization preserved program order. *)
+      (** Base location-based preserved program order.
+
+          Includes orderings required for correct location-based semantics. *)
+  ppo_base : (int * int) uset;
+      (** Base preserved program order.
+
+          Core orderings that must be preserved regardless of memory model. *)
+  ppo_sync : (int * int) uset;
+      (** Synchronization preserved program order.
+
+          Orderings from acquire-release, SC fences, and volatile accesses. *)
   ppo_loc_baseA : (int * int) uset;
-      (** Location-based PPO template (before PO intersection). *)
-  ppo_loc_eqA : (int * int) uset;  (** Location equality PPO component. *)
+      (** Location-based PPO template (before PO intersection).
+
+          Used as starting point for location-based PPO computation. *)
+  ppo_loc_eqA : (int * int) uset;
+      (** Location equality PPO component.
+
+          Orderings between events that may access the same location. *)
   ppo_syncA : (int * int) uset;
-      (** Synchronization PPO template (before PO intersection). *)
-  ppo_volA : (int * int) uset;  (** Volatile PPO component. *)
+      (** Synchronization PPO template (before PO intersection).
+
+          Template for synchronization orderings before filtering. *)
+  ppo_volA : (int * int) uset;
+      (** Volatile PPO component.
+
+          Orderings required for volatile access semantics. *)
 }
 
 (** Event structure context.
 
-    Contains all es_ctx associated with a specific event structure. This is
+    Contains all data associated with a specific event structure. This is
     created once per event structure and shared across all forwarding contexts
-    for that structure. *)
+    for that structure. Provides precomputed relations and caches. *)
 type event_structure_context = {
   structure : symbolic_event_structure;
-  e : int uset;
+      (** The underlying symbolic event structure. *)
+  e : int uset;  (** Set of all event IDs in the structure. *)
   val_fn : int -> expr option;
-  ppo : ppo_relations;
-  ppo_cache : PpoCache.t;
-  context_cache : ContextCache.t;
+      (** Value function mapping event IDs to their symbolic values. *)
+  ppo : ppo_relations;  (** Precomputed PPO relations. *)
+  ppo_cache : PpoCache.t;  (** Cache for PPO computations. *)
+  context_cache : ContextCache.t;  (** Cache for context validity checks. *)
 }
 
 (** Module for working with event structure contexts. *)
 module EventStructureContext = struct
+  (** Type alias for event structure context. *)
   type t = event_structure_context
 
-  (** Create a new event structure context.
+  (** [create structure] creates a new event structure context.
 
       The PPO relations are initialized to empty and must be computed via
-      {!init} before use. *)
+      {!init} before use.
+
+      @param structure The symbolic event structure.
+      @return A new event structure context with empty PPO relations. *)
   let create structure =
     {
       structure;
@@ -256,17 +367,22 @@ module EventStructureContext = struct
       context_cache = ContextCache.create ();
     }
 
-  (** Clear all caches. *)
+  (** [clear_caches es_ctx] clears all caches in the context.
+
+      Clears both the PPO computation cache and context validity cache.
+
+      @param es_ctx The event structure context. *)
   let clear_caches es_ctx =
     ContextCache.clear es_ctx.context_cache;
     PpoCache.clear es_ctx.ppo_cache
 
-  (** [update_po po] updates PPO relations for new program order.
+  (** [update_po es_ctx po] updates PPO relations for new program order.
 
       Recomputes all PPO relations by intersecting templates with the given
       program order. Clears the forwarding cache since all cached results are
       now invalid.
 
+      @param es_ctx The event structure context.
       @param po The new program order relation. *)
   let update_po es_ctx po =
     USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
@@ -288,11 +404,19 @@ module EventStructureContext = struct
 
     clear_caches es_ctx
 
-  (** Initialize PPO relations.
+  (** [init es_ctx] initializes PPO relations.
 
       Computes the base PPO relations that will be used as templates for all
       forwarding contexts. Must be called before creating forwarding contexts.
-  *)
+
+      This function:
+      - Computes synchronization-based PPO from acquire/release and fences
+      - Computes volatile-based PPO for volatile accesses
+      - Performs semantic alias analysis for location-based PPO
+      - Updates all PPO templates
+
+      @param es_ctx The event structure context.
+      @return Promise that resolves when initialization is complete. *)
   let init es_ctx =
     let landmark = Landmark.register "ForwardingContext.init" in
       Landmark.enter landmark;
@@ -307,6 +431,7 @@ module EventStructureContext = struct
       let w = USet.intersection es_ctx.structure.write_events e in
       let f = USet.intersection es_ctx.structure.fence_events e in
 
+      (* Extract volatile events *)
       let e_vol =
         USet.filter
           (fun e ->
@@ -316,6 +441,7 @@ module EventStructureContext = struct
           es_ctx.e
       in
 
+      (* Program order without fences *)
       let po_nf =
         USet.filter
           (fun (f, t) ->
@@ -325,8 +451,7 @@ module EventStructureContext = struct
           po
       in
 
-      (* Mode filters *)
-      (* TODO pregenerate in interpret *)
+      (* Helper to filter events by memory ordering mode *)
       let filter_order events mode =
         USet.filter
           (fun e ->
@@ -395,7 +520,7 @@ module EventStructureContext = struct
       in
         USet.clear es_ctx.ppo.ppo_loc_eqA |> ignore;
         USet.inplace_union es_ctx.ppo.ppo_loc_eqA eqA |> ignore;
-        (* Location-based ppo; TODO filter by if in events hash table? *)
+        (* Location-based ppo *)
         USet.clear es_ctx.ppo.ppo_loc_baseA |> ignore;
         USet.set_minus po_nf eqA
         |> USet.inplace_union es_ctx.ppo.ppo_loc_baseA
@@ -410,158 +535,35 @@ module EventStructureContext = struct
         Lwt.return_unit
 end
 
-(** {1 Forwarding Context}
-
-    This section defines specific forwarding contexts for (fwd, we) pairs. *)
-
 (** Forwarding context.
 
-    Represents a specific forwarding context with fwd and we edges, predicates,
-    and event remapping. *)
+    Represents a specific forwarding and write-exclusion configuration for an
+    event structure. Contains the edges being added and the resulting
+    satisfiability constraints. *)
 type forwarding_context = {
-  es_ctx : event_structure_context;
-  fwd : (int * int) uset;
-  we : (int * int) uset;
-  psi : expr list;
+  es_ctx : event_structure_context;  (** The event structure context. *)
+  fwd : (int * int) uset;  (** Forwarding edges (read observes write). *)
+  we : (int * int) uset;  (** Write-exclusion edges (writes don't interfere). *)
   fwdwe : (int * int) uset;
+      (** Combined forwarding and write-exclusion edges. *)
   remap_map : (int, int) Hashtbl.t;
+      (** Remapping table for following forwarding chains. *)
+  psi : expr list;  (** Path condition (satisfiability constraints). *)
 }
 
-module ForwardingContext : sig
-  (** Forwarding context representing event reorderings.
-
-      Encapsulates a set of forwarding edges (reads seeing later writes) and
-      write-exclusion edges (writes being elided by later writes), along with
-      derived information like value equalities and remapping tables. *)
+(** Module for working with forwarding contexts. *)
+module ForwardingContext = struct
   type t = forwarding_context
 
-  (** [create ~structure ?fwd ?we ()] creates a new forwarding context.
+  (** [create es_ctx ?fwd ?we] creates a new forwarding context.
 
-      Builds derived information including value equalities, constraints, and
-      the event remapping table.
+      Computes the remapping table and path condition for the given forwarding
+      and write-exclusion edges.
 
-      @param structure The symbolic event structure.
-      @param fwd Optional forwarding edge set (default: empty).
-      @param we Optional write-exclusion edge set (default: empty).
-      @return A new forwarding context. *)
-  val create :
-    event_structure_context ->
-    ?fwd:(int * int) uset ->
-    ?we:(int * int) uset ->
-    unit ->
-    t
-
-  (** [remap ctx e] remaps a single event through the context.
-
-      Follows forwarding chains and write-exclusion to find the canonical event
-      that [e] maps to in this context.
-
-      @param ctx The forwarding context.
-      @param e The event ID to remap.
-      @return The canonical event ID. *)
-  val remap : t -> int -> int
-
-  (** [remap_rel ctx rel] remaps a relation through the context.
-
-      Applies event remapping to both components of each pair in the relation,
-      removing self-edges that result from remapping.
-
-      @param ctx The forwarding context.
-      @param rel The relation to remap.
-      @return The remapped relation. *)
-  val remap_rel : t -> (int * int) uset -> (int * int) uset
-
-  (** [remap_just ctx just op] remaps a justification through the context.
-
-      Updates the justification's forwarding and write-exclusion sets by
-      combining them with the context's edges.
-
-      @param ctx The forwarding context.
-      @param just The justification to remap.
-      @param op Optional operation descriptor (currently unused).
-      @return The remapped justification. *)
-  val remap_just : t -> justification -> justification
-
-  (** [ppo ?debug ctx predicates] computes preserved program order.
-
-      Computes the PPO relation by filtering base orderings through semantic
-      alias analysis. Uses caching to avoid redundant solver queries.
-
-      @param debug Optional flag to enable debug output (default: false).
-      @param ctx The forwarding context.
-      @param predicates Additional predicate constraints.
-      @return Promise of the PPO relation. *)
-  val ppo : ?debug:bool -> t -> expr list -> (int * int) uset Lwt.t
-
-  (** [ppo_loc ctx predicates] computes location-based PPO.
-
-      Computes PPO restricted to events accessing the same concrete location.
-      More precise than standard PPO as it requires exact location equality
-      under the given predicates.
-
-      @param ctx The forwarding context.
-      @param predicates The predicate constraints.
-      @return Promise of the location-based PPO relation. *)
-  val ppo_loc : t -> expr list -> (int * int) uset Lwt.t
-
-  (** [ppo_sync ctx] computes synchronization PPO.
-
-      Returns the synchronization-based preserved program order, which includes
-      orderings from acquire-release, SC fences, and volatile accesses.
-
-      @param ctx The forwarding context.
-      @return The synchronization PPO relation. *)
-  val ppo_sync : t -> (int * int) uset
-
-  (** [check ctx] validates context satisfiability.
-
-      Uses an SMT solver to check if the constraints implied by the forwarding
-      context are satisfiable. Caches the result in good/bad context sets.
-
-      @param ctx The forwarding context to validate.
-      @return Promise of [true] if satisfiable *)
-  val check : t -> bool Lwt.t
-
-  val cache_set_ppo : t -> expr list -> (int * int) uset -> (int * int) uset
-  val cache_set_ppo_loc : t -> expr list -> (int * int) uset -> (int * int) uset
-
-  (** [cache_get ctx predicates] retrieves exact cache match.
-
-      @param ctx The forwarding context.
-      @param predicates The predicate list.
-      @return Cached value or empty value if not found. *)
-  val cache_get : t -> expr list -> ppo_cache_value
-
-  (** [cache_get_subset ctx predicates] retrieves subset cache match.
-
-      @param ctx The forwarding context.
-      @param predicates The predicate list.
-      @return [Some value] if matching entry found, [None] otherwise. *)
-  val cache_get_subset : t -> expr list -> ppo_cache_value option
-
-  (** [to_string ctx] converts context to human-readable string.
-
-      Format: [{valmap} | {fwd} | {we}]
-
-      @param ctx The forwarding context.
-      @return String representation showing all components. *)
-  val to_string : t -> string
-end = struct
-  (** Forwarding context representing event reorderings.
-
-      Encapsulates a set of forwarding edges (reads seeing later writes) and
-      write-exclusion edges (writes being elided by later writes), along with
-      derived information like value equalities and remapping tables. *)
-  type t = forwarding_context
-
-  (** [create ?fwd ?we ()] creates a new forwarding context.
-
-      Builds derived information including value equalities, constraints, and
-      the event remapping table.
-
-      @param fwd Optional forwarding edge set (default: empty).
-      @param we Optional write-exclusion edge set (default: empty).
-      @return A new forwarding context. *)
+      @param es_ctx The event structure context.
+      @param fwd Forwarding edges to add.
+      @param we Write-exclusion edges to add.
+      @return The created forwarding context. *)
   let create es_ctx ?(fwd = USet.create ()) ?(we = USet.create ()) () =
     let landmark = Landmark.register "ForwardingContext.create" in
       Landmark.enter landmark;
@@ -577,6 +579,7 @@ end = struct
         )
       in
 
+      (* Build path condition from forwarding *)
       let psi =
         List.filter_map
           (fun (e1, e2) ->
@@ -593,7 +596,7 @@ end = struct
         URelation.inverse fwdwe |> URelation.to_map |> map_transitive_closure
       in
 
-      let ctx = { es_ctx; fwd; we; psi; fwdwe; remap_map } in
+      let ctx = { es_ctx; fwd; we; fwdwe; remap_map; psi } in
         Landmark.exit landmark;
         ctx
 
@@ -627,7 +630,7 @@ end = struct
       rel
     |> USet.filter (fun (from, to_) -> from <> to_)
 
-  (** [remap_just ctx just op] remaps a justification through the context.
+  (** [remap_just ctx just] remaps a justification through the context.
 
       Updates the justification's forwarding and write-exclusion sets by
       combining them with the context's edges.
@@ -658,9 +661,22 @@ end = struct
   let cache_get_subset ctx predicates =
     PpoCache.get_subset ctx.es_ctx.ppo_cache (ctx.fwd, ctx.we) predicates
 
+  (** [cache_set_ppo ctx predicates value] stores PPO in cache.
+
+      @param ctx The forwarding context.
+      @param predicates The predicate list.
+      @param value The computed PPO relation.
+      @return The value that was stored. *)
   let cache_set_ppo ctx predicates value =
     PpoCache.set_ppo ctx.es_ctx.ppo_cache (ctx.fwd, ctx.we) predicates value
 
+  (** [cache_set_ppo_loc ctx predicates value] stores location-based PPO in
+      cache.
+
+      @param ctx The forwarding context.
+      @param predicates The predicate list.
+      @param value The computed location-based PPO relation.
+      @return The value that was stored. *)
   let cache_set_ppo_loc ctx predicates value =
     PpoCache.set_ppo_loc ctx.es_ctx.ppo_cache (ctx.fwd, ctx.we) predicates value
 
@@ -698,7 +714,7 @@ end = struct
                 | None -> es_ctx.ppo.ppo_loc_base
               in
                 (* Filter with alias analysis using solver - check if locations are
-               equal given predicates and psi of forwarding context *)
+                   equal given predicates and psi of forwarding context *)
                 USet.async_filter
                   (fun (e1, e2) ->
                     let loc1 = Events.get_loc es_ctx.structure e1 in
@@ -710,7 +726,7 @@ end = struct
                   base
             in
 
-            (* RMW ppo *)
+            (* RMW ppo - add read-modify-write orderings *)
             let* rmw_filtered =
               USet.async_filter
                 (fun (er, expr, ew) ->
