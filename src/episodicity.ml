@@ -536,115 +536,121 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
               m "Symbolic event structure with symbolic loop semantics.\n%s\n\n"
                 (show_symbolic_event_structure symbolic_structure)
           );
+          (* TODO use mordor_ctx and pipeline *)
           (* Generate 3-iteration event structure *)
           let* three_structure, three_source_spans =
             StepCounterSemantics.interpret ~step_counter:3 lwt_ctx
           in
+          let three_init_ppo = Eventstructures.init_ppo three_structure in
           (* Compute dependencies for 3-iteration executions *)
           let three_fwd_es_ctx =
             Forwarding.EventStructureContext.create three_structure
           in
             let* () = Forwarding.EventStructureContext.init three_fwd_es_ctx in
-              let* _, three_executions =
-                Symmrd.calculate_dependencies three_structure three_fwd_es_ctx
-                  ~include_rf:false ~exhaustive:true
-                  ~restrictions:coherence_restrictions
+              let* three_justs =
+                Elaborations.generate_justifications three_structure
+                  three_fwd_es_ctx three_init_ppo
               in
-              let cache =
-                {
-                  symbolic_structure;
-                  symbolic_source_spans;
-                  three_structure;
-                  three_source_spans;
-                  three_executions;
-                }
-              in
-
-              let loop_episodicity_results = ref [] in
-
-              (* Initialize episodicity table *)
-              let is_episodic_table = Hashtbl.create 10 in
-
-              (* Check each loop *)
-              let* () =
-                Lwt_list.iter_s
-                  (fun loop_id ->
-                    Logs.info (fun m -> m "Analyzing Loop %d..." loop_id);
-                    let* episodic_result =
-                      check_loop_episodicity ctx cache loop_id
-                    in
-                      match episodic_result with
-                      | Some result ->
-                          Hashtbl.add is_episodic_table loop_id
-                            result.is_episodic;
-
-                          Logs.info (fun m ->
-                              m "Loop %d: %s" loop_id
-                                ( if result.is_episodic then "EPISODIC"
-                                  else "NOT EPISODIC"
-                                )
-                          );
-
-                          (* Log violations for each condition *)
-                          if not result.condition1.satisfied then
-                            Logs.info (fun m ->
-                                m "  Condition 1 violations: %s"
-                                  (String.concat "; "
-                                     (List.map show_episodicity_violation
-                                        result.condition1.violations
-                                     )
-                                  )
-                            );
-                          if not result.condition2.satisfied then
-                            Logs.info (fun m ->
-                                m "  Condition 2 violations: %s"
-                                  (String.concat "; "
-                                     (List.map show_episodicity_violation
-                                        result.condition2.violations
-                                     )
-                                  )
-                            );
-                          if not result.condition3.satisfied then
-                            Logs.info (fun m ->
-                                m "  Condition 3 violations: %s"
-                                  (String.concat "; "
-                                     (List.map show_episodicity_violation
-                                        result.condition3.violations
-                                     )
-                                  )
-                            );
-                          if not result.condition4.satisfied then
-                            Logs.info (fun m ->
-                                m "  Condition 4 violations: %s"
-                                  (String.concat "; "
-                                     (List.map show_episodicity_violation
-                                        result.condition4.violations
-                                     )
-                                  )
-                            );
-                          loop_episodicity_results :=
-                            result :: !loop_episodicity_results;
-                          Lwt.return_unit
-                      | None ->
-                          Logs.info (fun m ->
-                              m "Loop %d: Could not analyze" loop_id
-                          );
-                          Hashtbl.add is_episodic_table loop_id false;
-                          Lwt.return_unit
-                  )
-                  loop_ids
-              in
-
-              (* Store results in context *)
-              ctx.is_episodic <- Some is_episodic_table;
-              ctx.episodicity_results <-
-                Some
+                let* three_executions =
+                  Executions.calculate_dependencies three_structure three_justs
+                    three_fwd_es_ctx ~include_rf:false ~exhaustive:true
+                    ~restrictions:coherence_restrictions
+                in
+                let cache =
                   {
-                    type_ = "episodicity-results";
-                    loop_episodicity_results =
-                      List.rev !loop_episodicity_results;
-                  };
-              Lwt.return ctx
+                    symbolic_structure;
+                    symbolic_source_spans;
+                    three_structure;
+                    three_source_spans;
+                    three_executions;
+                  }
+                in
+
+                let loop_episodicity_results = ref [] in
+
+                (* Initialize episodicity table *)
+                let is_episodic_table = Hashtbl.create 10 in
+
+                (* Check each loop *)
+                let* () =
+                  Lwt_list.iter_s
+                    (fun loop_id ->
+                      Logs.info (fun m -> m "Analyzing Loop %d..." loop_id);
+                      let* episodic_result =
+                        check_loop_episodicity ctx cache loop_id
+                      in
+                        match episodic_result with
+                        | Some result ->
+                            Hashtbl.add is_episodic_table loop_id
+                              result.is_episodic;
+
+                            Logs.info (fun m ->
+                                m "Loop %d: %s" loop_id
+                                  ( if result.is_episodic then "EPISODIC"
+                                    else "NOT EPISODIC"
+                                  )
+                            );
+
+                            (* Log violations for each condition *)
+                            if not result.condition1.satisfied then
+                              Logs.info (fun m ->
+                                  m "  Condition 1 violations: %s"
+                                    (String.concat "; "
+                                       (List.map show_episodicity_violation
+                                          result.condition1.violations
+                                       )
+                                    )
+                              );
+                            if not result.condition2.satisfied then
+                              Logs.info (fun m ->
+                                  m "  Condition 2 violations: %s"
+                                    (String.concat "; "
+                                       (List.map show_episodicity_violation
+                                          result.condition2.violations
+                                       )
+                                    )
+                              );
+                            if not result.condition3.satisfied then
+                              Logs.info (fun m ->
+                                  m "  Condition 3 violations: %s"
+                                    (String.concat "; "
+                                       (List.map show_episodicity_violation
+                                          result.condition3.violations
+                                       )
+                                    )
+                              );
+                            if not result.condition4.satisfied then
+                              Logs.info (fun m ->
+                                  m "  Condition 4 violations: %s"
+                                    (String.concat "; "
+                                       (List.map show_episodicity_violation
+                                          result.condition4.violations
+                                       )
+                                    )
+                              );
+                            loop_episodicity_results :=
+                              result :: !loop_episodicity_results;
+                            Lwt.return_unit
+                        | None ->
+                            Logs.info (fun m ->
+                                m "Loop %d: Could not analyze" loop_id
+                            );
+                            Hashtbl.add is_episodic_table loop_id false;
+                            Lwt.return_unit
+                    )
+                    loop_ids
+                in
+
+                (* Store results in context *)
+                ctx.is_episodic <- Some is_episodic_table;
+                ctx.episodicity_results <-
+                  Some
+                    {
+                      type_ = "episodicity-results";
+                      loop_episodicity_results =
+                        List.rev !loop_episodicity_results;
+                    };
+                Lwt.return ctx
     | None ->
         Logs.warn (fun m ->
             m "No program statements available for episodicity analysis"

@@ -36,7 +36,6 @@
   solver_threadsafe
   solver_threadsafe_local
   source_info
-  symmrd
   types
   uset)
  (flags

@@ -15,6 +15,7 @@
 
 open Algorithms
 open Coherence
+open Context
 open Events
 open Eventstructures
 open Expr
@@ -1705,3 +1706,119 @@ let generate_executions ?(include_rf = true)
 
           Landmark.exit landmark;
           Lwt.return minimal_executions
+
+(** Calculate dependencies and justifications *)
+
+let calculate_dependencies ?(include_rf = true)
+    (structure : symbolic_event_structure) (final_justs : justification uset)
+    (fwd_es_ctx : Forwarding.event_structure_context) ~(exhaustive : bool)
+    ~(restrictions : Coherence.restrictions) : symbolic_execution list Lwt.t =
+  (* Initialize initial PPO relation - relates all initial events and terminal
+     events to other events along po-edges. *)
+  let init_ppo = Eventstructures.init_ppo structure in
+
+  Logs.debug (fun m -> m "Generating executions...");
+
+  (* Compute statex: allocation disjointness constraints *)
+
+  (* 1. Extract static/global locations from all events *)
+  let static_locs =
+    USet.values structure.e
+    |> List.filter_map (fun eid ->
+        match Hashtbl.find_opt structure.events eid with
+        | Some evt -> (
+            (* Get location from event if it exists and is a variable *)
+            match Events.get_loc structure eid with
+            | Some loc when Expr.is_var loc -> Some loc
+            | _ -> None
+          )
+        | None -> None
+    )
+    |> List.sort_uniq compare (* Remove duplicates *)
+  in
+
+  (* 2. Extract malloc locations *)
+  (* TODO these constraints do not account for intermediate deallocation:
+
+    • enforces the disjointness of symbolic memory locations introduced by
+    consecutive allocation events, i.e. without an intermediate deallocation
+    event.
+    *)
+  let malloc_locs =
+    USet.values structure.malloc_events
+    |> List.filter_map (fun eid ->
+        match Hashtbl.find_opt structure.events eid with
+        | Some evt -> Option.map Expr.of_value evt.rval
+        | None -> None
+    )
+  in
+
+  (* 3. Combine both sets *)
+  let all_locs = static_locs @ malloc_locs in
+
+  (* 4. Create pairwise disjointness for ALL distinct locations *)
+  let statex =
+    let pairs = ref [] in
+      for i = 0 to List.length all_locs - 1 do
+        for j = i + 1 to List.length all_locs - 1 do
+          let loc1 = List.nth all_locs i in
+          let loc2 = List.nth all_locs j in
+            pairs := Expr.binop loc1 "!=" loc2 :: !pairs
+        done
+      done;
+      !pairs @ structure.constraints
+  in
+
+  (* Build executions if not just structure *)
+  let* executions =
+    generate_executions ~include_rf structure fwd_es_ctx final_justs statex
+      init_ppo ~restrictions
+  in
+
+  Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));
+
+  Lwt.return executions
+
+let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
+    =
+  let* ctx = lwt_ctx in
+
+  (* Create restrictions for coherence checking *)
+  Logs.debug (fun m ->
+      m "Setting up coherence restrictions...%s" ctx.options.coherent
+  );
+  let coherence_restrictions =
+    {
+      Coherence.coherent =
+        ( try ctx.options.coherent with _ -> "imm"
+        )
+        (* default to IMM if not specified *);
+    }
+  in
+    match (ctx.structure, ctx.justifications) with
+    | Some structure, Some final_justs ->
+        let* fwd_es_ctx =
+          match ctx.fwd_es_ctx with
+          | Some fwd_es_ctx -> Lwt.return fwd_es_ctx
+          | None ->
+              let fwd_es_ctx =
+                Forwarding.EventStructureContext.create structure
+              in
+                ctx.fwd_es_ctx <- Some fwd_es_ctx;
+                let* () = Forwarding.EventStructureContext.init fwd_es_ctx in
+                  Lwt.return fwd_es_ctx
+        in
+          let* executions =
+            calculate_dependencies structure final_justs fwd_es_ctx
+              ~exhaustive:(ctx.options.exhaustive || false)
+              ~restrictions:coherence_restrictions
+          in
+            ctx.executions <- Some (USet.of_list executions);
+            Lwt.return ctx
+    | _ ->
+        Logs.err (fun m ->
+            m
+              "Program statements or litmus constraints not available, \
+               orjustifications not available"
+        );
+        Lwt.return ctx

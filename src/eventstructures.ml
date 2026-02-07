@@ -364,3 +364,22 @@ let dslwb structure w r =
       in
         Landmark.exit landmark;
         Lwt.return result
+
+let init_ppo structure =
+  let events = structure.events in
+  let po = structure.po in
+  let init_ppo =
+    if Hashtbl.mem events 0 then USet.filter (fun (f, t) -> f <> t && f = 0) po
+    else USet.create ()
+  in
+  let terminal_events =
+    Hashtbl.fold
+      (fun lbl ev acc -> if ev.typ = Terminal then USet.add acc lbl else acc)
+      structure.events (USet.create ())
+  in
+  let terminal_ppo =
+    USet.filter (fun (f, t) -> f <> t && USet.mem terminal_events t) po
+  in
+  (* TODO discern in subsequent computation *)
+  let init_ppo = USet.union init_ppo terminal_ppo in
+    init_ppo

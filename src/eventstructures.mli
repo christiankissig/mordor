@@ -75,3 +75,13 @@ val generate_max_conflictfree_sets : symbolic_event_structure -> path_info list
     @param read The read event label
     @return [Lwt.t] of [true] if condition holds, [false] otherwise *)
 val dslwb : symbolic_event_structure -> int -> int -> bool Lwt.t
+
+(** [structure] Get PPO relation from initial events and to terminal events.
+
+    The PPO relation is initialized by relating all initial events and terminal
+    events to other events along program order edges.
+
+    @param structure The symbolic event structure
+    @return A set of pairs of event labels representing the initial PPO relation
+*)
+val init_ppo : symbolic_event_structure -> (int * int) uset

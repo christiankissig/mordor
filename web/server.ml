@@ -50,7 +50,8 @@ let visualize_to_stream program options step_counter stream =
       |> Eventstructureviz.step_send_event_structure_graph ~send_data
       |> Episodicity.step_test_episodicity
       |> Episodicity.send_episodicity_results send_data
-      |> Symmrd.step_calculate_dependencies
+      |> Elaborations.step_generate_justifications
+      |> Executions.step_calculate_dependencies
       |> Assertion.step_check_assertions
       |> Assertion.step_send_assertion_results ~send_data
       |> Eventstructureviz.step_send_execution_graphs ~send_data

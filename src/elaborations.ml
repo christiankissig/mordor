@@ -6,6 +6,7 @@
     progressively build up execution models. *)
 
 open Algorithms
+open Context
 open Expr
 open Forwarding
 open Justifications
@@ -1399,3 +1400,39 @@ let generate_justifications structure fwd_es_ctx init_ppo =
 
   let* final_justs = batch_elaborations elab_ctx pre_justs in
     Lwt.return final_justs
+
+(** [step_generate_justifications lwt_ctx] step to generate justifications.
+
+    Retrieves the event structure from the context, initializes the forwarding
+    context if necessary, and generates justifications.
+
+    @param lwt_ctx The Lwt promise of the context.
+    @return Promise of the context with generated justifications. *)
+let step_generate_justifications (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
+    =
+  let* ctx = lwt_ctx in
+    match ctx.structure with
+    | Some structure ->
+        let* fwd_es_ctx =
+          match ctx.fwd_es_ctx with
+          | Some fwd_es_ctx -> Lwt.return fwd_es_ctx
+          | None ->
+              let fwd_es_ctx =
+                Forwarding.EventStructureContext.create structure
+              in
+                ctx.fwd_es_ctx <- Some fwd_es_ctx;
+                let* () = Forwarding.EventStructureContext.init fwd_es_ctx in
+                  Lwt.return fwd_es_ctx
+        in
+        let init_ppo = Eventstructures.init_ppo structure in
+          let* final_justs =
+            generate_justifications structure fwd_es_ctx init_ppo
+          in
+            Logs.debug (fun m ->
+                m "Generated %d justifications." (USet.size final_justs)
+            );
+            ctx.justifications <- Some final_justs;
+            Lwt.return ctx
+    | None ->
+        Logs.err (fun m -> m "No event structure found in context.");
+        Lwt.return ctx

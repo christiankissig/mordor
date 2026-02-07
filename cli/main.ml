@@ -306,7 +306,8 @@ module Pipeline = struct
       Lwt.return context
       |> Parse.step_parse_litmus
       |> Interpret.step_interpret
-      |> Symmrd.step_calculate_dependencies
+      |> Elaborations.step_generate_justifications
+      |> Executions.step_calculate_dependencies
       |> Assertion.step_check_assertions
       |> Display.print_results
 
@@ -430,7 +431,8 @@ module Pipeline = struct
       Lwt.return context
       |> Parse.step_parse_litmus
       |> Interpret.step_interpret
-      |> Symmrd.step_calculate_dependencies
+      |> Elaborations.step_generate_justifications
+      |> Executions.step_calculate_dependencies
       |> Eventstructureviz.step_visualize_event_structure
       |> Display.print_results
 
@@ -450,7 +452,8 @@ module Pipeline = struct
       Lwt.return context
       |> Parse.step_parse_litmus
       |> Interpret.step_interpret
-      |> Symmrd.step_calculate_dependencies
+      |> Elaborations.step_generate_justifications
+      |> Executions.step_calculate_dependencies
       |> Futures.step_futures
       |> Futures.print_futures
       |> Display.print_results

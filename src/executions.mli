@@ -1,3 +1,4 @@
+open Context
 open Types
 
 (** Execution generation for symbolic memory model checking *)
@@ -43,3 +44,14 @@ val generate_executions :
   (int * int) uset ->
   restrictions:Coherence.restrictions ->
   symbolic_execution list Lwt.t
+
+val calculate_dependencies :
+  ?include_rf:bool ->
+  symbolic_event_structure ->
+  justification uset ->
+  Forwarding.event_structure_context ->
+  exhaustive:bool ->
+  restrictions:Coherence.restrictions ->
+  symbolic_execution list Lwt.t
+
+val step_calculate_dependencies : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
