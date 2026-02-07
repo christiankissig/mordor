@@ -353,8 +353,7 @@ type mordor_ctx = {
       (** Event table mapping labels to events *)
   mutable structure : symbolic_event_structure option;
       (** Symbolic event structure *)
-  mutable forwardingcontext_state :
-    Forwardingcontext.event_structure_context option;
+  mutable fwd_es_ctx : Forwarding.event_structure_context option;
       (** Forwarding context state *)
   mutable source_spans : event_source_code_span option;
       (** Source code locations for events *)
@@ -408,7 +407,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     step_counter;
     events = None;
     structure = None;
-    forwardingcontext_state = None;
+    fwd_es_ctx = None;
     source_spans = None;
     justifications = None;
     executions = None;

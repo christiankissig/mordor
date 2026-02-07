@@ -3,7 +3,7 @@ open Elaborations
 open Events
 open Eventstructures
 open Expr
-open Forwardingcontext
+open Forwarding
 open Justifications
 open Lwt.Syntax
 open Types
@@ -70,10 +70,8 @@ module TestData = struct
   let make_context ?(structure = make_structure ()) () =
     let fj = USet.create () in
     let op_trace = OpTrace.create 0 in
-    let forwardingcontext_state =
-      Forwardingcontext.EventStructureContext.create structure
-    in
-      { forwardingcontext_state; structure; fj; op_trace }
+    let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
+      { fwd_es_ctx; structure; fj; op_trace }
 
   (* Mock justification builder *)
   let make_justification ?(predicates = []) ?(fwd = USet.create ())
@@ -161,7 +159,7 @@ let test_value_assign_operations () =
          d = USet.create ();
        }
      in
-       let* result2 = ValueAssignment.elab ctx just_var in
+       let* result2 = ValueAssignElab.elab ctx just_var in
          check bool "value_assign processes variables" true
            (List.length result2 > 0);
 
@@ -189,7 +187,7 @@ let test_fprime_operations () =
        (fun (name, ppo_loc, pred_fn, e1, e2, expected) ->
          let ctx = TestData.make_context () in
          let just = TestData.make_justification 3 in
-           let* result = Forwarding.fprime ctx pred_fn ppo_loc just e1 e2 in
+           let* result = ForwardElab.fprime ctx pred_fn ppo_loc just e1 e2 in
              check bool name expected result;
              Lwt.return_unit
        )
@@ -199,13 +197,13 @@ let test_fprime_operations () =
 let test_fwd_operations () =
   let ctx = TestData.make_context () in
   let pred_fn _e = USet.create () in
-  let fwd_ctx = ForwardingContext.create ctx.forwardingcontext_state in
+  let fwd_ctx = ForwardingContext.create ctx.fwd_es_ctx in
   let just = TestData.make_justification 3 in
   let ppo_loc = USet.of_list [ (1, 2) ] in
 
   Lwt_main.run
     ((* Basic *)
-     let* result1 = Forwarding.fwd ctx pred_fn fwd_ctx ppo_loc just in
+     let* result1 = ForwardElab.fwd ctx pred_fn fwd_ctx ppo_loc just in
        check bool "fwd returns edges" true (USet.size result1 >= 0);
 
        (* Filters volatile *)
@@ -220,7 +218,7 @@ let test_fwd_operations () =
          let pred_fn2 _e = USet.singleton 1 in
          let ppo_loc2 = USet.of_list [ (1, 4) ] in
          let just2 = TestData.make_justification 5 in
-           let* result2 = Forwarding.fwd ctx pred_fn2 fwd_ctx ppo_loc2 just2 in
+           let* result2 = ForwardElab.fwd ctx pred_fn2 fwd_ctx ppo_loc2 just2 in
              check bool "fwd filters volatile" true
                (not (USet.exists (fun (_, e) -> e = 4) result2));
 
@@ -230,13 +228,13 @@ let test_fwd_operations () =
 let test_we_operations () =
   let ctx = TestData.make_context () in
   let pred_fn _e = USet.create () in
-  let we_ctx = ForwardingContext.create ctx.forwardingcontext_state in
+  let we_ctx = ForwardingContext.create ctx.fwd_es_ctx in
   let just = TestData.make_justification 4 in
   let ppo_loc = USet.of_list [ (1, 3) ] in
 
   Lwt_main.run
     ((* Basic *)
-     let* result1 = Forwarding.we ctx pred_fn we_ctx ppo_loc just in
+     let* result1 = ForwardElab.we ctx pred_fn we_ctx ppo_loc just in
        check bool "we returns edges" true (USet.size result1 >= 0);
 
        (* Write-to-write *)
@@ -244,7 +242,7 @@ let test_we_operations () =
        let structure = { ctx.structure with po } in
        let ctx = { ctx with structure } in
        let pred_fn2 _e = USet.singleton 1 in
-         let* result2 = Forwarding.we ctx pred_fn2 we_ctx ppo_loc just in
+         let* result2 = ForwardElab.we ctx pred_fn2 we_ctx ppo_loc just in
            check bool "we write-to-write" true (USet.size result2 >= 0);
 
            Lwt.return_unit
@@ -257,7 +255,7 @@ let test_forward_operations () =
   Lwt_main.run
     ((* Single justification *)
      let just = TestData.make_justification 1 ~predicates:[ pred ] in
-       let* result2 = Forwarding.elab ctx just in
+       let* result2 = ForwardElab.elab ctx just in
          check bool "forward produces results" true (List.length result2 >= 0);
 
          Lwt.return_unit
@@ -272,12 +270,12 @@ let test_lift_and_weaken () =
 
   Lwt_main.run
     ((* Lift identity *)
-     let* lift_result = Lifting.elab ctx just just in
+     let* lift_result = LiftElab.elab ctx just just in
        check int "lift identity" 0 (List.length lift_result);
 
        (* Weaken no pwg *)
        let just2 = TestData.make_justification 1 ~predicates:[ pred; pred ] in
-         let* weaken_result1 = Weakening.elab ctx just2 in
+         let* weaken_result1 = WeakElab.elab ctx just2 in
            check int "weaken no pwg" 1 (List.length weaken_result1);
 
            (* Weaken with pwg *)
@@ -285,7 +283,7 @@ let test_lift_and_weaken () =
              Hashtbl.add defacto 1 [ pred ];
              let structure = { ctx.structure with defacto } in
              let elab_ctx = { ctx with structure } in
-               let* weaken_result2 = Weakening.elab elab_ctx just2 in
+               let* weaken_result2 = WeakElab.elab elab_ctx just2 in
                  check bool "weaken with defacto" true
                    (List.length weaken_result2 > 0);
                  let just' = List.hd weaken_result2 in
@@ -394,7 +392,7 @@ let test_pre_justifications_edge_cases () =
         let labels_set = List.sort_uniq compare labels in
           check int "distinct writes" 2 (List.length labels_set)
 
-module LiftingTests = struct
+module LiftElabTests = struct
   (* ============================================================
      Test Data Providers
      ============================================================ *)
@@ -455,10 +453,8 @@ module LiftingTests = struct
     let create_elab_ctx structure =
       let fj = USet.create () in
       let op_trace = OpTrace.create 0 in
-      let forwardingcontext_state =
-        Forwardingcontext.EventStructureContext.create structure
-      in
-        { forwardingcontext_state; structure; fj; op_trace }
+      let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
+        { fwd_es_ctx; structure; fj; op_trace }
 
     (* Predicate test cases *)
     type predicate_test_case = {
@@ -601,7 +597,7 @@ module LiftingTests = struct
   let test_find_distinguishing_predicate_with_case test_case =
    fun () ->
     let diff =
-      Lifting.find_distinguishing_predicate test_case.TestData.p1 test_case.p2
+      LiftElab.find_distinguishing_predicate test_case.TestData.p1 test_case.p2
     in
       match
         (diff, test_case.expected_dist_pred, test_case.expected_disjunction)
@@ -638,15 +634,13 @@ module LiftingTests = struct
     let just_2 = TestData.create_justification events test_case.just_2_spec in
     let ppo_1 = USet.of_list [] in
     let ppo_2 = USet.of_list [] in
-    let forwardingcontext_state =
-      Forwardingcontext.EventStructureContext.create structure
-    in
-    let con_1 = ForwardingContext.create forwardingcontext_state () in
-    let con_2 = ForwardingContext.create forwardingcontext_state () in
+    let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
+    let con_1 = ForwardingContext.create fwd_es_ctx () in
+    let con_2 = ForwardingContext.create fwd_es_ctx () in
 
     Lwt_main.run
       (let* relabelings =
-         Lifting.generate_relabelings elab_ctx just_1 just_2 ppo_1 ppo_2 con_1
+         LiftElab.generate_relabelings elab_ctx just_1 just_2 ppo_1 ppo_2 con_1
            con_2
        in
        let relabeling = USet.values relabelings |> List.hd in
@@ -683,7 +677,7 @@ module LiftingTests = struct
     let just_2 = TestData.create_justification events test_case.just_2_spec in
 
     Lwt_main.run
-      (let* liftings = Lifting.elab elab_ctx just_1 just_2 in
+      (let* liftings = LiftElab.elab elab_ctx just_1 just_2 in
          check int
            (Printf.sprintf "%s: number of liftings" test_case.name)
            test_case.expected_lifting_count (List.length liftings);
@@ -800,5 +794,5 @@ let suite =
             (test_pre_justifications_symbol_extraction case)
         )
         TestData.symbol_extraction_cases
-    @ LiftingTests.suite
+    @ LiftElabTests.suite
   )

@@ -3,7 +3,7 @@ open Uset
 
 open Eventstructures
 open Expr
-open Forwardingcontext
+open Forwarding
 open Lwt.Syntax
 open Types
 
@@ -189,8 +189,8 @@ let test_init () =
   Lwt_main.run
     (let* () =
        let structure = TestUtil.make_structure () in
-       let forwardingcontext_state = EventStructureContext.create structure in
-         EventStructureContext.init forwardingcontext_state
+       let fwd_es_ctx = EventStructureContext.create structure in
+         EventStructureContext.init fwd_es_ctx
      in
        Alcotest.(check pass) "Initialization completes" () ();
        Lwt.return_unit
@@ -206,15 +206,15 @@ let test_init_clears_state () =
 
          (* Initialize - should clear *)
          let structure = TestUtil.make_structure () in
-         let forwardingcontext_state = EventStructureContext.create structure in
+         let fwd_es_ctx = EventStructureContext.create structure in
 
-         ContextCache.mark_good forwardingcontext_state.context_cache fwd we;
+         ContextCache.mark_good fwd_es_ctx.context_cache fwd we;
 
-         let* () = EventStructureContext.init forwardingcontext_state in
+         let* () = EventStructureContext.init fwd_es_ctx in
 
          Alcotest.(check bool)
            "goodcon cleared" false
-           (ContextCache.is_good forwardingcontext_state.context_cache fwd we);
+           (ContextCache.is_good fwd_es_ctx.context_cache fwd we);
          Lwt.return_unit
      in
        Lwt.return_unit
@@ -223,7 +223,7 @@ let test_init_clears_state () =
 (** Test context creation - using data provider *)
 let test_create_context (data : DataProviders.context_creation_data) =
   let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
+  let fwd_es_ctx = EventStructureContext.create structure in
 
   let create_uset edges =
     let s = USet.create () in
@@ -233,17 +233,17 @@ let test_create_context (data : DataProviders.context_creation_data) =
 
   let ctx =
     match (data.fwd_edges, data.we_edges) with
-    | None, None -> ForwardingContext.create forwardingcontext_state ()
+    | None, None -> ForwardingContext.create fwd_es_ctx ()
     | Some fwd_edges, None ->
         let fwd = create_uset fwd_edges in
-          ForwardingContext.create forwardingcontext_state ~fwd ()
+          ForwardingContext.create fwd_es_ctx ~fwd ()
     | None, Some we_edges ->
         let we = create_uset we_edges in
-          ForwardingContext.create forwardingcontext_state ~we ()
+          ForwardingContext.create fwd_es_ctx ~we ()
     | Some fwd_edges, Some we_edges ->
         let fwd = create_uset fwd_edges in
         let we = create_uset we_edges in
-          ForwardingContext.create forwardingcontext_state ~fwd ~we ()
+          ForwardingContext.create fwd_es_ctx ~fwd ~we ()
   in
     Alcotest.(check int)
       (Printf.sprintf "Fwd size for %s" data.name)
@@ -255,13 +255,13 @@ let test_create_context (data : DataProviders.context_creation_data) =
 let test_create_generates_psi () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
+     let* () = EventStructureContext.init fwd_es_ctx in
 
      let fwd = USet.create () in
        ignore (USet.add fwd (1, 2));
-       let ctx = ForwardingContext.create forwardingcontext_state ~fwd () in
+       let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
          (* Should have predicates for value equality *)
          Alcotest.(check bool)
            "Has psi predicates" true
@@ -273,12 +273,12 @@ let test_create_generates_psi () =
 let test_remap (data : DataProviders.remap_data) =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
+     let* () = EventStructureContext.init fwd_es_ctx in
      let fwd = USet.create () in
        List.iter (fun (a, b) -> ignore (USet.add fwd (a, b))) data.fwd_edges;
-       let ctx = ForwardingContext.create forwardingcontext_state ~fwd () in
+       let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
          Alcotest.(check int)
            (Printf.sprintf "Remap %s" data.name)
            data.expected
@@ -289,10 +289,10 @@ let test_remap (data : DataProviders.remap_data) =
 let test_remap_rel () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
      let rel = USet.create () in
        ignore (USet.add rel (1, 2));
        ignore (USet.add rel (3, 4));
@@ -304,12 +304,12 @@ let test_remap_rel () =
 let test_remap_rel_filters_reflexive () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
+     let* () = EventStructureContext.init fwd_es_ctx in
      let fwd = USet.create () in
        ignore (USet.add fwd (1, 2));
-       let ctx = ForwardingContext.create forwardingcontext_state ~fwd () in
+       let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
        let rel = USet.create () in
          (* Add edges that become reflexive after remapping *)
          ignore (USet.add rel (1, 2));
@@ -326,9 +326,9 @@ let test_remap_rel_filters_reflexive () =
 (** Test cache operations *)
 let test_cache_initially_empty () =
   let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
+  let fwd_es_ctx = EventStructureContext.create structure in
 
-  let ctx = ForwardingContext.create forwardingcontext_state () in
+  let ctx = ForwardingContext.create fwd_es_ctx () in
   let cached = ForwardingContext.cache_get ctx [] in
     Alcotest.(check bool)
       "PPO not cached" true
@@ -340,10 +340,10 @@ let test_cache_initially_empty () =
 let test_cache_set_and_get () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
      let test_set = USet.create () in
        ignore (USet.add test_set (1, 2));
        let _ = ForwardingContext.cache_set_ppo ctx [] test_set in
@@ -359,10 +359,10 @@ let test_cache_set_and_get () =
 let test_cache_different_predicates () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
      let set1 = USet.create () in
        ignore (USet.add set1 (1, 2));
        let set2 = USet.create () in
@@ -389,36 +389,33 @@ let test_cache_different_predicates () =
 (** Test context cache status *)
 let test_is_good_initially_false () =
   let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
+  let fwd_es_ctx = EventStructureContext.create structure in
 
   let fwd = USet.create () in
   let we = USet.create () in
     Alcotest.(check bool)
       "Not initially good" false
-      (ContextCache.is_good forwardingcontext_state.context_cache fwd we)
+      (ContextCache.is_good fwd_es_ctx.context_cache fwd we)
 
 let test_is_bad_initially_false () =
   let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
+  let fwd_es_ctx = EventStructureContext.create structure in
 
   let fwd = USet.create () in
   let we = USet.create () in
     Alcotest.(check bool)
       "Not initially bad" false
-      (ContextCache.is_bad forwardingcontext_state.context_cache fwd we)
+      (ContextCache.is_bad fwd_es_ctx.context_cache fwd we)
 
 (** Test context checking - using data provider *)
 let test_check (data : DataProviders.check_data) =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
+     let* () = EventStructureContext.init fwd_es_ctx in
      let ctx =
-       {
-         (ForwardingContext.create forwardingcontext_state ()) with
-         psi = data.psi;
-       }
+       { (ForwardingContext.create fwd_es_ctx ()) with psi = data.psi }
      in
        let* result = ForwardingContext.check ctx in
          Alcotest.(check bool)
@@ -429,17 +426,13 @@ let test_check (data : DataProviders.check_data) =
            Alcotest.(check bool)
              (Printf.sprintf "%s marked as good" data.name)
              true
-             (ContextCache.is_good forwardingcontext_state.context_cache ctx.fwd
-                ctx.we
-             );
+             (ContextCache.is_good fwd_es_ctx.context_cache ctx.fwd ctx.we);
 
          if data.should_be_bad then
            Alcotest.(check bool)
              (Printf.sprintf "%s marked as bad" data.name)
              true
-             (ContextCache.is_bad forwardingcontext_state.context_cache ctx.fwd
-                ctx.we
-             );
+             (ContextCache.is_bad fwd_es_ctx.context_cache ctx.fwd ctx.we);
 
          Lwt.return_unit
     )
@@ -448,10 +441,10 @@ let test_check (data : DataProviders.check_data) =
 let test_ppo_returns_remapped () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
        let* ppo = ForwardingContext.ppo ctx [] in
          (* Should return some relation *)
          Alcotest.(check bool) "PPO is a uset" true (USet.size ppo >= 0);
@@ -461,10 +454,10 @@ let test_ppo_returns_remapped () =
 let test_ppo_caches_result () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
      let predicates = [] in
 
      (* First call *)
@@ -479,10 +472,10 @@ let test_ppo_caches_result () =
 let test_ppo_loc_returns_remapped () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
        let* ppo_loc = ForwardingContext.ppo_loc ctx [] in
          (* Should return some relation *)
          Alcotest.(check bool) "PPO_loc is a uset" true (USet.size ppo_loc >= 0);
@@ -492,10 +485,10 @@ let test_ppo_loc_returns_remapped () =
 let test_ppo_sync_returns_remapped () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
-     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
      let ppo_sync = ForwardingContext.ppo_sync ctx in
        (* Should return some relation *)
        Alcotest.(check bool) "PPO_sync is a uset" true (USet.size ppo_sync >= 0);
@@ -505,9 +498,9 @@ let test_ppo_sync_returns_remapped () =
 (** Test to_string *)
 let test_to_string_empty () =
   let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
+  let fwd_es_ctx = EventStructureContext.create structure in
 
-  let ctx = ForwardingContext.create forwardingcontext_state () in
+  let ctx = ForwardingContext.create fwd_es_ctx () in
 
   let s = ForwardingContext.to_string ctx in
     Alcotest.(check bool)
@@ -516,11 +509,11 @@ let test_to_string_empty () =
 
 let test_to_string_with_edges () =
   let structure = TestUtil.make_structure () in
-  let forwardingcontext_state = EventStructureContext.create structure in
+  let fwd_es_ctx = EventStructureContext.create structure in
 
   let fwd = USet.create () in
     ignore (USet.add fwd (1, 2));
-    let ctx = ForwardingContext.create forwardingcontext_state ~fwd () in
+    let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
     let s = ForwardingContext.to_string ctx in
       Alcotest.(check bool) "String not empty" true (String.length s > 0)
 
@@ -528,11 +521,11 @@ let test_to_string_with_edges () =
 let test_update_po_clears_cache () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
-     let forwardingcontext_state = EventStructureContext.create structure in
+     let fwd_es_ctx = EventStructureContext.create structure in
 
-     let* () = EventStructureContext.init forwardingcontext_state in
+     let* () = EventStructureContext.init fwd_es_ctx in
      (* Create a context and cache something *)
-     let ctx = ForwardingContext.create forwardingcontext_state () in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
      let test_set = USet.create () in
        ignore (USet.add test_set (1, 2));
        let _ = ForwardingContext.cache_set_ppo ctx [] test_set in
@@ -540,12 +533,12 @@ let test_update_po_clears_cache () =
        (* Update PO - should clear cache *)
        let new_po = USet.create () in
          ignore (USet.add new_po (0, 1));
-         EventStructureContext.update_po forwardingcontext_state new_po;
+         EventStructureContext.update_po fwd_es_ctx new_po;
 
          (* Cache size should be 0 after clear *)
          Alcotest.(check int)
            "Cache cleared" 0
-           (PpoCache.size forwardingcontext_state.ppo_cache);
+           (PpoCache.size fwd_es_ctx.ppo_cache);
          Lwt.return_unit
     )
 

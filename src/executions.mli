@@ -37,7 +37,7 @@ end
 val generate_executions :
   ?include_rf:bool ->
   symbolic_event_structure ->
-  Forwardingcontext.event_structure_context ->
+  Forwarding.event_structure_context ->
   justification uset ->
   expr list ->
   (int * int) uset ->

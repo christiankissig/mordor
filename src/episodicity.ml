@@ -541,17 +541,14 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
             StepCounterSemantics.interpret ~step_counter:3 lwt_ctx
           in
           (* Compute dependencies for 3-iteration executions *)
-          let three_forwardingcontext_state =
-            Forwardingcontext.EventStructureContext.create three_structure
+          let three_fwd_es_ctx =
+            Forwarding.EventStructureContext.create three_structure
           in
-            let* () =
-              Forwardingcontext.EventStructureContext.init
-                three_forwardingcontext_state
-            in
+            let* () = Forwarding.EventStructureContext.init three_fwd_es_ctx in
               let* _, three_executions =
-                Symmrd.calculate_dependencies three_structure
-                  three_forwardingcontext_state ~include_rf:false
-                  ~exhaustive:true ~restrictions:coherence_restrictions
+                Symmrd.calculate_dependencies three_structure three_fwd_es_ctx
+                  ~include_rf:false ~exhaustive:true
+                  ~restrictions:coherence_restrictions
               in
               let cache =
                 {

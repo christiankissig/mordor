@@ -7,35 +7,34 @@
 
 open Algorithms
 open Expr
-open Forwardingcontext
+open Forwarding
+open Justifications
 open Lwt.Syntax
 open Types
 open Uset
-open Justifications
 
 (** {1 Foundational Types} *)
 
 (** Elaboration operation for tracing. *)
 type op =
   | PreJustification
-  | ValueAssignment of justification
+  | ValueAssignElab of justification
   | Forwarding of justification
-  | Lifting of justification * justification
-  | Weakening of justification
+  | LiftElab of justification * justification
+  | WeakElab of justification
 
 (** Pretty print elaboration operation for tracing. *)
 let op_to_string = function
   | PreJustification -> "PreJustification"
-  | ValueAssignment just ->
-      Printf.sprintf "ValueAssignment %s" (Justification.to_string just)
+  | ValueAssignElab just ->
+      Printf.sprintf "ValueAssignElab %s" (Justification.to_string just)
   | Forwarding just ->
       Printf.sprintf "Forwarding %s" (Justification.to_string just)
-  | Lifting (just1, just2) ->
-      Printf.sprintf "Lifting %s and %s"
+  | LiftElab (just1, just2) ->
+      Printf.sprintf "LiftElab %s and %s"
         (Justification.to_string just1)
         (Justification.to_string just2)
-  | Weakening just ->
-      Printf.sprintf "Weakening %s" (Justification.to_string just)
+  | WeakElab just -> Printf.sprintf "WeakElab %s" (Justification.to_string just)
 
 module OpTrace = Hashtbl.Make (JustificationCacheKey)
 
@@ -46,7 +45,7 @@ module OpTrace = Hashtbl.Make (JustificationCacheKey)
 type context = {
   structure : symbolic_event_structure;
       (** The symbolic event structure being elaborated. *)
-  forwardingcontext_state : Forwardingcontext.event_structure_context;
+  fwd_es_ctx : Forwarding.event_structure_context;
   fj : (int * int) USet.t;  (** Fork-join edges that constrain forwarding. *)
   op_trace : op OpTrace.t;
       (** Cache of operations performed on justifications to avoid redundancy.
@@ -137,7 +136,7 @@ let pre_justifications structure =
 
 (** {1 Value Assignment Elaboration} *)
 
-module ValueAssignment = struct
+module ValueAssignElab = struct
   (** [elab elab_ctx just] performs value assignment elaboration.
 
       For the given justification, attempts to find a satisfying model and
@@ -149,8 +148,7 @@ module ValueAssignment = struct
   let elab elab_ctx just =
     let structure = elab_ctx.structure in
     let fwd_ctx =
-      ForwardingContext.create elab_ctx.forwardingcontext_state ~fwd:just.fwd
-        ~we:just.we ()
+      ForwardingContext.create elab_ctx.fwd_es_ctx ~fwd:just.fwd ~we:just.we ()
     in
     let defacto =
       Hashtbl.find_opt elab_ctx.structure.defacto just.w.label
@@ -196,7 +194,7 @@ end
 
 (** {1 Forwarding Elaboration} *)
 
-module Forwarding = struct
+module ForwardElab = struct
   (** [fprime elab_ctx pred_fn ppo_loc just e1 e2] checks forwarding condition.
 
       Tests if events [e1] and [e2] satisfy the forwarding prime condition: they
@@ -291,8 +289,8 @@ module Forwarding = struct
         Lwt_list.map_p
           (fun p ->
             let fwd_ctx =
-              ForwardingContext.create elab_ctx.forwardingcontext_state
-                ~fwd:just.fwd ~we:just.we ()
+              ForwardingContext.create elab_ctx.fwd_es_ctx ~fwd:just.fwd
+                ~we:just.we ()
             in
               let* ppo = ForwardingContext.ppo fwd_ctx p in
                 let* ppo_loc = ForwardingContext.ppo_loc fwd_ctx p in
@@ -346,20 +344,17 @@ module Forwarding = struct
                     (* Filter edge function *)
                     let filtedge (edge, new_fwd, new_we) =
                       if
-                        Forwardingcontext.ContextCache.is_bad
-                          elab_ctx.forwardingcontext_state.context_cache new_fwd
-                          new_we
+                        Forwarding.ContextCache.is_bad
+                          elab_ctx.fwd_es_ctx.context_cache new_fwd new_we
                       then Lwt.return_false
                       else if
-                        Forwardingcontext.ContextCache.is_good
-                          elab_ctx.forwardingcontext_state.context_cache new_fwd
-                          new_we
+                        Forwarding.ContextCache.is_good
+                          elab_ctx.fwd_es_ctx.context_cache new_fwd new_we
                       then Lwt.return_true
                       else
                         let con =
-                          ForwardingContext.create
-                            elab_ctx.forwardingcontext_state ~fwd:new_fwd
-                            ~we:new_we ()
+                          ForwardingContext.create elab_ctx.fwd_es_ctx
+                            ~fwd:new_fwd ~we:new_we ()
                         in
                           ForwardingContext.check con
                     in
@@ -395,9 +390,8 @@ module Forwarding = struct
                         List.map
                           (fun (edge, new_fwd, new_we) ->
                             let con =
-                              ForwardingContext.create
-                                elab_ctx.forwardingcontext_state ~fwd:new_fwd
-                                ~we:new_we ()
+                              ForwardingContext.create elab_ctx.fwd_es_ctx
+                                ~fwd:new_fwd ~we:new_we ()
                             in
                               ForwardingContext.remap_just con just
                           )
@@ -408,9 +402,8 @@ module Forwarding = struct
                         List.map
                           (fun (edge, new_fwd, new_we) ->
                             let con =
-                              ForwardingContext.create
-                                elab_ctx.forwardingcontext_state ~fwd:new_fwd
-                                ~we:new_we ()
+                              ForwardingContext.create elab_ctx.fwd_es_ctx
+                                ~fwd:new_fwd ~we:new_we ()
                             in
                               ForwardingContext.remap_just con just
                           )
@@ -425,14 +418,14 @@ module Forwarding = struct
         Lwt.return results
 end
 
-(** {1 Lifting Elaboration} *)
+(** {1 LiftElab Elaboration} *)
 
-(** Lifting elaboration operations.
+(** LiftElab elaboration operations.
 
     Implements the lifting elaboration that combines pairs of justifications for
     conflicting writes by finding relabelings that make their paths equivalent.
 *)
-module Lifting : sig
+module LiftElab : sig
   (** [elab ctx j1 j2] attempts to lift justifications [j1] and [j2].
 
       For conflicting writes, finds relabelings that make the justifications
@@ -875,7 +868,7 @@ end = struct
   let elab elab_ctx just_1 just_2 =
     (* only consider justifications of writes in conflict and with non-trivial
        predicates *)
-    let landmark = Landmark.register "Elaborations.Lifting.elab" in
+    let landmark = Landmark.register "Elaborations.LiftElab.elab" in
       Landmark.enter landmark;
       let is_trace = false in
         if
@@ -902,7 +895,7 @@ end = struct
         else (
           if is_trace then
             Logs.debug (fun m ->
-                m "Lifting justifications:\n\t%s\n\t%s"
+                m "LiftElab justifications:\n\t%s\n\t%s"
                   (Justification.to_string just_1)
                   (Justification.to_string just_2)
             );
@@ -911,12 +904,12 @@ end = struct
 
           (* Create forwarding contexts *)
           let con_1 =
-            ForwardingContext.create elab_ctx.forwardingcontext_state
-              ~fwd:just_1.fwd ~we:just_1.we ()
+            ForwardingContext.create elab_ctx.fwd_es_ctx ~fwd:just_1.fwd
+              ~we:just_1.we ()
           in
           let con_2 =
-            ForwardingContext.create elab_ctx.forwardingcontext_state
-              ~fwd:just_2.fwd ~we:just_2.we ()
+            ForwardingContext.create elab_ctx.fwd_es_ctx ~fwd:just_2.fwd
+              ~we:just_2.we ()
           in
 
           (* Compute ppo for both justifications *)
@@ -960,7 +953,7 @@ end = struct
                     Lwt_list.map_s
                       (fun relab ->
                         let inner_landmark =
-                          Landmark.register "Lifting.elab.process_relabeling"
+                          Landmark.register "LiftElab.elab.process_relabeling"
                         in
                           Landmark.enter inner_landmark;
                           let relabeled_just_1_p =
@@ -1120,7 +1113,7 @@ end = struct
 
                   if is_trace then
                     Logs.debug (fun m ->
-                        m "Lifting produced %d justifications:\n%s"
+                        m "LiftElab produced %d justifications:\n%s"
                           (List.length lifted)
                           (String.concat "\n"
                              (List.map
@@ -1138,9 +1131,9 @@ end = struct
         )
 end
 
-(** {1 Weakening elaboration operations.} *)
+(** {1 WeakElab elaboration operations.} *)
 
-module Weakening = struct
+module WeakElab = struct
   (** [elab elab_ctx just] performs weakening elaboration on a justification.
       Removes predicates from [just] that are implied by program-wide guarantees
       (PWG).
@@ -1150,8 +1143,7 @@ module Weakening = struct
       @return Promise of list of weakened justifications. *)
   let elab elab_ctx just =
     let con =
-      ForwardingContext.create elab_ctx.forwardingcontext_state ~fwd:just.fwd
-        ~we:just.we ()
+      ForwardingContext.create elab_ctx.fwd_es_ctx ~fwd:just.fwd ~we:just.we ()
     in
 
     (* Filter predicates that are not implied by PWG *)
@@ -1231,10 +1223,10 @@ let batch_elaborations elab_ctx pre_justs =
       let* new_va_justs =
         USet.async_map
           (fun just ->
-            let* elaborated = ValueAssignment.elab elab_ctx just in
+            let* elaborated = ValueAssignElab.elab elab_ctx just in
               List.iter
                 (fun just' ->
-                  OpTrace.add elab_ctx.op_trace just' (ValueAssignment just)
+                  OpTrace.add elab_ctx.op_trace just' (ValueAssignElab just)
                   |> ignore
                 )
                 elaborated;
@@ -1253,7 +1245,7 @@ let batch_elaborations elab_ctx pre_justs =
         let* new_fwd_justs =
           USet.async_map
             (fun just ->
-              let* elaborated = Forwarding.elab elab_ctx just in
+              let* elaborated = ForwardElab.elab elab_ctx just in
                 List.iter
                   (fun just' ->
                     OpTrace.add elab_ctx.op_trace just' (Forwarding just)
@@ -1280,10 +1272,10 @@ let batch_elaborations elab_ctx pre_justs =
             let* new_lift_justs =
               USet.async_map
                 (fun (j1, j2) ->
-                  let* elaborated = Lifting.elab elab_ctx j1 j2 in
+                  let* elaborated = LiftElab.elab elab_ctx j1 j2 in
                     List.iter
                       (fun just' ->
-                        OpTrace.add elab_ctx.op_trace just' (Lifting (j1, j2))
+                        OpTrace.add elab_ctx.op_trace just' (LiftElab (j1, j2))
                         |> ignore
                       )
                       elaborated;
@@ -1297,17 +1289,17 @@ let batch_elaborations elab_ctx pre_justs =
               |> filter_justs
             in
               Logs.debug (fun m ->
-                  m "Lifting produced %d new justifications."
+                  m "LiftElab produced %d new justifications."
                     (USet.size new_lift_justs)
               );
 
               let* new_weaken_justs =
                 USet.async_map
                   (fun just ->
-                    let* elaborated = Weakening.elab elab_ctx just in
+                    let* elaborated = WeakElab.elab elab_ctx just in
                       List.iter
                         (fun just' ->
-                          OpTrace.add elab_ctx.op_trace just' (Weakening just)
+                          OpTrace.add elab_ctx.op_trace just' (WeakElab just)
                           |> ignore
                         )
                         elaborated;
@@ -1321,7 +1313,7 @@ let batch_elaborations elab_ctx pre_justs =
                 |> filter_justs
               in
                 Logs.debug (fun m ->
-                    m "Weakening produced %d new justifications."
+                    m "WeakElab produced %d new justifications."
                       (USet.size new_weaken_justs)
                 );
 
@@ -1383,7 +1375,7 @@ let batch_elaborations elab_ctx pre_justs =
     @param structure The event structure.
     @param init_ppo Initial PPO relations.
     @return Promise of generated justifications. *)
-let generate_justifications structure forwardingcontext_state init_ppo =
+let generate_justifications structure fwd_es_ctx init_ppo =
   let po = structure.po in
   let events = structure.events in
 
@@ -1401,9 +1393,7 @@ let generate_justifications structure forwardingcontext_state init_ppo =
 
   (* Build context for elaborations *)
   let op_trace = OpTrace.create 0 in
-  let elab_ctx : context =
-    { forwardingcontext_state; structure; fj; op_trace }
-  in
+  let elab_ctx : context = { fwd_es_ctx; structure; fj; op_trace } in
 
   Logs.debug (fun m -> m "Starting elaborations...");
 

@@ -11,8 +11,8 @@ open Uset
 
 let calculate_dependencies ?(include_rf = true)
     (structure : symbolic_event_structure)
-    (forwardingcontext_state : Forwardingcontext.event_structure_context)
-    ~exhaustive ~restrictions =
+    (fwd_es_ctx : Forwarding.event_structure_context) ~exhaustive ~restrictions
+    =
   let e_set = structure.e in
   let events = structure.events in
   let po = structure.po in
@@ -35,8 +35,7 @@ let calculate_dependencies ?(include_rf = true)
   let init_ppo = USet.union init_ppo terminal_ppo in
 
   let* final_justs =
-    Elaborations.generate_justifications structure forwardingcontext_state
-      init_ppo
+    Elaborations.generate_justifications structure fwd_es_ctx init_ppo
   in
 
   Logs.debug (fun m ->
@@ -98,8 +97,8 @@ let calculate_dependencies ?(include_rf = true)
 
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions ~include_rf structure forwardingcontext_state
-      final_justs statex init_ppo ~restrictions
+    generate_executions ~include_rf structure fwd_es_ctx final_justs statex
+      init_ppo ~restrictions
   in
 
   Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));
@@ -124,17 +123,13 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
   in
     match ctx.structure with
     | Some structure ->
-        let forwardingcontext_state =
-          Forwardingcontext.EventStructureContext.create structure
-        in
-          ctx.forwardingcontext_state <- Some forwardingcontext_state;
+        let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
+          ctx.fwd_es_ctx <- Some fwd_es_ctx;
 
-          let* () =
-            Forwardingcontext.EventStructureContext.init forwardingcontext_state
-          in
+          let* () = Forwarding.EventStructureContext.init fwd_es_ctx in
 
           let* justs, executions =
-            calculate_dependencies structure forwardingcontext_state
+            calculate_dependencies structure fwd_es_ctx
               ~exhaustive:(ctx.options.exhaustive || false)
               ~restrictions:coherence_restrictions
           in

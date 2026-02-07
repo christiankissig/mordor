@@ -17,7 +17,7 @@
   test_episodicity
   test_executions
   test_expr
-  test_forwardingcontext
+  test_forwarding
   test_histories_futures
   test_interpret
   test_model_and_tuple_features

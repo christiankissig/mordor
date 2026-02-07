@@ -18,7 +18,7 @@ open Coherence
 open Events
 open Eventstructures
 open Expr
-open Forwardingcontext
+open Forwarding
 open Justifications
 open Lwt.Syntax
 open Types
@@ -1040,7 +1040,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
 module Freeze : sig
   val freeze :
     symbolic_event_structure ->
-    Forwardingcontext.event_structure_context ->
+    Forwarding.event_structure_context ->
     path_info ->
     justification list ->
     (int * int) USet.t ->
@@ -1088,8 +1088,7 @@ end = struct
       @param p_combined Combined predicates.
       @param init_ppo Initial PPO edges.
       @return Pair (PPO, PPO_loc) of ppo relations. *)
-  let freeze_ppo structure forwardingcontext_state path j_list con p_combined
-      init_ppo =
+  let freeze_ppo structure fwd_es_ctx path j_list con p_combined init_ppo =
     let landmark = Landmark.register "freeze_ppo" in
       Landmark.enter landmark;
       let e_squared = URelation.cross path.path path.path in
@@ -1099,8 +1098,7 @@ end = struct
         Lwt_list.map_s
           (fun just ->
             let just_con =
-              ForwardingContext.create forwardingcontext_state ~fwd:just.fwd
-                ~we:just.we ()
+              ForwardingContext.create fwd_es_ctx ~fwd:just.fwd ~we:just.we ()
             in
               let* ppo_j = ForwardingContext.ppo just_con just.p in
 
@@ -1167,8 +1165,8 @@ end = struct
       @param constraints Additional constraints.
       @param include_rf Whether to compute RF relations (false for testing).
       @return Promise of list of valid freeze results. *)
-  let freeze structure forwardingcontext_state path j_list init_ppo statex
-      ~elided ~constraints ~include_rf =
+  let freeze structure fwd_es_ctx path j_list init_ppo statex ~elided
+      ~constraints ~include_rf =
     let landmark = Landmark.register "Executions.freeze" in
       Landmark.enter landmark;
 
@@ -1228,7 +1226,7 @@ end = struct
       );
 
       (* Create forwarding context *)
-      let con = ForwardingContext.create forwardingcontext_state ~fwd ~we () in
+      let con = ForwardingContext.create fwd_es_ctx ~fwd ~we () in
 
       (* Combine predicates *)
       let p_combined =
@@ -1280,8 +1278,7 @@ end = struct
         );
         let*? () = (combined_p_sat, "predicates unsatisfiable") in
           let* ppo, ppo_loc =
-            freeze_ppo structure forwardingcontext_state path j_list con
-              p_combined init_ppo
+            freeze_ppo structure fwd_es_ctx path j_list con p_combined init_ppo
           in
 
           let* all_fr =
@@ -1411,7 +1408,7 @@ let compute_justification_combinations structure paths init_ppo statex
     @return Promise of list of valid coherent executions. *)
 let generate_executions ?(include_rf = true)
     (structure : symbolic_event_structure)
-    (forwardingcontext_state : Forwardingcontext.event_structure_context)
+    (fwd_es_ctx : Forwarding.event_structure_context)
     (justs : justification uset) statex init_ppo ~restrictions =
   let landmark = Landmark.register "generate_executions" in
     Landmark.enter landmark;
@@ -1465,9 +1462,7 @@ let generate_executions ?(include_rf = true)
               (fun acc j -> USet.inplace_union acc j.we)
               (USet.create ()) just_combo
           in
-          let con =
-            ForwardingContext.create forwardingcontext_state ~fwd ~we ()
-          in
+          let con = ForwardingContext.create fwd_es_ctx ~fwd ~we () in
           let j_remapped =
             List.map (fun j -> ForwardingContext.remap_just con j) just_combo
           in
@@ -1477,8 +1472,8 @@ let generate_executions ?(include_rf = true)
           in
 
           let* freeze_results =
-            Freeze.freeze structure forwardingcontext_state path j_remapped
-              init_ppo statex ~elided ~constraints ~include_rf
+            Freeze.freeze structure fwd_es_ctx path j_remapped init_ppo statex
+              ~elided ~constraints ~include_rf
           in
             Logs.debug (fun m ->
                 m
