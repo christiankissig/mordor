@@ -517,31 +517,6 @@ let test_to_string_with_edges () =
     let s = ForwardingContext.to_string ctx in
       Alcotest.(check bool) "String not empty" true (String.length s > 0)
 
-(** Test update_po *)
-let test_update_po_clears_cache () =
-  Lwt_main.run
-    (let structure = TestUtil.make_structure () in
-     let fwd_es_ctx = EventStructureContext.create structure in
-
-     let* () = EventStructureContext.init fwd_es_ctx in
-     (* Create a context and cache something *)
-     let ctx = ForwardingContext.create fwd_es_ctx () in
-     let test_set = USet.create () in
-       ignore (USet.add test_set (1, 2));
-       let _ = ForwardingContext.cache_set_ppo ctx [] test_set in
-
-       (* Update PO - should clear cache *)
-       let new_po = USet.create () in
-         ignore (USet.add new_po (0, 1));
-         EventStructureContext.update_po fwd_es_ctx new_po;
-
-         (* Cache size should be 0 after clear *)
-         Alcotest.(check int)
-           "Cache cleared" 0
-           (PpoCache.size fwd_es_ctx.ppo_cache);
-         Lwt.return_unit
-    )
-
 (** Generate test cases from data providers *)
 let make_context_creation_tests () =
   List.map
@@ -602,6 +577,5 @@ let suite =
           test_ppo_sync_returns_remapped;
         test_case "to_string empty" `Quick test_to_string_empty;
         test_case "to_string with edges" `Quick test_to_string_with_edges;
-        test_case "update_po clears cache" `Quick test_update_po_clears_cache;
       ]
   )

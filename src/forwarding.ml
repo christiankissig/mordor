@@ -367,6 +367,112 @@ module EventStructureContext = struct
       context_cache = ContextCache.create ();
     }
 
+  (* Helper to filter events by memory ordering mode *)
+  let filter_order structure events mode =
+    USet.filter
+      (fun e ->
+        let ev = Hashtbl.find structure.events e in
+          match ev.typ with
+          | Read -> ev.rmod = mode
+          | Write -> ev.wmod = mode
+          | Fence -> ev.fmod = mode
+          | _ -> false
+      )
+      events
+
+  (** [compute_ppo_syncA structure e po] computes the synchronization-based PPO
+      template.
+
+      This includes orderings from release/acquire modes and SC fences, as well
+      as volatile accesses. The resulting relation is not yet intersected with
+      program order and serves as a template for synchronization PPO.
+
+      @param structure The symbolic event structure.
+      @param e The set of events to consider.
+      @param po The program order relation.
+      @return The computed synchronization PPO template. *)
+  let compute_ppo_syncA structure e po =
+    let e_squared = URelation.cross e e in
+    let r = USet.intersection structure.read_events e in
+    let w = USet.intersection structure.write_events e in
+    let f = USet.intersection structure.fence_events e in
+
+    let w_rel =
+      USet.union (filter_order structure w Release) (filter_order structure w SC)
+    in
+    let r_acq =
+      USet.union (filter_order structure r Acquire) (filter_order structure r SC)
+    in
+    let f_rel = filter_order structure f Release in
+    let f_acq = filter_order structure f Acquire in
+    let f_sc = filter_order structure f SC in
+
+    (* Synchronization ppo *)
+    let w_rel_sq = URelation.cross w_rel w_rel in
+    let r_acq_sq = URelation.cross r_acq r_acq in
+    let f_sc_sq = URelation.cross f_sc f_sc in
+    let f_rel_sq = URelation.cross f_rel f_rel in
+    let f_acq_sq = URelation.cross f_acq f_acq in
+    let e_minus_r = USet.set_minus e r in
+    let e_minus_w = USet.set_minus e w in
+
+    URelation.compose [ e_squared; w_rel_sq ]
+    |> USet.inplace_union (URelation.compose [ r_acq_sq; e_squared ])
+    |> USet.inplace_union (URelation.compose [ e_squared; f_sc_sq; e_squared ])
+    |> USet.inplace_union
+         (URelation.compose
+            [ e_squared; f_rel_sq; URelation.cross e_minus_r e_minus_r ]
+         )
+    |> USet.inplace_union
+         (URelation.compose
+            [ URelation.cross e_minus_w e_minus_w; f_acq_sq; e_squared ]
+         )
+    |> USet.intersection po
+
+  (** [compute_ppo_loc_eqA structure e po] computes the location equality PPO
+      component.
+
+      This relation includes pairs of events that may access the same location
+      and thus require ordering to preserve location-based semantics. It is
+      computed by filtering program order with a solver check for location
+      equality under the given predicates.
+
+      @param structure The symbolic event structure.
+      @param e The set of events to consider.
+      @param po The program order relation.
+      @return The computed location equality PPO component. *)
+  let compute_ppo_loc_eqA structure e po =
+    USet.async_filter
+      (fun (e1, e2) ->
+        let loc1 = Events.get_loc structure e1 in
+        let loc2 = Events.get_loc structure e2 in
+          match (loc1, loc2) with
+          | Some l1, Some l2 -> Solver.exeq ~state:[] l1 l2
+          | _ -> Lwt.return false
+      )
+      po
+
+  (** [compute_ppo_volA structure e po] computes the volatile PPO component.
+
+      This relation includes orderings required for volatile access semantics.
+      It is computed by filtering program order to pairs of volatile events.
+
+      @param structure The symbolic event structure.
+      @param e The set of events to consider.
+      @param po The program order relation.
+      @return The computed volatile PPO component. *)
+  let compute_ppo_volA structure e po =
+    (* Volatile ppo *)
+    let e_vol =
+      USet.filter
+        (fun e ->
+          try (Hashtbl.find structure.events e).volatile
+          with Not_found -> false
+        )
+        e
+    in
+      URelation.cross e_vol e_vol |> USet.intersection po
+
   (** [clear_caches es_ctx] clears all caches in the context.
 
       Clears both the PPO computation cache and context validity cache.
@@ -375,34 +481,6 @@ module EventStructureContext = struct
   let clear_caches es_ctx =
     ContextCache.clear es_ctx.context_cache;
     PpoCache.clear es_ctx.ppo_cache
-
-  (** [update_po es_ctx po] updates PPO relations for new program order.
-
-      Recomputes all PPO relations by intersecting templates with the given
-      program order. Clears the forwarding cache since all cached results are
-      now invalid.
-
-      @param es_ctx The event structure context.
-      @param po The new program order relation. *)
-  let update_po es_ctx po =
-    USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
-    USet.intersection es_ctx.ppo.ppo_loc_baseA po
-    |> USet.inplace_union es_ctx.ppo.ppo_loc_base
-    |> ignore;
-
-    USet.clear es_ctx.ppo.ppo_sync |> ignore;
-    USet.intersection es_ctx.ppo.ppo_syncA po
-    |> USet.inplace_union es_ctx.ppo.ppo_sync
-    |> ignore;
-
-    USet.clear es_ctx.ppo.ppo_base |> ignore;
-    USet.union es_ctx.ppo.ppo_volA es_ctx.ppo.ppo_syncA
-    |> USet.union es_ctx.ppo.ppo_loc_eqA
-    |> USet.intersection po
-    |> USet.inplace_union es_ctx.ppo.ppo_base
-    |> ignore;
-
-    clear_caches es_ctx
 
   (** [init es_ctx] initializes PPO relations.
 
@@ -422,26 +500,12 @@ module EventStructureContext = struct
       Landmark.enter landmark;
       let rmw = es_ctx.structure.rmw in
 
-      clear_caches es_ctx;
-
+      let structure = es_ctx.structure in
+      let e = es_ctx.structure.e in
       let po = es_ctx.structure.po in
 
-      let e = es_ctx.e in
-      let r = USet.intersection es_ctx.structure.read_events e in
-      let w = USet.intersection es_ctx.structure.write_events e in
-      let f = USet.intersection es_ctx.structure.fence_events e in
-
-      (* Extract volatile events *)
-      let e_vol =
-        USet.filter
-          (fun e ->
-            try (Hashtbl.find es_ctx.structure.events e).volatile
-            with Not_found -> false
-          )
-          es_ctx.e
-      in
-
       (* Program order without fences *)
+      (* TODO 1) why this? 2) how about initial and terminal events? *)
       let po_nf =
         USet.filter
           (fun (f, t) ->
@@ -451,78 +515,27 @@ module EventStructureContext = struct
           po
       in
 
-      (* Helper to filter events by memory ordering mode *)
-      let filter_order events mode =
-        USet.filter
-          (fun e ->
-            let ev = Hashtbl.find es_ctx.structure.events e in
-              match ev.typ with
-              | Read -> ev.rmod = mode
-              | Write -> ev.wmod = mode
-              | Fence -> ev.fmod = mode
-              | _ -> false
-          )
-          events
-      in
-
-      let w_rel = USet.union (filter_order w Release) (filter_order w SC) in
-      let r_acq = USet.union (filter_order r Acquire) (filter_order r SC) in
-      let f_rel = filter_order f Release in
-      let f_acq = filter_order f Acquire in
-      let f_sc = filter_order f SC in
-
-      (* Volatile ppo *)
-      URelation.cross e_vol e_vol
-      |> USet.intersection po_nf
-      |> USet.inplace_union es_ctx.ppo.ppo_volA
+      (* PPO between volatile events *)
+      USet.clear es_ctx.ppo.ppo_volA |> ignore;
+      USet.inplace_union es_ctx.ppo.ppo_volA (compute_ppo_volA structure e po_nf)
       |> ignore;
 
-      (* Synchronization ppo *)
-      let e_squared = URelation.cross es_ctx.e es_ctx.e in
-      let semicolon r1 r2 = URelation.compose [ r1; r2 ] in
-
-      let w_rel_sq = URelation.cross w_rel w_rel in
-      let r_acq_sq = URelation.cross r_acq r_acq in
-      let f_sc_sq = URelation.cross f_sc f_sc in
-      let f_rel_sq = URelation.cross f_rel f_rel in
-      let f_acq_sq = URelation.cross f_acq f_acq in
-      let e_minus_r = USet.set_minus es_ctx.e r in
-      let e_minus_w = USet.set_minus es_ctx.e w in
-
+      (* PPO based on memory order *)
       USet.clear es_ctx.ppo.ppo_syncA |> ignore;
-      semicolon e_squared w_rel_sq
-      |> USet.inplace_union (semicolon r_acq_sq e_squared)
-      |> USet.inplace_union (semicolon e_squared (semicolon f_sc_sq e_squared))
-      |> USet.inplace_union
-           (semicolon e_squared
-              (semicolon f_rel_sq (URelation.cross e_minus_r e_minus_r))
-           )
-      |> USet.inplace_union
-           (semicolon
-              (URelation.cross e_minus_w e_minus_w)
-              (semicolon f_acq_sq e_squared)
-           )
-      |> USet.intersection po_nf
-      |> USet.inplace_union es_ctx.ppo.ppo_syncA
+      USet.inplace_union es_ctx.ppo.ppo_syncA
+        (compute_ppo_syncA es_ctx.structure es_ctx.e po_nf)
       |> ignore;
 
-      (* Async filtering with semantic equality *)
-      let* eqA =
-        USet.async_filter
-          (fun (e1, e2) ->
-            let loc1 = Events.get_loc es_ctx.structure e1 in
-            let loc2 = Events.get_loc es_ctx.structure e2 in
-              match (loc1, loc2) with
-              | Some l1, Some l2 -> Solver.exeq ~state:[] l1 l2
-              | _ -> Lwt.return false
-          )
-          po_nf
-      in
+      (* Filter for location equality with semantic equality *)
+      (* TODO it is counter-intuitive that ppo_loc would be the complement of
+         ppo_loc_eq *)
+      let* ppo_loc_eqA = compute_ppo_loc_eqA es_ctx.structure es_ctx.e po_nf in
         USet.clear es_ctx.ppo.ppo_loc_eqA |> ignore;
-        USet.inplace_union es_ctx.ppo.ppo_loc_eqA eqA |> ignore;
-        (* Location-based ppo *)
+        USet.inplace_union es_ctx.ppo.ppo_loc_eqA ppo_loc_eqA |> ignore;
+
+        (* PPO based on memory location *)
         USet.clear es_ctx.ppo.ppo_loc_baseA |> ignore;
-        USet.set_minus po_nf eqA
+        USet.set_minus po_nf ppo_loc_eqA
         |> USet.inplace_union es_ctx.ppo.ppo_loc_baseA
         |> ignore;
 
@@ -530,7 +543,25 @@ module EventStructureContext = struct
             m "ForwardingContext initialized with %d events" (USet.size es_ctx.e)
         );
 
-        update_po es_ctx po;
+        USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
+        USet.intersection es_ctx.ppo.ppo_loc_baseA po
+        |> USet.inplace_union es_ctx.ppo.ppo_loc_base
+        |> ignore;
+
+        USet.clear es_ctx.ppo.ppo_sync |> ignore;
+        USet.intersection es_ctx.ppo.ppo_syncA po
+        |> USet.inplace_union es_ctx.ppo.ppo_sync
+        |> ignore;
+
+        USet.clear es_ctx.ppo.ppo_base |> ignore;
+        USet.union es_ctx.ppo.ppo_volA es_ctx.ppo.ppo_syncA
+        |> USet.union es_ctx.ppo.ppo_loc_eqA
+        |> USet.intersection po
+        |> USet.inplace_union es_ctx.ppo.ppo_base
+        |> ignore;
+
+        clear_caches es_ctx;
+
         Landmark.exit landmark;
         Lwt.return_unit
 end
