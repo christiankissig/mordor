@@ -1,4 +1,5 @@
 open Events
+open Expr
 open Lwt.Syntax
 open Types
 open Uset
@@ -383,3 +384,28 @@ let init_ppo structure =
   (* TODO discern in subsequent computation *)
   let init_ppo = USet.union init_ppo terminal_ppo in
     init_ppo
+
+(* TODO accomodate indexing po_iter by loop indices *)
+let symbols_in_loop structure e =
+  let e_loops =
+    Hashtbl.find_opt structure.loop_indices e
+    |> Option.value ~default:[]
+    |> USet.of_list
+  in
+  let evt = Hashtbl.find structure.events e in
+  let symbols =
+    (Option.map Expr.get_symbols evt.loc |> Option.value ~default:[])
+    @ (Option.map Value.get_symbols evt.rval |> Option.value ~default:[])
+    @ (Option.map Expr.get_symbols evt.wval |> Option.value ~default:[])
+    |> USet.of_list
+    |> USet.filter (fun s ->
+        let o_loops =
+          Hashtbl.find structure.origin s
+          |> Hashtbl.find_opt structure.loop_indices
+          |> Option.value ~default:[]
+          |> USet.of_list
+        in
+          USet.size (USet.intersection e_loops o_loops) > 0
+    )
+  in
+    symbols

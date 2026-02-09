@@ -40,8 +40,8 @@
   (:standard -g))
  (modules
   test_integration
-  ; other integration test modules
-  test_integration_litmus_tests)
+  test_integration_litmus_tests
+  test_integration_episodicity)
  (libraries
   mordor_lib
   landmarks

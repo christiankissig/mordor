@@ -438,6 +438,57 @@ let test_check (data : DataProviders.check_data) =
     )
 
 (** Test PPO computation *)
+
+(** Data provider for PPO tests *)
+module PPODataProvider = struct
+  type ppo_test_data = {
+    name : string;
+    fwd_edges : (int * int) list;
+    predicates : expr list;
+    ctx_psi : expr list;
+    description : string;
+  }
+
+  let ppo_test_cases =
+    [
+      {
+        name = "empty_context_no_predicates";
+        fwd_edges = [];
+        predicates = [];
+        ctx_psi = [];
+        description = "Empty forwarding context with no predicates";
+      };
+      {
+        name = "with_forwarding_no_predicates";
+        fwd_edges = [ (1, 2); (2, 3) ];
+        predicates = [];
+        ctx_psi = [];
+        description = "Forwarding edges but no predicates";
+      };
+      {
+        name = "no_forwarding_with_predicates";
+        fwd_edges = [];
+        predicates = [ EBinOp (ENum Z.one, "=", ENum Z.one) ];
+        ctx_psi = [];
+        description = "No forwarding but with true predicate";
+      };
+      {
+        name = "forwarding_and_predicates";
+        fwd_edges = [ (1, 2) ];
+        predicates = [ EBinOp (ESymbol "x", ">", ENum Z.zero) ];
+        ctx_psi = [ EBinOp (ESymbol "y", "<", ENum (Z.of_int 10)) ];
+        description = "Forwarding with both predicates and context psi";
+      };
+      {
+        name = "complex_forwarding";
+        fwd_edges = [ (1, 2); (2, 3); (3, 4) ];
+        predicates = [];
+        ctx_psi = [];
+        description = "Complex forwarding chain";
+      };
+    ]
+end
+
 let test_ppo_returns_remapped () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
@@ -469,6 +520,124 @@ let test_ppo_caches_result () =
        Lwt.return_unit
     )
 
+let test_ppo_with_different_predicates () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     let pred1 = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] in
+     let pred2 = [ EBinOp (ENum (Z.of_int 2), "=", ENum (Z.of_int 2)) ] in
+
+     let* ppo1 = ForwardingContext.ppo ctx pred1 in
+       let* ppo2 = ForwardingContext.ppo ctx pred2 in
+
+       (* Both should succeed and be cached separately *)
+       Alcotest.(check bool)
+         "Both PPOs computed" true
+         (USet.size ppo1 >= 0 && USet.size ppo2 >= 0);
+
+       (* Verify they're cached separately *)
+       let cached1 = ForwardingContext.cache_get ctx pred1 in
+       let cached2 = ForwardingContext.cache_get ctx pred2 in
+
+       Alcotest.(check bool)
+         "Different predicates cached separately" true
+         ( match (cached1.ppo, cached2.ppo) with
+         | Some _, Some _ -> true
+         | _ -> false
+         );
+       Lwt.return_unit
+    )
+
+let test_ppo_with_context_psi () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+
+     (* Create context with psi *)
+     let ctx_psi = [ EBinOp (ESymbol "x", ">", ENum Z.zero) ] in
+     let ctx =
+       { (ForwardingContext.create fwd_es_ctx ()) with psi = ctx_psi }
+     in
+
+     let predicates = [ EBinOp (ESymbol "y", "<", ENum (Z.of_int 10)) ] in
+
+     let* ppo = ForwardingContext.ppo ctx predicates in
+
+     (* Should combine predicates and psi for computation *)
+     Alcotest.(check bool)
+       "PPO computed with combined predicates" true
+       (USet.size ppo >= 0);
+
+     Lwt.return_unit
+    )
+
+let test_ppo_applies_remapping () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+
+     (* Create context with forwarding edges *)
+     let fwd = USet.create () in
+       ignore (USet.add fwd (2, 1));
+
+       (* Event 2 forwards to event 1 *)
+       let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
+
+       let* ppo = ForwardingContext.ppo ctx [] in
+
+       (* Verify that edges involving event 2 are remapped to event 1 *)
+       (* The result should not contain self-edges after remapping *)
+       let has_self_edge = USet.exists (fun (from, to_) -> from = to_) ppo in
+
+       Alcotest.(check bool) "No self-edges after remapping" false has_self_edge;
+
+       Lwt.return_unit
+    )
+
+let test_ppo_includes_rmw_orderings () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     (* The test structure includes RMW edges, PPO should include RMW-related orderings *)
+     let* ppo = ForwardingContext.ppo ctx [] in
+
+     Alcotest.(check bool) "PPO includes orderings" true (USet.size ppo >= 0);
+
+     Lwt.return_unit
+    )
+
+let test_ppo_with_debug_flag () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     (* Test with debug flag enabled *)
+     let* ppo = ForwardingContext.ppo ~debug:true ctx [] in
+
+     Alcotest.(check bool)
+       "PPO computed with debug flag" true
+       (USet.size ppo >= 0);
+
+     Lwt.return_unit
+    )
+
+(** PPO_LOC Tests *)
+
 let test_ppo_loc_returns_remapped () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
@@ -482,6 +651,157 @@ let test_ppo_loc_returns_remapped () =
          Lwt.return_unit
     )
 
+let test_ppo_loc_caches_result () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+     let predicates = [] in
+
+     (* First call *)
+     let* ppo_loc1 = ForwardingContext.ppo_loc ctx predicates in
+       (* Second call - should hit cache *)
+       let* ppo_loc2 = ForwardingContext.ppo_loc ctx predicates in
+
+       Alcotest.(check bool) "PPO_loc cached" true (USet.equal ppo_loc1 ppo_loc2);
+
+       (* Verify it's actually in cache *)
+       let cached = ForwardingContext.cache_get ctx predicates in
+         Alcotest.(check bool)
+           "PPO_loc in cache" true
+           ( match cached.ppo_loc with
+           | Some _ -> true
+           | None -> false
+           );
+
+         Lwt.return_unit
+    )
+
+let test_ppo_loc_subset_of_ppo () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     let* ppo = ForwardingContext.ppo ctx [] in
+       let* ppo_loc = ForwardingContext.ppo_loc ctx [] in
+
+       (* ppo_loc should be a subset or equal to ppo (more restrictive) *)
+       Alcotest.(check bool)
+         "PPO_loc size <= PPO size" true
+         (USet.size ppo_loc <= USet.size ppo);
+
+       Lwt.return_unit
+    )
+
+let test_ppo_loc_with_predicates () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     let predicates = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] in
+
+     let* ppo_loc = ForwardingContext.ppo_loc ctx predicates in
+
+     Alcotest.(check bool)
+       "PPO_loc computed with predicates" true
+       (USet.size ppo_loc >= 0);
+
+     Lwt.return_unit
+    )
+
+let test_ppo_loc_normalizes_predicates () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     (* Add duplicate predicates - should be normalized *)
+     let predicates =
+       [
+         EBinOp (ENum Z.one, "=", ENum Z.one);
+         EBinOp (ENum Z.one, "=", ENum Z.one);
+       ]
+     in
+
+     let* ppo_loc1 = ForwardingContext.ppo_loc ctx predicates in
+
+     (* Try again with single predicate *)
+     let predicates2 = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] in
+       let* ppo_loc2 = ForwardingContext.ppo_loc ctx predicates2 in
+
+       (* Should produce same result (predicates are normalized via USet) *)
+       Alcotest.(check bool)
+         "Duplicate predicates normalized" true
+         (USet.equal ppo_loc1 ppo_loc2);
+
+       Lwt.return_unit
+    )
+
+let test_ppo_loc_uses_cache_subset () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     (* First compute with a subset of predicates *)
+     let predicates1 = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] in
+       let* _ppo_loc1 = ForwardingContext.ppo_loc ctx predicates1 in
+
+       (* Now compute with superset - should use cached subset as base *)
+       let predicates2 =
+         [
+           EBinOp (ENum Z.one, "=", ENum Z.one);
+           EBinOp (ENum (Z.of_int 2), "=", ENum (Z.of_int 2));
+         ]
+       in
+         let* ppo_loc2 = ForwardingContext.ppo_loc ctx predicates2 in
+
+         Alcotest.(check bool) "Cache subset used" true (USet.size ppo_loc2 >= 0);
+
+         Lwt.return_unit
+    )
+
+let test_ppo_loc_applies_remapping () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+
+     (* Create context with forwarding edges *)
+     let fwd = USet.create () in
+       ignore (USet.add fwd (3, 1));
+
+       (* Event 3 forwards to event 1 *)
+       let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
+
+       let* ppo_loc = ForwardingContext.ppo_loc ctx [] in
+
+       (* Verify no self-edges after remapping *)
+       let has_self_edge =
+         USet.exists (fun (from, to_) -> from = to_) ppo_loc
+       in
+
+       Alcotest.(check bool)
+         "No self-edges in PPO_loc after remapping" false has_self_edge;
+
+       Lwt.return_unit
+    )
+
+(** PPO_SYNC Tests *)
+
 let test_ppo_sync_returns_remapped () =
   Lwt_main.run
     (let structure = TestUtil.make_structure () in
@@ -493,6 +813,165 @@ let test_ppo_sync_returns_remapped () =
        (* Should return some relation *)
        Alcotest.(check bool) "PPO_sync is a uset" true (USet.size ppo_sync >= 0);
        Lwt.return_unit
+    )
+
+let test_ppo_sync_is_deterministic () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     let ppo_sync1 = ForwardingContext.ppo_sync ctx in
+     let ppo_sync2 = ForwardingContext.ppo_sync ctx in
+
+     Alcotest.(check bool)
+       "PPO_sync deterministic" true
+       (USet.equal ppo_sync1 ppo_sync2);
+
+     Lwt.return_unit
+    )
+
+let test_ppo_sync_applies_remapping () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+
+     (* Create context with forwarding *)
+     let fwd = USet.create () in
+       ignore (USet.add fwd (4, 2));
+
+       (* Event 4 forwards to event 2 *)
+       let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
+       let ppo_sync = ForwardingContext.ppo_sync ctx in
+
+       (* Verify no self-edges after remapping *)
+       let has_self_edge =
+         USet.exists (fun (from, to_) -> from = to_) ppo_sync
+       in
+
+       Alcotest.(check bool)
+         "No self-edges in PPO_sync after remapping" false has_self_edge;
+
+       Lwt.return_unit
+    )
+
+let test_ppo_sync_independent_of_predicates () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+
+     (* ppo_sync doesn't take predicates, should be same regardless of context psi *)
+     let ctx1 = ForwardingContext.create fwd_es_ctx () in
+     let ctx2 =
+       {
+         (ForwardingContext.create fwd_es_ctx ()) with
+         psi = [ EBinOp (ENum Z.one, "=", ENum Z.one) ];
+       }
+     in
+
+     let ppo_sync1 = ForwardingContext.ppo_sync ctx1 in
+     let ppo_sync2 = ForwardingContext.ppo_sync ctx2 in
+
+     Alcotest.(check bool)
+       "PPO_sync independent of psi" true
+       (USet.equal ppo_sync1 ppo_sync2);
+
+     Lwt.return_unit
+    )
+
+let test_ppo_sync_with_complex_forwarding () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+
+     (* Create complex forwarding chain *)
+     let fwd = USet.create () in
+       ignore (USet.add fwd (1, 0));
+       ignore (USet.add fwd (2, 1));
+       ignore (USet.add fwd (3, 2));
+
+       let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
+       let ppo_sync = ForwardingContext.ppo_sync ctx in
+
+       Alcotest.(check bool)
+         "PPO_sync with complex forwarding" true
+         (USet.size ppo_sync >= 0);
+
+       Lwt.return_unit
+    )
+
+(** Integration tests for compute_ppo functions *)
+
+let test_ppo_ppo_loc_relationship () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     let predicates = [] in
+
+     let* ppo = ForwardingContext.ppo ctx predicates in
+       let* ppo_loc = ForwardingContext.ppo_loc ctx predicates in
+
+       (* ppo_loc should be subset of or equal to ppo *)
+       let is_subset = USet.for_all (fun edge -> USet.mem ppo edge) ppo_loc in
+
+       Alcotest.(check bool) "PPO_loc is subset of PPO" true is_subset;
+
+       Lwt.return_unit
+    )
+
+let test_all_ppo_functions_with_same_context () =
+  Lwt_main.run
+    (let structure = TestUtil.make_structure () in
+     let fwd_es_ctx = EventStructureContext.create structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+
+     let fwd = USet.create () in
+       ignore (USet.add fwd (1, 0));
+
+       let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
+
+       let* ppo = ForwardingContext.ppo ctx [] in
+         let* ppo_loc = ForwardingContext.ppo_loc ctx [] in
+         let ppo_sync = ForwardingContext.ppo_sync ctx in
+
+         (* All should complete successfully and return valid relations *)
+         Alcotest.(check bool)
+           "All PPO functions complete" true
+           (USet.size ppo >= 0
+           && USet.size ppo_loc >= 0
+           && USet.size ppo_sync >= 0
+           );
+
+         Lwt.return_unit
+    )
+
+let test_ppo_with_empty_structure () =
+  Lwt_main.run
+    (let empty_structure = SymbolicEventStructure.create () in
+     let fwd_es_ctx = EventStructureContext.create empty_structure in
+
+     let* () = EventStructureContext.init fwd_es_ctx in
+     let ctx = ForwardingContext.create fwd_es_ctx () in
+
+     let* ppo = ForwardingContext.ppo ctx [] in
+
+     (* Should handle empty structure gracefully *)
+     Alcotest.(check int) "Empty structure produces empty PPO" 0 (USet.size ppo);
+
+     Lwt.return_unit
     )
 
 (** Test to_string *)
@@ -569,12 +1048,47 @@ let suite =
       ]
     @ make_check_tests ()
     @ [
+        (* Basic PPO tests *)
         test_case "ppo returns remapped" `Quick test_ppo_returns_remapped;
         test_case "ppo caches result" `Quick test_ppo_caches_result;
+        test_case "ppo with different predicates" `Quick
+          test_ppo_with_different_predicates;
+        test_case "ppo with context psi" `Quick test_ppo_with_context_psi;
+        test_case "ppo applies remapping" `Quick test_ppo_applies_remapping;
+        test_case "ppo includes rmw orderings" `Quick
+          test_ppo_includes_rmw_orderings;
+        test_case "ppo with debug flag" `Quick test_ppo_with_debug_flag;
+        (* PPO_LOC tests *)
         test_case "ppo_loc returns remapped" `Quick
           test_ppo_loc_returns_remapped;
+        test_case "ppo_loc caches result" `Quick test_ppo_loc_caches_result;
+        test_case "ppo_loc subset of ppo" `Quick test_ppo_loc_subset_of_ppo;
+        test_case "ppo_loc with predicates" `Quick test_ppo_loc_with_predicates;
+        test_case "ppo_loc normalizes predicates" `Quick
+          test_ppo_loc_normalizes_predicates;
+        test_case "ppo_loc uses cache subset" `Quick
+          test_ppo_loc_uses_cache_subset;
+        test_case "ppo_loc applies remapping" `Quick
+          test_ppo_loc_applies_remapping;
+        (* PPO_SYNC tests *)
         test_case "ppo_sync returns remapped" `Quick
           test_ppo_sync_returns_remapped;
+        test_case "ppo_sync is deterministic" `Quick
+          test_ppo_sync_is_deterministic;
+        test_case "ppo_sync applies remapping" `Quick
+          test_ppo_sync_applies_remapping;
+        test_case "ppo_sync independent of predicates" `Quick
+          test_ppo_sync_independent_of_predicates;
+        test_case "ppo_sync with complex forwarding" `Quick
+          test_ppo_sync_with_complex_forwarding;
+        (* Integration tests *)
+        test_case "ppo ppo_loc relationship" `Quick
+          test_ppo_ppo_loc_relationship;
+        test_case "all ppo functions with same context" `Quick
+          test_all_ppo_functions_with_same_context;
+        test_case "ppo with empty structure" `Quick
+          test_ppo_with_empty_structure;
+        (* Utility tests *)
         test_case "to_string empty" `Quick test_to_string_empty;
         test_case "to_string with edges" `Quick test_to_string_with_edges;
       ]

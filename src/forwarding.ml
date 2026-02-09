@@ -7,6 +7,7 @@
     program order (PPO) relations under various memory model constraints. *)
 
 open Algorithms
+open Eventstructures
 open Expr
 open Lwt.Syntax
 open Types
@@ -290,6 +291,11 @@ end
     starting points for context-specific PPO computation. They represent various
     aspects of preserved program order under different memory models. *)
 type ppo_relations = {
+  ppo_init : (int * int) uset;
+      (** Initial PPO relation.
+
+          Relates all initial and terminal events to other events along program
+          order edges. *)
   ppo_loc_base : (int * int) uset;
       (** Base location-based preserved program order.
 
@@ -316,6 +322,36 @@ type ppo_relations = {
           Template for synchronization orderings before filtering. *)
   ppo_volA : (int * int) uset;
       (** Volatile PPO component.
+
+          Orderings required for volatile access semantics. *)
+  ppo_iter_loc_base : (int * int) uset;
+      (** Base location-based preserved program order between iterations.
+
+          Includes orderings required for correct location-based semantics. *)
+  ppo_iter_base : (int * int) uset;
+      (** Base preserved program order between iterations.
+
+          Core orderings that must be preserved regardless of memory model. *)
+  ppo_iter_sync : (int * int) uset;
+      (** Synchronization preserved program order between iterations.
+
+          Orderings from acquire-release, SC fences, and volatile accesses. *)
+  ppo_iter_loc_baseA : (int * int) uset;
+      (** Location-based PPO template (before PO intersection) between
+          iterations.
+
+          Used as starting point for location-based PPO computation. *)
+  ppo_iter_loc_eqA : (int * int) uset;
+      (** Location equality PPO component between iterations.
+
+          Orderings between events that may access the same location. *)
+  ppo_iter_syncA : (int * int) uset;
+      (** Synchronization PPO template (before PO intersection) between
+          iterations.
+
+          Template for synchronization orderings before filtering. *)
+  ppo_iter_volA : (int * int) uset;
+      (** Volatile PPO component between iterations.
 
           Orderings required for volatile access semantics. *)
 }
@@ -355,6 +391,7 @@ module EventStructureContext = struct
       val_fn = Events.get_val structure;
       ppo =
         {
+          ppo_init = USet.create ();
           ppo_loc_base = USet.create ();
           ppo_base = USet.create ();
           ppo_sync = USet.create ();
@@ -362,6 +399,14 @@ module EventStructureContext = struct
           ppo_loc_eqA = USet.create ();
           ppo_syncA = USet.create ();
           ppo_volA = USet.create ();
+          (* PPO relations between events in successive iterations of the same loop. *)
+          ppo_iter_loc_base = USet.create ();
+          ppo_iter_base = USet.create ();
+          ppo_iter_sync = USet.create ();
+          ppo_iter_loc_baseA = USet.create ();
+          ppo_iter_loc_eqA = USet.create ();
+          ppo_iter_syncA = USet.create ();
+          ppo_iter_volA = USet.create ();
         };
       ppo_cache = PpoCache.create ();
       context_cache = ContextCache.create ();
@@ -379,6 +424,22 @@ module EventStructureContext = struct
           | _ -> false
       )
       events
+
+  let compute_ppo_init (structure : symbolic_event_structure) =
+    let initial_events =
+      if
+        USet.mem structure.e 0
+        &&
+          try (Hashtbl.find structure.events 0).typ = Init
+          with Not_found -> false
+      then USet.singleton 0
+      else USet.create ()
+    in
+      USet.filter
+        (fun (f, t) ->
+          USet.mem initial_events f || USet.mem structure.terminal_events t
+        )
+        structure.po
 
   (** [compute_ppo_syncA structure e po] computes the synchronization-based PPO
       template.
@@ -437,15 +498,37 @@ module EventStructureContext = struct
       computed by filtering program order with a solver check for location
       equality under the given predicates.
 
+      TODO computing this relative to the event structure, and not the
+      predicates of an execution / value constraints of second event is too
+      strong, as it would miss semantic equivalence of memory locations relative
+      to execution constraints.
+
       @param structure The symbolic event structure.
       @param e The set of events to consider.
       @param po The program order relation.
       @return The computed location equality PPO component. *)
-  let compute_ppo_loc_eqA structure e po =
+  let compute_ppo_loc_eqA ?(iter = false) structure e po =
     USet.async_filter
       (fun (e1, e2) ->
         let loc1 = Events.get_loc structure e1 in
-        let loc2 = Events.get_loc structure e2 in
+        let loc2 =
+          if iter then
+            (* if iter, then adjust symbols read in the loop as potentially read
+               in the previous iteration
+
+               TODO this should factor in symbols read ppo-before this
+               location, i.e. not possibly read in a previous iteration
+               *)
+            let symbols = symbols_in_loop structure e2 in
+              Events.get_loc structure e2
+              |> Option.map
+                   (Expr.evaluate ~env:(fun s ->
+                        if USet.mem symbols s then Some (ESymbol (s ^ "+1"))
+                        else None
+                    )
+                   )
+          else Events.get_loc structure e2
+        in
           match (loc1, loc2) with
           | Some l1, Some l2 -> Solver.exeq ~state:[] l1 l2
           | _ -> Lwt.return false
@@ -463,6 +546,7 @@ module EventStructureContext = struct
       @return The computed volatile PPO component. *)
   let compute_ppo_volA structure e po =
     (* Volatile ppo *)
+    (* TODO pregenerate *)
     let e_vol =
       USet.filter
         (fun e ->
@@ -501,8 +585,11 @@ module EventStructureContext = struct
       let rmw = es_ctx.structure.rmw in
 
       let structure = es_ctx.structure in
-      let e = es_ctx.structure.e in
+      let e = es_ctx.e in
       let po = es_ctx.structure.po in
+      (* po_iter is the program order between events in successive iterations of
+         the same loop. *)
+      let po_iter = es_ctx.structure.po_iter in
 
       (* Program order without fences *)
       (* TODO 1) why this? 2) how about initial and terminal events? *)
@@ -514,56 +601,106 @@ module EventStructureContext = struct
           )
           po
       in
+      let po_iter_nf =
+        USet.filter
+          (fun (f, t) ->
+            (not (USet.mem es_ctx.structure.fence_events f))
+            && not (USet.mem es_ctx.structure.fence_events t)
+          )
+          po_iter
+      in
+
+      (* PPO from initial events and to terminal events *)
+      USet.clear es_ctx.ppo.ppo_init |> ignore;
+      USet.inplace_union es_ctx.ppo.ppo_init (compute_ppo_init structure)
+      |> ignore;
 
       (* PPO between volatile events *)
       USet.clear es_ctx.ppo.ppo_volA |> ignore;
       USet.inplace_union es_ctx.ppo.ppo_volA (compute_ppo_volA structure e po_nf)
       |> ignore;
 
+      USet.clear es_ctx.ppo.ppo_iter_volA |> ignore;
+      USet.inplace_union es_ctx.ppo.ppo_iter_volA
+        (compute_ppo_volA structure e po_iter_nf)
+      |> ignore;
+
       (* PPO based on memory order *)
       USet.clear es_ctx.ppo.ppo_syncA |> ignore;
       USet.inplace_union es_ctx.ppo.ppo_syncA
-        (compute_ppo_syncA es_ctx.structure es_ctx.e po_nf)
+        (compute_ppo_syncA es_ctx.structure e po_nf)
+      |> ignore;
+
+      USet.clear es_ctx.ppo.ppo_iter_syncA |> ignore;
+      USet.inplace_union es_ctx.ppo.ppo_iter_syncA
+        (compute_ppo_syncA es_ctx.structure e po_iter_nf)
       |> ignore;
 
       (* Filter for location equality with semantic equality *)
-      (* TODO it is counter-intuitive that ppo_loc would be the complement of
-         ppo_loc_eq *)
-      let* ppo_loc_eqA = compute_ppo_loc_eqA es_ctx.structure es_ctx.e po_nf in
+      let* ppo_loc_eqA = compute_ppo_loc_eqA structure e po_nf in
         USet.clear es_ctx.ppo.ppo_loc_eqA |> ignore;
         USet.inplace_union es_ctx.ppo.ppo_loc_eqA ppo_loc_eqA |> ignore;
 
         (* PPO based on memory location *)
+        (* TODO it is counter-intuitive that ppo_loc would be the complement of
+         ppo_loc_eq *)
         USet.clear es_ctx.ppo.ppo_loc_baseA |> ignore;
         USet.set_minus po_nf ppo_loc_eqA
         |> USet.inplace_union es_ctx.ppo.ppo_loc_baseA
         |> ignore;
 
-        Logs.debug (fun m ->
-            m "ForwardingContext initialized with %d events" (USet.size es_ctx.e)
-        );
+        let* ppo_iter_loc_eqA =
+          compute_ppo_loc_eqA ~iter:true structure e po_iter_nf
+        in
+          USet.clear es_ctx.ppo.ppo_iter_loc_eqA |> ignore;
+          USet.inplace_union es_ctx.ppo.ppo_iter_loc_eqA ppo_iter_loc_eqA
+          |> ignore;
 
-        USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
-        USet.intersection es_ctx.ppo.ppo_loc_baseA po
-        |> USet.inplace_union es_ctx.ppo.ppo_loc_base
-        |> ignore;
+          USet.clear es_ctx.ppo.ppo_loc_baseA |> ignore;
+          USet.set_minus po_nf ppo_loc_eqA
+          |> USet.inplace_union es_ctx.ppo.ppo_loc_baseA
+          |> ignore;
 
-        USet.clear es_ctx.ppo.ppo_sync |> ignore;
-        USet.intersection es_ctx.ppo.ppo_syncA po
-        |> USet.inplace_union es_ctx.ppo.ppo_sync
-        |> ignore;
+          (* TODO all of the relations above are already filtered on po_nf, which
+  in turn is a subset of po, so this intersection should be redundant. *)
+          USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
+          USet.intersection es_ctx.ppo.ppo_loc_baseA po
+          |> USet.inplace_union es_ctx.ppo.ppo_loc_base
+          |> ignore;
 
-        USet.clear es_ctx.ppo.ppo_base |> ignore;
-        USet.union es_ctx.ppo.ppo_volA es_ctx.ppo.ppo_syncA
-        |> USet.union es_ctx.ppo.ppo_loc_eqA
-        |> USet.intersection po
-        |> USet.inplace_union es_ctx.ppo.ppo_base
-        |> ignore;
+          USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
+          USet.intersection es_ctx.ppo.ppo_iter_loc_baseA po
+          |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base
+          |> ignore;
 
-        clear_caches es_ctx;
+          USet.clear es_ctx.ppo.ppo_sync |> ignore;
+          USet.intersection es_ctx.ppo.ppo_syncA po
+          |> USet.inplace_union es_ctx.ppo.ppo_sync
+          |> ignore;
 
-        Landmark.exit landmark;
-        Lwt.return_unit
+          USet.clear es_ctx.ppo.ppo_iter_sync |> ignore;
+          USet.intersection es_ctx.ppo.ppo_iter_syncA po
+          |> USet.inplace_union es_ctx.ppo.ppo_iter_sync
+          |> ignore;
+
+          USet.clear es_ctx.ppo.ppo_base |> ignore;
+          USet.union es_ctx.ppo.ppo_volA es_ctx.ppo.ppo_syncA
+          |> USet.union es_ctx.ppo.ppo_loc_eqA
+          |> USet.intersection po
+          |> USet.inplace_union es_ctx.ppo.ppo_base
+          |> ignore;
+
+          USet.clear es_ctx.ppo.ppo_iter_base |> ignore;
+          USet.union es_ctx.ppo.ppo_iter_volA es_ctx.ppo.ppo_iter_syncA
+          |> USet.union es_ctx.ppo.ppo_iter_loc_eqA
+          |> USet.intersection po
+          |> USet.inplace_union es_ctx.ppo.ppo_base
+          |> ignore;
+
+          clear_caches es_ctx;
+
+          Landmark.exit landmark;
+          Lwt.return_unit
 end
 
 (** Forwarding context.
@@ -711,6 +848,31 @@ module ForwardingContext = struct
   let cache_set_ppo_loc ctx predicates value =
     PpoCache.set_ppo_loc ctx.es_ctx.ppo_cache (ctx.fwd, ctx.we) predicates value
 
+  (** [compute_ppo_rmw es_ctx] computes RMW-related PPO orderings.
+
+      Computes additional PPO orderings induced by read-modify-write (RMW)
+      pairs. This includes orderings from the read to the write and from the
+      write to the read, filtered by semantic alias analysis to ensure they only
+      include pairs that may access the same location.
+
+      @param es_ctx The event structure context.
+      @return The computed RMW-induced PPO orderings. *)
+  let compute_ppo_rmw es_ctx predicates =
+    let* rmw_filtered =
+      USet.async_filter
+        (fun (er, expr, ew) ->
+          Solver.exeq ~state:predicates expr (EBoolean true)
+        )
+        es_ctx.structure.rmw
+    in
+    let rmw_inv = USet.map (fun (er, _, ew) -> (ew, er)) rmw_filtered in
+    let rmw_ppo =
+      USet.union
+        (URelation.compose [ es_ctx.ppo.ppo_sync; rmw_inv ])
+        (URelation.compose [ rmw_inv; es_ctx.ppo.ppo_sync ])
+    in
+      Lwt.return rmw_ppo
+
   (** {1 PPO Computation} *)
 
   (** [ppo ?debug ctx predicates] computes preserved program order.
@@ -758,19 +920,7 @@ module ForwardingContext = struct
             in
 
             (* RMW ppo - add read-modify-write orderings *)
-            let* rmw_filtered =
-              USet.async_filter
-                (fun (er, expr, ew) ->
-                  Solver.exeq ~state:predicates expr (EBoolean true)
-                )
-                es_ctx.structure.rmw
-            in
-            let rmw_inv = USet.map (fun (er, _, ew) -> (ew, er)) rmw_filtered in
-            let rmw_ppo =
-              USet.union
-                (URelation.compose [ es_ctx.ppo.ppo_sync; rmw_inv ])
-                (URelation.compose [ rmw_inv; es_ctx.ppo.ppo_sync ])
-            in
+            let* rmw_ppo = compute_ppo_rmw es_ctx predicates in
             let result = USet.inplace_union result rmw_ppo in
             let result = USet.inplace_union result es_ctx.ppo.ppo_base in
 

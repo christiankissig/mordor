@@ -451,7 +451,7 @@ end = struct
     in
       aux (Hash_set.to_list s)
 
-  let fold f s init = Hash_set.fold s ~init ~f:(fun acc v -> f acc v)
+  let fold f s init = Hash_set.fold s ~init ~f
   let for_all f s = Hash_set.for_all s ~f
   let exists f s = Hash_set.exists s ~f
   let find f s = Hash_set.find s ~f

@@ -1038,19 +1038,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
           Landmark.exit landmark;
           Lwt.return rf_candidates
 
-module Freeze : sig
-  val freeze :
-    symbolic_event_structure ->
-    Forwarding.event_structure_context ->
-    path_info ->
-    justification list ->
-    (int * int) USet.t ->
-    expr list ->
-    elided:int USet.t ->
-    constraints:expr list ->
-    include_rf:bool ->
-    FreezeResult.t list Lwt.t
-end = struct
+module Freeze = struct
   (** [freeze_dp structure just] freezes semantic dependency relations from
       justification.
 
@@ -1079,19 +1067,19 @@ end = struct
         Landmark.exit landmark;
         dp
 
-  (** [freeze_ppo structure path j_list con p_combined init_ppo] computes PPO
-      for justification list.
+  (** [freeze_ppo structure path j_list fwd_ctx p_combined] computes PPO for
+      justification list.
 
       @param structure The event structure.
       @param path Current path.
       @param j_list List of justifications.
-      @param con Forwarding context.
+      @param fwd_ctx Forwarding context.
       @param p_combined Combined predicates.
-      @param init_ppo Initial PPO edges.
       @return Pair (PPO, PPO_loc) of ppo relations. *)
-  let freeze_ppo structure fwd_es_ctx path j_list con p_combined init_ppo =
+  let freeze_ppo structure path j_list fwd_ctx p_combined =
     let landmark = Landmark.register "freeze_ppo" in
       Landmark.enter landmark;
+      let fwd_es_ctx = fwd_ctx.es_ctx in
       let e_squared = URelation.cross path.path path.path in
 
       (* Compute PPO for each justification *)
@@ -1122,9 +1110,9 @@ end = struct
       in
 
       (* Compute ppo_loc *)
-      let* ppo_loc_base = ForwardingContext.ppo_loc con p_combined in
+      let* ppo_loc_base = ForwardingContext.ppo_loc fwd_ctx p_combined in
       let ppo_loc =
-        USet.union ppo_loc_base init_ppo
+        USet.union ppo_loc_base fwd_es_ctx.ppo.ppo_init
         |> USet.intersection e_squared
         |> (fun rel ->
         USet.set_minus rel
@@ -1135,8 +1123,8 @@ end = struct
 
       let ppo =
         List.fold_left USet.inplace_union (USet.create ()) ppos
-        |> USet.inplace_union (ForwardingContext.ppo_sync con)
-        |> USet.inplace_union init_ppo
+        |> USet.inplace_union (ForwardingContext.ppo_sync fwd_ctx)
+        |> USet.inplace_union fwd_es_ctx.ppo.ppo_init
         |> USet.inplace_union ppo_loc
         |> USet.intersection e_squared
         |> URelation.transitive_closure
@@ -1149,8 +1137,8 @@ end = struct
       Landmark.exit landmark;
       Lwt.return (ppo, ppo_loc)
 
-  (** [freeze structure path j_list init_ppo statex ~elided ~constraints
-       ~include_rf] creates executions from justifications.
+  (** [freeze structure path j_list statex ~elided ~constraints ~include_rf]
+      creates executions from justifications.
 
       The "freeze" operation converts a list of justifications for a path into
       concrete executions by: 1. Computing dependency and PPO relations 2.
@@ -1160,14 +1148,13 @@ end = struct
       @param structure The event structure.
       @param path Current path.
       @param j_list List of justifications for writes on path.
-      @param init_ppo Initial PPO edges.
       @param statex Static constraints.
       @param elided Set of elided events.
       @param constraints Additional constraints.
       @param include_rf Whether to compute RF relations (false for testing).
       @return Promise of list of valid freeze results. *)
-  let freeze structure fwd_es_ctx path j_list init_ppo statex ~elided
-      ~constraints ~include_rf =
+  let freeze structure fwd_es_ctx path j_list statex ~elided ~constraints
+      ~include_rf =
     let landmark = Landmark.register "Executions.freeze" in
       Landmark.enter landmark;
 
@@ -1227,13 +1214,13 @@ end = struct
       );
 
       (* Create forwarding context *)
-      let con = ForwardingContext.create fwd_es_ctx ~fwd ~we () in
+      let fwd_ctx = ForwardingContext.create fwd_es_ctx ~fwd ~we () in
 
       (* Combine predicates *)
       let p_combined =
         USet.map (fun j -> USet.of_list j.p) justs
         |> USet.flatten
-        |> USet.inplace_union (USet.of_list con.psi)
+        |> USet.inplace_union (USet.of_list fwd_ctx.psi)
         |> USet.inplace_union (USet.of_list path.p)
         |> USet.inplace_union (USet.of_list statex)
         |> USet.values
@@ -1256,8 +1243,8 @@ end = struct
         j_list;
       Logs.debug (fun m ->
           m "[freeze] Forwarding context predicates (%d): [%s]"
-            (List.length con.psi)
-            (String.concat "; " (List.map Expr.to_string con.psi))
+            (List.length fwd_ctx.psi)
+            (String.concat "; " (List.map Expr.to_string fwd_ctx.psi))
       );
       Logs.debug (fun m ->
           m "[freeze] Statex predicates (%d): [%s]" (List.length statex)
@@ -1279,7 +1266,7 @@ end = struct
         );
         let*? () = (combined_p_sat, "predicates unsatisfiable") in
           let* ppo, ppo_loc =
-            freeze_ppo structure fwd_es_ctx path j_list con p_combined init_ppo
+            freeze_ppo structure path j_list fwd_ctx p_combined
           in
 
           let* all_fr =
@@ -1324,19 +1311,19 @@ end = struct
                 Lwt.return filtered_results
 end
 
-(** [compute_justification_combinations structure paths init_ppo statex justmap]
-    computes justification combinations for all paths.
+(** [compute_justification_combinations fwd_es_ctx structure paths statex
+     justmap] computes justification combinations for all paths.
 
     For each path, builds all valid combinations of justifications for the write
     events on that path. Returns a stream of [(path, justifications)] pairs.
 
+    @param fwd_es_ctx Forwarding event structure context for PPO computation.
     @param structure The event structure.
     @param paths List of all paths through the structure.
-    @param init_ppo Initial PPO edges.
     @param statex Static constraints.
     @param justmap Hash table mapping write event IDs to justification lists.
     @return Stream of [(path, justification list)] pairs. *)
-let compute_justification_combinations structure paths init_ppo statex
+let compute_justification_combinations fwd_es_ctx structure paths statex
     (justmap : (int, justification list) Hashtbl.t) =
   (* Given a path, combine justifications for each write on the path. *)
   let combine_justifications_for_path path =
@@ -1390,8 +1377,8 @@ let compute_justification_combinations structure paths init_ppo statex
 
 (** {1 Generate executions} *)
 
-(** [generate_executions ?include_rf structure justs statex init_ppo
-     ~restrictions] generates all valid executions.
+(** [generate_executions ?include_rf structure justs statex ~restrictions]
+    generates all valid executions.
 
     This is the main entry point for execution generation. The algorithm: 1.
     Generates all maximal conflict-free paths 2. For each path, combines
@@ -1404,13 +1391,12 @@ let compute_justification_combinations structure paths init_ppo statex
     @param structure The symbolic event structure.
     @param justs Set of justifications from elaboration.
     @param statex Static constraints.
-    @param init_ppo Initial preserved program order.
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
 let generate_executions ?(include_rf = true)
     (structure : symbolic_event_structure)
     (fwd_es_ctx : Forwarding.event_structure_context)
-    (justs : justification uset) statex init_ppo ~restrictions =
+    (justs : justification uset) statex ~restrictions =
   let landmark = Landmark.register "generate_executions" in
     Landmark.enter landmark;
 
@@ -1473,8 +1459,8 @@ let generate_executions ?(include_rf = true)
           in
 
           let* freeze_results =
-            Freeze.freeze structure fwd_es_ctx path j_remapped init_ppo statex
-              ~elided ~constraints ~include_rf
+            Freeze.freeze structure fwd_es_ctx path j_remapped statex ~elided
+              ~constraints ~include_rf
           in
             Logs.debug (fun m ->
                 m
@@ -1668,7 +1654,7 @@ let generate_executions ?(include_rf = true)
 
       (* Build justcombos for all paths *)
       let* freeze_results =
-        compute_justification_combinations structure paths init_ppo statex
+        compute_justification_combinations fwd_es_ctx structure paths statex
           justmap
         |> stream_freeze
         |> dedup_freeze_results
@@ -1713,10 +1699,6 @@ let calculate_dependencies ?(include_rf = true)
     (structure : symbolic_event_structure) (final_justs : justification uset)
     (fwd_es_ctx : Forwarding.event_structure_context) ~(exhaustive : bool)
     ~(restrictions : Coherence.restrictions) : symbolic_execution list Lwt.t =
-  (* Initialize initial PPO relation - relates all initial events and terminal
-     events to other events along po-edges. *)
-  let init_ppo = Eventstructures.init_ppo structure in
-
   Logs.debug (fun m -> m "Generating executions...");
 
   (* Compute statex: allocation disjointness constraints *)
@@ -1772,7 +1754,7 @@ let calculate_dependencies ?(include_rf = true)
   (* Build executions if not just structure *)
   let* executions =
     generate_executions ~include_rf structure fwd_es_ctx final_justs statex
-      init_ppo ~restrictions
+      ~restrictions
   in
 
   Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));

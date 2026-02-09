@@ -57,6 +57,7 @@ module Event : sig
     ?loc:Expr.t ->
     ?rval:Value.t ->
     ?wval:Expr.t ->
+    ?cond:Expr.t ->
     ?rmod:mode ->
     ?wmod:mode ->
     ?fmod:mode ->
@@ -65,6 +66,7 @@ module Event : sig
     ?lhs:int ->
     ?rhs:int ->
     ?pc:int ->
+    ?is_rdmw:bool ->
     unit ->
     event
 
@@ -104,8 +106,9 @@ end = struct
   let is_ordering e = is_lock_unlock e || is_fence e
 
   (** Create event with specialized initialization *)
-  let create typ label ?id ?loc ?rval ?wval ?(rmod = Relaxed) ?(wmod = Relaxed)
-      ?(fmod = Relaxed) ?(volatile = false) ?strong ?lhs ?rhs ?pc () =
+  let create typ label ?id ?loc ?rval ?wval ?cond ?(rmod = Relaxed)
+      ?(wmod = Relaxed) ?(fmod = Relaxed) ?(volatile = false) ?strong ?lhs ?rhs
+      ?pc ?(is_rdmw = false) () =
     let base =
       {
         label;
@@ -127,8 +130,21 @@ end = struct
       | Fence -> { base with fmod }
       | Malloc -> { base with id = rval; loc; rval }
       | Lock | Unlock -> { base with id }
+      | Branch -> { base with cond }
       | _ ->
-          { base with id; loc; rval; wval; rmod; wmod; fmod; volatile; strong }
+          {
+            base with
+            id;
+            loc;
+            rval;
+            wval;
+            rmod;
+            wmod;
+            fmod;
+            volatile;
+            strong;
+            is_rdmw;
+          }
 
   (** Clone an event *)
   let clone e = { e with label = e.label }

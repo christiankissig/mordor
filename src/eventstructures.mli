@@ -85,3 +85,14 @@ val dslwb : symbolic_event_structure -> int -> int -> bool Lwt.t
     @return A set of pairs of event labels representing the initial PPO relation
 *)
 val init_ppo : symbolic_event_structure -> (int * int) uset
+
+(** [structure e] Get symbols associated with events in a loop.
+
+    The function retrieves the set of symbols associated with the event e which
+    have been read before the loop of the event e.
+
+    @param structure The symbolic event structure
+    @param loop_id The identifier of the loop
+    @return A set of symbol names associated with events in the specified loop
+*)
+val symbols_in_loop : symbolic_event_structure -> int -> string uset

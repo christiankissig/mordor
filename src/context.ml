@@ -349,8 +349,6 @@ type mordor_ctx = {
   mutable assertions : ir_assertion option;  (** Assertions to verify *)
   (* Event structures *)
   step_counter : int;  (** Loop iteration bound *)
-  mutable events : (int, event) Hashtbl.t option;
-      (** Event table mapping labels to events *)
   mutable structure : symbolic_event_structure option;
       (** Symbolic event structure *)
   mutable fwd_es_ctx : Forwarding.event_structure_context option;
@@ -405,7 +403,6 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     assertions = None;
     program_stmts = None;
     step_counter;
-    events = None;
     structure = None;
     fwd_es_ctx = None;
     source_spans = None;

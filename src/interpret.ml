@@ -711,9 +711,12 @@ let rec interpret_statements stmts env phi events =
       A tuple of (symbolic event structure, events table, source spans table).
 *)
 let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
+  (* Events context *)
   let events = create_events defacto in
+  (* Register environment *)
   let env = Hashtbl.create 32 in
 
+  (* Initial event. Create first for correct labelling. *)
   let init_event = Event.create Init 0 () in
   let init_event' =
     add_event events
@@ -722,18 +725,19 @@ let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
       { source_span = None; thread_ctx = None; loop_ctx = None }
   in
 
+  (* Interpret program statements *)
   let* structure = stmt_semantics stmts env [] events in
-  (* prefix with init event *)
+
+  (* Prefix with initial event *)
   let defacto =
     List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
   in
+  let structure = SymbolicEventStructure.dot init_event' structure [] defacto in
 
-  let structure' =
-    SymbolicEventStructure.dot init_event' structure [] defacto
-  in
-  let structure'' =
+  (* Add data from the events context *)
+  let structure =
     {
-      structure' with
+      structure with
       events = events.events;
       origin = events.origin;
       loop_indices = events.loop_indices;
@@ -742,7 +746,7 @@ let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
     }
   in
 
-  Lwt.return (structure'', events.events, events.source_spans)
+  Lwt.return (structure, events.source_spans)
 
 (** Default interpretation function with basic statement semantics.
 
@@ -771,7 +775,7 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
     | Some stmts ->
         let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
         let constraints = ctx.litmus_constraints |> Option.value ~default:[] in
-          let* structure, events, source_spans =
+          let* structure, source_spans =
             interpret_generic ~stmt_semantics ~defacto ~constraints stmts
           in
             Logs.debug (fun m ->
@@ -788,11 +792,10 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
                        ^ Printf.sprintf "Event %d: %s\n" label
                            (Event.to_string evt)
                      )
-                     events ""
+                     structure.events ""
                   )
             );
             ctx.structure <- Some structure;
-            ctx.events <- Some events;
             ctx.source_spans <- Some source_spans;
             Lwt.return ctx
     | _ ->
@@ -987,7 +990,7 @@ end = struct
       | Some stmts ->
           let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
           let constraints = ctx.litmus_constraints in
-            let* structure, events, source_spans =
+            let* structure, source_spans =
               interpret_generic ~stmt_semantics ~defacto ~constraints stmts
             in
               Lwt.return (structure, source_spans)
@@ -1089,6 +1092,42 @@ end = struct
     in
       generic_step_interpret ~stmt_semantics lwt_ctx
 
+  (** Generate program order relations for a symbolic event structure.
+
+      For each loop, generate program order edges between all pairs of events in
+      that loop with the meaning that any event in the previous iteration of a
+      loop is po-before any event in the current iteration of the loop. This
+      approximation makes distinctly sense for symbolic loop semantics, and
+      under the assumption that symbols and registers meet episodicity criteria.
+
+      @param structure The symbolic event structure to analyze.
+      @return A set of program order edges between events in the same loop. *)
+  let generate_po_iter (structure : symbolic_event_structure) =
+    let po_iter = USet.create () in
+    let events_by_loop = Hashtbl.create (USet.size structure.e) in
+      Hashtbl.iter
+        (fun e loops ->
+          List.iter
+            (fun l ->
+              let events =
+                Hashtbl.find_opt events_by_loop l
+                |> Option.value ~default:(USet.create ())
+              in
+                Hashtbl.replace events_by_loop l (USet.add events e)
+            )
+            loops
+        )
+        structure.loop_indices;
+      Hashtbl.iter
+        (fun _ events ->
+          URelation.cross events events
+          |> USet.set_minus (URelation.identity events)
+          |> USet.inplace_union po_iter
+          |> ignore
+        )
+        events_by_loop;
+      po_iter
+
   let interpret lwt_ctx =
     let* ctx = lwt_ctx in
       greek_counter := 0;
@@ -1102,8 +1141,11 @@ end = struct
       | Some stmts ->
           let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
           let constraints = ctx.litmus_constraints in
-            let* structure, events, source_spans =
+            let* structure, source_spans =
               interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+            in
+            let structure =
+              { structure with po_iter = generate_po_iter structure }
             in
               Lwt.return (structure, source_spans)
       | _ -> failwith "No program statements or constraints for interpretation."

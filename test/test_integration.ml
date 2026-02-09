@@ -17,4 +17,7 @@ let setup_logs () =
 let () =
   setup_logs ();
   Alcotest.run "Mordor Integration Test Suite"
-    [ Test_integration_litmus_tests.suite_strict ]
+    [
+      Test_integration_litmus_tests.suite_strict;
+      Test_integration_episodicity.suite;
+    ]
