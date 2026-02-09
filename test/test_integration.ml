@@ -16,6 +16,8 @@ let setup_logs () =
 
 let () =
   setup_logs ();
+  (* Initialize episodicity test directories before running *)
+  Test_integration_episodicity.initialize ();
   Alcotest.run "Mordor Integration Test Suite"
     [
       Test_integration_litmus_tests.suite_strict;
