@@ -1,0 +1,8 @@
+r1 := malloc(1);
+*r1 := 1;
+rsucc := 0;
+do {
+  *r1 := 0;
+  rsucc := 1;
+} while (rsucc = 0);
+*r1 := 0;

@@ -1,0 +1,11 @@
+x := 0;
+rtest := x;
+do
+{
+  rtemp := 0;
+  if (rtest = 1) {
+    rtemp := 1;
+  }
+}
+while (rtemp = 0);
+x := 1;

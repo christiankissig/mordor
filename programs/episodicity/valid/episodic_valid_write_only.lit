@@ -1,0 +1,8 @@
+rC := malloc 1;
+*rC := 0;
+ri := 0;
+do
+{
+  *rC := 0;
+}
+while (ri < 5)

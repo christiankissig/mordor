@@ -1,0 +1,14 @@
+x := 0;
+y := 1;
+rval := x;
+rtest := y;
+do
+{
+  ri := 0;
+  if (rval = 0) {
+    if (rtest = 1) {
+      ri := 1;
+    }
+  }
+}
+while (ri = 0)
