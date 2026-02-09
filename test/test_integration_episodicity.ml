@@ -303,25 +303,25 @@ let test_specifications =
       expected_failing_conditions = [ 3 ];
       description = "Branch condition failure - constrains pre-loop symbol";
     };
-    (* TODO event ordering condition
-     {
-      filepath = "programs/episodicity/ordering_violations/episodic_events_cond_fail.lit";
-       expected_episodic = Some false;
-       expected_failing_conditions = [ 4 ];
-       description = "Event ordering failure - iterations not properly ordered";
+    {
+      filepath =
+        "programs/episodicity/ordering_violations/episodic_events_cond_two_reads_fail.lit";
+      expected_episodic = Some false;
+      expected_failing_conditions = [ 4 ];
+      description =
+        "Event ordering failure - iterations don't separate two reads ";
     };
-       *)
     {
       filepath = "programs/episodicity/episodic_branch_nested_fail.lit";
       expected_episodic = Some false;
-      expected_failing_conditions = [ 3 ];
+      expected_failing_conditions = [ 3; 4 ];
       description =
         "Branch condition failure - nested loop constrains pre-loop symbol";
     };
     {
       filepath = "programs/episodicity/episodic_register_multi_fail.lit";
       expected_episodic = Some false;
-      expected_failing_conditions = [ 1; 2 ];
+      expected_failing_conditions = [ 1; 2; 4 ];
       description =
         "Multiple condition failures - register and write conditions fail";
     };

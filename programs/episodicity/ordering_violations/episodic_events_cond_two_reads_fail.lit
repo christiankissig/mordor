@@ -1,0 +1,11 @@
+rC := malloc 1;
+rD := malloc 1;
+*rC := 0;
+*rD := 0;
+rc := 0;
+rd := 0;
+do {
+  rc := *rC;
+  rd := *rD;
+}
+while (rc = rd)

@@ -1019,6 +1019,71 @@ module SymbolicLoopSemantics : sig
     mordor_ctx Lwt.t ->
     (symbolic_event_structure * (int, source_span) Hashtbl.t) Lwt.t
 end = struct
+  (** Generate program order relations for a symbolic event structure.
+
+      For each loop, generate program order edges between all pairs of events in
+      that loop with the meaning that any event in the previous iteration of a
+      loop is po-before any event in the current iteration of the loop. This
+      approximation makes distinctly sense for symbolic loop semantics, and
+      under the assumption that symbols and registers meet episodicity criteria.
+
+      @param structure The symbolic event structure to analyze.
+      @return A set of program order edges between events in the same loop. *)
+  let generate_po_iter (structure : symbolic_event_structure) =
+    Logs.debug (fun m ->
+        m "Generating program order relations for symbolic loop semantics."
+    );
+    Logs.debug (fun m ->
+        m "Loop indices by event: %s"
+          (Hashtbl.fold
+             (fun e loops acc ->
+               let loops_str =
+                 loops |> List.map string_of_int |> String.concat ", "
+               in
+                 acc ^ Printf.sprintf "Event %d: Loops [%s]\n" e loops_str
+             )
+             structure.loop_indices ""
+          )
+    );
+    let po_iter = USet.create () in
+    let events_by_loop = Hashtbl.create (USet.size structure.e) in
+      Hashtbl.iter
+        (fun e loops ->
+          List.iter
+            (fun l ->
+              let events =
+                Hashtbl.find_opt events_by_loop l
+                |> Option.value ~default:(USet.create ())
+              in
+                Hashtbl.replace events_by_loop l (USet.add events e)
+            )
+            loops
+        )
+        structure.loop_indices;
+      Logs.debug (fun m ->
+          m "Events by loop: %s"
+            (Hashtbl.fold
+               (fun l events acc ->
+                 let events_str =
+                   USet.values events
+                   |> List.map string_of_int
+                   |> String.concat ", "
+                 in
+                   acc ^ Printf.sprintf "Loop %d: Events [%s]\n" l events_str
+               )
+               events_by_loop ""
+            )
+      );
+      Hashtbl.iter
+        (fun _ events ->
+          URelation.identity events
+          |> USet.set_minus (URelation.cross events events)
+          |> USet.inplace_union po_iter
+          |> ignore
+        )
+        events_by_loop;
+      po_iter
+
   (** Interpret statements with symbolic loop semantics.
 
       Evaluates all branches of loops symbolically without unrolling.
@@ -1085,48 +1150,20 @@ end = struct
     | [] -> final_structure ~add_event env phi events
 
   let step_interpret lwt_ctx =
+    Logs.debug (fun m -> m "Interpreting program with symbolic loop semantics.");
     let* ctx = lwt_ctx in
     let stmt_semantics =
       interpret_statements_symbolic_loop
         ~final_structure:make_generic_terminal_structure ~add_event
     in
-      generic_step_interpret ~stmt_semantics lwt_ctx
-
-  (** Generate program order relations for a symbolic event structure.
-
-      For each loop, generate program order edges between all pairs of events in
-      that loop with the meaning that any event in the previous iteration of a
-      loop is po-before any event in the current iteration of the loop. This
-      approximation makes distinctly sense for symbolic loop semantics, and
-      under the assumption that symbols and registers meet episodicity criteria.
-
-      @param structure The symbolic event structure to analyze.
-      @return A set of program order edges between events in the same loop. *)
-  let generate_po_iter (structure : symbolic_event_structure) =
-    let po_iter = USet.create () in
-    let events_by_loop = Hashtbl.create (USet.size structure.e) in
-      Hashtbl.iter
-        (fun e loops ->
-          List.iter
-            (fun l ->
-              let events =
-                Hashtbl.find_opt events_by_loop l
-                |> Option.value ~default:(USet.create ())
-              in
-                Hashtbl.replace events_by_loop l (USet.add events e)
-            )
-            loops
-        )
-        structure.loop_indices;
-      Hashtbl.iter
-        (fun _ events ->
-          URelation.cross events events
-          |> USet.set_minus (URelation.identity events)
-          |> USet.inplace_union po_iter
-          |> ignore
-        )
-        events_by_loop;
-      po_iter
+      let* ctx = generic_step_interpret ~stmt_semantics lwt_ctx in
+        ctx.structure <-
+          Some
+            {
+              (Option.get ctx.structure) with
+              po_iter = generate_po_iter (Option.get ctx.structure);
+            };
+        Lwt.return ctx
 
   let interpret lwt_ctx =
     let* ctx = lwt_ctx in
