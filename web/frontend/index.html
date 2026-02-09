@@ -48,6 +48,9 @@
                                 📁 Open
                             </label>
                         </div>
+                        <button id="share-btn" class="btn-secondary" title="Generate shareable URL" style="padding:0.3rem 0.6rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px; cursor:pointer; margin-right:0.5rem;">
+                            🔗 Share
+                        </button>
                         <select id="examples" style="padding:0.3rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px;">
                             <option value="">-- Select Example --</option>
                             <option value="sb">Store Buffering (SB)</option>
@@ -207,6 +210,62 @@
         
         // Initialize Test Runner
         const testRunner = new TestRunner();
+        
+        // Load program from URL parameter if present
+        const urlParams = new URLSearchParams(window.location.search);
+        const programParam = urlParams.get('program');
+        if (programParam) {
+            try {
+                const decodedProgram = decodeURIComponent(programParam);
+                const textarea = document.getElementById('litmus-input');
+                textarea.value = decodedProgram;
+                
+                // Trigger input event to update syntax highlighting
+                const inputEvent = new Event('input', { bubbles: true });
+                textarea.dispatchEvent(inputEvent);
+                
+                // Log the URL load
+                const logDiv = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                logDiv.innerHTML = `<div class="log-entry success"><span class="log-time">${timestamp}</span>Loaded program from URL</div>` + logDiv.innerHTML;
+            } catch (error) {
+                console.error('Error loading program from URL:', error);
+                const logDiv = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                logDiv.innerHTML = `<div class="log-entry error"><span class="log-time">${timestamp}</span>Error loading program from URL</div>` + logDiv.innerHTML;
+            }
+        }
+        
+        // Share button handler
+        document.getElementById('share-btn').addEventListener('click', () => {
+            const textarea = document.getElementById('litmus-input');
+            const program = textarea.value.trim();
+            
+            if (!program) {
+                const logDiv = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                logDiv.innerHTML = `<div class="log-entry error"><span class="log-time">${timestamp}</span>No program to share. Please enter a program first.</div>` + logDiv.innerHTML;
+                return;
+            }
+            
+            // Create URL with program parameter
+            const encodedProgram = encodeURIComponent(program);
+            const baseUrl = window.location.origin + window.location.pathname;
+            const shareUrl = `${baseUrl}?program=${encodedProgram}`;
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                const logDiv = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                logDiv.innerHTML = `<div class="log-entry success"><span class="log-time">${timestamp}</span>Shareable URL copied to clipboard!</div>` + logDiv.innerHTML;
+            }).catch(err => {
+                console.error('Failed to copy URL:', err);
+                // Fallback: show URL in log
+                const logDiv = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                logDiv.innerHTML = `<div class="log-entry"><span class="log-time">${timestamp}</span>Shareable URL: <a href="${shareUrl}" style="color:#4ec9b0; word-break:break-all;">${shareUrl}</a></div>` + logDiv.innerHTML;
+            });
+        });
         
         // File input handler
         document.getElementById('file-input').addEventListener('change', function(e) {
