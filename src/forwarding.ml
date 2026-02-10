@@ -320,10 +320,6 @@ type ppo_relations = {
       (** Synchronization PPO template (before PO intersection).
 
           Template for synchronization orderings before filtering. *)
-  ppo_volA : (int * int) uset;
-      (** Volatile PPO component.
-
-          Orderings required for volatile access semantics. *)
   ppo_iter_loc_base : (int * int) uset;
       (** Base location-based preserved program order between iterations.
 
@@ -350,10 +346,6 @@ type ppo_relations = {
           iterations.
 
           Template for synchronization orderings before filtering. *)
-  ppo_iter_volA : (int * int) uset;
-      (** Volatile PPO component between iterations.
-
-          Orderings required for volatile access semantics. *)
 }
 
 (** Event structure context.
@@ -398,7 +390,6 @@ module EventStructureContext = struct
           ppo_loc_baseA = USet.create ();
           ppo_loc_eqA = USet.create ();
           ppo_syncA = USet.create ();
-          ppo_volA = USet.create ();
           (* PPO relations between events in successive iterations of the same loop. *)
           ppo_iter_loc_base = USet.create ();
           ppo_iter_base = USet.create ();
@@ -406,7 +397,6 @@ module EventStructureContext = struct
           ppo_iter_loc_baseA = USet.create ();
           ppo_iter_loc_eqA = USet.create ();
           ppo_iter_syncA = USet.create ();
-          ppo_iter_volA = USet.create ();
         };
       ppo_cache = PpoCache.create ();
       context_cache = ContextCache.create ();
@@ -535,28 +525,6 @@ module EventStructureContext = struct
       )
       po
 
-  (** [compute_ppo_volA structure e po] computes the volatile PPO component.
-
-      This relation includes orderings required for volatile access semantics.
-      It is computed by filtering program order to pairs of volatile events.
-
-      @param structure The symbolic event structure.
-      @param e The set of events to consider.
-      @param po The program order relation.
-      @return The computed volatile PPO component. *)
-  let compute_ppo_volA structure e po =
-    (* Volatile ppo *)
-    (* TODO pregenerate *)
-    let e_vol =
-      USet.filter
-        (fun e ->
-          try (Hashtbl.find structure.events e).volatile
-          with Not_found -> false
-        )
-        e
-    in
-      URelation.cross e_vol e_vol |> USet.intersection po
-
   (** [clear_caches es_ctx] clears all caches in the context.
 
       Clears both the PPO computation cache and context validity cache.
@@ -613,16 +581,6 @@ module EventStructureContext = struct
       (* PPO from initial events and to terminal events *)
       USet.clear es_ctx.ppo.ppo_init |> ignore;
       USet.inplace_union es_ctx.ppo.ppo_init (compute_ppo_init structure)
-      |> ignore;
-
-      (* PPO between volatile events *)
-      USet.clear es_ctx.ppo.ppo_volA |> ignore;
-      USet.inplace_union es_ctx.ppo.ppo_volA (compute_ppo_volA structure e po_nf)
-      |> ignore;
-
-      USet.clear es_ctx.ppo.ppo_iter_volA |> ignore;
-      USet.inplace_union es_ctx.ppo.ppo_iter_volA
-        (compute_ppo_volA structure e po_iter_nf)
       |> ignore;
 
       (* PPO based on memory order *)
@@ -684,15 +642,13 @@ module EventStructureContext = struct
           |> ignore;
 
           USet.clear es_ctx.ppo.ppo_base |> ignore;
-          USet.union es_ctx.ppo.ppo_volA es_ctx.ppo.ppo_syncA
-          |> USet.union es_ctx.ppo.ppo_loc_eqA
+          USet.union es_ctx.ppo.ppo_syncA es_ctx.ppo.ppo_loc_eqA
           |> USet.intersection po
           |> USet.inplace_union es_ctx.ppo.ppo_base
           |> ignore;
 
           USet.clear es_ctx.ppo.ppo_iter_base |> ignore;
-          USet.union es_ctx.ppo.ppo_iter_volA es_ctx.ppo.ppo_iter_syncA
-          |> USet.union es_ctx.ppo.ppo_iter_loc_eqA
+          USet.union es_ctx.ppo.ppo_iter_syncA es_ctx.ppo.ppo_iter_loc_eqA
           |> USet.intersection po
           |> USet.inplace_union es_ctx.ppo.ppo_base
           |> ignore;
