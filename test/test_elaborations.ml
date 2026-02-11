@@ -297,8 +297,11 @@ let test_lift_and_weaken () =
 
 let test_pre_justifications_basic () =
   let structure = SymbolicEventStructure.create () in
-  let result = pre_justifications structure in
-    check int "empty structure" 0 (USet.size result)
+    Lwt_main.run
+      (let* result = pre_justifications structure in
+         check int "empty structure" 0 (USet.size result);
+         Lwt.return_unit
+      )
 
 let test_pre_justifications_parameterized
     (name, events_list, e_set, write_events, read_events, expected_count) () =
@@ -308,8 +311,11 @@ let test_pre_justifications_parameterized
     let structure =
       { structure with events; e = e_set; write_events; read_events }
     in
-    let result = pre_justifications structure in
-      check int name expected_count (USet.size result)
+      Lwt_main.run
+        (let* result = pre_justifications structure in
+           check int name expected_count (USet.size result);
+           Lwt.return_unit
+        )
 
 let test_pre_justifications_structure_details () =
   let structure = SymbolicEventStructure.create () in
@@ -327,15 +333,18 @@ let test_pre_justifications_structure_details () =
         write_events = USet.singleton 1;
       }
     in
-    let result = pre_justifications structure in
-    let justs = USet.values result in
-      check int "count" 1 (List.length justs);
+      Lwt_main.run
+        (let* result = pre_justifications structure in
+         let justs = USet.values result in
+           check int "count" 1 (List.length justs);
 
-      let just = List.hd justs in
-        check int "p empty" 0 (List.length just.p);
-        check int "fwd empty" 0 (USet.size just.fwd);
-        check int "we empty" 0 (USet.size just.we);
-        check int "correct label" 1 just.w.label
+           let just = List.hd justs in
+             check int "p empty" 0 (List.length just.p);
+             check int "fwd empty" 0 (USet.size just.fwd);
+             check int "we empty" 0 (USet.size just.we);
+             check int "correct label" 1 just.w.label;
+             Lwt.return_unit
+        )
 
 let test_pre_justifications_symbol_extraction (name, event, validator) () =
   let structure = SymbolicEventStructure.create () in
@@ -349,11 +358,15 @@ let test_pre_justifications_symbol_extraction (name, event, validator) () =
         write_events = USet.singleton 1;
       }
     in
-    let result = pre_justifications structure in
-    let justs = USet.values result in
-      match justs with
-      | [ just ] -> check bool name true (validator just)
-      | _ -> fail (name ^ ": Expected single justification")
+      Lwt_main.run
+        (let* result = pre_justifications structure in
+         let justs = USet.values result in
+           ( match justs with
+           | [ just ] -> check bool name true (validator just)
+           | _ -> fail (name ^ ": Expected single justification")
+           );
+           Lwt.return_unit
+        )
 
 let test_pre_justifications_edge_cases () =
   (* Missing events *)
@@ -362,8 +375,11 @@ let test_pre_justifications_edge_cases () =
   let structure1 =
     { structure1 with events = events1; e = USet.of_list [ 1 ] }
   in
-  let result1 = pre_justifications structure1 in
-    check int "missing events filtered" 0 (USet.size result1);
+    Lwt_main.run
+      (let* result1 = pre_justifications structure1 in
+         check int "missing events filtered" 0 (USet.size result1);
+         Lwt.return_unit
+      );
 
     (* Multiple writes distinct *)
     let structure2 = SymbolicEventStructure.create () in
@@ -385,12 +401,15 @@ let test_pre_justifications_edge_cases () =
           write_events = USet.of_list [ 1; 2 ];
         }
       in
-      let result2 = pre_justifications structure2 in
-      let justs = USet.values result2 in
-        check int "multiple writes count" 2 (List.length justs);
-        let labels = List.map (fun j -> j.w.label) justs in
-        let labels_set = List.sort_uniq compare labels in
-          check int "distinct writes" 2 (List.length labels_set)
+        Lwt_main.run
+          (let* result2 = pre_justifications structure2 in
+           let justs = USet.values result2 in
+             check int "multiple writes count" 2 (List.length justs);
+             let labels = List.map (fun j -> j.w.label) justs in
+             let labels_set = List.sort_uniq compare labels in
+               check int "distinct writes" 2 (List.length labels_set);
+               Lwt.return_unit
+          )
 
 module LiftElabTests = struct
   (* ============================================================

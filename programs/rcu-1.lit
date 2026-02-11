@@ -23,7 +23,7 @@ rdet := malloc rN;
     rv := *rs;
     *rn := rv+1;
     rsucc := cas(acquire,release,rC,rs,rn);
-  } while (!rsucc);
+  } while (rsucc = 0);
   *(rcu + rtid) := 0;
 
   // reclaim
