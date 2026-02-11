@@ -134,6 +134,7 @@ let pre_justifications structure =
         with Not_found -> failwith "Event not found"
       )
       prejustifiable_events
+    |> USet.async_filter (fun prejust -> Solver.is_sat_cached prejust.p)
 
 (** {1 Value Assignment Elaboration} *)
 
@@ -1114,7 +1115,7 @@ end = struct
 
                   if is_trace then
                     Logs.debug (fun m ->
-                        m "LiftElab produced %d justifications:\n%s"
+                        m "Lifting produced %d justifications:\n%s"
                           (List.length lifted)
                           (String.concat "\n"
                              (List.map
@@ -1290,7 +1291,7 @@ let batch_elaborations elab_ctx pre_justs =
               |> filter_justs
             in
               Logs.debug (fun m ->
-                  m "LiftElab produced %d new justifications."
+                  m "Lifting produced %d new justifications."
                     (USet.size new_lift_justs)
               );
 
@@ -1314,7 +1315,7 @@ let batch_elaborations elab_ctx pre_justs =
                 |> filter_justs
               in
                 Logs.debug (fun m ->
-                    m "WeakElab produced %d new justifications."
+                    m "Weakening produced %d new justifications."
                       (USet.size new_weaken_justs)
                 );
 
@@ -1381,7 +1382,7 @@ let generate_justifications structure fwd_es_ctx init_ppo =
   let events = structure.events in
 
   (* Initialize justifications for writes *)
-  let pre_justs = pre_justifications structure in
+  let* pre_justs = pre_justifications structure in
 
   Logs.debug (fun m ->
       m "Pre-justifications for event\n\t%s"

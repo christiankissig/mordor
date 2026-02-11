@@ -102,7 +102,8 @@ and to_bitvec context expr bitwidth =
     @param context The solver context
     @param value The value to convert
     @return Z3 expression representation *)
-let rec value_to_z3 context = function
+let rec value_to_z3 context value =
+  match value with
   | VNumber n -> Z3.Arithmetic.Integer.mk_numeral_s context.ctx (Z.to_string n)
   | VSymbol s | VVar s -> get_var context s
   | VBoolean b ->
@@ -122,13 +123,14 @@ let rec value_to_z3 context = function
     @param context The solver context
     @param expr The expression to convert
     @return Z3 expression *)
-and expr_to_z3 context = function
+and expr_to_z3 context expr =
+  match expr with
   | ENum n -> Z3.Arithmetic.Integer.mk_numeral_s context.ctx (Z.to_string n)
   | EVar v -> get_var context v
   | EBoolean b ->
       if b then Z3.Boolean.mk_true context.ctx
       else Z3.Boolean.mk_false context.ctx
-  | ESymbol s -> get_var context s (* TODO: this should fail *)
+  | ESymbol s -> get_var context s
   | EBinOp (lhs, op, rhs) -> (
       let l = expr_to_z3 context lhs in
       let r = expr_to_z3 context rhs in
@@ -181,7 +183,7 @@ and expr_to_z3 context = function
       let r = expr_to_z3 context rhs in
         if Z3.Boolean.is_bool r then Z3.Boolean.mk_not context.ctx r
         else
-          (* Integer semantics: !x is true iff x == 0 *)
+          (* Integer semantics: !x is true iff x = 0 *)
           let zero = Z3.Arithmetic.Integer.mk_numeral_i context.ctx 0 in
             Z3.Boolean.mk_eq context.ctx r zero
   | EUnOp ("~", rhs) ->

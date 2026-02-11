@@ -513,7 +513,7 @@ module EventStructureContext = struct
               Events.get_loc structure e2
               |> Option.map
                    (Expr.evaluate ~env:(fun s ->
-                        if USet.mem symbols s then Some (ESymbol (s ^ "+1"))
+                        if USet.mem symbols s then Some (ESymbol (s ^ "_next"))
                         else None
                     )
                    )

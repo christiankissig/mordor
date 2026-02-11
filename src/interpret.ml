@@ -423,8 +423,8 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
 
                 let env_succ = Hashtbl.copy env in
                 let env_fail = Hashtbl.copy env in
-                  Hashtbl.replace env_succ register (EBoolean true);
-                  Hashtbl.replace env_fail register (EBoolean false);
+                  Hashtbl.replace env_succ register (ENum Z.one);
+                  Hashtbl.replace env_fail register (ENum Z.zero);
                   let* cont_succ = recurse rest env_succ phi_succ events in
                     let* cont_fail = recurse rest env_fail phi_fail events in
                       Lwt.return
@@ -1150,7 +1150,6 @@ end = struct
     | [] -> final_structure ~add_event env phi events
 
   let step_interpret lwt_ctx =
-    Logs.debug (fun m -> m "Interpreting program with symbolic loop semantics.");
     let* ctx = lwt_ctx in
     let stmt_semantics =
       interpret_statements_symbolic_loop
