@@ -460,10 +460,18 @@ pre.line-numbers > code {
 .accordion {
     display: flex;
     flex-direction: column;
+    height: 100%;
 }
 
 .accordion-item {
     border-bottom: 1px solid #3e3e42;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.accordion-item:last-child {
+    border-bottom: none;
 }
 
 .accordion-header {
@@ -495,14 +503,16 @@ pre.line-numbers > code {
 }
 
 .accordion-content {
-    max-height: 0;
+    flex: 0 0 0;
     overflow: hidden;
-    transition: max-height 0.3s ease;
+    transition: flex 0.3s ease;
     background: #1e1e1e;
+    display: flex;
+    flex-direction: column;
 }
 
 .accordion-content.active {
-    max-height: 100%;
+    flex: 1 1 auto;
     overflow-y: auto;
 }
 
@@ -664,4 +674,90 @@ pre.line-numbers > code {
 
 .assertion-validity.invalid {
     color: #f48771;
+}
+
+/* Collapsible loop styles */
+.loop-item {
+    padding: 0.75rem;
+    margin: 0.5rem 0;
+    background: #252526;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.loop-item:hover {
+    background: #2d2d30;
+}
+
+.loop-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.loop-toggle {
+    font-size: 0.8rem;
+    color: #6a6a6a;
+    transition: transform 0.2s;
+}
+
+.loop-item.expanded .loop-toggle {
+    transform: rotate(180deg);
+}
+
+.loop-conditions {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.loop-item.expanded .loop-conditions {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* Collapsible episodicity condition styles */
+.episodicity-condition {
+    margin: 0.4rem 0;
+    padding: 0.4rem;
+    background: #1e1e1e;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.episodicity-condition:hover {
+    background: #252526;
+}
+
+.condition-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.condition-toggle {
+    font-size: 0.7rem;
+    color: #6a6a6a;
+    transition: transform 0.2s;
+}
+
+.episodicity-condition.expanded .condition-toggle {
+    transform: rotate(180deg);
+}
+
+.condition-violations {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    margin-left: 1.5rem;
+    margin-top: 0.3rem;
+}
+
+.episodicity-condition.expanded .condition-violations {
+    max-height: 300px;
+    overflow-y: auto;
 }

@@ -290,14 +290,18 @@ class GraphVisualizer {
             
             html += `
                 <div class="loop-item" 
+                     data-loop-id="${loop.id}"
                      data-start-line="${loop.start_line}" 
                      data-start-col="${loop.start_col}"
                      data-end-line="${loop.end_line}" 
                      data-end-col="${loop.end_col}"
                      style="padding: 0.75rem; margin: 0.5rem 0; background: #252526; border: 1px solid #3e3e42; border-radius: 4px; cursor: pointer; transition: background 0.2s;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <strong style="color: #4ec9b0;">Loop ${loop.id}</strong>
-                        ${episodicityData ? `<span style="font-size: 0.85rem; color: ${episodicityData.is_episodic ? '#89d185' : '#f48771'}; font-weight: bold;">${episodicityData.is_episodic ? '✓ Episodic' : '✗ Non-episodic'}</span>` : ''}
+                    <div class="loop-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <strong style="color: #4ec9b0;">Loop ${loop.id}</strong>
+                            ${episodicityData ? `<span style="font-size: 0.85rem; color: ${episodicityData.is_episodic ? '#89d185' : '#f48771'}; font-weight: bold;">${episodicityData.is_episodic ? '✓ Episodic' : '✗ Non-episodic'}</span>` : ''}
+                        </div>
+                        ${episodicityData ? '<span class="loop-toggle">▼</span>' : ''}
                     </div>
                     <div style="font-size: 0.85rem; color: #6a6a6a; margin-top: 0.25rem;">
                         Lines ${loop.start_line}:${loop.start_col} - ${loop.end_line}:${loop.end_col}
@@ -306,7 +310,7 @@ class GraphVisualizer {
             
             // Add episodicity conditions if available
             if (episodicityData) {
-                html += '<div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #3e3e42;">';
+                html += '<div class="loop-conditions" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #3e3e42;">';
                 html += '<div style="font-size: 0.85rem; color: #cccccc; margin-bottom: 0.5rem; font-weight: bold;">Episodicity Conditions:</div>';
                 
                 ['condition1', 'condition2', 'condition3', 'condition4'].forEach((condName, index) => {
@@ -315,18 +319,22 @@ class GraphVisualizer {
                         const satisfied = cond.satisfied;
                         const icon = satisfied ? '✓' : '✗';
                         const color = satisfied ? '#89d185' : '#f48771';
+                        const hasViolations = !satisfied && cond.violations && cond.violations.length > 0;
                         
                         html += `
-                            <div style="margin: 0.4rem 0; padding: 0.4rem; background: #1e1e1e; border-radius: 3px;">
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <span style="color: ${color}; font-weight: bold; min-width: 20px;">${icon}</span>
-                                    <span style="color: #d4d4d4; font-size: 0.85rem;">Condition ${index + 1}</span>
+                            <div class="episodicity-condition" data-condition="${condName}" style="margin: 0.4rem 0; padding: 0.4rem; background: #1e1e1e; border-radius: 3px;">
+                                <div class="condition-header" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="color: ${color}; font-weight: bold; min-width: 20px;">${icon}</span>
+                                        <span style="color: #d4d4d4; font-size: 0.85rem;">Condition ${index + 1}</span>
+                                    </div>
+                                    ${hasViolations ? '<span class="condition-toggle">▼</span>' : ''}
                                 </div>
                         `;
                         
                         // Show violations if any
-                        if (!satisfied && cond.violations && cond.violations.length > 0) {
-                            html += '<div style="margin-left: 1.5rem; margin-top: 0.3rem;">';
+                        if (hasViolations) {
+                            html += '<div class="condition-violations">';
                             cond.violations.forEach(violation => {
                                 const violationType = violation[0];
                                 const violationDetails = violation[1];
@@ -363,6 +371,26 @@ class GraphVisualizer {
         html += '</div>';
         
         loopsContent.innerHTML = html;
+        
+        // Add click listeners for collapsible loops
+        const loopHeaders = loopsContent.querySelectorAll('.loop-header');
+        loopHeaders.forEach(header => {
+            header.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const loopItem = header.closest('.loop-item');
+                loopItem.classList.toggle('expanded');
+            });
+        });
+        
+        // Add click listeners for collapsible conditions
+        const conditionHeaders = loopsContent.querySelectorAll('.condition-header');
+        conditionHeaders.forEach(header => {
+            header.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const condition = header.closest('.episodicity-condition');
+                condition.classList.toggle('expanded');
+            });
+        });
         
         // Add hover listeners to loop items
         const loopItems = loopsContent.querySelectorAll('.loop-item');
