@@ -166,16 +166,6 @@ module EventStructureViz = struct
   }
   [@@deriving yojson]
 
-  (** Completion message sent after processing all executions. *)
-
-  type complete_message = {
-    type_ : string; [@key "type"]
-        (** type_ Message type (should be "complete") *)
-    total_executions : int;
-        (** total_executions Total number of executions processed *)
-  }
-  [@@deriving yojson]
-
   (** {1 Graph Construction Functions} *)
 
   (** {2 Graph Construction Helpers}
@@ -1062,34 +1052,14 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
               );
 
               (* Send each execution graph *)
-              let* () =
-                Lwt_list.iteri_s
-                  (send_single_execution_graph ~send_data ~build_exec_graph
-                     checked_executions
-                  )
-                  exec_list
-              in
-
-              (* Send completion message *)
-              let complete_message =
-                EventStructureViz.
-                  { type_ = "complete"; total_executions = exec_count }
-              in
-              let complete_json =
-                Yojson.Safe.to_string
-                  (EventStructureViz.complete_message_to_yojson complete_message)
-              in
-                send_data complete_json
+              Lwt_list.iteri_s
+                (send_single_execution_graph ~send_data ~build_exec_graph
+                   checked_executions
+                )
+                exec_list
         | None ->
-            (* No executions - send completion with count 0 *)
-            let complete_message =
-              EventStructureViz.{ type_ = "complete"; total_executions = 0 }
-            in
-            let complete_json =
-              Yojson.Safe.to_string
-                (EventStructureViz.complete_message_to_yojson complete_message)
-            in
-              send_data complete_json
+            (* No executions *)
+            Lwt.return_unit
       in
 
       Logs.info (fun m -> m "Execution graphs sent after dependency calculation");

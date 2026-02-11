@@ -34,6 +34,8 @@ class GraphVisualizer {
         this.loops = []; // Store loop information
         this.episodicityResults = {}; // Store episodicity results by loop_id
         this.assertionResults = null; // Store assertion results
+        this.currentEndpoint = '/api/visualize/stream'; // Default endpoint
+        this.currentAction = 'visualize'; // Default action
         
         // Settings
         this.settings = {
@@ -617,13 +619,51 @@ class GraphVisualizer {
             }
         });
 
-        document.getElementById('visualize-btn').addEventListener('click', () => {
+        // Split button functionality
+        const actionBtn = document.getElementById('action-btn');
+        const dropdownToggle = document.getElementById('dropdown-toggle');
+        const splitButton = document.querySelector('.split-button');
+        const dropdownItems = document.querySelectorAll('.dropdown-content button');
+        
+        // Main action button - executes the current action
+        actionBtn.addEventListener('click', () => {
             const program = textarea.value.trim();
             if (!program) {
                 this.log('Please enter a litmus test', 'error');
                 return;
             }
             this.visualize(program);
+        });
+        
+        // Toggle button - shows/hides dropdown
+        dropdownToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            splitButton.classList.toggle('active');
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', () => {
+            splitButton.classList.remove('active');
+        });
+        
+        // Handle dropdown item selection
+        dropdownItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = item.getAttribute('data-action');
+                const endpoint = item.getAttribute('data-endpoint');
+                
+                // Update button text and store current endpoint
+                actionBtn.textContent = item.textContent;
+                this.currentEndpoint = endpoint;
+                this.currentAction = action;
+                
+                // Close dropdown
+                splitButton.classList.remove('active');
+                
+                // Log the selection
+                this.log('Action changed to: ' + action, 'info');
+            });
         });
 
         document.getElementById('layout-select').addEventListener('change', (e) => {
@@ -837,7 +877,7 @@ class GraphVisualizer {
     }
     
     async visualize(program) {
-        this.log('Starting visualization with ' + this.settings.loopSemantics + ' semantics...');
+        this.log('Starting ' + this.currentAction + ' with ' + this.settings.loopSemantics + ' semantics...');
 
         // Store program for regeneration
         this.lastProgram = program;
@@ -853,7 +893,7 @@ class GraphVisualizer {
 
         // Update UI
         document.getElementById('status').textContent = 'Processing...';
-        document.getElementById('visualize-btn').disabled = true;
+        document.getElementById('action-btn').disabled = true;
         document.getElementById('empty-state').style.display = 'none';
         document.getElementById('carousel-container').style.display = 'none';
         document.getElementById('graph-controls').style.display = 'none';
@@ -872,7 +912,7 @@ class GraphVisualizer {
         document.getElementById('edge-count').textContent = '0';
         document.getElementById('execution-count').textContent = '0';
 
-        document.getElementById('visualize-btn').disabled = true;
+        document.getElementById('action-btn').disabled = true;
 
         this.log('Sending request to backend...');
 
@@ -885,8 +925,8 @@ class GraphVisualizer {
             allow_unbounded_deref: this.settings.showUnboundedDeref.toString(),
         };
         
-        // Use Server-Sent Events
-        const es = new EventSource('/api/visualize/stream?' + new URLSearchParams(params));
+        // Use Server-Sent Events with the current endpoint
+        const es = new EventSource(this.currentEndpoint + '?' + new URLSearchParams(params));
 
         es.onmessage = (event) => {
             try {
@@ -933,16 +973,16 @@ class GraphVisualizer {
                 } else if (data.type === 'complete') {
                     this.executionCount = data.total_executions;
                     document.getElementById('execution-count').textContent = this.executionCount;
-                    this.log('Visualization complete: ' + this.executionCount + ' executions', 'success');
+                    this.log(this.currentAction.charAt(0).toUpperCase() + this.currentAction.slice(1) + ' complete: ' + this.executionCount + ' executions', 'success');
                     this.updateCarouselUI();
                     document.getElementById('status').textContent = 'Complete';
                     es.close();
-                    document.getElementById('visualize-btn').disabled = false;
+                    document.getElementById('action-btn').disabled = false;
                 } else if (data.error) {
                     this.log('Error: ' + data.error, 'error');
                     this.showError(data.error);
                     es.close();
-                    document.getElementById('visualize-btn').disabled = false;
+                    document.getElementById('action-btn').disabled = false;
                 }
             } catch (e) {
                 console.error('Failed to parse SSE message:', e);
@@ -953,7 +993,7 @@ class GraphVisualizer {
         es.onerror = () => { 
             this.log('Connection error', 'error'); 
             es.close(); 
-            document.getElementById('visualize-btn').disabled = false; 
+            document.getElementById('action-btn').disabled = false; 
         };
     }
 

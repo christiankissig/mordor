@@ -15,6 +15,6 @@
   lwt.unix)
  ; Unix operations
  (preprocess
-  (pps lwt_ppx landmarks-ppx --auto)))
+  (pps ppx_deriving_yojson lwt_ppx landmarks-ppx --auto)))
 
 ; Lwt syntax sugar (let*, let+, etc.)

@@ -9,6 +9,23 @@ open Context
 open Types
 open Source_info
 open Test_runner_api
+open Uset
+
+(** Completion message sent at the end. *)
+
+type complete_message = {
+  type_ : string; [@key "type"]
+      (** type_ Message type (should be "complete") *)
+  total_executions : int;  (** Optional total number of executions *)
+}
+[@@deriving yojson]
+
+let send_complete ~send_data total_executions =
+  let complete_message = { type_ = "complete"; total_executions } in
+  let complete_json =
+    Yojson.Safe.to_string (complete_message_to_yojson complete_message)
+  in
+    send_data complete_json
 
 (** {2 Visualization Functions} *)
 
@@ -57,7 +74,114 @@ let visualize_to_stream program options step_counter stream =
       |> Eventstructureviz.step_send_execution_graphs ~send_data
     in
 
+    let total_executions =
+      match ctx.executions with
+      | Some exs -> USet.size exs
+      | None -> 0
+    in
+      let* () = send_complete ~send_data total_executions in
+
+      Lwt.return ctx
+
+let visualize_parse_to_stream program options step_counter stream =
+  let context = make_context options ~output_mode:Json ~step_counter () in
+    context.litmus <- Some program;
+
+    (* Create a function to send graph data through SSE *)
+    let send_data json_str =
+      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
+        Dream.flush stream
+    in
+
+    let* ctx =
+      Lwt.return context
+      |> Parse.step_parse_litmus
+      |> LoopInformation.send_loop_information send_data
+    in
+
+    let* () = send_complete ~send_data 0 in
+
     Lwt.return ctx
+
+let visualize_interpret_to_stream program options step_counter stream =
+  let context = make_context options ~output_mode:Json ~step_counter () in
+    context.litmus <- Some program;
+
+    (* Create a function to send graph data through SSE *)
+    let send_data json_str =
+      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
+        Dream.flush stream
+    in
+
+    let* ctx =
+      Lwt.return context
+      |> Parse.step_parse_litmus
+      |> LoopInformation.send_loop_information send_data
+      |> Interpret.step_interpret
+      |> Eventstructureviz.step_send_event_structure_graph ~send_data
+    in
+
+    let* () = send_complete ~send_data 0 in
+
+    Lwt.return ctx
+
+let visualize_test_episodicity_to_stream program options step_counter stream =
+  let context = make_context options ~output_mode:Json ~step_counter () in
+    context.litmus <- Some program;
+
+    (* Create a function to send graph data through SSE *)
+    let send_data json_str =
+      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
+        Dream.flush stream
+    in
+
+    let* ctx =
+      Lwt.return context
+      |> Parse.step_parse_litmus
+      |> LoopInformation.send_loop_information send_data
+      |> Interpret.step_interpret
+      |> Eventstructureviz.step_send_event_structure_graph ~send_data
+      |> Episodicity.step_test_episodicity
+      |> Episodicity.send_episodicity_results send_data
+    in
+
+    let* () = send_complete ~send_data 0 in
+
+    Lwt.return ctx
+
+let visualize_test_assertions_to_stream program options step_counter stream =
+  let context = make_context options ~output_mode:Json ~step_counter () in
+    context.litmus <- Some program;
+
+    (* Create a function to send graph data through SSE *)
+    let send_data json_str =
+      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
+        Dream.flush stream
+    in
+
+    let* ctx =
+      Lwt.return context
+      |> Parse.step_parse_litmus
+      |> LoopInformation.send_loop_information send_data
+      |> Interpret.step_interpret
+      |> Eventstructureviz.step_send_event_structure_graph ~send_data
+      |> Episodicity.step_test_episodicity
+      |> Episodicity.send_episodicity_results send_data
+      |> Elaborations.step_generate_justifications
+      |> Executions.step_calculate_dependencies
+      |> Assertion.step_check_assertions
+      |> Assertion.step_send_assertion_results ~send_data
+      |> Eventstructureviz.step_send_execution_graphs ~send_data
+    in
+
+    let total_executions =
+      match ctx.executions with
+      | Some exs -> USet.size exs
+      | None -> 0
+    in
+      let* () = send_complete ~send_data total_executions in
+
+      Lwt.return ctx
 
 (** [sse_data json_obj] formats a JSON object as an SSE data message.
 
@@ -69,23 +193,15 @@ let sse_data json_obj =
 
 (** {2 HTTP Request Handlers} *)
 
-(** [visualize_sse_handler request] handles SSE requests for program
-    visualization.
+(** [make_sse_handler pipeline_fn] creates an SSE handler for a specific
+    pipeline.
 
-    Accepts query parameters:
-    - [program]: The litmus test source code
-    - [loop_semantics]: The loop execution semantics ("symbolic",
-      "step-counter", or default)
-    - [steps]: Number of loop iterations (default: 2, ignored for symbolic
-      semantics)
-
-    @param request The HTTP request from Dream
-    @return An SSE stream response that sends visualization updates in real-time
-
-    The handler establishes an SSE connection and streams status updates
-    ("parsing", "interpreting", "visualizing") followed by visualization data.
-    Errors are caught and sent as SSE error messages. *)
-let visualize_sse_handler request =
+    @param pipeline_fn
+      The pipeline function to execute, with signature:
+      [string -> options -> int -> Dream.stream -> context Lwt.t]
+    @return An HTTP request handler that sets up SSE streaming for the pipeline
+*)
+let make_sse_handler pipeline_fn request =
   let program = Dream.query request "program" |> Option.value ~default:"" in
 
   let loop_semantics =
@@ -143,35 +259,47 @@ let visualize_sse_handler request =
               in
                 let* () = Dream.flush stream in
 
-                let* _ctx =
-                  Lwt.catch
-                    (fun () ->
-                      visualize_to_stream program options step_counter stream
-                    )
-                    (fun exn ->
-                      let error = Printexc.to_string exn in
-                        Printf.printf "❌ Error: %s\n%!" error;
-                        let* () =
-                          Dream.write stream
-                            (sse_data (`Assoc [ ("error", `String error) ]))
-                        in
-                          let* () = Dream.flush stream in
-                            Lwt.fail exn
-                    )
-                in
+                let* _ctx = pipeline_fn program options step_counter stream in
 
-                Printf.printf "🎉 Complete!\n%!";
-                Dream.close stream
+                Lwt.return_unit
         )
         (fun exn ->
-          Printf.printf "❌ SSE error: %s\n%!" (Printexc.to_string exn);
-          let* () =
-            Dream.write stream
-              (sse_data (`Assoc [ ("error", `String (Printexc.to_string exn)) ]))
-          in
-            Dream.close stream
+          let error_msg = Printexc.to_string exn in
+            Printf.printf "❌ Pipeline error: %s\n%!" error_msg;
+            let* () =
+              Dream.write stream
+                (sse_data
+                   (`Assoc
+                      [
+                        ("type", `String "error"); ("message", `String error_msg);
+                      ]
+                   )
+                )
+            in
+              Dream.flush stream
         )
     )
+
+(** [visualize_sse_handler request] handles SSE requests for full program
+    visualization using the complete pipeline. *)
+let visualize_sse_handler = make_sse_handler visualize_to_stream
+
+(** [parse_sse_handler request] handles SSE requests for parsing only. *)
+let parse_sse_handler = make_sse_handler visualize_parse_to_stream
+
+(** [interpret_sse_handler request] handles SSE requests for parsing and
+    interpretation. *)
+let interpret_sse_handler = make_sse_handler visualize_interpret_to_stream
+
+(** [episodicity_sse_handler request] handles SSE requests for parsing,
+    interpretation, and episodicity testing. *)
+let episodicity_sse_handler =
+  make_sse_handler visualize_test_episodicity_to_stream
+
+(** [assertions_sse_handler request] handles SSE requests for parsing,
+    interpretation, episodicity testing, and assertion checking. *)
+let assertions_sse_handler =
+  make_sse_handler visualize_test_assertions_to_stream
 
 (** [health_handler request] provides a simple health check endpoint.
 
@@ -501,7 +629,14 @@ let setup_logs () =
     - [GET /health] - Returns [{"status": "ok"}]
 
     {b Visualization API:}
-    - [GET /api/visualize/stream] - SSE endpoint for program visualization
+    - [GET /api/visualize/stream] - SSE endpoint for full visualization pipeline
+    - [GET /api/visualize/parse/stream] - SSE endpoint for parse stage only
+    - [GET /api/visualize/interpret/stream] - SSE endpoint for parse + interpret
+      stages
+    - [GET /api/visualize/episodicity/stream] - SSE endpoint for parse +
+      interpret + episodicity stages
+    - [GET /api/visualize/assertions/stream] - SSE endpoint for parse +
+      interpret + episodicity + assertions stages
 
     {b Test Runner API:}
     - [GET /api/tests/list] - List all available litmus tests
@@ -523,7 +658,12 @@ let () =
          Dream.get "/help/" (Dream.from_filesystem "web/frontend" "help.html");
          Dream.get "/static/**" (Dream.static "web/frontend/static");
          Dream.get "/health" health_handler;
+         (* Visualization API - Pipeline stages *)
          Dream.get "/api/visualize/stream" visualize_sse_handler;
+         Dream.get "/api/parse/stream" parse_sse_handler;
+         Dream.get "/api/interpret/stream" interpret_sse_handler;
+         Dream.get "/api/episodicity/stream" episodicity_sse_handler;
+         Dream.get "/api/assertions/stream" assertions_sse_handler;
          (* Test Runner API *)
          Dream.get "/api/tests/list" TestRunner.list_tests_handler;
          Dream.post "/api/tests/run" TestRunner.run_test_handler;
