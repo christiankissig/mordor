@@ -604,39 +604,43 @@ module TestWriteCondition = struct
       let loop_indices = Hashtbl.create 0 in
         Hashtbl.add loop_indices read.label [ 0 ];
         Hashtbl.add loop_indices mod_write.label [ 0 ];
-        let symbolic_structure =
-          {
-            (SymbolicEventStructure.create ()) with
-            e = e_set;
-            events;
-            po;
-            read_events = USet.of_list [ read.label ];
-            write_events = USet.of_list [ init_write.label; mod_write.label ];
-            rlx_read_events = USet.of_list [ read.label ];
-            rlx_write_events = USet.of_list [ mod_write.label ];
-            malloc_events = USet.of_list [ alloc.label ];
-            loop_indices;
-          }
-        in
-        let symbolic_source_spans = Hashtbl.create 0 in
-          Hashtbl.add symbolic_source_spans alloc.label
-            { start_line = 2; start_col = 1; end_line = 2; end_col = 10 };
-          Hashtbl.add symbolic_source_spans init_write.label
-            { start_line = 3; start_col = 1; end_line = 3; end_col = 10 };
-          Hashtbl.add symbolic_source_spans read.label
-            { start_line = 6; start_col = 1; end_line = 6; end_col = 10 };
-          Hashtbl.add symbolic_source_spans mod_write.label
-            { start_line = 7; start_col = 1; end_line = 7; end_col = 10 };
-          let symbolic_justifications = USet.create () in
-          let symbolic_fwd_es_ctx =
-            EventStructureContext.create symbolic_structure
-          in
+        let loop_conditions = Hashtbl.create 0 in
+          Hashtbl.add loop_conditions 0 (EBoolean true);
+          (* while true *)
+          let symbolic_structure =
             {
-              symbolic_structure;
-              symbolic_source_spans;
-              symbolic_justifications;
-              symbolic_fwd_es_ctx;
+              (SymbolicEventStructure.create ()) with
+              e = e_set;
+              events;
+              po;
+              read_events = USet.of_list [ read.label ];
+              write_events = USet.of_list [ init_write.label; mod_write.label ];
+              rlx_read_events = USet.of_list [ read.label ];
+              rlx_write_events = USet.of_list [ mod_write.label ];
+              malloc_events = USet.of_list [ alloc.label ];
+              loop_indices;
+              loop_conditions;
             }
+          in
+          let symbolic_source_spans = Hashtbl.create 0 in
+            Hashtbl.add symbolic_source_spans alloc.label
+              { start_line = 2; start_col = 1; end_line = 2; end_col = 10 };
+            Hashtbl.add symbolic_source_spans init_write.label
+              { start_line = 3; start_col = 1; end_line = 3; end_col = 10 };
+            Hashtbl.add symbolic_source_spans read.label
+              { start_line = 6; start_col = 1; end_line = 6; end_col = 10 };
+            Hashtbl.add symbolic_source_spans mod_write.label
+              { start_line = 7; start_col = 1; end_line = 7; end_col = 10 };
+            let symbolic_justifications = USet.create () in
+            let symbolic_fwd_es_ctx =
+              EventStructureContext.create symbolic_structure
+            in
+              {
+                symbolic_structure;
+                symbolic_source_spans;
+                symbolic_justifications;
+                symbolic_fwd_es_ctx;
+              }
 
   (* Test 2: Same-iteration write before read (VALID) *)
   let test_same_iteration_write_setup () =
@@ -722,31 +726,35 @@ module TestWriteCondition = struct
         Hashtbl.add loop_indices write1.label [ 0 ];
         Hashtbl.add loop_indices write2.label [ 0 ];
         Hashtbl.add loop_indices read.label [ 0 ];
-        let symbolic_structure =
-          {
-            (SymbolicEventStructure.create ()) with
-            e = e_set;
-            events;
-            po;
-            read_events = USet.of_list [ read.label ];
-            write_events = USet.of_list [ write1.label; write2.label ];
-            rlx_read_events = USet.of_list [ read.label ];
-            rlx_write_events = USet.of_list [ write1.label; write2.label ];
-            malloc_events = USet.of_list [ alloc.label ];
-            loop_indices;
-          }
-        in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
-        let symbolic_fwd_es_ctx =
-          EventStructureContext.create symbolic_structure
-        in
-          {
-            symbolic_structure;
-            symbolic_source_spans;
-            symbolic_justifications;
-            symbolic_fwd_es_ctx;
-          }
+        let loop_conditions = Hashtbl.create 0 in
+          Hashtbl.add loop_conditions 0 (EBoolean true);
+          (* while true *)
+          let symbolic_structure =
+            {
+              (SymbolicEventStructure.create ()) with
+              e = e_set;
+              events;
+              po;
+              read_events = USet.of_list [ read.label ];
+              write_events = USet.of_list [ write1.label; write2.label ];
+              rlx_read_events = USet.of_list [ read.label ];
+              rlx_write_events = USet.of_list [ write1.label; write2.label ];
+              malloc_events = USet.of_list [ alloc.label ];
+              loop_indices;
+              loop_conditions;
+            }
+          in
+          let symbolic_source_spans = Hashtbl.create 0 in
+          let symbolic_justifications = USet.create () in
+          let symbolic_fwd_es_ctx =
+            EventStructureContext.create symbolic_structure
+          in
+            {
+              symbolic_structure;
+              symbolic_source_spans;
+              symbolic_justifications;
+              symbolic_fwd_es_ctx;
+            }
 
   (* Test 4: Read-don't-modify RMW (VALID) *)
   let test_rdmw_valid_setup () =

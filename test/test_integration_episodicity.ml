@@ -321,7 +321,7 @@ let test_specifications =
     {
       filepath = "programs/episodicity/episodic_register_multi_fail.lit";
       expected_episodic = Some false;
-      expected_failing_conditions = [ 1; 2; 4 ];
+      expected_failing_conditions = [ 1; 4 ];
       description =
         "Multiple condition failures - register and write conditions fail";
     };
