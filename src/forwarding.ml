@@ -308,18 +308,10 @@ type ppo_relations = {
       (** Synchronization preserved program order.
 
           Orderings from acquire-release, SC fences, and volatile accesses. *)
-  ppo_loc_baseA : (int * int) uset;
-      (** Location-based PPO template (before PO intersection).
-
-          Used as starting point for location-based PPO computation. *)
-  ppo_loc_eqA : (int * int) uset;
+  ppo_loc_eq : (int * int) uset;
       (** Location equality PPO component.
 
           Orderings between events that may access the same location. *)
-  ppo_syncA : (int * int) uset;
-      (** Synchronization PPO template (before PO intersection).
-
-          Template for synchronization orderings before filtering. *)
   ppo_iter_loc_base : (int * int) uset;
       (** Base location-based preserved program order between iterations.
 
@@ -332,20 +324,10 @@ type ppo_relations = {
       (** Synchronization preserved program order between iterations.
 
           Orderings from acquire-release, SC fences, and volatile accesses. *)
-  ppo_iter_loc_baseA : (int * int) uset;
-      (** Location-based PPO template (before PO intersection) between
-          iterations.
-
-          Used as starting point for location-based PPO computation. *)
-  ppo_iter_loc_eqA : (int * int) uset;
+  ppo_iter_loc_eq : (int * int) uset;
       (** Location equality PPO component between iterations.
 
           Orderings between events that may access the same location. *)
-  ppo_iter_syncA : (int * int) uset;
-      (** Synchronization PPO template (before PO intersection) between
-          iterations.
-
-          Template for synchronization orderings before filtering. *)
 }
 
 (** Event structure context.
@@ -384,19 +366,15 @@ module EventStructureContext = struct
       ppo =
         {
           ppo_init = USet.create ();
-          ppo_loc_base = USet.create ();
           ppo_base = USet.create ();
           ppo_sync = USet.create ();
-          ppo_loc_baseA = USet.create ();
-          ppo_loc_eqA = USet.create ();
-          ppo_syncA = USet.create ();
+          ppo_loc_eq = USet.create ();
+          ppo_loc_base = USet.create ();
           (* PPO relations between events in successive iterations of the same loop. *)
-          ppo_iter_loc_base = USet.create ();
           ppo_iter_base = USet.create ();
           ppo_iter_sync = USet.create ();
-          ppo_iter_loc_baseA = USet.create ();
-          ppo_iter_loc_eqA = USet.create ();
-          ppo_iter_syncA = USet.create ();
+          ppo_iter_loc_eq = USet.create ();
+          ppo_iter_loc_base = USet.create ();
         };
       ppo_cache = PpoCache.create ();
       context_cache = ContextCache.create ();
@@ -431,7 +409,7 @@ module EventStructureContext = struct
         )
         structure.po
 
-  (** [compute_ppo_syncA structure e po] computes the synchronization-based PPO
+  (** [compute_ppo_sync structure e po] computes the synchronization-based PPO
       template.
 
       This includes orderings from release/acquire modes and SC fences, as well
@@ -442,7 +420,7 @@ module EventStructureContext = struct
       @param e The set of events to consider.
       @param po The program order relation.
       @return The computed synchronization PPO template. *)
-  let compute_ppo_syncA structure e po =
+  let compute_ppo_sync structure e po =
     let e_squared = URelation.cross e e in
     let r = USet.intersection structure.read_events e in
     let w = USet.intersection structure.write_events e in
@@ -480,7 +458,7 @@ module EventStructureContext = struct
          )
     |> USet.intersection po
 
-  (** [compute_ppo_loc_eqA structure e po] computes the location equality PPO
+  (** [compute_ppo_loc_eq structure e po] computes the location equality PPO
       component.
 
       This relation includes pairs of events that may access the same location
@@ -497,7 +475,7 @@ module EventStructureContext = struct
       @param e The set of events to consider.
       @param po The program order relation.
       @return The computed location equality PPO component. *)
-  let compute_ppo_loc_eqA ?(iter = false) structure e po =
+  let compute_ppo_loc_eq ?(iter = false) structure e po =
     USet.async_filter
       (fun (e1, e2) ->
         let loc1 = Events.get_loc structure e1 in
@@ -584,72 +562,48 @@ module EventStructureContext = struct
       |> ignore;
 
       (* PPO based on memory order *)
-      USet.clear es_ctx.ppo.ppo_syncA |> ignore;
-      USet.inplace_union es_ctx.ppo.ppo_syncA
-        (compute_ppo_syncA es_ctx.structure e po_nf)
+      USet.clear es_ctx.ppo.ppo_sync |> ignore;
+      USet.inplace_union es_ctx.ppo.ppo_sync
+        (compute_ppo_sync es_ctx.structure e po_nf)
       |> ignore;
 
-      USet.clear es_ctx.ppo.ppo_iter_syncA |> ignore;
-      USet.inplace_union es_ctx.ppo.ppo_iter_syncA
-        (compute_ppo_syncA es_ctx.structure e po_iter_nf)
+      USet.clear es_ctx.ppo.ppo_iter_sync |> ignore;
+      USet.inplace_union es_ctx.ppo.ppo_iter_sync
+        (compute_ppo_sync es_ctx.structure e po_iter_nf)
       |> ignore;
 
       (* Filter for location equality with semantic equality *)
-      let* ppo_loc_eqA = compute_ppo_loc_eqA structure e po_nf in
-        USet.clear es_ctx.ppo.ppo_loc_eqA |> ignore;
-        USet.inplace_union es_ctx.ppo.ppo_loc_eqA ppo_loc_eqA |> ignore;
+      let* ppo_loc_eq = compute_ppo_loc_eq structure e po_nf in
+        USet.clear es_ctx.ppo.ppo_loc_eq |> ignore;
+        USet.inplace_union es_ctx.ppo.ppo_loc_eq ppo_loc_eq |> ignore;
 
-        (* PPO based on memory location *)
-        (* TODO it is counter-intuitive that ppo_loc would be the complement of
-         ppo_loc_eq *)
-        USet.clear es_ctx.ppo.ppo_loc_baseA |> ignore;
-        USet.set_minus po_nf ppo_loc_eqA
-        |> USet.inplace_union es_ctx.ppo.ppo_loc_baseA
-        |> ignore;
-
-        let* ppo_iter_loc_eqA =
-          compute_ppo_loc_eqA ~iter:true structure e po_iter_nf
+        let* ppo_iter_loc_eq =
+          compute_ppo_loc_eq ~iter:true structure e po_iter_nf
         in
-          USet.clear es_ctx.ppo.ppo_iter_loc_eqA |> ignore;
-          USet.inplace_union es_ctx.ppo.ppo_iter_loc_eqA ppo_iter_loc_eqA
+          USet.clear es_ctx.ppo.ppo_iter_loc_eq |> ignore;
+          USet.inplace_union es_ctx.ppo.ppo_iter_loc_eq ppo_iter_loc_eq
           |> ignore;
 
-          USet.clear es_ctx.ppo.ppo_loc_baseA |> ignore;
-          USet.set_minus po_nf ppo_loc_eqA
-          |> USet.inplace_union es_ctx.ppo.ppo_loc_baseA
-          |> ignore;
-
-          (* TODO all of the relations above are already filtered on po_nf, which
-  in turn is a subset of po, so this intersection should be redundant. *)
-          USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
-          USet.intersection es_ctx.ppo.ppo_loc_baseA po
-          |> USet.inplace_union es_ctx.ppo.ppo_loc_base
-          |> ignore;
+        (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
+           computed in that complement for each execution later on. *)
+        USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
+USet.set_minus po_nf es_ctx.ppo.ppo_loc_eq
+          |> USet.inplace_union es_ctx.ppo.ppo_loc_base |> ignore;
 
           USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
-          USet.intersection es_ctx.ppo.ppo_iter_loc_baseA po
+          USet.set_minus po_nf ppo_iter_loc_eq
           |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base
           |> ignore;
 
-          USet.clear es_ctx.ppo.ppo_sync |> ignore;
-          USet.intersection es_ctx.ppo.ppo_syncA po
-          |> USet.inplace_union es_ctx.ppo.ppo_sync
-          |> ignore;
-
-          USet.clear es_ctx.ppo.ppo_iter_sync |> ignore;
-          USet.intersection es_ctx.ppo.ppo_iter_syncA po
-          |> USet.inplace_union es_ctx.ppo.ppo_iter_sync
-          |> ignore;
-
           USet.clear es_ctx.ppo.ppo_base |> ignore;
-          USet.union es_ctx.ppo.ppo_syncA es_ctx.ppo.ppo_loc_eqA
-          |> USet.intersection po
+          es_ctx.ppo.ppo_sync
+          |> USet.union es_ctx.ppo.ppo_loc_eq
           |> USet.inplace_union es_ctx.ppo.ppo_base
           |> ignore;
 
           USet.clear es_ctx.ppo.ppo_iter_base |> ignore;
-          USet.union es_ctx.ppo.ppo_iter_syncA es_ctx.ppo.ppo_iter_loc_eqA
-          |> USet.intersection po
+          es_ctx.ppo.ppo_iter_sync
+          |> USet.union es_ctx.ppo.ppo_iter_loc_eq
           |> USet.inplace_union es_ctx.ppo.ppo_base
           |> ignore;
 

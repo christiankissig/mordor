@@ -1361,18 +1361,14 @@ module TestEventOrdering = struct
     let ppo_loc_base = USet.create () in
     let ppo_base = USet.create () in
     let ppo_sync = USet.create () in
-    let ppo_syncA = USet.create () in
     let ppo_loc_base = USet.create () in
-    let ppo_loc_baseA = USet.create () in
-    let ppo_loc_eqA = USet.create () in
+    let ppo_loc_eq = USet.create () in
 
     let ppo_iter_loc_base = USet.create () in
     let ppo_iter_base = USet.create () in
     let ppo_iter_sync = USet.create () in
-    let ppo_iter_syncA = USet.create () in
     let ppo_iter_loc_base = USet.create () in
-    let ppo_iter_loc_baseA = USet.create () in
-    let ppo_iter_loc_eqA = USet.create () in
+    let ppo_iter_loc_eq = USet.create () in
 
     USet.of_list ppo_pairs |> USet.inplace_union ppo_base |> ignore;
     USet.of_list ppo_iter_pairs |> USet.inplace_union ppo_iter_base |> ignore;
@@ -1381,16 +1377,12 @@ module TestEventOrdering = struct
       ppo_init;
       ppo_base;
       ppo_sync;
-      ppo_syncA;
       ppo_loc_base;
-      ppo_loc_baseA;
-      ppo_loc_eqA;
+      ppo_loc_eq;
       ppo_iter_loc_base;
       ppo_iter_base;
       ppo_iter_sync;
-      ppo_iter_syncA;
-      ppo_iter_loc_baseA;
-      ppo_iter_loc_eqA;
+      ppo_iter_loc_eq;
     }
 
   (* Test 1: Proper ordering via ppo (VALID) *)
