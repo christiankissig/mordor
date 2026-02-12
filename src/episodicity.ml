@@ -242,61 +242,91 @@ let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
   let writes_in_loop =
     USet.intersection events_in_loop structure.write_events
   in
-  let violations = ref [] in
-    let* () =
-      USet.iter_async
-        (fun read_event ->
-          (* Find writes to same location not ⊑-before the read *)
-          let* writes_in_loop_not_before_read =
-            USet.async_filter
-              (fun write_event ->
-                if USet.mem cache.symbolic_structure.po (write_event, read_event)
-                then Lwt.return false
-                else
-                  match
-                    ( Events.get_loc structure write_event,
-                      Events.get_loc structure read_event
-                    )
-                  with
-                  | Some wloc, Some rloc ->
-                      let state =
-                        Hashtbl.find_opt structure.restrict read_event
-                      in
-                        let* same_loc = Solver.expoteq ?state wloc rloc in
-                          if same_loc then
-                            (* Only invalid if not a read-don't-modify RMW *)
-                            Lwt.return
-                              (not (Events.is_rdmw structure write_event))
-                          else Lwt.return false
-                  | _ -> Lwt.return false
-              )
-              writes_in_loop
+    (* filter writes on whether they're in the last iteration of every loop *)
+    let* writes_in_loop =
+      USet.async_filter
+        (fun write_event ->
+          (* exclude writes in the last iteration of the loop *)
+          let loop_conditions =
+            Hashtbl.find_opt structure.loop_indices write_event
+            |> Option.value ~default:[]
+            |> List.filter_map (fun lid ->
+                Hashtbl.find_opt structure.loop_conditions lid
+            )
           in
-            (* Record violations for invalid write sources *)
-            USet.iter
-              (fun write_event ->
-                let violation =
-                  WriteConditionViolation
-                    (WriteFromPreviousIteration
-                       ( Events.get_loc structure read_event
-                         |> Option.map show_expr
-                         |> Option.value ~default:"",
-                         Hashtbl.find_opt cache.symbolic_source_spans read_event,
-                         Hashtbl.find_opt cache.symbolic_source_spans
-                           write_event
-                       )
-                    )
-                in
-                  violations := violation :: !violations
-              )
-              writes_in_loop_not_before_read;
-            Lwt.return ()
+          let write_valres =
+            Hashtbl.find_opt structure.restrict write_event
+            |> Option.value ~default:[]
+          in
+            let* can_continue =
+              Lwt_list.filter_s
+                (fun expr -> Solver.is_sat (expr :: write_valres))
+                loop_conditions
+            in
+              Lwt.return (List.length can_continue > 0)
         )
-        reads_in_loop
+        writes_in_loop
     in
+    let violations = ref [] in
+      let* () =
+        USet.iter_async
+          (fun read_event ->
+            (* Find writes to same location not ⊑-before the read *)
+            let* writes_in_loop_not_before_read =
+              USet.async_filter
+                (fun write_event ->
+                  (* exclude writes that are ⊑-before the read *)
+                  if
+                    USet.mem cache.symbolic_structure.po
+                      (write_event, read_event)
+                  then Lwt.return false
+                  else
+                    (* check if locations match *)
+                    match
+                      ( Events.get_loc structure write_event,
+                        Events.get_loc structure read_event
+                      )
+                    with
+                    | Some wloc, Some rloc ->
+                        let state =
+                          Hashtbl.find_opt structure.restrict read_event
+                        in
+                          let* same_loc = Solver.expoteq ?state wloc rloc in
+                            if same_loc then
+                              (* Only invalid if not a read-don't-modify RMW *)
+                              Lwt.return
+                                (not (Events.is_rdmw structure write_event))
+                            else Lwt.return false
+                    | _ -> Lwt.return false
+                )
+                writes_in_loop
+            in
+              (* Record violations for invalid write sources *)
+              USet.iter
+                (fun write_event ->
+                  let violation =
+                    WriteConditionViolation
+                      (WriteFromPreviousIteration
+                         ( Events.get_loc structure read_event
+                           |> Option.map show_expr
+                           |> Option.value ~default:"",
+                           Hashtbl.find_opt cache.symbolic_source_spans
+                             read_event,
+                           Hashtbl.find_opt cache.symbolic_source_spans
+                             write_event
+                         )
+                      )
+                  in
+                    violations := violation :: !violations
+                )
+                writes_in_loop_not_before_read;
+              Lwt.return ()
+          )
+          reads_in_loop
+      in
 
-    Lwt.return
-      { satisfied = List.length !violations == 0; violations = !violations }
+      Lwt.return
+        { satisfied = List.length !violations == 0; violations = !violations }
 
 (** {1 Condition 3: Branch Condition Symbols (Syntactic + Origin Tracking)} *)
 

@@ -23,6 +23,7 @@ module SymbolicEventStructure = struct
       conflict = USet.create ();
       origin = Hashtbl.create 16;
       loop_indices = Hashtbl.create 16;
+      loop_conditions = Hashtbl.create 16;
       thread_index = Hashtbl.create 16;
       write_events = USet.create ();
       read_events = USet.create ();
@@ -59,6 +60,7 @@ module SymbolicEventStructure = struct
       conflict = structure.conflict;
       origin = structure.origin;
       loop_indices = structure.loop_indices;
+      loop_conditions = structure.loop_conditions;
       thread_index = structure.thread_index;
       write_events =
         ( if event.typ = Write then
@@ -133,6 +135,7 @@ module SymbolicEventStructure = struct
           (* a and b share the same origin table *)
           origin = a.origin;
           loop_indices = a.loop_indices;
+          loop_conditions = a.loop_conditions;
           thread_index = a.thread_index;
           write_events = USet.union a.write_events b.write_events;
           read_events = USet.union a.read_events b.read_events;
@@ -168,6 +171,7 @@ module SymbolicEventStructure = struct
           (* a and b share the same origin table *)
           origin = a.origin;
           loop_indices = a.loop_indices;
+          loop_conditions = a.loop_conditions;
           thread_index = a.thread_index;
           write_events = USet.union a.write_events b.write_events;
           read_events = USet.union a.read_events b.read_events;
@@ -336,7 +340,7 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
 
 (* Check if write w is downward-closed same-location write before read r. This
    prevents r reading from shadowed writes w.*)
-(* TODO optimize *)
+(* TODO optimize; pregenerate *)
 let dslwb structure w r =
   let landmark = Landmark.register "dslwb" in
     Landmark.enter landmark;

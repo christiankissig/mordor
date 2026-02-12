@@ -1591,10 +1591,7 @@ let generate_executions ?(include_rf = true)
 
         Lwt_stream.filter_map
           (fun fr ->
-            if FreezeResultCache.mem seen fr then (
-              Logs.debug (fun m -> m "Deduplicated freeze result");
-              None
-            )
+            if FreezeResultCache.mem seen fr then None
             else begin
               FreezeResultCache.add seen fr ();
               Some fr
@@ -1608,10 +1605,7 @@ let generate_executions ?(include_rf = true)
 
         Lwt_stream.filter_map
           (fun ex ->
-            if ExecutionCache.mem seen ex then (
-              Logs.debug (fun m -> m "Deduplicated execution");
-              None
-            )
+            if ExecutionCache.mem seen ex then None
             else begin
               ExecutionCache.add seen ex ();
               Some ex

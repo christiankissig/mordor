@@ -4,6 +4,7 @@
     programs as symbolic event structures. It supports various loop semantics
     including step-counter based unrolling and symbolic loop handling. *)
 
+open Ast
 open Context
 open Events
 open Eventstructures
@@ -76,6 +77,9 @@ type events_t = {
       (** Mapping from event labels to thread indices. *)
   loop_indices : (int, int list) Hashtbl.t;
       (** Mapping from event labels to loop indices. *)
+  loop_conditions : (int, expr) Hashtbl.t;
+      (** Mapping from loop indices to their loop conditions. Used with symbolic
+          loop semantics. *)
   source_spans : (int, source_span) Hashtbl.t;
       (** Mapping from event labels to source code spans. *)
   globals : string USet.t;  (** Set of global variable names. *)
@@ -93,6 +97,7 @@ let create_events defacto =
     source_spans = Hashtbl.create 256;
     thread_index = Hashtbl.create 256;
     loop_indices = Hashtbl.create 256;
+    loop_conditions = Hashtbl.create 256;
     globals = USet.create ();
     label = 0;
   }
@@ -671,6 +676,7 @@ let make_generic_terminal_structure ~add_event env phi events =
       events = events.events;
       origin = events.origin;
       loop_indices = events.loop_indices;
+      loop_conditions = events.loop_conditions;
       thread_index = events.thread_index;
       p = events.env_by_evt;
       constraints;
@@ -779,12 +785,7 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
             interpret_generic ~stmt_semantics ~defacto ~constraints stmts
           in
             Logs.debug (fun m ->
-                m
-                  "Completed program interpretation with symbolic\n\
-                  \        event structure: \n\
-                   %s\n\
-                   and events\n\
-                   %s"
+                m "Completed program interpretation: \n%s\nand events\n%s"
                   (show_symbolic_event_structure structure)
                   (Hashtbl.fold
                      (fun label evt acc ->
@@ -1101,27 +1102,79 @@ end = struct
     | node :: rest -> (
         match node.stmt with
         | Do { body; condition } ->
-            let after_val =
-              Expr.evaluate
-                ~env:(fun v -> Hashtbl.find_opt env v)
-                (Expr.inverse condition)
-            in
-            let final_structure ~add_event env phi _events =
-              interpret_statements_symbolic_loop ~final_structure ~add_event
-                rest env (after_val :: phi) events
-            in
+            (* Recursive interpretation in the first unravelling of the loop
+               body before the while-loop continuation. final_structure here
+               must not be the final_structure below as a the while
+               continuation. *)
             let recurse nodes env phi events =
               interpret_statements_symbolic_loop ~final_structure ~add_event
                 nodes env phi events
             in
-              interpret_statements_open ~recurse ~final_structure ~add_event
-                body env phi events
+
+            let final_structure ~add_event env phi events =
+              (* this block calculates the semantics of the do-while loop with a
+                 single body unravelling as if it was a while loop. Doing the
+                 unravelling syntactically doesn't work because the branching
+                 events in the while statement of the do-while loop must
+                 evaluate in this loop iteration for the purpose of tracking
+                 loop conditions. *)
+              let continue_val =
+                Expr.evaluate ~env:(fun v -> Hashtbl.find_opt env v) condition
+              in
+              let after_val =
+                Expr.evaluate
+                  ~env:(fun v -> Hashtbl.find_opt env v)
+                  (Expr.inverse condition)
+              in
+                let* after_structure =
+                  interpret_statements_symbolic_loop ~final_structure ~add_event
+                    rest env (after_val :: phi) events
+                in
+                let final_structure ~add_event:_ _env _phi _events =
+                  Lwt.return after_structure
+                in
+                let recurse nodes env phi events =
+                  interpret_statements_symbolic_loop ~final_structure ~add_event
+                    nodes env phi events
+                in
+                let loop_index =
+                  node.annotations.loop_ctx
+                  |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
+                in
+                  Option.iter
+                    (fun lid ->
+                      Hashtbl.replace events.loop_conditions lid continue_val
+                      |> ignore
+                    )
+                    loop_index;
+                  interpret_statements_open ~recurse ~final_structure ~add_event
+                    body env phi events
+            in
+
+            (* Interpret the first unravelling of the loop body before the
+               while-loop continuation. *)
+            interpret_statements_open ~recurse ~final_structure ~add_event body
+              env phi events
         | While { condition; body } ->
+            let continue_val =
+              Expr.evaluate ~env:(fun v -> Hashtbl.find_opt env v) condition
+            in
             let after_val =
               Expr.evaluate
                 ~env:(fun v -> Hashtbl.find_opt env v)
                 (Expr.inverse condition)
             in
+            let loop_index =
+              node.annotations.loop_ctx
+              |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
+            in
+              Option.iter
+                (fun lid ->
+                  Hashtbl.replace events.loop_conditions lid continue_val
+                  |> ignore
+                )
+                loop_index;
+
               let* after_structure =
                 interpret_statements_symbolic_loop ~final_structure ~add_event
                   rest env (after_val :: phi) events

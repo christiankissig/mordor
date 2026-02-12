@@ -169,6 +169,10 @@ let pp_rmw = pp_ternary_relation pp_int pp_expr pp_int
 let pp_loop_indices fmt loop_indices =
   pp_hashtbl pp_print_int pp_int_list fmt loop_indices
 
+(** Pretty printer for loop_conditions hashtable *)
+let pp_loop_conditions fmt loop_conditions =
+  pp_hashtbl pp_int pp_expr fmt loop_conditions
+
 (** Pretty printer for thread_index hashtable *)
 let pp_thread_index fmt thread_index =
   pp_hashtbl pp_print_int pp_print_int fmt thread_index
@@ -196,6 +200,8 @@ type symbolic_event_structure = {
       (* Origin mapping for symbols *)
   loop_indices : (int, int list) Hashtbl.t; [@printer pp_loop_indices]
       (* Mapping from events to their loop indices *)
+  loop_conditions : (int, expr) Hashtbl.t; [@printer pp_loop_conditions]
+      (* Mapping from events to their loop conditions *)
   thread_index : (int, int) Hashtbl.t; [@printer pp_thread_index]
   (* Mapping from events to their thread indices *)
   (* cached event filters *)

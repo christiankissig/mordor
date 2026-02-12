@@ -48,6 +48,7 @@ type output_mode =
   | Html  (** HTML format for interactive visualizations *)
   | Dot  (** GraphViz DOT format for graph rendering *)
   | Isa  (** Isabelle/HOL format for theorem prover *)
+[@@deriving show]
 
 (** Loop interpretation semantics mode.
 
@@ -77,6 +78,7 @@ type loop_semantics =
   | FiniteStepCounter  (** Global iteration bound for all loops *)
   | StepCounterPerLoop  (** Per-loop iteration bounds *)
   | Generic  (** Default interpretation strategy *)
+[@@deriving show]
 
 (** Parse output mode string from command line.
 
@@ -118,6 +120,7 @@ type options = {
   mutable step_counter : int;
       (** Number of loop iterations for bounded analysis *)
 }
+[@@deriving show]
 
 (** Default configuration options.
 

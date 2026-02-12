@@ -26,6 +26,7 @@ module Config = struct
     | AllLitmusTests of { dir : string; recursive : bool }
         (** Run all .lit files in a directory *)
     | Single of string  (** Run a single specified file *)
+  [@@deriving show]
 
   (** Available commands for the Mordor tool.
 
@@ -46,6 +47,7 @@ module Config = struct
     | Futures
         (** Compute futures: calculate possible future states (requires single
             file) *)
+  [@@deriving show]
 
   (** Complete configuration for a Mordor run.
 
@@ -59,6 +61,7 @@ module Config = struct
     step_counter : int option;  (** Loop iteration bound (if applicable) *)
     options : Context.options;  (** Detailed analysis options *)
   }
+  [@@deriving show]
 end
 
 (** {1 Example Programs} *)
@@ -301,6 +304,10 @@ module Pipeline = struct
       @param config Configuration
       @return Unit wrapped in Lwt *)
   let run_single name program config =
+    Logs.info (fun m ->
+        m "Running single program %s with options\n%s" name
+          (show_options config.Config.options)
+    );
     Display.print_program_header name program;
     let context = make_program_context name program config in
       Lwt.return context
