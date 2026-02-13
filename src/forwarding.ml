@@ -421,41 +421,31 @@ module EventStructureContext = struct
       @param po The program order relation.
       @return The computed synchronization PPO template. *)
   let compute_ppo_sync structure e po =
-    let e_squared = URelation.cross e e in
+    Printf.printf "Computing synchronization PPO template...\ne=%s\n po=%s\n"
+      (String.concat ", " (List.map string_of_int (USet.values e)))
+      (String.concat ", "
+         (List.map
+            (fun (f, t) -> Printf.sprintf "(%d, %d)" f t)
+            (USet.values po)
+         )
+      );
     let r = USet.intersection structure.read_events e in
     let w = USet.intersection structure.write_events e in
     let f = USet.intersection structure.fence_events e in
 
-    let w_rel =
-      USet.union (filter_order structure w Release) (filter_order structure w SC)
-    in
-    let r_acq =
-      USet.union (filter_order structure r Acquire) (filter_order structure r SC)
-    in
+    let w_rel = filter_order structure w Release in
+    let w_sc = filter_order structure w SC in
+    let r_acq = filter_order structure r Acquire in
+    let r_sc = filter_order structure r SC in
     let f_rel = filter_order structure f Release in
     let f_acq = filter_order structure f Acquire in
     let f_sc = filter_order structure f SC in
 
-    (* Synchronization ppo *)
-    let w_rel_sq = URelation.cross w_rel w_rel in
-    let r_acq_sq = URelation.cross r_acq r_acq in
-    let f_sc_sq = URelation.cross f_sc f_sc in
-    let f_rel_sq = URelation.cross f_rel f_rel in
-    let f_acq_sq = URelation.cross f_acq f_acq in
-    let e_minus_r = USet.set_minus e r in
-    let e_minus_w = USet.set_minus e w in
+    let e_acq = USet.union r_acq f_sc |> USet.union f_acq |> USet.union f_sc in
+    let e_rel = USet.union w_rel w_sc |> USet.union f_rel |> USet.union f_sc in
 
-    URelation.compose [ e_squared; w_rel_sq ]
-    |> USet.inplace_union (URelation.compose [ r_acq_sq; e_squared ])
-    |> USet.inplace_union (URelation.compose [ e_squared; f_sc_sq; e_squared ])
-    |> USet.inplace_union
-         (URelation.compose
-            [ e_squared; f_rel_sq; URelation.cross e_minus_r e_minus_r ]
-         )
-    |> USet.inplace_union
-         (URelation.compose
-            [ URelation.cross e_minus_w e_minus_w; f_acq_sq; e_squared ]
-         )
+    URelation.cross e_acq e
+    |> USet.inplace_union (URelation.cross e e_rel)
     |> USet.intersection po
 
   (** [compute_ppo_loc_eq structure e po] computes the location equality PPO
@@ -566,6 +556,13 @@ module EventStructureContext = struct
       USet.inplace_union es_ctx.ppo.ppo_sync
         (compute_ppo_sync es_ctx.structure e po_nf)
       |> ignore;
+      Printf.printf "Computed synchronization PPO template: %s\n"
+        (String.concat ", "
+           (List.map
+              (fun (e1, e2) -> Printf.sprintf "(%d, %d)" e1 e2)
+              (USet.values es_ctx.ppo.ppo_sync)
+           )
+        );
 
       USet.clear es_ctx.ppo.ppo_iter_sync |> ignore;
       USet.inplace_union es_ctx.ppo.ppo_iter_sync
@@ -584,11 +581,12 @@ module EventStructureContext = struct
           USet.inplace_union es_ctx.ppo.ppo_iter_loc_eq ppo_iter_loc_eq
           |> ignore;
 
-        (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
+          (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
            computed in that complement for each execution later on. *)
-        USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
-USet.set_minus po_nf es_ctx.ppo.ppo_loc_eq
-          |> USet.inplace_union es_ctx.ppo.ppo_loc_base |> ignore;
+          USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
+          USet.set_minus po_nf es_ctx.ppo.ppo_loc_eq
+          |> USet.inplace_union es_ctx.ppo.ppo_loc_base
+          |> ignore;
 
           USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
           USet.set_minus po_nf ppo_iter_loc_eq
@@ -767,7 +765,7 @@ module ForwardingContext = struct
 
       @param es_ctx The event structure context.
       @return The computed RMW-induced PPO orderings. *)
-  let compute_ppo_rmw es_ctx predicates =
+  let compute_ppo_rmw (es_ctx : EventStructureContext.t) predicates =
     let* rmw_filtered =
       USet.async_filter
         (fun (er, expr, ew) ->
@@ -775,7 +773,7 @@ module ForwardingContext = struct
         )
         es_ctx.structure.rmw
     in
-    let rmw_inv = USet.map (fun (er, _, ew) -> (ew, er)) rmw_filtered in
+    let rmw_inv = USet.map (fun (er, _, ew) -> (er, ew)) rmw_filtered in
     let rmw_ppo =
       USet.union
         (URelation.compose [ es_ctx.ppo.ppo_sync; rmw_inv ])
@@ -816,8 +814,8 @@ module ForwardingContext = struct
                   )
                 | None -> es_ctx.ppo.ppo_loc_base
               in
-                (* Filter with alias analysis using solver - check if locations are
-                   equal given predicates and psi of forwarding context *)
+                (* Filter with alias analysis using solver - check if locations
+                   are equal given predicates and psi of forwarding context *)
                 USet.async_filter
                   (fun (e1, e2) ->
                     let loc1 = Events.get_loc es_ctx.structure e1 in

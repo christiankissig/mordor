@@ -974,6 +974,128 @@ let test_ppo_with_empty_structure () =
      Lwt.return_unit
     )
 
+let test_ppo_rmw_read_dont_modify () =
+  Lwt_main.run
+    (let events = Hashtbl.create 16 in
+
+     (* Event 1: Read with alpha *)
+     Hashtbl.add events 1
+       {
+         label = 1;
+         typ = Read;
+         id = Some (VNumber (Z.of_int 1));
+         loc = Some (ENum (Z.of_int 1));
+         rval = Some (VSymbol "alpha");
+         wval = None;
+         cond = None;
+         rmod = Relaxed;
+         wmod = Relaxed;
+         fmod = Relaxed;
+         volatile = false;
+         strong = None;
+         is_rdmw = false;
+       };
+
+     (* Event 2: Acquiring read with beta *)
+     Hashtbl.add events 2
+       {
+         label = 2;
+         typ = Read;
+         id = Some (VNumber (Z.of_int 2));
+         loc = Some (ENum (Z.of_int 2));
+         rval = Some (VSymbol "beta");
+         wval = None;
+         cond = None;
+         rmod = Acquire;
+         wmod = Relaxed;
+         fmod = Relaxed;
+         volatile = false;
+         strong = None;
+         is_rdmw = false;
+       };
+
+     (* Event 3: Releasing write with beta + 0, read-dont-modify *)
+     Hashtbl.add events 3
+       {
+         label = 3;
+         typ = Write;
+         id = Some (VNumber (Z.of_int 3));
+         loc = Some (ENum (Z.of_int 3));
+         rval = None;
+         wval = Some (EBinOp (ESymbol "beta", "+", ENum Z.zero));
+         cond = None;
+         rmod = Relaxed;
+         wmod = Release;
+         fmod = Relaxed;
+         volatile = false;
+         strong = None;
+         is_rdmw = true;
+       };
+
+     (* Event 4: Read with gamma *)
+     Hashtbl.add events 4
+       {
+         label = 4;
+         typ = Read;
+         id = Some (VNumber (Z.of_int 4));
+         loc = Some (ENum (Z.of_int 4));
+         rval = Some (VSymbol "gamma");
+         wval = None;
+         cond = None;
+         rmod = Relaxed;
+         wmod = Relaxed;
+         fmod = Relaxed;
+         volatile = false;
+         strong = None;
+         is_rdmw = false;
+       };
+
+     (* Create event set *)
+     let e_set = USet.create () in
+       List.iter (fun i -> ignore (USet.add e_set i)) [ 1; 2; 3; 4 ];
+
+       (* Create program order: path through all events *)
+       let po =
+         USet.of_list [ (1, 2); (2, 3); (3, 4) ] |> URelation.transitive_closure
+       in
+
+       (* Create RMW edge from write 3 to read 2 with predicate true *)
+       let rmw = USet.create () in
+         ignore (USet.add rmw (3, EBoolean true, 2));
+
+         let read_events = USet.of_list [ 1; 2; 4 ] in
+         let write_events = USet.of_list [ 3 ] in
+
+         let structure =
+           {
+             (SymbolicEventStructure.create ()) with
+             e = e_set;
+             events;
+             po;
+             rmw;
+             read_events;
+             write_events;
+           }
+         in
+
+         let fwd_es_ctx = EventStructureContext.create structure in
+           let* () = EventStructureContext.init fwd_es_ctx in
+
+           (* Create context - write 3 is justified by read 2 only *)
+           let ctx = ForwardingContext.create fwd_es_ctx () in
+
+           let* ppo = ForwardingContext.ppo ctx [] in
+
+           (* Verify PPO relations: 1,2 and 3,4 should be in PPO *)
+           let has_1_2 = USet.mem ppo (1, 2) in
+           let has_3_4 = USet.mem ppo (3, 4) in
+
+           Alcotest.(check bool) "PPO contains (1,2)" true has_1_2;
+           Alcotest.(check bool) "PPO contains (3,4)" true has_3_4;
+
+           Lwt.return_unit
+    )
+
 (** Test to_string *)
 let test_to_string_empty () =
   let structure = TestUtil.make_structure () in
@@ -1088,6 +1210,8 @@ let suite =
           test_all_ppo_functions_with_same_context;
         test_case "ppo with empty structure" `Quick
           test_ppo_with_empty_structure;
+        test_case "ppo rmw read-dont-modify" `Quick
+          test_ppo_rmw_read_dont_modify;
         (* Utility tests *)
         test_case "to_string empty" `Quick test_to_string_empty;
         test_case "to_string with edges" `Quick test_to_string_with_edges;
