@@ -1689,6 +1689,25 @@ let generate_executions ?(include_rf = true)
 
 (** Calculate dependencies and justifications *)
 
+(** [calculate_dependencies ?include_rf structure final_justs fwd_es_ctx ~exhaustive
+     ~restrictions] is the main function to calculate dependencies and generate
+     executions.
+
+    This function orchestrates the entire execution generation process by:
+      1. Computing constraints for disjointness of memory allocations
+      2. Generating executions
+      3. Applying coherence restrictions
+
+    The dependency relations are generated as part of the executions.
+
+    @param include_rf Whether to compute read-from relations (default: true).
+    @param structure The symbolic event structure.
+    @param final_justs Set of justifications from elaboration.
+    @param fwd_es_ctx Forwarding event structure context for PPO computation.
+    @param exhaustive Whether to exhaustively explore all combinations (default:
+    false).
+    @param restrictions Coherence restrictions to check.
+    @return Promise of list of valid coherent executions. *)
 let calculate_dependencies ?(include_rf = true)
     (structure : symbolic_event_structure) (final_justs : justification uset)
     (fwd_es_ctx : Forwarding.event_structure_context) ~(exhaustive : bool)
@@ -1700,17 +1719,9 @@ let calculate_dependencies ?(include_rf = true)
   (* 1. Extract static/global locations from all events *)
   let static_locs =
     USet.values structure.e
-    |> List.filter_map (fun eid ->
-        match Hashtbl.find_opt structure.events eid with
-        | Some evt -> (
-            (* Get location from event if it exists and is a variable *)
-            match Events.get_loc structure eid with
-            | Some loc when Expr.is_var loc -> Some loc
-            | _ -> None
-          )
-        | None -> None
-    )
-    |> List.sort_uniq compare (* Remove duplicates *)
+    |> List.filter_map (Events.get_loc structure)
+    |> List.filter (Expr.is_var)
+    |> List.sort_uniq compare (* Remove duplicates and sort *)
   in
 
   (* 2. Extract malloc locations *)
@@ -1755,6 +1766,12 @@ let calculate_dependencies ?(include_rf = true)
 
   Lwt.return executions
 
+(** [step_calculate_dependencies lwt_ctx] is the main entry point for the
+    dependency calculation step. It checks for necessary data, sets up coherence
+    restrictions, and calls [calculate_dependencies] to produce executions.
+
+    @param lwt_ctx Promise of current Mordor context.
+    @return Promise of updated Mordor context with executions. *)
 let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
     =
   let* ctx = lwt_ctx in

@@ -359,7 +359,6 @@ let dslwb structure w r =
               (* w2 po after w, thus in between w and r *)
             then
               (* w2 potentially shadows w *)
-              (* TODO use semantic equivalence relative to valres *)
               match (get_loc structure w, get_loc structure w2) with
               | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
               | _ -> Lwt.return false

@@ -70,14 +70,7 @@ module EventStructureViz = struct
       - [DP preds]: Data Dependency with predicates
       - [PPO preds]: Preserved Program Order with predicates
       - [RF preds]: Read-From relationship with predicates *)
-  type edge_label =
-    | PO
-    | RMW
-    | LO
-    | FJ
-    | DP of string
-    | PPO of string
-    | RF of string
+  type edge_label = PO | RMW | LO | FJ | DP | PPO | RF
 
   (** {3 Edge Module}
 
@@ -284,62 +277,30 @@ module EventStructureViz = struct
     | None -> USet.create ()
     | Some execs ->
         (* Collect edges with predicates in a hash table *)
-        let edge_preds_table = Hashtbl.create 100 in
+        let result_edges = USet.create () in
 
         (* Process each execution *)
         USet.iter
           (fun exec ->
-            let preds = exec.ex_p in
-            let filter_preds src =
-              filter_predicates_for_event structure src preds
-            in
-
             (* Helper to process a relation type *)
             let process_relation rel_type edges =
               USet.iter
                 (fun (src, dst) ->
-                  let clause = filter_preds src in
                   let key = (src, dst, rel_type) in
-                  let existing =
-                    Hashtbl.find_opt edge_preds_table key
-                    |> Option.value ~default:[]
-                  in
-                    Hashtbl.replace edge_preds_table key (clause :: existing)
+                    USet.add result_edges key |> ignore
                 )
                 edges
             in
 
             (* Process each relation type with transitive reduction *)
-            process_relation `DP (URelation.transitive_reduction exec.dp);
-            process_relation `PPO (URelation.transitive_reduction exec.ppo);
-            process_relation `RF (URelation.transitive_reduction exec.rf);
-            process_relation `RMW (URelation.transitive_reduction exec.rmw)
+            process_relation DP (URelation.transitive_reduction exec.dp);
+            process_relation PPO (URelation.transitive_reduction exec.ppo);
+            process_relation RF (URelation.transitive_reduction exec.rf);
+            process_relation RMW (URelation.transitive_reduction exec.rmw)
           )
           execs;
 
-        (* Simplify predicates and create final edges *)
-        let result_edges = ref (USet.create ()) in
-          Hashtbl.iter
-            (fun (src, dst, rel_type) dnf_clauses ->
-              let simplified_dnf = Expr.simplify_dnf dnf_clauses in
-
-              List.iter
-                (fun clause ->
-                  let preds_str = format_predicate_string clause in
-                  let edge =
-                    match rel_type with
-                    | `DP -> (src, dst, DP preds_str)
-                    | `PPO -> (src, dst, PPO preds_str)
-                    | `RF -> (src, dst, RF preds_str)
-                    | `RMW -> (src, dst, RMW)
-                  in
-                    result_edges := USet.add !result_edges edge
-                )
-                simplified_dnf
-            )
-            edge_preds_table;
-
-          !result_edges
+        result_edges
 
   (** {2 Main Graph Construction}
 
@@ -484,9 +445,9 @@ module EventStructureViz = struct
           (URelation.transitive_reduction relation)
       in
 
-      add_dep_edges exec.dp (fun p -> DP p);
-      add_dep_edges exec.ppo (fun p -> PPO p);
-      add_dep_edges exec.rf (fun p -> RF p);
+      add_dep_edges exec.dp (fun _ -> DP);
+      add_dep_edges exec.ppo (fun _ -> PPO);
+      add_dep_edges exec.rf (fun _ -> RF);
       add_dep_edges exec.rmw (fun _ -> RMW);
 
       g
@@ -632,9 +593,9 @@ module EventStructureViz = struct
         | RMW -> ("rmw", 0xFF0000, `Solid, 2.0)
         | LO -> ("lo", 0x0000FF, `Dashed, 1.0)
         | FJ -> ("fj", 0x00FF00, `Dotted, 1.0)
-        | DP preds -> ("dp: " ^ preds, 0xFFA500, `Bold, 1.5)
-        | PPO preds -> ("ppo: " ^ preds, 0x800080, `Bold, 1.5)
-        | RF preds -> ("rf: " ^ preds, 0xA52A2A, `Bold, 1.5)
+        | DP -> ("dp", 0xFFA500, `Bold, 1.5)
+        | PPO -> ("ppo", 0x800080, `Bold, 1.5)
+        | RF -> ("rf", 0xA52A2A, `Bold, 1.5)
       in
         [ `Label label_txt; `Color color; `Style style; `Penwidth penwidth ]
 
@@ -733,9 +694,9 @@ module EventStructureViz = struct
     | RMW -> "rmw"
     | LO -> "lo"
     | FJ -> "fj"
-    | DP preds -> if preds = "" then "dp" else "dp - " ^ preds
-    | PPO preds -> if preds = "" then "ppo" else "ppo - " ^ preds
-    | RF preds -> if preds = "" then "rf" else "rf - " ^ preds
+    | DP -> "dp"
+    | PPO -> "ppo"
+    | RF -> "rf"
 
   (** [sort_edges_po_first edges] sorts edges to place program order edges
       first.
@@ -981,7 +942,7 @@ let send_single_execution_graph ~send_data ~build_exec_graph checked_executions
       {
         type_ = "execution";
         graph = graph_obj;
-        index = Some (i + 1);
+        index = Some exec.id;
         preds = Some exec_preds_string;
         is_valid;
         undefined_behaviour;
