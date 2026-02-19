@@ -540,9 +540,10 @@ class GraphVisualizer {
         assertionItems.forEach(item => {
             item.addEventListener('click', () => {
                 const execId = parseInt(item.getAttribute('data-exec-id'));
-                // Navigate to the execution (exec_id + 1 since index 0 is event structure)
-                if (execId >= 0 && execId < this.graphs.length) {
-                    this.navigateTo(execId);
+                // Find the carousel index whose data.index matches the execution id
+                const carouselIndex = this.data.findIndex(d => d.index > 0 && d.index === execId);
+                if (carouselIndex >= 0) {
+                    this.navigateTo(carouselIndex);
                 }
             });
             
