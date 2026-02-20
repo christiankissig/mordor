@@ -1689,14 +1689,13 @@ let generate_executions ?(include_rf = true)
 
 (** Calculate dependencies and justifications *)
 
-(** [calculate_dependencies ?include_rf structure final_justs fwd_es_ctx ~exhaustive
-     ~restrictions] is the main function to calculate dependencies and generate
-     executions.
+(** [calculate_dependencies ?include_rf structure final_justs fwd_es_ctx
+     ~exhaustive ~restrictions] is the main function to calculate dependencies
+    and generate executions.
 
-    This function orchestrates the entire execution generation process by:
-      1. Computing constraints for disjointness of memory allocations
-      2. Generating executions
-      3. Applying coherence restrictions
+    This function orchestrates the entire execution generation process by: 1.
+    Computing constraints for disjointness of memory allocations 2. Generating
+    executions 3. Applying coherence restrictions
 
     The dependency relations are generated as part of the executions.
 
@@ -1704,8 +1703,8 @@ let generate_executions ?(include_rf = true)
     @param structure The symbolic event structure.
     @param final_justs Set of justifications from elaboration.
     @param fwd_es_ctx Forwarding event structure context for PPO computation.
-    @param exhaustive Whether to exhaustively explore all combinations (default:
-    false).
+    @param exhaustive
+      Whether to exhaustively explore all combinations (default: false).
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
 let calculate_dependencies ?(include_rf = true)
@@ -1720,7 +1719,7 @@ let calculate_dependencies ?(include_rf = true)
   let static_locs =
     USet.values structure.e
     |> List.filter_map (Events.get_loc structure)
-    |> List.filter (Expr.is_var)
+    |> List.filter Expr.is_var
     |> List.sort_uniq compare (* Remove duplicates and sort *)
   in
 

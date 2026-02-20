@@ -226,9 +226,9 @@ let test_imm_coherent_simple () =
     }
   in
   let loc_restrict x = x in
-  let cache = IMM.build_cache execution structure events loc_restrict in
+  let cache = IMM.build_cache execution structure loc_restrict in
   let co = uset_of_list [ (1, 2) ] in
-  let result = IMM.check_coherence co cache in
+  let result = IMM.check_coherence cache co in
     check bool "simple coherence passes" true result;
     ()
 
@@ -263,9 +263,9 @@ let test_rc11_coherent_simple () =
     }
   in
   let loc_restrict x = x in
-  let cache = RC11Test.build_cache execution structure events loc_restrict in
+  let cache = RC11Test.build_cache execution structure loc_restrict in
   let co = USet.create () in
-  let result = RC11Test.check_coherence co cache in
+  let result = RC11Test.check_coherence cache co in
     check bool "simple RC11 coherence passes" true result;
     ()
 
@@ -300,9 +300,9 @@ let test_rc11c_coherent_simple () =
     }
   in
   let loc_restrict x = x in
-  let cache = RC11CTest.build_cache execution structure events loc_restrict in
+  let cache = RC11CTest.build_cache execution structure loc_restrict in
   let co = USet.create () in
-  let result = RC11CTest.check_coherence co cache in
+  let result = RC11CTest.check_coherence cache co in
     check bool "simple RC11c coherence with consume passes" true result;
     ()
 
@@ -343,10 +343,10 @@ let test_imm_coherent_rmw () =
     }
   in
   let loc_restrict x = x in
-  let cache = IMM.build_cache execution structure events loc_restrict in
+  let cache = IMM.build_cache execution structure loc_restrict in
   (* co ordering that violates atomicity: 0 -> 3 -> 2 *)
   let co = uset_of_list [ (0, 3); (3, 2) ] in
-  let result = IMM.check_coherence co cache in
+  let result = IMM.check_coherence cache co in
     check bool "RMW atomicity violated" false result;
     (* Should fail *)
     ()
@@ -378,24 +378,22 @@ let test_cache_types () =
   let loc_restrict x = x in
 
   (* Test IMM cache creation - just verify it doesn't raise *)
-  let _imm_cache = IMM.build_cache execution structure events loc_restrict in
+  let _imm_cache = IMM.build_cache execution structure loc_restrict in
     check bool "IMM cache created" true true;
 
     (* Test RC11 cache creation *)
-    let _rc11_cache =
-      RC11Test.build_cache execution structure events loc_restrict
-    in
+    let _rc11_cache = RC11Test.build_cache execution structure loc_restrict in
       check bool "RC11 cache created" true true;
 
       (* Test RC11c cache creation *)
       let _rc11c_cache =
-        RC11CTest.build_cache execution structure events loc_restrict
+        RC11CTest.build_cache execution structure loc_restrict
       in
         check bool "RC11c cache created" true true;
 
         (* Test Undefined cache creation *)
         let _undefined_cache =
-          Undefined.build_cache execution structure events loc_restrict
+          Undefined.build_cache execution structure loc_restrict
         in
           check bool "Undefined cache created" true true;
           ()

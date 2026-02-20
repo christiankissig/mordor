@@ -460,6 +460,7 @@ let model_options_table : (string, model_options) Hashtbl.t =
     Hashtbl.add tbl "imm" { coherent = Some "imm"; ubopt = false };
     Hashtbl.add tbl "rc11ub" { coherent = Some "rc11"; ubopt = true };
     Hashtbl.add tbl "immub" { coherent = Some "imm"; ubopt = true };
+    Hashtbl.add tbl "smrd" { coherent = Some "smrd"; ubopt = false };
     Hashtbl.add tbl "ub11" { coherent = None; ubopt = true };
     Hashtbl.add tbl "_" { coherent = None; ubopt = false };
     tbl
@@ -470,6 +471,8 @@ let model_options_table : (string, model_options) Hashtbl.t =
     @return Model options if found *)
 let get_model_options name =
   Hashtbl.find_opt model_options_table (String.lowercase_ascii name)
+
+(* TODO not used *)
 
 (** List of all supported memory model names. *)
 let model_names =
@@ -489,6 +492,7 @@ let model_names =
     "RC11UB";
     "IMMUB";
     "UB11";
+    "SMRD";
     "_";
   ]
 

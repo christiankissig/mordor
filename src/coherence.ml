@@ -17,12 +17,11 @@ module type MEMORY_MODEL = sig
   val build_cache :
     symbolic_execution ->
     symbolic_event_structure ->
-    (int, event) Hashtbl.t ->
     ((int * int) uset -> (int * int) uset) ->
     cache
 
-  val check_coherence : (int * int) uset -> cache -> bool
-  val check_thin_air : symbolic_execution -> cache -> bool
+  val check_coherence : cache -> (int * int) uset -> bool
+  val check_thin_air : cache -> symbolic_execution -> bool
 
   val compute_dependencies :
     symbolic_execution ->
@@ -83,6 +82,27 @@ module ModelUtils = struct
   (* let build_synchronizes_with events e po rf release loc_restrict = ... *)
 end
 
+(** Coherence checks module *)
+module CoherenceChecks = struct
+  (** Atomicity check: rmw ∩ (rf⁻¹;co) = ∅ *)
+  let rmw_atomicity ~rf ~rfi ~rmw ~co () =
+    (* compose twice with co to establish the intermediate write witnessing the violation *)
+    URelation.compose [ rfi; co; co ] |> USet.intersection rmw |> USet.is_empty
+
+  let thin_air_check ~hb ~rf () = URelation.acyclic (USet.union hb rf)
+
+  (** Coherence axiom check: hb;eco ∪ hb is irreflexive *)
+  let coherence_axiom ?eco ~rf ~rfi ~co ~hb () =
+    let rb = URelation.compose [ rfi; co ] in
+    (* eco = (rf ∪ co ∪ rb)⁺ *)
+    let eco =
+      if Option.is_some eco then Option.get eco
+      else USet.union rf co |> USet.union rb |> URelation.transitive_closure
+    in
+      (* Coherence: hb;eco ∪ hb is irreflexive *)
+      URelation.is_irreflexive (URelation.compose [ hb; eco ])
+end
+
 (** {1 Memory Model Implementations} *)
 
 module IMM : MEMORY_MODEL = struct
@@ -106,14 +126,15 @@ module IMM : MEMORY_MODEL = struct
 
   (** IMM coherence cache builder *)
   let build_cache (execution : symbolic_execution)
-      (structure : symbolic_event_structure) (events : (int, event) Hashtbl.t)
+      (structure : symbolic_event_structure)
       (loc_restrict : (int * int) uset -> (int * int) uset) : cache =
     let landmark = Landmark.register "IMM.build_cache" in
       Landmark.enter landmark;
 
       let ({ e; rf; rmw; _ } : symbolic_execution) = execution in
-      let ({ po; restrict; _ } : symbolic_event_structure) = structure in
-      let _E = e in
+      let ({ events; po; restrict; _ } : symbolic_event_structure) =
+        structure
+      in
 
       let rf = USet.clone rf in
       let po = USet.clone po in
@@ -122,20 +143,20 @@ module IMM : MEMORY_MODEL = struct
       let thread_internal_restriction x = USet.intersection x po in
       let thread_external_restriction x = USet.set_minus x po in
 
-      let w = ModelUtils.match_events events _E Write None None None in
+      let w = ModelUtils.match_events events e Write None None None in
 
       (* rs = [W];(po ∩ loc);[W] ∪ [W];([po ∩ loc]?;rf;rmw)⁺? *)
       let rs =
         let part1 = URelation.compose [ w; loc_restrict po; w ] in
         let inner =
           URelation.compose
-            [ URelation.reflexive_closure _E (loc_restrict po); rf; rmw ]
+            [ URelation.reflexive_closure e (loc_restrict po); rf; rmw ]
         in
         let part2 =
           URelation.compose
             [
               w;
-              URelation.reflexive_closure _E (URelation.transitive_closure inner);
+              URelation.reflexive_closure e (URelation.transitive_closure inner);
             ]
         in
           USet.inplace_union part1 part2
@@ -144,12 +165,12 @@ module IMM : MEMORY_MODEL = struct
       (* release = ([W_rel] ∪ [F_rel];po);rs *)
       let release =
         let w_rel =
-          ModelUtils.match_events events _E Write (Some Release) None None
+          ModelUtils.match_events events e Write (Some Release) None None
         in
         let f_rel_po =
           URelation.compose
             [
-              ModelUtils.match_events events _E Fence (Some Release) (Some ">")
+              ModelUtils.match_events events e Fence (Some Release) (Some ">")
                 None;
               po;
             ]
@@ -163,17 +184,17 @@ module IMM : MEMORY_MODEL = struct
         let rfe = thread_external_restriction rf in
         let middle =
           URelation.compose
-            [ URelation.reflexive_closure _E (loc_restrict po); rfe ]
+            [ URelation.reflexive_closure e (loc_restrict po); rfe ]
           |> USet.union rfi
         in
         let r_acq =
-          ModelUtils.match_events events _E Read (Some Acquire) None None
+          ModelUtils.match_events events e Read (Some Acquire) None None
         in
         let po_f_acq =
           URelation.compose
             [
               po;
-              ModelUtils.match_events events _E Fence (Some Acquire) (Some ">")
+              ModelUtils.match_events events e Fence (Some Acquire) (Some ">")
                 None;
             ]
         in
@@ -189,30 +210,29 @@ module IMM : MEMORY_MODEL = struct
           URelation.compose
             [
               po;
-              ModelUtils.match_events events _E Write (Some Release) None None;
+              ModelUtils.match_events events e Write (Some Release) None None;
             ]
         in
         let p2 =
           URelation.compose
             [
-              ModelUtils.match_events events _E Read (Some Acquire) None None;
-              po;
+              ModelUtils.match_events events e Read (Some Acquire) None None; po;
             ]
         in
         let p3 =
           URelation.compose
-            [ po; ModelUtils.match_events events _E Fence None None None ]
+            [ po; ModelUtils.match_events events e Fence None None None ]
         in
         let p4 =
           URelation.compose
-            [ ModelUtils.match_events events _E Fence None None None; po ]
+            [ ModelUtils.match_events events e Fence None None None; po ]
         in
         let p5 =
           URelation.compose
             [
-              ModelUtils.match_events events _E Write (Some Release) None None;
+              ModelUtils.match_events events e Write (Some Release) None None;
               loc_restrict po;
-              ModelUtils.match_events events _E Write None None None;
+              ModelUtils.match_events events e Write None None None;
             ]
         in
           USet.union p1 p2
@@ -225,8 +245,8 @@ module IMM : MEMORY_MODEL = struct
 
       (* ppo = [R];(rf ∩ ¬po ∪ deps)⁺;[W] *)
       let ppo =
-        let r = ModelUtils.match_events events _E Read None None None in
-        let w = ModelUtils.match_events events _E Write None None None in
+        let r = ModelUtils.match_events events e Read None None None in
+        let w = ModelUtils.match_events events e Write None None None in
         let middle =
           URelation.transitive_closure
             (USet.inplace_union (thread_internal_restriction rf) deps)
@@ -238,9 +258,9 @@ module IMM : MEMORY_MODEL = struct
       let strong_ =
         URelation.compose
           [
-            ModelUtils.match_events events _E Write None None (Some Strong);
+            ModelUtils.match_events events e Write None None (Some Strong);
             po;
-            ModelUtils.match_events events _E Write None None None;
+            ModelUtils.match_events events e Write None None None;
           ]
       in
 
@@ -255,20 +275,20 @@ module IMM : MEMORY_MODEL = struct
       (* psc_a = [F_sc];hb *)
       let psc_a =
         URelation.compose
-          [ ModelUtils.match_events events _E Fence (Some SC) None None; hb ]
+          [ ModelUtils.match_events events e Fence (Some SC) None None; hb ]
       in
 
       (* psc_b = hb;[F_sc] *)
       let psc_b =
         URelation.compose
-          [ hb; ModelUtils.match_events events _E Fence (Some SC) None None ]
+          [ hb; ModelUtils.match_events events e Fence (Some SC) None None ]
       in
 
       Landmark.exit landmark;
       { hb; rf; rfi = URelation.inverse rf; ar_; po; psc_a; psc_b; rmw }
 
   (** IMM coherence checker *)
-  let check_coherence (co : (int * int) uset) (cache : cache) : bool =
+  let check_coherence (cache : cache) (co : (int * int) uset) : bool =
     let { hb; rfi; po; rf; ar_; psc_a; psc_b; rmw; _ } = cache in
 
     let landmark = Landmark.register "IMM.check_coherence" in
@@ -353,7 +373,7 @@ module IMM : MEMORY_MODEL = struct
         Landmark.exit landmark;
         result
 
-  let check_thin_air execution cache = true
+  let check_thin_air _ _ = true
 
   (** IMM dependency calculation *)
   let compute_dependencies (execution : symbolic_execution)
@@ -453,14 +473,13 @@ end) : MEMORY_MODEL = struct
 
   (** RC11 coherence cache builder *)
   let build_cache (execution : symbolic_execution)
-      (structure : symbolic_event_structure) (events : (int, event) Hashtbl.t)
+      (structure : symbolic_event_structure)
       (loc_restrict : (int * int) uset -> (int * int) uset) : cache =
     let landmark = Landmark.register "RC11.build_cache" in
       Landmark.enter landmark;
 
       let ({ e; rf; rmw; _ } : symbolic_execution) = execution in
-      let ({ po; _ } : symbolic_event_structure) = structure in
-      let _E = e in
+      let ({ po; events; _ } : symbolic_event_structure) = structure in
 
       let rf = USet.clone rf in
       let rmw = USet.clone rmw in
@@ -468,9 +487,9 @@ end) : MEMORY_MODEL = struct
 
       (* rs = [W];[po ∩ loc]?;[W_rlx⁺];(rf;rmw)⁺? *)
       let rs =
-        let w = ModelUtils.match_events events _E Write None None None in
+        let w = ModelUtils.match_events events e Write None None None in
         let w_rlx =
-          ModelUtils.match_events events _E Write (Some Relaxed) (Some ">") None
+          ModelUtils.match_events events e Write (Some Relaxed) (Some ">") None
         in
         let inner =
           URelation.transitive_closure (URelation.compose [ rf; rmw ])
@@ -478,9 +497,9 @@ end) : MEMORY_MODEL = struct
           URelation.compose
             [
               w;
-              URelation.reflexive_closure _E (loc_restrict sb);
+              URelation.reflexive_closure e (loc_restrict sb);
               w_rlx;
-              URelation.reflexive_closure _E inner;
+              URelation.reflexive_closure e inner;
             ]
       in
 
@@ -489,43 +508,43 @@ end) : MEMORY_MODEL = struct
       let sw =
         let rel =
           USet.union
-            (ModelUtils.match_events events _E Read (Some Release) (Some ">")
+            (ModelUtils.match_events events e Read (Some Release) (Some ">")
                None
             )
-            (ModelUtils.match_events events _E Write (Some Release) (Some ">")
+            (ModelUtils.match_events events e Write (Some Release) (Some ">")
                None
             )
           |> USet.inplace_union
-               (ModelUtils.match_events events _E Fence (Some Release)
-                  (Some ">") None
+               (ModelUtils.match_events events e Fence (Some Release) (Some ">")
+                  None
                )
         in
         let fence_sb =
-          URelation.reflexive_closure _E
+          URelation.reflexive_closure e
             (URelation.compose
-               [ ModelUtils.match_events events _E Fence None None None; sb ]
+               [ ModelUtils.match_events events e Fence None None None; sb ]
             )
         in
         let r_rlx =
-          ModelUtils.match_events events _E Read (Some Relaxed) (Some ">") None
+          ModelUtils.match_events events e Read (Some Relaxed) (Some ">") None
         in
         let sb_fence =
-          URelation.reflexive_closure _E
+          URelation.reflexive_closure e
             (URelation.compose
-               [ sb; ModelUtils.match_events events _E Fence None None None ]
+               [ sb; ModelUtils.match_events events e Fence None None None ]
             )
         in
         let acq =
           USet.union
-            (ModelUtils.match_events events _E Read (Some Acquire) (Some ">")
+            (ModelUtils.match_events events e Read (Some Acquire) (Some ">")
                None
             )
-            (ModelUtils.match_events events _E Write (Some Acquire) (Some ">")
+            (ModelUtils.match_events events e Write (Some Acquire) (Some ">")
                None
             )
           |> USet.inplace_union
-               (ModelUtils.match_events events _E Fence (Some Acquire)
-                  (Some ">") None
+               (ModelUtils.match_events events e Fence (Some Acquire) (Some ">")
+                  None
                )
         in
           URelation.compose [ rel; fence_sb; rs; rf; r_rlx; sb_fence; acq ]
@@ -538,12 +557,12 @@ end) : MEMORY_MODEL = struct
       { sb; hb; rfi = URelation.inverse rf; rf; e; events; rmw; loc_restrict }
 
   (** Check coherence *)
-  let check_coherence (co : (int * int) uset) (cache : cache) : bool =
+  let check_coherence (cache : cache) (co : (int * int) uset) : bool =
     let landmark = Landmark.register "RC11.check_coherence" in
       Landmark.enter landmark;
 
       let { sb; hb; rfi; rf; e; events; rmw; loc_restrict } = cache in
-      let _E = e in
+      let e = e in
 
       (* rb = rf⁻¹;co *)
       let rb = URelation.compose [ rfi; co ] in
@@ -554,16 +573,19 @@ end) : MEMORY_MODEL = struct
       in
 
       (* Atomicity: rmw ∩ (rb;co) = ∅ *)
-      if USet.size rmw <> 0 then
-        if USet.size (USet.intersection rmw (URelation.compose [ rb; co ])) <> 0
-        then false
+      if USet.size rmw > 0 then
+        if not (CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()) then (
+          Landmark.exit landmark;
+          false
+        )
         else if
           (* Coherence: hb;eco ∪ hb is irreflexive *)
-          not
-            (URelation.is_irreflexive
-               (USet.inplace_union (URelation.compose [ hb; eco ]) hb)
-            )
-        then false
+          (* TODO this is under rmw <> 0! *)
+          not (CoherenceChecks.coherence_axiom ~eco ~rf ~rfi ~co ~hb ())
+        then (
+          Landmark.exit landmark;
+          false
+        )
         else
           (* SC consistency *)
           let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
@@ -575,20 +597,20 @@ end) : MEMORY_MODEL = struct
           in
 
           let sc_events =
-            ModelUtils.match_events events _E Init (Some SC) None None
+            ModelUtils.match_events events e Init (Some SC) None None
           in
           let f_sc =
-            ModelUtils.match_events events _E Fence (Some SC) None None
+            ModelUtils.match_events events e Fence (Some SC) None None
           in
 
           let psc_base =
             URelation.compose
               [
                 USet.inplace_union sc_events
-                  (URelation.compose [ f_sc; URelation.reflexive_closure _E hb ]);
+                  (URelation.compose [ f_sc; URelation.reflexive_closure e hb ]);
                 scb;
                 USet.inplace_union sc_events
-                  (URelation.compose [ URelation.reflexive_closure _E hb; f_sc ]);
+                  (URelation.compose [ URelation.reflexive_closure e hb; f_sc ]);
               ]
           in
 
@@ -620,20 +642,18 @@ end) : MEMORY_MODEL = struct
         in
 
         let sc_events =
-          ModelUtils.match_events events _E Init (Some SC) None None
+          ModelUtils.match_events events e Init (Some SC) None None
         in
-        let f_sc =
-          ModelUtils.match_events events _E Fence (Some SC) None None
-        in
+        let f_sc = ModelUtils.match_events events e Fence (Some SC) None None in
 
         let psc_base =
           URelation.compose
             [
               USet.inplace_union sc_events
-                (URelation.compose [ f_sc; URelation.reflexive_closure _E hb ]);
+                (URelation.compose [ f_sc; URelation.reflexive_closure e hb ]);
               scb;
               USet.inplace_union sc_events
-                (URelation.compose [ URelation.reflexive_closure _E hb; f_sc ]);
+                (URelation.compose [ URelation.reflexive_closure e hb; f_sc ]);
             ]
         in
 
@@ -651,15 +671,74 @@ end) : MEMORY_MODEL = struct
           Landmark.exit landmark;
           acyclic
 
-  let check_thin_air (execution : symbolic_execution) (cache : cache) =
-    URelation.acyclic (USet.union cache.sb execution.rf)
+  let check_thin_air (cache : cache) (execution : symbolic_execution) =
+    let { hb; rf; _ } = cache in
+      CoherenceChecks.thin_air_check ~hb ~rf ()
+
+  let compute_dependencies _ _ _ _ _ = USet.create ()
+end
+
+module SMRD : MEMORY_MODEL = struct
+  type cache = {
+    rf : (int * int) uset;
+    rfi : (int * int) uset;
+    hb : (int * int) uset;
+    rmw : (int * int) uset;
+  }
+
+  type config = unit
+
+  let name = "smrd"
+  let default_config = ()
+
+  let build_cache (execution : symbolic_execution)
+      (structure : symbolic_event_structure) loc_restrict =
+    let landmark = Landmark.register "SMRD.build_cache" in
+      Landmark.enter landmark;
+
+      let po = USet.clone structure.po in
+      let rf = USet.clone execution.rf in
+      let rfi = URelation.inverse rf in
+      let rmw = USet.clone execution.rmw in
+      let dp = USet.clone execution.dp in
+      let ppo = USet.clone execution.ppo in
+
+      (* hb = ppo ∪ dp *)
+      let hb = USet.union ppo dp |> URelation.transitive_closure in
+
+      Landmark.exit landmark;
+      { rf; rfi; hb; rmw }
+
+  let check_coherence cache co =
+    let landmark = Landmark.register "SMRD.check_coherence" in
+      Landmark.enter landmark;
+
+      let { rf; rfi; hb; rmw; _ } = cache in
+      let result =
+        CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()
+        && CoherenceChecks.coherence_axiom ~rf ~rfi ~co ~hb ()
+      in
+        Landmark.exit landmark;
+        result
+
+  let check_thin_air cache execution =
+    let landmark = Landmark.register "SMRD.check_thin_air" in
+      Landmark.enter landmark;
+      let { rf; hb; _ } = cache in
+      let result = CoherenceChecks.thin_air_check ~hb ~rf () in
+        Landmark.exit landmark;
+        result
 
   let compute_dependencies _ _ _ _ _ = USet.create ()
 end
 
 module Undefined : MEMORY_MODEL = struct
   (** Cache type *)
-  type cache = { rfi : (int * int) uset option; rmw : (int * int) uset option }
+  type cache = {
+    rf : (int * int) uset;
+    rfi : (int * int) uset;
+    rmw : (int * int) uset;
+  }
 
   (** Config type *)
   type config = unit
@@ -669,19 +748,15 @@ module Undefined : MEMORY_MODEL = struct
 
   (** Build cache *)
   let build_cache (execution : symbolic_execution)
-      (structure : symbolic_event_structure) (events : (int, event) Hashtbl.t)
+      (structure : symbolic_event_structure)
       (loc_restrict : (int * int) uset -> (int * int) uset) : cache =
-    if USet.size execution.rmw > 0 then
-      { rfi = Some (URelation.inverse execution.rf); rmw = Some execution.rmw }
-    else { rfi = None; rmw = None }
+    let { rf; rmw; _ } : symbolic_execution = execution in
+      { rf; rfi = URelation.inverse rf; rmw }
 
   (** Check coherence *)
-  let check_coherence (co : (int * int) uset) (cache : cache) : bool =
-    match cache with
-    | { rfi = Some rfi; rmw = Some rmw } ->
-        let fr = URelation.compose [ rfi; co ] in
-          USet.size (USet.intersection rmw (URelation.compose [ fr; co ])) = 0
-    | _ -> true
+  let check_coherence (cache : cache) (co : (int * int) uset) : bool =
+    let { rf; rfi; rmw; _ } = cache in
+      CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()
 
   let check_thin_air execution cache = true
   let compute_dependencies _ _ _ _ _ = USet.create ()
@@ -723,6 +798,8 @@ module ModelRegistry = struct
         (module M : MEMORY_MODEL)
     );
 
+    register "smrd" (fun () -> (module SMRD : MEMORY_MODEL));
+
     register "undefined" (fun () -> (module Undefined : MEMORY_MODEL));
     register "" (fun () -> (module Undefined : MEMORY_MODEL))
 end
@@ -733,7 +810,7 @@ let build_location_restriction structure execution eqlocs :
  fun x -> USet.filter (fun (a, b) -> USet.mem eqlocs (a, b)) x
 
 (** Try all coherence orders *)
-let try_all_coherence_orders structure execution cache check_coherence eqlocs =
+let try_all_coherence_orders cache structure execution check_coherence eqlocs =
   let landmark = Landmark.register "try_all_coherence_orders" in
     Landmark.enter landmark;
 
@@ -754,9 +831,7 @@ let try_all_coherence_orders structure execution cache check_coherence eqlocs =
       if USet.size writes < 2 then Lwt.return true
       else
         (* Check if reads from init *)
-        let reads_from_init =
-          USet.exists (fun (_, to_id) -> to_id = 0) execution.rf
-        in
+        let reads_from_init = USet.exists (fun (_, w) -> w = 0) execution.rf in
 
         (* Group writes by location *)
         let writes_per_location =
@@ -831,7 +906,7 @@ let try_all_coherence_orders structure execution cache check_coherence eqlocs =
         let rec choose_one i vals =
           if i < 0 then
             let co = URelation.transitive_closure (USet.of_list vals) in
-              Lwt.return (check_coherence co cache)
+              Lwt.return (check_coherence cache co)
           else
             let rec try_perms = function
               | [] -> Lwt.return false
@@ -852,59 +927,58 @@ let check_for_coherence structure execution restrictions =
   let landmark = Landmark.register "check_for_coherence" in
     Landmark.enter landmark;
 
-    let events = structure.events in
-      if USet.size execution.e = 0 then Lwt.return false
-      else
-        match ModelRegistry.lookup restrictions.coherent with
-        | None ->
-            Logs.warn (fun m -> m "Unknown model: %s" restrictions.coherent);
+    if USet.size execution.e = 0 then Lwt.return false
+    else
+      match ModelRegistry.lookup restrictions.coherent with
+      | None ->
+          Logs.warn (fun m -> m "Unknown model: %s" restrictions.coherent);
+          Landmark.exit landmark;
+          Lwt.return false
+      | Some model ->
+          let module M = (val model : MEMORY_MODEL) in
+          (* Create location equivalence relation using semantic equality *)
+          let%lwt eqlocs =
+            let all_events = execution.e in
+              USet.async_filter
+                (fun (a, b) ->
+                  if a = b then Lwt.return true
+                  else
+                    try
+                      let ev_a = Hashtbl.find structure.events a in
+                      let ev_b = Hashtbl.find structure.events b in
+                        match (ev_a.loc, ev_b.loc) with
+                        | Some loc_a, Some loc_b ->
+                            (* Use solver to check semantic equality *)
+                            Solver.Semeq.exeq
+                              (Solver.Semeq.create_state ())
+                              loc_a loc_b
+                        | _ -> Lwt.return false
+                    with Not_found -> Lwt.return false
+                )
+                (URelation.cross all_events all_events
+                |> USet.filter (fun (a, b) -> a <= b)
+                )
+          in
+          let eqlocs = USet.inplace_union eqlocs (URelation.inverse eqlocs) in
+
+          (* Build location restriction once *)
+          let loc_restrict =
+            build_location_restriction structure execution eqlocs
+          in
+
+          (* Build cache *)
+          let cache = M.build_cache execution structure loc_restrict in
+
+          (* Check thin-air *)
+          if not (M.check_thin_air cache execution) then (
             Landmark.exit landmark;
             Lwt.return false
-        | Some model ->
-            let module M = (val model : MEMORY_MODEL) in
-            (* Create location equivalence relation using semantic equality *)
-            let%lwt eqlocs =
-              let all_events = execution.e in
-                USet.async_filter
-                  (fun (a, b) ->
-                    if a = b then Lwt.return true
-                    else
-                      try
-                        let ev_a = Hashtbl.find structure.events a in
-                        let ev_b = Hashtbl.find structure.events b in
-                          match (ev_a.loc, ev_b.loc) with
-                          | Some loc_a, Some loc_b ->
-                              (* Use solver to check semantic equality *)
-                              Solver.Semeq.exeq
-                                (Solver.Semeq.create_state ())
-                                loc_a loc_b
-                          | _ -> Lwt.return false
-                      with Not_found -> Lwt.return false
-                  )
-                  (URelation.cross all_events all_events
-                  |> USet.filter (fun (a, b) -> a <= b)
-                  )
+          )
+          else
+            (* Try all coherence orders *)
+            let result =
+              try_all_coherence_orders cache structure execution
+                M.check_coherence eqlocs
             in
-            let eqlocs = USet.inplace_union eqlocs (URelation.inverse eqlocs) in
-
-            (* Build location restriction once *)
-            let loc_restrict =
-              build_location_restriction structure execution eqlocs
-            in
-
-            (* Build cache *)
-            let cache = M.build_cache execution structure events loc_restrict in
-
-            (* Check thin-air *)
-            if not (M.check_thin_air execution cache) then (
               Landmark.exit landmark;
-              Lwt.return false
-            )
-            else
-              (* Try all coherence orders *)
-              let result =
-                try_all_coherence_orders structure execution cache
-                  M.check_coherence eqlocs
-              in
-                Landmark.exit landmark;
-                result
+              result
