@@ -1679,10 +1679,316 @@ module TestEventOrdering = struct
       ordering_test_cases
 end
 
+module TestBisection = struct
+  (** Helpers to build minimal symbolic event structures for bisection tests.
+
+      loop_indices uses the full prefix-closed path convention: e.g. [1; 2; 3]
+      means the event is nested inside loop 1 → loop 2 → loop 3. *)
+
+  (** Build a structure where all events are directly in [loop_id] with no
+      further nesting (loop_indices = [[loop_id]] for every event). *)
+  let make_flat_structure loop_id event_labels po_pairs =
+    let e = USet.of_list event_labels in
+    let loop_indices = Hashtbl.create (List.length event_labels) in
+      List.iter
+        (fun lbl -> Hashtbl.add loop_indices lbl [ loop_id ])
+        event_labels;
+      let po = USet.of_list po_pairs in
+        { (SymbolicEventStructure.create ()) with e; loop_indices; po }
+
+  (** Build a structure where events may have arbitrarily long loop index paths.
+      [assignments] is [(event_label, path)] list. *)
+  let make_nested_structure event_labels path_assignments po_pairs =
+    let e = USet.of_list event_labels in
+    let loop_indices = Hashtbl.create (List.length event_labels) in
+      List.iter
+        (fun (lbl, path) -> Hashtbl.add loop_indices lbl path)
+        path_assignments;
+      let po = USet.of_list po_pairs in
+        { (SymbolicEventStructure.create ()) with e; loop_indices; po }
+
+  (* ------------------------------------------------------------------ *)
+  (* Tests for bisect_loop                                               *)
+  (* ------------------------------------------------------------------ *)
+
+  (** bisect_loop should remove (left × right) from po and add (right × left).
+  *)
+  let test_bisect_loop_reverses_po () =
+    (* Events 1 and 2 are both in loop 0, po has 1 → 2 *)
+    let structure = make_flat_structure 0 [ 1; 2 ] [ (1, 2) ] in
+    let left = USet.of_list [ 1 ] in
+    let right = USet.of_list [ 2 ] in
+    let result = Bisection.bisect_loop structure 0 left right in
+      (* After bisection: (1,2) removed, (2,1) added *)
+      check bool "bisect removes left→right" false (USet.mem result.po (1, 2));
+      check bool "bisect adds right→left" true (USet.mem result.po (2, 1))
+
+  let test_bisect_loop_no_cross_po () =
+    (* bisect_loop always adds the full right×left cross product to po,
+       regardless of whether any left→right edges existed before.
+       With left={1,2} and right={3}: (3,1) and (3,2) will be added.
+       The intra-left edge (1,2) must be preserved unchanged. *)
+    let structure = make_flat_structure 0 [ 1; 2; 3 ] [ (1, 2) ] in
+    let left = USet.of_list [ 1; 2 ] in
+    let right = USet.of_list [ 3 ] in
+    let result = Bisection.bisect_loop structure 0 left right in
+      check bool "intra-left edge preserved" true (USet.mem result.po (1, 2));
+      check bool "right→left edge (3,1) added" true (USet.mem result.po (3, 1));
+      check bool "right→left edge (3,2) added" true (USet.mem result.po (3, 2));
+      check bool "no left→right for (1,3)" false (USet.mem result.po (1, 3));
+      check bool "no left→right for (2,3)" false (USet.mem result.po (2, 3))
+
+  (* ------------------------------------------------------------------ *)
+  (* Tests for all_bisections — flat (no nesting)                        *)
+  (* ------------------------------------------------------------------ *)
+
+  let test_all_bisections_empty_loop () =
+    (* No events in loop → only the ({},{}) bisection *)
+    let structure = make_flat_structure 0 [] [] in
+    let bisections = Bisection.all_bisections structure 0 in
+      check int "one bisection for empty loop" 1 (List.length bisections);
+      let l, r = List.hd bisections in
+        check bool "left empty" true (USet.is_empty l);
+        check bool "right empty" true (USet.is_empty r)
+
+  let test_all_bisections_single_event () =
+    (* One event in loop → two subsets: {},{e} and {e},{} — both valid
+       since no po constraint can be violated with a single event *)
+    let structure = make_flat_structure 0 [ 1 ] [] in
+    let bisections = Bisection.all_bisections structure 0 in
+      check int "two bisections for single event" 2 (List.length bisections)
+
+  let test_all_bisections_po_constraint () =
+    (* Events 1 and 2 with po 1→2.
+       {},{1,2}:           cross empty → VALID
+       {1,2},{}:           cross empty → VALID
+       {left={1},right={2}}: cross(left,right) = {(1,2)} ⊆ po → VALID
+       {left={2},right={1}}: cross(left,right) = {(2,1)} ⊄ po → INVALID
+       Expected: 3 valid bisections. *)
+    let structure = make_flat_structure 0 [ 1; 2 ] [ (1, 2) ] in
+    let bisections = Bisection.all_bisections structure 0 in
+      check int "three bisections valid with po 1→2" 3 (List.length bisections);
+      (* The invalid partition (left={2}, right={1}) must not appear *)
+      let invalid_present =
+        List.exists (fun (l, r) -> USet.mem l 2 && USet.mem r 1) bisections
+      in
+        check bool "left={2},right={1} absent" false invalid_present
+
+  let test_all_bisections_no_po_filters_partition () =
+    (* Events 1 and 2 with no po.
+       {left={1}, right={2}}: cross(left,right) = {(1,2)} ⊄ po → INVALID
+       {left={2}, right={1}}: cross(left,right) = {(2,1)} ⊄ po → INVALID
+       {},{1,2} and {1,2},{}: cross is empty → VALID
+       Expected: 2 valid bisections *)
+    let structure = make_flat_structure 0 [ 1; 2 ] [] in
+    let bisections = Bisection.all_bisections structure 0 in
+      check int "two bisections when no po" 2 (List.length bisections);
+      List.iter
+        (fun (l, r) ->
+          check bool "one side empty" true (USet.is_empty l || USet.is_empty r)
+        )
+        bisections
+
+  (* ------------------------------------------------------------------ *)
+  (* Tests for all_bisections — nested-loop sub-group constraint         *)
+  (* ------------------------------------------------------------------ *)
+
+  (** Scenario from the spec:
+      loop_id = 2
+      Events:
+        e1 → path [1;2;3]     (in sub-loop 3)
+        e2 → path [1;2;3;4]   (in sub-loop 3 → 4, child of 3 under 2 is 3)
+        e3 → path [1;2;3;5]   (in sub-loop 3 → 5, child of 3 under 2 is 3)
+        e4 → path [1;2;6]     (in sub-loop 6)
+      po: none (simplifies bisection logic)
+
+      Valid bisection: {e1,e2,e3} left, {e4} right — sub-loop 3 all-left, 6 all-right.
+      Invalid: {e2} left, {e1,e3,e4} right — e2 and e1 both in sub-loop 3, split.
+      Invalid: {e1,e2,e4} left, {e3} right — e1,e2,e3 in sub-loop 3, e3 on right. *)
+
+  let test_nested_loops_valid_bisection () =
+    (* loop_id = 2, events:
+         e1 [1;2;3], e2 [1;2;3;4], e3 [1;2;3;5]  — all in sub-loop group 3
+         e4 [1;2;6]                                — sub-loop group 6
+       For the partition left={e1,e2,e3}, right={e4} to survive the po filter
+       we need cross(left,right) = {(1,4),(2,4),(3,4)} ⊆ po. *)
+    let structure =
+      make_nested_structure [ 1; 2; 3; 4 ]
+        [
+          (1, [ 1; 2; 3 ]);
+          (2, [ 1; 2; 3; 4 ]);
+          (3, [ 1; 2; 3; 5 ]);
+          (4, [ 1; 2; 6 ]);
+        ]
+        [ (1, 4); (2, 4); (3, 4) ]
+      (* po: sub-loop-3 events before sub-loop-6 event *)
+    in
+    let bisections = Bisection.all_bisections structure 2 in
+    let left_123_right_4 =
+      List.exists
+        (fun (l, r) ->
+          USet.equal l (USet.of_list [ 1; 2; 3 ])
+          && USet.equal r (USet.of_list [ 4 ])
+        )
+        bisections
+    in
+      check bool "sub-loop 3 all-left, sub-loop 6 all-right is valid" true
+        left_123_right_4
+
+  let test_nested_loops_invalid_split_sub_loop () =
+    (* e1 path [1;2;3], e2 path [1;2;3;4]: both child=3 under loop 2.
+       Splitting them across sides is invalid. *)
+    let structure =
+      make_nested_structure [ 1; 2 ]
+        [ (1, [ 1; 2; 3 ]); (2, [ 1; 2; 3; 4 ]) ]
+        [] (* no po — we want to isolate the sub-loop constraint *)
+    in
+    let bisections = Bisection.all_bisections structure 2 in
+    (* The partition ({e1},{e2}) and ({e2},{e1}) should be absent *)
+    let split_found =
+      List.exists
+        (fun (l, r) ->
+          (USet.mem l 1 && USet.mem r 2) || (USet.mem l 2 && USet.mem r 1)
+        )
+        bisections
+    in
+      check bool "splitting events in same sub-loop is invalid" false
+        split_found
+
+  let test_nested_loops_different_sub_loops_can_split () =
+    (* e1 path [1;2;3], e2 path [1;2;4]: different child loops → can be split *)
+    let structure =
+      make_nested_structure [ 1; 2 ]
+        [ (1, [ 1; 2; 3 ]); (2, [ 1; 2; 4 ]) ]
+        [ (1, 2) ]
+      (* po 1→2 to allow left={1},right={2} *)
+    in
+    let bisections = Bisection.all_bisections structure 2 in
+    let split_found =
+      List.exists (fun (l, r) -> USet.mem l 1 && USet.mem r 2) bisections
+    in
+      check bool "events in different sub-loops may be split" true split_found
+
+  let test_nested_direct_and_nested_events () =
+    (* e1 directly in loop 2 (path [2]), e2 in sub-loop 3 (path [2;3]).
+       child_loop_of e1 loop 2 = None; child_loop_of e2 loop 2 = Some 3.
+       Since they have different keys (None vs Some 3) they can be on different sides. *)
+    let structure =
+      make_nested_structure [ 1; 2 ] [ (1, [ 2 ]); (2, [ 2; 3 ]) ] [ (1, 2) ]
+      (* po 1→2 *)
+    in
+    let bisections = Bisection.all_bisections structure 2 in
+    let split_found =
+      List.exists (fun (l, r) -> USet.mem l 1 && USet.mem r 2) bisections
+    in
+      check bool "direct-in-loop and sub-loop events may be split" true
+        split_found
+
+  let test_nested_same_group_none_not_split () =
+    (* Two events directly in loop 2 (path [2] each) have no child loop.
+       The nesting constraint does NOT apply to them — only the po filter does.
+       With no po edges, cross(left,right) is not a subset of po, so neither
+       single-event partition passes the po filter. Only the trivial all-left
+       and all-right partitions are valid. *)
+    let structure =
+      make_nested_structure [ 1; 2 ] [ (1, [ 2 ]); (2, [ 2 ]) ] [] (* no po *)
+    in
+    let bisections = Bisection.all_bisections structure 2 in
+    (* Neither ({1},{2}) nor ({2},{1}) should pass the po filter *)
+    let split_found =
+      List.exists
+        (fun (l, r) ->
+          (USet.mem l 1 && USet.mem r 2) || (USet.mem l 2 && USet.mem r 1)
+        )
+        bisections
+    in
+      check bool "direct-in-loop events blocked by po filter (not nesting)"
+        false split_found;
+      check int "only trivial bisections pass" 2 (List.length bisections)
+
+  let test_complex_nested_scenario () =
+    (* Full example from spec:
+       e1 [1;2;3], e2 [1;2;3;4], e3 [1;2;3;5] all have child=3 under loop 2.
+       e4 [1;2;6] has child=6 under loop 2.
+       Bisection ({e1,e2,e3},{e4}) VALID; ({e2},{e1,e3,e4}) INVALID. *)
+    let structure =
+      make_nested_structure [ 1; 2; 3; 4 ]
+        [
+          (1, [ 1; 2; 3 ]);
+          (2, [ 1; 2; 3; 4 ]);
+          (3, [ 1; 2; 3; 5 ]);
+          (4, [ 1; 2; 6 ]);
+        ]
+        (* Need po edges for non-trivial left/right to satisfy po filter.
+         Add 1→4 to allow {e1,e2,e3}→left, e4→right *)
+        [ (1, 4); (2, 4); (3, 4) ]
+    in
+    let bisections = Bisection.all_bisections structure 2 in
+    let left_e123_right_e4 =
+      List.exists
+        (fun (l, r) ->
+          USet.equal l (USet.of_list [ 1; 2; 3 ])
+          && USet.equal r (USet.of_list [ 4 ])
+        )
+        bisections
+    in
+    let invalid_e2_left_others_right =
+      List.exists (fun (l, r) -> USet.mem l 2 && USet.mem r 1) bisections
+    in
+      check bool "valid bisection: sub-loop-3 all-left, sub-loop-6 all-right"
+        true left_e123_right_e4;
+      check bool "invalid bisection: e1 and e2 (both sub-loop 3) split" false
+        invalid_e2_left_others_right
+
+  let test_nested_same_group_none_can_split_with_po () =
+    (* Two events directly in loop 2 (path [2] each) — no child loop constraint.
+       With po edge (1,2), the partition left={1},right={2} passes both filters. *)
+    let structure =
+      make_nested_structure [ 1; 2 ] [ (1, [ 2 ]); (2, [ 2 ]) ] [ (1, 2) ]
+    in
+    let bisections = Bisection.all_bisections structure 2 in
+    let split_found =
+      List.exists (fun (l, r) -> USet.mem l 1 && USet.mem r 2) bisections
+    in
+      check bool "direct-in-loop events can split when po permits" true
+        split_found
+
+  let suite =
+    [
+      test_case "bisect_loop reverses po edge" `Quick
+        test_bisect_loop_reverses_po;
+      test_case "bisect_loop always adds right×left" `Quick
+        test_bisect_loop_no_cross_po;
+      test_case "all_bisections empty loop" `Quick
+        test_all_bisections_empty_loop;
+      test_case "all_bisections single event" `Quick
+        test_all_bisections_single_event;
+      test_case "all_bisections with po constraint" `Quick
+        test_all_bisections_po_constraint;
+      test_case "all_bisections no po filters partition" `Quick
+        test_all_bisections_no_po_filters_partition;
+      test_case "nested: valid sub-loop bisection" `Quick
+        test_nested_loops_valid_bisection;
+      test_case "nested: split sub-loop invalid" `Quick
+        test_nested_loops_invalid_split_sub_loop;
+      test_case "nested: different sub-loops can split" `Quick
+        test_nested_loops_different_sub_loops_can_split;
+      test_case "nested: direct and sub-loop can split" `Quick
+        test_nested_direct_and_nested_events;
+      test_case "nested: direct events blocked by po not nesting" `Quick
+        test_nested_same_group_none_not_split;
+      test_case "nested: direct events can split with po" `Quick
+        test_nested_same_group_none_can_split_with_po;
+      test_case "nested: complex multi-group scenario" `Quick
+        test_complex_nested_scenario;
+    ]
+end
+
 let suite =
   ( "Episodicity",
     TestRegisterCondition.suite
     @ TestWriteCondition.suite
     @ TestBranchCondition.suite
     @ TestEventOrdering.suite
+    @ TestBisection.suite
   )

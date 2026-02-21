@@ -68,6 +68,134 @@ let get_events_in_loop (structure : symbolic_event_structure) (loop_id : int) :
     )
     structure.e
 
+(** {1 Bisect Loops} *)
+
+(** Loop bisection modifies the po and po_iter relations in event structures
+    with symbolic loop semantics around a structure compatible bisection of the
+    events under a given loop. The modification of po and po_iter simulates a
+    refactoring of the loop body through a partial unravelling of the loop for
+    the purpose of episodocity checks. *)
+module Bisection = struct
+  (** Perform loop bisection on the symbolic event structure for a given loop.
+
+      This modifies the po and po_iter relations to reflect a refactoring of the
+      loop body, simulating a partial unrolling of the loop. The events in the
+      loop are partitioned into two sets (left and right), and the relations are
+      updated to maintain consistency with this partitioning.
+
+      @param structure The original symbolic event structure
+      @param loop_id The identifier of the loop to bisect
+      @param left The set of events in the left partition of the bisection
+      @param right The set of events in the right partition of the bisection
+      @return
+        A new symbolic event structure with updated relations reflecting the
+        bisection *)
+  let bisect_loop structure loop_id left right =
+    let { po; _ } = structure in
+    let po =
+      USet.set_minus po (URelation.cross left right)
+      |> USet.union (URelation.cross right left)
+    in
+      { structure with po }
+
+  (** Get the direct child loop ID of [evt_label] under [loop_id].
+
+      Given an event's loop_indices list (a prefix-closed path of loop IDs),
+      this returns the loop ID immediately following [loop_id] in that path, if
+      any. This identifies which sub-loop group the event belongs to when
+      bisecting at [loop_id].
+
+      For example, if loop_indices for an event is [[1; 2; 3; 4]] and loop_id is
+      2, this returns [Some 3], meaning the event is in the sub-loop group
+      rooted at loop 3. If loop_indices is [[1; 2]] and loop_id is 2, this
+      returns [None], meaning the event is directly in loop_id with no further
+      nesting.
+
+      @param loop_indices The loop_indices hashtable from the event structure
+      @param evt_label The event label to look up
+      @param loop_id The loop being bisected
+      @return
+        [Some child_loop_id] if event is nested under a child of loop_id, [None]
+        if event is directly in loop_id *)
+  let child_loop_of loop_indices evt_label loop_id =
+    match Hashtbl.find_opt loop_indices evt_label with
+    | None -> None
+    | Some path ->
+        let rec find_next = function
+          | [] | [ _ ] -> None
+          | x :: y :: _ when x = loop_id -> Some y
+          | _ :: rest -> find_next rest
+        in
+          find_next path
+
+  (** Check that each sub-loop group under [loop_id] is entirely on one side.
+
+      Two events that share the same direct child loop under [loop_id] (i.e. are
+      both in the same nested sub-loop) must not be split across [left] and
+      [right]. Additionally, events directly in [loop_id] (child_loop = None)
+      that share the same position in the loop_indices path must also not be
+      split. This preserves the tree structure of nested loops: a sub-tree is
+      either wholly left or wholly right.
+
+      @param structure The symbolic event structure
+      @param loop_id The loop being bisected
+      @param left The proposed left partition
+      @param right The proposed right partition
+      @return [true] if no sub-loop group is split across left and right *)
+  let nested_loops_unsplit structure loop_id left right =
+    (* Build a map from child-loop-id -> (has_left, has_right).
+       Only events that have a concrete child loop (Some child_id) are
+       constrained: all events sharing the same child loop must be on
+       the same side.  Events directly in loop_id with no further nesting
+       (child = None) have no such constraint and are skipped. *)
+    let group_sides : (int, bool * bool) Hashtbl.t = Hashtbl.create 8 in
+    let record_side evt side =
+      match child_loop_of structure.loop_indices evt loop_id with
+      | None -> () (* directly in loop_id — no grouping constraint *)
+      | Some child_id ->
+          let l, r =
+            try Hashtbl.find group_sides child_id
+            with Not_found -> (false, false)
+          in
+          let updated =
+            match side with
+            | `Left -> (true, r)
+            | `Right -> (l, true)
+          in
+            Hashtbl.replace group_sides child_id updated
+    in
+      USet.iter (fun evt -> record_side evt `Left) left;
+      USet.iter (fun evt -> record_side evt `Right) right;
+      (* A split group is one whose child loop appears on both sides *)
+      Hashtbl.fold
+        (fun _key (has_left, has_right) ok -> ok && not (has_left && has_right))
+        group_sides true
+
+  let all_bisections structure loop_id =
+    let events_in_loop = get_events_in_loop structure loop_id in
+    let event_list = USet.to_list events_in_loop in
+    let rec power_set lst =
+      match lst with
+      | [] -> [ [] ]
+      | x :: xs ->
+          let ps = power_set xs in
+            ps @ List.map (fun subset -> x :: subset) ps
+    in
+    let subsets = power_set event_list in
+      List.map
+        (fun left ->
+          let left = USet.of_list left in
+            (left, USet.set_minus events_in_loop left)
+        )
+        subsets
+      |> List.filter (fun (left, right) ->
+          USet.subset (URelation.cross left right) structure.po
+      )
+      |> List.filter (fun (left, right) ->
+          nested_loops_unsplit structure loop_id left right
+      )
+end
+
 (** {1 Condition 1: Register Access Restriction (Syntactic)} *)
 
 module RegisterCondition = struct
@@ -75,7 +203,7 @@ module RegisterCondition = struct
 
       This implements Condition 1 of episodicity: registers are only accessed if
       they have been written to ⊑-before within the same iteration or before the
-      loop starts.
+      loop starts.zR
 
       @param loop_body The list of IR nodes representing the loop body
       @return A condition result indicating satisfaction and any violations *)
