@@ -522,7 +522,9 @@ module TestRegisterCondition = struct
   (* Generic test function that uses test case data *)
   let run_test_case test_case () =
     let loop_body = List.map make_ir_node test_case.stmts in
-    let { satisfied; violations } = check_register_accesses_in_loop loop_body in
+    let { satisfied; violations } =
+      RegisterCondition.check_register_accesses_in_loop loop_body
+    in
 
     (* Check satisfied flag *)
     check bool
@@ -636,6 +638,7 @@ module TestWriteCondition = struct
               EventStructureContext.create symbolic_structure
             in
               {
+                program = [];
                 symbolic_structure;
                 symbolic_source_spans;
                 symbolic_justifications;
@@ -688,6 +691,7 @@ module TestWriteCondition = struct
           EventStructureContext.create symbolic_structure
         in
           {
+            program = [];
             symbolic_structure;
             symbolic_source_spans;
             symbolic_justifications;
@@ -750,6 +754,7 @@ module TestWriteCondition = struct
             EventStructureContext.create symbolic_structure
           in
             {
+              program = [];
               symbolic_structure;
               symbolic_source_spans;
               symbolic_justifications;
@@ -815,6 +820,7 @@ module TestWriteCondition = struct
           EventStructureContext.create symbolic_structure
         in
           {
+            program = [];
             symbolic_structure;
             symbolic_source_spans;
             symbolic_justifications;
@@ -840,6 +846,7 @@ module TestWriteCondition = struct
         EventStructureContext.create symbolic_structure
       in
         {
+          program = [];
           symbolic_structure;
           symbolic_source_spans;
           symbolic_justifications;
@@ -888,7 +895,7 @@ module TestWriteCondition = struct
 
   let run_write_test_case test_case () =
     let cache = test_case.setup () in
-      let* result = check_condition2_read_sources cache 0 in
+      let* result = WriteCondition.check cache 0 in
         check bool
           (Printf.sprintf "%s - satisfied" test_case.name)
           test_case.expected_satisfied result.satisfied;
@@ -1003,6 +1010,7 @@ module TestBranchCondition = struct
         in
         let cache =
           {
+            program;
             symbolic_structure;
             symbolic_source_spans;
             symbolic_justifications;
@@ -1084,6 +1092,7 @@ module TestBranchCondition = struct
         in
         let cache =
           {
+            program;
             symbolic_structure;
             symbolic_source_spans;
             symbolic_justifications;
@@ -1191,6 +1200,7 @@ module TestBranchCondition = struct
         in
         let cache =
           {
+            program;
             symbolic_structure;
             symbolic_source_spans;
             symbolic_justifications;
@@ -1222,6 +1232,7 @@ module TestBranchCondition = struct
       in
       let cache =
         {
+          program;
           symbolic_structure;
           symbolic_source_spans;
           symbolic_justifications;
@@ -1271,6 +1282,7 @@ module TestBranchCondition = struct
         in
         let cache =
           {
+            program;
             symbolic_structure;
             symbolic_source_spans;
             symbolic_justifications;
@@ -1320,27 +1332,33 @@ module TestBranchCondition = struct
     ]
 
   let run_branch_test_case test_case () =
-    let program, cache = test_case.setup () in
-    let result = check_condition3_branch_conditions program cache 0 in
-      check bool
-        (Printf.sprintf "%s - satisfied" test_case.name)
-        test_case.expected_satisfied result.satisfied;
-      match test_case.expected_violation_count with
-      | Some expected_count ->
-          check int
-            (Printf.sprintf "%s - violation count" test_case.name)
-            expected_count
-            (List.length result.violations)
-      | None ->
-          if not test_case.expected_satisfied then
-            check bool
-              (Printf.sprintf "%s - has violations" test_case.name)
-              true
-              (List.length result.violations > 0)
+    let _, cache = test_case.setup () in
+      let* result = BranchCondition.check cache 0 in
+        check bool
+          (Printf.sprintf "%s - satisfied" test_case.name)
+          test_case.expected_satisfied result.satisfied;
+        ( match test_case.expected_violation_count with
+        | Some expected_count ->
+            check int
+              (Printf.sprintf "%s - violation count" test_case.name)
+              expected_count
+              (List.length result.violations)
+        | None ->
+            if not test_case.expected_satisfied then
+              check bool
+                (Printf.sprintf "%s - has violations" test_case.name)
+                true
+                (List.length result.violations > 0)
+        );
+        Lwt.return_unit
 
   let suite =
     List.map
-      (fun tc -> test_case tc.name `Quick (run_branch_test_case tc))
+      (fun tc ->
+        test_case tc.name `Quick (fun () ->
+            Lwt_main.run ((run_branch_test_case tc) ())
+        )
+      )
       branch_test_cases
 end
 
@@ -1421,6 +1439,7 @@ module TestEventOrdering = struct
         let symbolic_justifications = USet.create () in
           Lwt.return
             {
+              program = [];
               symbolic_structure;
               symbolic_source_spans;
               symbolic_justifications;
@@ -1463,6 +1482,7 @@ module TestEventOrdering = struct
         let symbolic_justifications = USet.create () in
           Lwt.return
             {
+              program = [];
               symbolic_structure;
               symbolic_source_spans;
               symbolic_justifications;
@@ -1490,6 +1510,7 @@ module TestEventOrdering = struct
       let symbolic_justifications = USet.create () in
         Lwt.return
           {
+            program = [];
             symbolic_structure;
             symbolic_source_spans;
             symbolic_justifications;
@@ -1527,6 +1548,7 @@ module TestEventOrdering = struct
         let symbolic_justifications = USet.create () in
           Lwt.return
             {
+              program = [];
               symbolic_structure;
               symbolic_source_spans;
               symbolic_justifications;
@@ -1579,6 +1601,7 @@ module TestEventOrdering = struct
         let symbolic_justifications = USet.create () in
           Lwt.return
             {
+              program = [];
               symbolic_structure;
               symbolic_source_spans;
               symbolic_justifications;
@@ -1627,7 +1650,7 @@ module TestEventOrdering = struct
 
   let run_ordering_test_case test_case () =
     let* cache = test_case.setup () in
-      let* result = check_condition4_iteration_ordering cache 0 in
+      let* result = EventsCondition.check cache 0 in
         check bool
           (Printf.sprintf "%s - satisfied" test_case.name)
           test_case.expected_satisfied result.satisfied;

@@ -39,6 +39,8 @@ open Lwt.Syntax
     This cache stores precomputed event structures and executions to avoid
     redundant computation during episodicity checking. *)
 type episodicity_cache = {
+  mutable program : ir_node list;
+      (** The complete program as a list of IR nodes *)
   mutable symbolic_structure : symbolic_event_structure;
       (** Event structure with symbolic loop semantics *)
   mutable symbolic_source_spans : (int, source_span) Hashtbl.t;
@@ -68,432 +70,450 @@ let get_events_in_loop (structure : symbolic_event_structure) (loop_id : int) :
 
 (** {1 Condition 1: Register Access Restriction (Syntactic)} *)
 
-(** Check if a register is written before it's read within a loop body.
+module RegisterCondition = struct
+  (** Check if a register is written before it's read within a loop body.
 
-    This implements Condition 1 of episodicity: registers are only accessed if
-    they have been written to ⊑-before within the same iteration or before the
-    loop starts.
+      This implements Condition 1 of episodicity: registers are only accessed if
+      they have been written to ⊑-before within the same iteration or before the
+      loop starts.
 
-    @param loop_body The list of IR nodes representing the loop body
-    @return A condition result indicating satisfaction and any violations *)
-let check_register_accesses_in_loop (loop_body : ir_node list) :
-    condition_result =
-  let violations = ref [] in
-  let satisfied = ref true in
-  let written_before_read = USet.create () in
-  let must_not_write = USet.create () in
+      @param loop_body The list of IR nodes representing the loop body
+      @return A condition result indicating satisfaction and any violations *)
+  let check_register_accesses_in_loop (loop_body : ir_node list) :
+      condition_result =
+    let violations = ref [] in
+    let satisfied = ref true in
+    let written_before_read = USet.create () in
+    let must_not_write = USet.create () in
 
-  (* Recursively traverse IR nodes to check register accesses.
+    (* Recursively traverse IR nodes to check register accesses.
 
      @param nodes The list of IR nodes to traverse
      @param written_before_read Set of registers written before current point
      @param must_not_write Set of registers that must not be written *)
-  let rec traverse_nodes (nodes : ir_node list) written_before_read
-      must_not_write =
-    match nodes with
-    | [] -> ()
-    | node :: rest -> (
-        let stmt = node.stmt in
-          match stmt with
-          | Threads { threads } ->
-              (* Each thread gets independent copies of register sets *)
-              List.iter
-                (fun thread ->
-                  traverse_nodes thread
-                    (USet.clone written_before_read)
-                    (USet.clone must_not_write)
-                )
-                threads
-          | While { condition; body } ->
-              let read_regs =
-                Ir.extract_read_registers_from_stmt stmt |> USet.of_list
-              in
-              let must_not_write =
-                USet.set_minus read_regs written_before_read
-                |> USet.union must_not_write
-              in
-                traverse_nodes (body @ rest) written_before_read must_not_write
-          | Do { condition; body } ->
-              traverse_nodes body written_before_read must_not_write;
-              let read_regs =
-                Ir.extract_read_registers_from_stmt stmt |> USet.of_list
-              in
-              let must_not_write =
-                USet.set_minus read_regs written_before_read
-                |> USet.union must_not_write
-              in
-                traverse_nodes rest written_before_read must_not_write
-          | If { condition; then_body; else_body } -> (
-              let read_regs =
-                Ir.extract_read_registers_from_stmt stmt |> USet.of_list
-              in
-              let must_not_write =
-                USet.set_minus read_regs written_before_read
-                |> USet.union must_not_write
-              in
-                (* Each branch gets independent copies *)
-                traverse_nodes (then_body @ rest)
-                  (USet.clone written_before_read)
-                  (USet.clone must_not_write);
-                match else_body with
-                | Some else_stmts ->
-                    traverse_nodes (else_stmts @ rest)
+    let rec traverse_nodes (nodes : ir_node list) written_before_read
+        must_not_write =
+      match nodes with
+      | [] -> ()
+      | node :: rest -> (
+          let stmt = node.stmt in
+            match stmt with
+            | Threads { threads } ->
+                (* Each thread gets independent copies of register sets *)
+                List.iter
+                  (fun thread ->
+                    traverse_nodes thread
                       (USet.clone written_before_read)
                       (USet.clone must_not_write)
-                | None -> ()
-            )
-          | Labeled { stmt; _ } ->
-              traverse_nodes (stmt :: rest) written_before_read must_not_write
-          | _ ->
-              let written_regs =
-                Ir.extract_written_registers_from_stmt stmt |> USet.of_list
-              in
-              let read_regs =
-                Ir.extract_read_registers_from_stmt stmt |> USet.of_list
-              in
+                  )
+                  threads
+            | While { condition; body } ->
+                let read_regs =
+                  Ir.extract_read_registers_from_stmt stmt |> USet.of_list
+                in
+                let must_not_write =
+                  USet.set_minus read_regs written_before_read
+                  |> USet.union must_not_write
+                in
+                  traverse_nodes (body @ rest) written_before_read
+                    must_not_write
+            | Do { condition; body } ->
+                traverse_nodes body written_before_read must_not_write;
+                let read_regs =
+                  Ir.extract_read_registers_from_stmt stmt |> USet.of_list
+                in
+                let must_not_write =
+                  USet.set_minus read_regs written_before_read
+                  |> USet.union must_not_write
+                in
+                  traverse_nodes rest written_before_read must_not_write
+            | If { condition; then_body; else_body } -> (
+                let read_regs =
+                  Ir.extract_read_registers_from_stmt stmt |> USet.of_list
+                in
+                let must_not_write =
+                  USet.set_minus read_regs written_before_read
+                  |> USet.union must_not_write
+                in
+                  (* Each branch gets independent copies *)
+                  traverse_nodes (then_body @ rest)
+                    (USet.clone written_before_read)
+                    (USet.clone must_not_write);
+                  match else_body with
+                  | Some else_stmts ->
+                      traverse_nodes (else_stmts @ rest)
+                        (USet.clone written_before_read)
+                        (USet.clone must_not_write)
+                  | None -> ()
+              )
+            | Labeled { stmt; _ } ->
+                traverse_nodes (stmt :: rest) written_before_read must_not_write
+            | _ ->
+                let written_regs =
+                  Ir.extract_written_registers_from_stmt stmt |> USet.of_list
+                in
+                let read_regs =
+                  Ir.extract_read_registers_from_stmt stmt |> USet.of_list
+                in
 
-              (* Check reads against written_before_read *)
-              USet.iter
-                (fun reg -> USet.add must_not_write reg |> ignore)
-                (USet.set_minus read_regs written_before_read);
+                (* Check reads against written_before_read *)
+                USet.iter
+                  (fun reg -> USet.add must_not_write reg |> ignore)
+                  (USet.set_minus read_regs written_before_read);
 
-              let invalid_written_regs =
-                USet.intersection written_regs must_not_write
-              in
+                let invalid_written_regs =
+                  USet.intersection written_regs must_not_write
+                in
 
-              (* Record violations for invalid writes *)
-              USet.iter
-                (fun reg ->
-                  let violation =
-                    RegisterConditionViolation
-                      (RegisterReadBeforeWrite
-                         (reg, node.annotations.source_span)
-                      )
-                  in
-                    violations := violation :: !violations;
-                    satisfied := false
-                )
-                invalid_written_regs;
+                (* Record violations for invalid writes *)
+                USet.iter
+                  (fun reg ->
+                    let violation =
+                      RegisterConditionViolation
+                        (RegisterReadBeforeWrite
+                           (reg, node.annotations.source_span)
+                        )
+                    in
+                      violations := violation :: !violations;
+                      satisfied := false
+                  )
+                  invalid_written_regs;
 
-              (* Update written_before_read with newly written registers *)
-              USet.iter
-                (fun reg -> USet.add written_before_read reg |> ignore)
-                (USet.set_minus written_regs must_not_write);
+                (* Update written_before_read with newly written registers *)
+                USet.iter
+                  (fun reg -> USet.add written_before_read reg |> ignore)
+                  (USet.set_minus written_regs must_not_write);
 
-              (* Recurse on remaining nodes *)
-              traverse_nodes rest written_before_read must_not_write
-      )
-  in
-    traverse_nodes loop_body written_before_read must_not_write;
-    { satisfied = !satisfied; violations = !violations }
+                (* Recurse on remaining nodes *)
+                traverse_nodes rest written_before_read must_not_write
+        )
+    in
+      traverse_nodes loop_body written_before_read must_not_write;
+      { satisfied = !satisfied; violations = !violations }
 
-(** Check Condition 1: Registers only accessed if written to ⊑-before.
+  (** Check Condition 1: Registers only accessed if written to ⊑-before.
 
-    @param program The complete program as a list of IR nodes
-    @param cache The episodicity cache (unused in this check)
-    @param loop_id The identifier of the loop to check
-    @return A condition result indicating satisfaction and any violations *)
-let check_condition1_register_access (program : ir_node list) cache
-    (loop_id : int) : condition_result =
-  let violations = ref [] in
-  let satisfied = ref true in
-  let loop_nodes = find_loop_nodes program loop_id in
-    List.iter
-      (fun (node : ir_node) ->
-        match node.stmt with
-        | While { body; _ } | Do { body; _ } ->
-            let result = check_register_accesses_in_loop body in
-              satisfied := !satisfied && result.satisfied;
-              violations := result.violations @ !violations
-        | _ -> ()
-      )
-      loop_nodes;
-    { satisfied = !satisfied; violations = !violations }
+      @param program The complete program as a list of IR nodes
+      @param cache The episodicity cache (unused in this check)
+      @param loop_id The identifier of the loop to check
+      @return A condition result indicating satisfaction and any violations *)
+  let check cache (loop_id : int) : condition_result Lwt.t =
+    let violations = ref [] in
+    let satisfied = ref true in
+    let { program; _ } = cache in
+    let loop_nodes = find_loop_nodes program loop_id in
+      List.iter
+        (fun (node : ir_node) ->
+          match node.stmt with
+          | While { body; _ } | Do { body; _ } ->
+              let result = check_register_accesses_in_loop body in
+                satisfied := !satisfied && result.satisfied;
+                violations := result.violations @ !violations
+          | _ -> ()
+        )
+        loop_nodes;
+      Lwt.return { satisfied = !satisfied; violations = !violations }
+end
 
 (** {1 Condition 2: Memory Read Sources (Semantic)} *)
 
-(** Get the origin event for a symbol.
+module WriteCondition = struct
+  (** Get the origin event for a symbol.
 
-    @param structure The symbolic event structure
-    @param symbol The symbol name to look up
-    @return The event label that introduced this symbol, if any *)
-let get_symbol_origin (structure : symbolic_event_structure) (symbol : string) :
-    int option =
-  Hashtbl.find_opt structure.origin symbol
+      @param structure The symbolic event structure
+      @param symbol The symbol name to look up
+      @return The event label that introduced this symbol, if any *)
+  let get_symbol_origin (structure : symbolic_event_structure) (symbol : string)
+      : int option =
+    Hashtbl.find_opt structure.origin symbol
 
-(** Check Condition 2: Reads must read from valid sources.
+  (** Check Condition 2: Reads must read from valid sources.
 
-    Valid sources are:
-    - Same-iteration writes (⊑-before the read)
-    - Cross-thread writes
-    - Read-don't-modify RMWs derived from such writes
+      Valid sources are:
+      - Same-iteration writes (⊑-before the read)
+      - Cross-thread writes
+      - Read-don't-modify RMWs derived from such writes
 
-    @param cache The episodicity cache containing event structures
-    @param loop_id The identifier of the loop to check
-    @return
-      A condition result (async) indicating satisfaction and any violations *)
-let check_condition2_read_sources cache (loop_id : int) : condition_result Lwt.t
-    =
-  let structure = cache.symbolic_structure in
-  let events_in_loop =
-    SymbolicEventStructure.events_in_loop structure loop_id
-  in
-  let reads_in_loop = USet.intersection events_in_loop structure.read_events in
-  let writes_in_loop =
-    USet.intersection events_in_loop structure.write_events
-  in
-    (* filter writes on whether they're in the last iteration of every loop *)
-    let* writes_in_loop =
-      USet.async_filter
-        (fun write_event ->
-          (* exclude writes in the last iteration of the loop *)
-          let loop_conditions =
-            Hashtbl.find_opt structure.loop_indices write_event
-            |> Option.value ~default:[]
-            |> List.filter_map (fun lid ->
-                Hashtbl.find_opt structure.loop_conditions lid
-            )
-          in
-          let write_valres =
-            Hashtbl.find_opt structure.restrict write_event
-            |> Option.value ~default:[]
-          in
-            let* can_continue =
-              Lwt_list.filter_s
-                (fun expr -> Solver.is_sat (expr :: write_valres))
-                loop_conditions
-            in
-              Lwt.return (List.length can_continue > 0)
-        )
-        writes_in_loop
+      @param cache The episodicity cache containing event structures
+      @param loop_id The identifier of the loop to check
+      @return
+        A condition result (async) indicating satisfaction and any violations *)
+  let check cache (loop_id : int) : condition_result Lwt.t =
+    let { symbolic_structure; symbolic_source_spans; _ } = cache in
+    let structure = symbolic_structure in
+    let events_in_loop =
+      SymbolicEventStructure.events_in_loop structure loop_id
     in
-    let violations = ref [] in
-      let* () =
-        USet.iter_async
-          (fun read_event ->
-            (* Find writes to same location not ⊑-before the read *)
-            let* writes_in_loop_not_before_read =
-              USet.async_filter
-                (fun write_event ->
-                  (* exclude writes that are ⊑-before the read *)
-                  if
-                    USet.mem cache.symbolic_structure.po
-                      (write_event, read_event)
-                  then Lwt.return false
-                  else
-                    (* check if locations match *)
-                    match
-                      ( Events.get_loc structure write_event,
-                        Events.get_loc structure read_event
-                      )
-                    with
-                    | Some wloc, Some rloc ->
-                        let state =
-                          Hashtbl.find_opt structure.restrict read_event
-                        in
-                          let* same_loc = Solver.expoteq ?state wloc rloc in
-                            if same_loc then
-                              (* Only invalid if not a read-don't-modify RMW *)
-                              Lwt.return
-                                (not (Events.is_rdmw structure write_event))
-                            else Lwt.return false
-                    | _ -> Lwt.return false
-                )
-                writes_in_loop
+    let reads_in_loop =
+      USet.intersection events_in_loop structure.read_events
+    in
+    let writes_in_loop =
+      USet.intersection events_in_loop structure.write_events
+    in
+      (* filter writes on whether they're in the last iteration of every loop *)
+      let* writes_in_loop =
+        USet.async_filter
+          (fun write_event ->
+            (* exclude writes in the last iteration of the loop *)
+            let loop_conditions =
+              Hashtbl.find_opt structure.loop_indices write_event
+              |> Option.value ~default:[]
+              |> List.filter_map (fun lid ->
+                  Hashtbl.find_opt structure.loop_conditions lid
+              )
             in
-              (* Record violations for invalid write sources *)
+            let write_valres =
+              Hashtbl.find_opt structure.restrict write_event
+              |> Option.value ~default:[]
+            in
+              let* can_continue =
+                Lwt_list.filter_s
+                  (fun expr -> Solver.is_sat (expr :: write_valres))
+                  loop_conditions
+              in
+                Lwt.return (List.length can_continue > 0)
+          )
+          writes_in_loop
+      in
+      let violations = ref [] in
+        let* () =
+          USet.iter_async
+            (fun read_event ->
+              (* Find writes to same location not ⊑-before the read *)
+              let* writes_in_loop_not_before_read =
+                USet.async_filter
+                  (fun write_event ->
+                    (* exclude writes that are ⊑-before the read *)
+                    if USet.mem structure.po (write_event, read_event) then
+                      Lwt.return false
+                    else
+                      (* check if locations match *)
+                      match
+                        ( Events.get_loc structure write_event,
+                          Events.get_loc structure read_event
+                        )
+                      with
+                      | Some wloc, Some rloc ->
+                          let state =
+                            Hashtbl.find_opt structure.restrict read_event
+                          in
+                            let* same_loc = Solver.expoteq ?state wloc rloc in
+                              if same_loc then
+                                (* Only invalid if not a read-don't-modify RMW *)
+                                Lwt.return
+                                  (not (Events.is_rdmw structure write_event))
+                              else Lwt.return false
+                      | _ -> Lwt.return false
+                  )
+                  writes_in_loop
+              in
+                (* Record violations for invalid write sources *)
+                USet.iter
+                  (fun write_event ->
+                    let violation =
+                      WriteConditionViolation
+                        (WriteFromPreviousIteration
+                           ( Events.get_loc structure read_event
+                             |> Option.map show_expr
+                             |> Option.value ~default:"",
+                             Hashtbl.find_opt symbolic_source_spans read_event,
+                             Hashtbl.find_opt symbolic_source_spans write_event
+                           )
+                        )
+                    in
+                      violations := violation :: !violations
+                  )
+                  writes_in_loop_not_before_read;
+                Lwt.return ()
+            )
+            reads_in_loop
+        in
+
+        Lwt.return
+          { satisfied = List.length !violations == 0; violations = !violations }
+end
+
+(** {1 Condition 3: Branch Condition Symbols (Syntactic + Origin Tracking)} *)
+
+module BranchCondition = struct
+  (** Check Condition 3: Branch conditions don't constrain pre-loop symbols.
+
+      This ensures that branching conditions within the loop don't constrain
+      symbols that were read before the loop started, maintaining iteration
+      independence.
+
+      @param program The complete program as a list of IR nodes
+      @param cache The episodicity cache containing event structures
+      @param loop_id The identifier of the loop to check
+      @return A condition result indicating satisfaction and any violations *)
+  let check cache (loop_id : int) : condition_result Lwt.t =
+    Logs.debug (fun m -> m "Checking Condition 3 for Loop %d..." loop_id);
+    let { program; symbolic_structure; symbolic_source_spans; _ } = cache in
+    let structure = symbolic_structure in
+      Logs.debug (fun m ->
+          m "Symbolic Event Structure:\n%s"
+            (show_symbolic_event_structure structure)
+      );
+      let violations = ref [] in
+      let events_in_loop =
+        SymbolicEventStructure.events_in_loop structure loop_id
+      in
+      let branch_events_in_loop =
+        USet.intersection events_in_loop structure.branch_events
+      in
+        Logs.debug (fun m ->
+            m "  Found %d events in loop" (USet.size events_in_loop)
+        );
+        USet.iter
+          (fun e ->
+            (* Get predicates (branch conditions) for this event *)
+            let cond =
+              Hashtbl.find_opt structure.events e |> Option.get |> fun event ->
+              event.cond |> Option.value ~default:(EBoolean true)
+            in
+            let symbols = Expr.get_symbols cond |> USet.of_list in
+            (* TODO this is too restrictive, we only need to check if the
+             branching condition constraints the symbol, not whether it contains
+             the symbol. *)
+            let symbols_read_before_loop =
+              USet.filter
+                (fun sym ->
+                  match Hashtbl.find_opt structure.origin sym with
+                  | Some origin_event ->
+                      not (USet.mem events_in_loop origin_event)
+                  | None -> false
+                )
+                symbols
+            in
+              Logs.debug (fun m ->
+                  m
+                    "  Event %d: Found %d branch condition symbols read before \
+                     loop"
+                    e
+                    (USet.size symbols_read_before_loop)
+              );
+              (* Record violations for constrained pre-loop symbols *)
               USet.iter
-                (fun write_event ->
+                (fun sym ->
                   let violation =
-                    WriteConditionViolation
-                      (WriteFromPreviousIteration
-                         ( Events.get_loc structure read_event
-                           |> Option.map show_expr
-                           |> Option.value ~default:"",
-                           Hashtbl.find_opt cache.symbolic_source_spans
-                             read_event,
-                           Hashtbl.find_opt cache.symbolic_source_spans
-                             write_event
+                    BranchConditionViolation
+                      (BranchConstraintsSymbol
+                         ( sym,
+                           Hashtbl.find_opt structure.origin sym
+                           |> Option.value ~default:(-1),
+                           Hashtbl.find_opt symbolic_source_spans e
                          )
                       )
                   in
                     violations := violation :: !violations
                 )
-                writes_in_loop_not_before_read;
-              Lwt.return ()
+                symbols_read_before_loop
           )
-          reads_in_loop
-      in
+          events_in_loop;
 
-      Lwt.return
-        { satisfied = List.length !violations == 0; violations = !violations }
-
-(** {1 Condition 3: Branch Condition Symbols (Syntactic + Origin Tracking)} *)
-
-(** Check Condition 3: Branch conditions don't constrain pre-loop symbols.
-
-    This ensures that branching conditions within the loop don't constrain
-    symbols that were read before the loop started, maintaining iteration
-    independence.
-
-    @param program The complete program as a list of IR nodes
-    @param cache The episodicity cache containing event structures
-    @param loop_id The identifier of the loop to check
-    @return A condition result indicating satisfaction and any violations *)
-let check_condition3_branch_conditions (program : ir_node list) cache
-    (loop_id : int) : condition_result =
-  Logs.debug (fun m -> m "Checking Condition 3 for Loop %d..." loop_id);
-  let structure = cache.symbolic_structure in
-    Logs.debug (fun m ->
-        m "Symbolic Event Structure:\n%s"
-          (show_symbolic_event_structure structure)
-    );
-    let violations = ref [] in
-    let events_in_loop =
-      SymbolicEventStructure.events_in_loop structure loop_id
-    in
-    let branch_events_in_loop =
-      USet.intersection events_in_loop structure.branch_events
-    in
-      Logs.debug (fun m ->
-          m "  Found %d events in loop" (USet.size events_in_loop)
-      );
-      USet.iter
-        (fun e ->
-          (* Get predicates (branch conditions) for this event *)
-          let cond =
-            Hashtbl.find_opt structure.events e |> Option.get |> fun event ->
-            event.cond |> Option.value ~default:(EBoolean true)
-          in
-          let symbols = Expr.get_symbols cond |> USet.of_list in
-          (* TODO this is too restrictive, we only need to check if the
-             branching condition constraints the symbol, not whether it contains
-             the symbol. *)
-          let symbols_read_before_loop =
-            USet.filter
-              (fun sym ->
-                match Hashtbl.find_opt structure.origin sym with
-                | Some origin_event -> not (USet.mem events_in_loop origin_event)
-                | None -> false
-              )
-              symbols
-          in
-            Logs.debug (fun m ->
-                m
-                  "  Event %d: Found %d branch condition symbols read before \
-                   loop"
-                  e
-                  (USet.size symbols_read_before_loop)
-            );
-            (* Record violations for constrained pre-loop symbols *)
-            USet.iter
-              (fun sym ->
-                let violation =
-                  BranchConditionViolation
-                    (BranchConstraintsSymbol
-                       ( sym,
-                         Hashtbl.find_opt structure.origin sym
-                         |> Option.value ~default:(-1),
-                         Hashtbl.find_opt cache.symbolic_source_spans e
-                       )
-                    )
-                in
-                  violations := violation :: !violations
-              )
-              symbols_read_before_loop
-        )
-        events_in_loop;
-
-      { satisfied = List.length !violations == 0; violations = !violations }
+        Lwt.return
+          { satisfied = List.length !violations == 0; violations = !violations }
+end
 
 (** {1 Condition 4: Inter-iteration Ordering (Semantic)} *)
 
-(** Check Condition 4: Events from prior iterations ordered before later
-    iterations.
+module EventsCondition = struct
+  (** Check Condition 4: Events from prior iterations ordered before later
+      iterations.
 
-    This checks that all events from iteration i are ordered before all events
-    from iteration i+1 by the transitive closure of (ppo ∪ dp), ensuring proper
-    happens-before relationships across iterations.
+      This checks that all events from iteration i are ordered before all events
+      from iteration i+1 by the transitive closure of (ppo ∪ dp), ensuring
+      proper happens-before relationships across iterations.
 
-    @param cache
-      The episodicity cache containing event structures and executions
-    @param loop_id The identifier of the loop to check
-    @return A condition result indicating satisfaction and any violations *)
-let check_condition4_iteration_ordering cache (loop_id : int) :
-    condition_result Lwt.t =
-  let structure = cache.symbolic_structure in
-  let events_in_loop =
-    SymbolicEventStructure.events_in_loop structure loop_id
-  in
-  (* Group events by iteration number *)
-  let events_by_iteration = Hashtbl.create 10 in
-    USet.iter
-      (fun event ->
-        match get_iteration_for_loop structure.loop_indices event loop_id with
-        | Some iter ->
-            let existing =
-              Hashtbl.find_opt events_by_iteration iter
-              |> Option.value ~default:(USet.create ())
-            in
-              Hashtbl.replace events_by_iteration iter (USet.add existing event)
-        | None -> ()
-      )
-      events_in_loop;
+      @param cache
+        The episodicity cache containing event structures and executions
+      @param loop_id The identifier of the loop to check
+      @return A condition result indicating satisfaction and any violations *)
+  let check cache (loop_id : int) : condition_result Lwt.t =
+    let {
+      symbolic_structure;
+      symbolic_fwd_es_ctx;
+      symbolic_justifications;
+      symbolic_source_spans;
+      _;
+    } =
+      cache
+    in
+    let structure = symbolic_structure in
+    let events_in_loop =
+      SymbolicEventStructure.events_in_loop structure loop_id
+    in
+    (* Group events by iteration number *)
+    let events_by_iteration = Hashtbl.create 10 in
+      USet.iter
+        (fun event ->
+          match get_iteration_for_loop structure.loop_indices event loop_id with
+          | Some iter ->
+              let existing =
+                Hashtbl.find_opt events_by_iteration iter
+                |> Option.value ~default:(USet.create ())
+              in
+                Hashtbl.replace events_by_iteration iter
+                  (USet.add existing event)
+          | None -> ()
+        )
+        events_in_loop;
 
-    (* Compute (ppo ∪ dp)* for the loop *)
-    let delta_loop = URelation.cross events_in_loop events_in_loop in
-    (* TODO use contextual predicates *)
-    let fwd_es_ctx = cache.symbolic_fwd_es_ctx in
-      let* ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
-      let ppo =
-        fwd_es_ctx.ppo.ppo_sync
-        |> USet.union fwd_es_ctx.ppo.ppo_base
-        |> USet.union fwd_es_ctx.ppo.ppo_loc_base
-        |> USet.union fwd_es_ctx.ppo.ppo_base
-      in
-      let dp =
-        USet.fold
-          (fun acc just ->
-            Freeze.freeze_dp structure just |> USet.inplace_union acc
-          )
-          cache.symbolic_justifications (USet.create ())
-      in
-      let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
+      (* Compute (ppo ∪ dp)* for the loop *)
+      let delta_loop = URelation.cross events_in_loop events_in_loop in
+      (* TODO use contextual predicates *)
+      let fwd_es_ctx = symbolic_fwd_es_ctx in
+        let* ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
+        let ppo =
+          fwd_es_ctx.ppo.ppo_sync
+          |> USet.union fwd_es_ctx.ppo.ppo_base
+          |> USet.union fwd_es_ctx.ppo.ppo_loc_base
+          |> USet.union fwd_es_ctx.ppo.ppo_base
+        in
+        let dp =
+          USet.fold
+            (fun acc just ->
+              Freeze.freeze_dp structure just |> USet.inplace_union acc
+            )
+            symbolic_justifications (USet.create ())
+        in
+        let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
 
-      let ppo_iter =
-        fwd_es_ctx.ppo.ppo_iter_sync
-        |> USet.union fwd_es_ctx.ppo.ppo_iter_base
-        |> USet.union fwd_es_ctx.ppo.ppo_iter_loc_base
-        |> USet.union fwd_es_ctx.ppo.ppo_iter_base
-      in
-      let cross_iter_ppo =
-        ppo_iter
-        |> USet.union (URelation.compose [ dp_ppo; ppo_iter ])
-        |> USet.union (URelation.compose [ ppo_iter; dp_ppo ])
-        |> USet.union (URelation.compose [ dp_ppo; ppo_iter; dp_ppo ])
-      in
+        let ppo_iter =
+          fwd_es_ctx.ppo.ppo_iter_sync
+          |> USet.union fwd_es_ctx.ppo.ppo_iter_base
+          |> USet.union fwd_es_ctx.ppo.ppo_iter_loc_base
+          |> USet.union fwd_es_ctx.ppo.ppo_iter_base
+        in
+        let cross_iter_ppo =
+          ppo_iter
+          |> USet.union (URelation.compose [ dp_ppo; ppo_iter ])
+          |> USet.union (URelation.compose [ ppo_iter; dp_ppo ])
+          |> USet.union (URelation.compose [ dp_ppo; ppo_iter; dp_ppo ])
+        in
 
-      let unordered_pairs = USet.set_minus structure.po_iter cross_iter_ppo in
+        let unordered_pairs = USet.set_minus structure.po_iter cross_iter_ppo in
 
-      let violations = ref [] in
-      let satisfied = ref true in
-        USet.iter
-          (fun (e1, e2) ->
-            let violation =
-              LoopConditionViolation
-                (LoopIterationOrderingViolation
-                   ( -1,
-                     Hashtbl.find_opt cache.symbolic_source_spans e1,
-                     Hashtbl.find_opt cache.symbolic_source_spans e2
-                   )
-                )
-            in
-              violations := violation :: !violations;
-              satisfied := false
-          )
-          unordered_pairs;
+        let violations = ref [] in
+        let satisfied = ref true in
+          USet.iter
+            (fun (e1, e2) ->
+              let violation =
+                LoopConditionViolation
+                  (LoopIterationOrderingViolation
+                     ( -1,
+                       Hashtbl.find_opt symbolic_source_spans e1,
+                       Hashtbl.find_opt symbolic_source_spans e2
+                     )
+                  )
+              in
+                violations := violation :: !violations;
+                satisfied := false
+            )
+            unordered_pairs;
 
-        Lwt.return { satisfied = !satisfied; violations = !violations }
+          Lwt.return { satisfied = !satisfied; violations = !violations }
+end
 
 (** {1 Main Episodicity Check} *)
 
@@ -508,27 +528,27 @@ let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
   match ctx.program_stmts with
   | Some program ->
       (* Check all four conditions *)
-      let cond1 = check_condition1_register_access program cache loop_id in
-        let* cond2 = check_condition2_read_sources cache loop_id in
-        let cond3 = check_condition3_branch_conditions program cache loop_id in
-          let* cond4 = check_condition4_iteration_ordering cache loop_id in
+      let* condition1 = RegisterCondition.check cache loop_id in
+        let* condition2 = WriteCondition.check cache loop_id in
+          let* condition3 = BranchCondition.check cache loop_id in
+            let* condition4 = EventsCondition.check cache loop_id in
 
-          let is_episodic =
-            cond1.satisfied
-            && cond2.satisfied
-            && cond3.satisfied
-            && cond4.satisfied
-          in
+            let is_episodic =
+              condition1.satisfied
+              && condition2.satisfied
+              && condition3.satisfied
+              && condition4.satisfied
+            in
 
-          Lwt.return_some
-            {
-              loop_id;
-              condition1 = cond1;
-              condition2 = cond2;
-              condition3 = cond3;
-              condition4 = cond4;
-              is_episodic;
-            }
+            Lwt.return_some
+              {
+                loop_id;
+                condition1;
+                condition2;
+                condition3;
+                condition4;
+                is_episodic;
+              }
   | _ -> Lwt.return_none
 
 (** Main episodicity testing function called from the analysis pipeline.
@@ -583,6 +603,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
 
           let cache =
             {
+              program;
               symbolic_structure;
               symbolic_source_spans;
               symbolic_fwd_es_ctx;
