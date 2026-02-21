@@ -697,9 +697,49 @@ class GraphVisualizer {
             });
         });
 
-        document.getElementById('layout-select').addEventListener('change', (e) => {
-            this.applyLayout(e.target.value);
+        const layoutWrapper = document.getElementById('layout-dropdown-wrapper');
+        const layoutBtn = document.getElementById('layout-dropdown-btn');
+        const layoutContent = document.getElementById('layout-dropdown-content');
+
+        layoutBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = layoutWrapper.classList.contains('open');
+            if (!isOpen) {
+                layoutWrapper.classList.add('open');
+                layoutBtn.textContent = layoutBtn.textContent.replace('▲', '▼');
+                const rect = layoutBtn.getBoundingClientRect();
+                requestAnimationFrame(() => {
+                    layoutContent.style.top = (rect.top - layoutContent.offsetHeight - 4) + 'px';
+                    layoutContent.style.left = rect.left + 'px';
+                });
+            } else {
+                layoutWrapper.classList.remove('open');
+                layoutBtn.textContent = layoutBtn.textContent.replace('▼', '▲');
+            }
         });
+
+        document.addEventListener('click', (e) => {
+            if (!layoutWrapper.contains(e.target)) {
+                layoutWrapper.classList.remove('open');
+                layoutBtn.textContent = layoutBtn.textContent.replace('▼', '▲');
+            }
+        });
+
+        layoutContent.querySelectorAll('.layout-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const value = option.dataset.value;
+                const label = option.textContent;
+                layoutContent.querySelectorAll('.layout-option').forEach(o => o.classList.remove('active'));
+                option.classList.add('active');
+                layoutBtn.textContent = label + ' ▲';
+                layoutWrapper.classList.remove('open');
+                this.applyLayout(value);
+            });
+        });
+
+        // Set initial active
+        layoutContent.querySelector('.layout-option[data-value="breadthfirst"]').classList.add('active');
 
         document.getElementById('fit-btn').addEventListener('click', () => {
             this.cy.fit(null, 50);
@@ -767,20 +807,24 @@ class GraphVisualizer {
             const isOpen = relationsWrapper.classList.contains('open');
             if (!isOpen) {
                 relationsWrapper.classList.add('open');
+                relationsBtn.textContent = 'Relations ▼';
                 // Position using fixed coords so it escapes any overflow:hidden parent
                 const rect = relationsBtn.getBoundingClientRect();
-                relationsContent.style.top = (rect.bottom + 4) + 'px';
+                // Open upward: position after render so we know the height
                 requestAnimationFrame(() => {
+                    relationsContent.style.top = (rect.top - relationsContent.offsetHeight - 4) + 'px';
                     relationsContent.style.left = (rect.right - relationsContent.offsetWidth) + 'px';
                 });
             } else {
                 relationsWrapper.classList.remove('open');
+                relationsBtn.textContent = 'Relations ▲';
             }
         });
 
         document.addEventListener('click', (e) => {
             if (!relationsWrapper.contains(e.target)) {
                 relationsWrapper.classList.remove('open');
+                relationsBtn.textContent = 'Relations ▲';
             }
         });
 

@@ -220,6 +220,14 @@ pre.line-numbers > code {
 .graph-controls { position: absolute; bottom: 10px; left: 10px; display: none; gap: 0.5rem; z-index: 100; }
 .graph-controls.active { display: flex; }
 .graph-controls select { padding: 0.4rem 0.6rem; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; color: #cccccc; border-radius: 4px; font-size: 0.85rem; cursor: pointer; }
+.layout-dropdown { position: relative; display: inline-block; }
+.layout-btn { background: rgba(37, 37, 38, 0.95) !important; border: 1px solid #3e3e42 !important; color: #cccccc !important; padding: 0.4rem 0.6rem !important; border-radius: 4px !important; font-size: 0.85rem !important; cursor: pointer; white-space: nowrap; transition: background 0.2s; }
+.layout-btn:hover { background: #505050 !important; }
+.layout-dropdown-content { display: none; position: fixed; background: #2d2d30; border: 1px solid #3e3e42; border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.5); z-index: 9999; min-width: 150px; }
+.layout-dropdown.open .layout-dropdown-content { display: block; }
+.layout-option { padding: 8px 12px; font-size: 13px; color: #d4d4d4; cursor: pointer; }
+.layout-option:hover { background: #3e3e42; }
+.layout-option.active { color: #4ec9b0; }
 .graph-controls button { padding: 0.4rem 0.8rem; background: rgba(37, 37, 38, 0.95); border: 1px solid #3e3e42; color: #cccccc; border-radius: 4px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
 .graph-controls button:hover { background: #505050; }
 
@@ -937,4 +945,3 @@ pre.line-numbers > code {
     cursor: pointer;
     flex: 1;
 }
-

@@ -106,12 +106,15 @@
                 </div>
                 
                 <div class="graph-controls" id="graph-controls">
-                    <select id="layout-select">
-                        <option value="breadthfirst">Hierarchical</option>
-                        <option value="fcose">fCoSE (Fast)</option>
-                        <option value="cose-bilkent">COSE (Quality)</option>
-                        <option value="circle">Circle</option>
-                    </select>
+                    <div class="layout-dropdown" id="layout-dropdown-wrapper">
+                        <button id="layout-dropdown-btn" class="layout-btn">Hierarchical ▲</button>
+                        <div class="layout-dropdown-content" id="layout-dropdown-content">
+                            <div class="layout-option" data-value="breadthfirst">Hierarchical</div>
+                            <div class="layout-option" data-value="fcose">fCoSE (Fast)</div>
+                            <div class="layout-option" data-value="cose-bilkent">COSE (Quality)</div>
+                            <div class="layout-option" data-value="circle">Circle</div>
+                        </div>
+                    </div>
                     <button id="fit-btn">Fit</button>
                     <button id="export-png-btn">Export PNG</button>
                     <div class="relations-dropdown" id="relations-dropdown-wrapper">
