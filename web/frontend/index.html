@@ -22,73 +22,6 @@
     <link rel="stylesheet" href="static/css/mordor.css">
     <!-- Test Runner CSS -->
     <link rel="stylesheet" href="static/css/test-runner.css">
-    <style>
-        /* Split button styles */
-        .split-button {
-            position: relative;
-            display: inline-flex;
-        }
-        
-        .split-button-action {
-            border-radius: 4px 0 0 4px;
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
-            min-width: 100px;
-        }
-        
-        .split-button-toggle {
-            border-radius: 0 4px 4px 0;
-            padding: 0.5rem 0.6rem;
-            min-width: auto;
-        }
-        
-        .split-button-toggle:hover {
-            background: #005a9e;
-        }
-        
-        .dropdown-content {
-            display: none;
-            position: absolute;
-            background-color: #2d2d30;
-            min-width: 160px;
-            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.4);
-            z-index: 1000;
-            border: 1px solid #3e3e42;
-            border-radius: 4px;
-            margin-top: 2px;
-            top: 100%;
-            right: 0;
-        }
-        
-        .dropdown-content button {
-            color: #d4d4d4;
-            padding: 10px 16px;
-            text-decoration: none;
-            display: block;
-            width: 100%;
-            text-align: left;
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.2s;
-        }
-        
-        .dropdown-content button:hover {
-            background-color: #3e3e42;
-        }
-        
-        .dropdown-content button:first-child {
-            border-radius: 4px 4px 0 0;
-        }
-        
-        .dropdown-content button:last-child {
-            border-radius: 0 0 4px 4px;
-        }
-        
-        .split-button.active .dropdown-content {
-            display: block;
-        }
-    </style>
 </head>
 <body>
     <div class="container">
@@ -181,6 +114,19 @@
                     </select>
                     <button id="fit-btn">Fit</button>
                     <button id="export-png-btn">Export PNG</button>
+                    <div class="relations-dropdown" id="relations-dropdown-wrapper">
+                        <button id="relations-dropdown-btn" class="relations-btn">Relations ▼</button>
+                        <div class="relations-dropdown-content" id="relations-dropdown-content">
+                            <div class="relations-header">
+                                <span>Show Relations</span>
+                                <div class="relations-header-actions">
+                                    <button id="relations-select-all" title="Select all">All</button>
+                                    <button id="relations-select-none" title="Deselect all">None</button>
+                                </div>
+                            </div>
+                            <div id="relations-checkboxes"></div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="graph-stats" id="graph-stats">

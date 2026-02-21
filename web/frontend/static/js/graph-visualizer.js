@@ -36,7 +36,9 @@ class GraphVisualizer {
         this.assertionResults = null; // Store assertion results
         this.currentEndpoint = '/api/visualize/stream'; // Default endpoint
         this.currentAction = 'visualize'; // Default action
-        
+        this.visibleRelations = null; // null means all visible
+        this.availableRelations = new Set(); // track which relation types exist
+
         // Settings
         this.settings = {
             showUAF: false,
@@ -754,6 +756,122 @@ class GraphVisualizer {
                 this.closeSettingsModal();
             }
         });
+
+        // Relations filter dropdown
+        const relationsWrapper = document.getElementById('relations-dropdown-wrapper');
+        const relationsBtn = document.getElementById('relations-dropdown-btn');
+        const relationsContent = document.getElementById('relations-dropdown-content');
+
+        relationsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = relationsWrapper.classList.contains('open');
+            if (!isOpen) {
+                relationsWrapper.classList.add('open');
+                // Position using fixed coords so it escapes any overflow:hidden parent
+                const rect = relationsBtn.getBoundingClientRect();
+                relationsContent.style.top = (rect.bottom + 4) + 'px';
+                requestAnimationFrame(() => {
+                    relationsContent.style.left = (rect.right - relationsContent.offsetWidth) + 'px';
+                });
+            } else {
+                relationsWrapper.classList.remove('open');
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!relationsWrapper.contains(e.target)) {
+                relationsWrapper.classList.remove('open');
+            }
+        });
+
+        document.getElementById('relations-select-all').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.availableRelations.forEach(rel => {
+                const cb = document.getElementById('rel-cb-' + rel);
+                if (cb) cb.checked = true;
+            });
+            this.visibleRelations = null;
+            this.applyRelationFilter();
+        });
+
+        document.getElementById('relations-select-none').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.availableRelations.forEach(rel => {
+                const cb = document.getElementById('rel-cb-' + rel);
+                if (cb) cb.checked = false;
+            });
+            this.visibleRelations = new Set();
+            this.applyRelationFilter();
+        });
+    }
+
+    updateRelationsDropdown(relations) {
+        // relations: array of base type strings
+        const container = document.getElementById('relations-checkboxes');
+        container.innerHTML = '';
+
+        // Update available set, preserving existing visibility state
+        relations.forEach(rel => this.availableRelations.add(rel));
+
+        [...this.availableRelations].sort().forEach(rel => {
+            const color = EDGE_COLORS[rel] || EDGE_COLORS.default;
+            const isChecked = this.visibleRelations === null || this.visibleRelations.has(rel);
+
+            const item = document.createElement('label');
+            item.className = 'relation-checkbox-item';
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'rel-cb-' + rel;
+            cb.checked = isChecked;
+            cb.addEventListener('change', (e) => {
+                e.stopPropagation();
+                if (this.visibleRelations === null) {
+                    // Clone all relations into set first
+                    this.visibleRelations = new Set(this.availableRelations);
+                }
+                if (cb.checked) {
+                    this.visibleRelations.add(rel);
+                } else {
+                    this.visibleRelations.delete(rel);
+                }
+                // If all checked, reset to null (all visible)
+                if (this.visibleRelations.size === this.availableRelations.size) {
+                    this.visibleRelations = null;
+                }
+                this.applyRelationFilter();
+            });
+
+            const dot = document.createElement('span');
+            dot.className = 'relation-color-dot';
+            dot.style.background = color;
+
+            const lbl = document.createElement('span');
+            lbl.textContent = rel;
+            lbl.style.color = '#d4d4d4';
+            lbl.style.fontSize = '13px';
+            lbl.style.cursor = 'pointer';
+
+            item.appendChild(cb);
+            item.appendChild(dot);
+            item.appendChild(lbl);
+            item.addEventListener('click', (e) => {
+                if (e.target !== cb) cb.click();
+            });
+            container.appendChild(item);
+        });
+    }
+
+    applyRelationFilter() {
+        if (this.visibleRelations === null) {
+            // Show all edges
+            this.cy.edges().style('display', 'element');
+        } else {
+            this.cy.edges().forEach(edge => {
+                const baseType = edge.data('type').split(' - ')[0];
+                edge.style('display', this.visibleRelations.has(baseType) ? 'element' : 'none');
+            });
+        }
     }
 
     setupResizer() {
@@ -919,6 +1037,9 @@ class GraphVisualizer {
         this.loops = [];
         this.episodicityResults = {};
         this.assertionResults = null;
+        this.visibleRelations = null; // reset to show all
+        this.availableRelations = new Set();
+        document.getElementById('relations-checkboxes').innerHTML = '';
 
         // Update UI
         document.getElementById('status').textContent = 'Processing...';
@@ -1085,6 +1206,10 @@ class GraphVisualizer {
                 });
             });
 
+            // Collect relation types from this graph and update filter dropdown
+            const relTypes = [...new Set(graph.edges.map(e => e.type.split(' - ')[0]))];
+            this.updateRelationsDropdown(relTypes);
+
           console.log('Graph nodes and edges added. Now processing UAF edges if any.');
             // Add UAF edges if undefined_behaviour data is provided
             let uafEdgeCount = 0;
@@ -1102,9 +1227,13 @@ class GraphVisualizer {
                     });
                     uafEdgeCount++;
                 });
+                this.updateRelationsDropdown(['uaf']);
             } else {
                 console.log('No UAF edges to add. undefinedBehaviour:', undefinedBehaviour);
             }
+
+            // Re-apply relation filter to newly rendered graph
+            this.applyRelationFilter();
 
             // Update stats (including UAF edges in edge count)
             document.getElementById('node-count').textContent = graph.nodes.length;

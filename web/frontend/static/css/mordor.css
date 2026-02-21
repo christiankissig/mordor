@@ -761,3 +761,180 @@ pre.line-numbers > code {
     max-height: 300px;
     overflow-y: auto;
 }
+
+/* Split button styles */
+.split-button {
+    position: relative;
+    display: inline-flex;
+}
+
+.split-button-action {
+    border-radius: 4px 0 0 4px;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 100px;
+}
+
+.split-button-toggle {
+    border-radius: 0 4px 4px 0;
+    padding: 0.5rem 0.6rem;
+    min-width: auto;
+}
+
+.split-button-toggle:hover {
+    background: #005a9e;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #2d2d30;
+    min-width: 160px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.4);
+    z-index: 1000;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    margin-top: 2px;
+    top: 100%;
+    right: 0;
+}
+
+.dropdown-content button {
+    color: #d4d4d4;
+    padding: 10px 16px;
+    text-decoration: none;
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.dropdown-content button:hover {
+    background-color: #3e3e42;
+}
+
+.dropdown-content button:first-child {
+    border-radius: 4px 4px 0 0;
+}
+
+.dropdown-content button:last-child {
+    border-radius: 0 0 4px 4px;
+}
+
+.split-button.active .dropdown-content {
+    display: block;
+}
+
+/* Relations filter dropdown */
+.relations-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.relations-btn {
+    background: #3c3c3c;
+    border: 1px solid #555;
+    color: #d4d4d4;
+    padding: 0.4rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    transition: background 0.2s;
+}
+
+.relations-btn:hover {
+    background: #4a4a4a;
+}
+
+.relations-dropdown-content {
+    display: none;
+    position: fixed;
+    background: #2d2d30;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+    z-index: 9999;
+    min-width: 180px;
+}
+
+.relations-dropdown.open .relations-dropdown-content {
+    display: block;
+}
+
+.relations-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid #3e3e42;
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.relations-header-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.relations-header-actions button {
+    background: #3c3c3c;
+    border: 1px solid #555;
+    color: #aaa;
+    padding: 2px 7px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.15s;
+}
+
+.relations-header-actions button:hover {
+    background: #4e4e4e;
+    color: #d4d4d4;
+}
+
+#relations-checkboxes {
+    padding: 6px 0;
+}
+
+.relation-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+    user-select: none;
+}
+
+.relation-checkbox-item:hover {
+    background: #3a3a3a;
+}
+
+.relation-checkbox-item input[type="checkbox"] {
+    cursor: pointer;
+    accent-color: #4ec9b0;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.relation-checkbox-item .relation-color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.relation-checkbox-item label {
+    color: #d4d4d4;
+    font-size: 13px;
+    cursor: pointer;
+    flex: 1;
+}
+
