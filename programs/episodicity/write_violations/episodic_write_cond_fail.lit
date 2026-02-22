@@ -1,9 +1,0 @@
-rtemp := 0;
-rC := malloc 1;
-*rC := 0;
-do
-{
-rtemp := *rC;
-*rC := rtemp + 1;
-}
-while (rtemp < 5)

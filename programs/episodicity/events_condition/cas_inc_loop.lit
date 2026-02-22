@@ -1,0 +1,12 @@
+rC := malloc 1;
+*rC := 0;
+rsucc := 0;
+rn := malloc 1;
+do
+{
+  rs := fadd(acquire,release,rC,0);
+  rv := *rs;
+  *rn := rv + 1;
+  rsucc := cas(acquire,release,rC,rs,rn);
+}
+while (rsucc = 0)

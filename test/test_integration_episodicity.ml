@@ -296,44 +296,72 @@ type episodicity_test_spec = {
 (* Predefined test specifications *)
 let test_specifications =
   [
+    (* register condition *)
     {
-      filepath =
-        "programs/episodicity/branch_violations/episodic_branch_cond_fail.lit";
+      filepath = "programs/episodicity/register_condition/fail.lit";
+      expected_episodic = Some false;
+      expected_failing_conditions = [ 1 ];
+      description =
+        "Register condition failure - loop reads pre-loop symbol without \
+         separation";
+    };
+    (* write condition *)
+    {
+      filepath = "programs/episodicity/write_condition/fail.lit";
+      expected_episodic = Some false;
+      expected_failing_conditions = [ 2 ];
+      description =
+        "Write condition failure - loop writes to pre-loop symbol without \
+         separation";
+    };
+    (* branch condition *)
+    {
+      filepath = "programs/episodicity/branch_condition/fail.lit";
       expected_episodic = Some false;
       expected_failing_conditions = [ 3 ];
       description = "Branch condition failure - constrains pre-loop symbol";
     };
     {
-      filepath =
-        "programs/episodicity/ordering_violations/episodic_events_cond_two_reads_fail.lit";
+      filepath = "programs/episodicity/branch_condition/nested_fail.lit";
+      expected_episodic = Some false;
+      expected_failing_conditions = [ 3; 4 ];
+      description =
+        "Branch condition failure - nested loop constrains pre-loop symbol";
+    };
+    (* events condition *)
+    {
+      filepath = "programs/episodicity/events_condition/two_reads_fail.lit";
       expected_episodic = Some false;
       expected_failing_conditions = [ 4 ];
       description =
         "Event ordering failure - iterations don't separate two reads ";
     };
     {
-      filepath = "programs/episodicity/episodic_branch_nested_fail.lit";
-      expected_episodic = Some false;
-      expected_failing_conditions = [ 3; 4 ];
+      filepath = "programs/episodicity/events_condition/cas_inc_loop.lit";
+      expected_episodic = Some true;
+      expected_failing_conditions = [];
       description =
-        "Branch condition failure - nested loop constrains pre-loop symbol";
+        "Valid episodic loop with RMW events - should be episodic with no \
+         failing conditions";
     };
+    (* multiple violations *)
     {
-      filepath = "programs/episodicity/episodic_register_multi_fail.lit";
+      filepath = "programs/episodicity/multiple/register_events_fail.lit";
       expected_episodic = Some false;
       expected_failing_conditions = [ 1; 4 ];
       description =
         "Multiple condition failures - register and write conditions fail";
     };
+    (* valid cases *)
     {
-      filepath = "programs/episodicity/valid/episodic_valid_read.lit";
+      filepath = "programs/episodicity/valid/read.lit";
       expected_episodic = Some true;
       expected_failing_conditions = [];
       description =
         "Valid episodic loop - should be episodic with no failing conditions";
     };
     {
-      filepath = "programs/episodicity/valid/episodic_valid_write_only.lit";
+      filepath = "programs/episodicity/valid/write_only.lit";
       expected_episodic = Some true;
       expected_failing_conditions = [];
       description =
@@ -562,7 +590,7 @@ let ensure_episodicity_dir () =
               (* Condition 2 failures *)
               "branch_violations";
               (* Condition 3 failures *)
-              "ordering_violations";
+              "events_condition";
               (* Condition 4 failures *)
             ]
           in
