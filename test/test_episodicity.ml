@@ -609,7 +609,7 @@ module TestWriteCondition = struct
         let loop_conditions = Hashtbl.create 0 in
           Hashtbl.add loop_conditions 0 (EBoolean true);
           (* while true *)
-          let symbolic_structure =
+          let structure =
             {
               (SymbolicEventStructure.create ()) with
               e = e_set;
@@ -624,25 +624,23 @@ module TestWriteCondition = struct
               loop_conditions;
             }
           in
-          let symbolic_source_spans = Hashtbl.create 0 in
-            Hashtbl.add symbolic_source_spans alloc.label
+          let source_spans = Hashtbl.create 0 in
+            Hashtbl.add source_spans alloc.label
               { start_line = 2; start_col = 1; end_line = 2; end_col = 10 };
-            Hashtbl.add symbolic_source_spans init_write.label
+            Hashtbl.add source_spans init_write.label
               { start_line = 3; start_col = 1; end_line = 3; end_col = 10 };
-            Hashtbl.add symbolic_source_spans read.label
+            Hashtbl.add source_spans read.label
               { start_line = 6; start_col = 1; end_line = 6; end_col = 10 };
-            Hashtbl.add symbolic_source_spans mod_write.label
+            Hashtbl.add source_spans mod_write.label
               { start_line = 7; start_col = 1; end_line = 7; end_col = 10 };
-            let symbolic_justifications = USet.create () in
-            let symbolic_fwd_es_ctx =
-              EventStructureContext.create symbolic_structure
-            in
+            let justifications = USet.create () in
+            let fwd_es_ctx = EventStructureContext.create structure in
               {
                 program = [];
-                symbolic_structure;
-                symbolic_source_spans;
-                symbolic_justifications;
-                symbolic_fwd_es_ctx;
+                structure;
+                source_spans;
+                justifications;
+                fwd_es_ctx;
               }
 
   (* Test 2: Same-iteration write before read (VALID) *)
@@ -671,7 +669,7 @@ module TestWriteCondition = struct
       let loop_indices = Hashtbl.create 0 in
         Hashtbl.add loop_indices write.label [ 0 ];
         Hashtbl.add loop_indices read.label [ 0 ];
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e = e_set;
@@ -685,18 +683,10 @@ module TestWriteCondition = struct
             loop_indices;
           }
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
-        let symbolic_fwd_es_ctx =
-          EventStructureContext.create symbolic_structure
-        in
-          {
-            program = [];
-            symbolic_structure;
-            symbolic_source_spans;
-            symbolic_justifications;
-            symbolic_fwd_es_ctx;
-          }
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
+        let fwd_es_ctx = EventStructureContext.create structure in
+          { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
   (* Test 3: Multiple writes to same location, not sequenced (VIOLATION) *)
   let test_multiple_unordered_writes_setup () =
@@ -733,7 +723,7 @@ module TestWriteCondition = struct
         let loop_conditions = Hashtbl.create 0 in
           Hashtbl.add loop_conditions 0 (EBoolean true);
           (* while true *)
-          let symbolic_structure =
+          let structure =
             {
               (SymbolicEventStructure.create ()) with
               e = e_set;
@@ -748,17 +738,15 @@ module TestWriteCondition = struct
               loop_conditions;
             }
           in
-          let symbolic_source_spans = Hashtbl.create 0 in
-          let symbolic_justifications = USet.create () in
-          let symbolic_fwd_es_ctx =
-            EventStructureContext.create symbolic_structure
-          in
+          let source_spans = Hashtbl.create 0 in
+          let justifications = USet.create () in
+          let fwd_es_ctx = EventStructureContext.create structure in
             {
               program = [];
-              symbolic_structure;
-              symbolic_source_spans;
-              symbolic_justifications;
-              symbolic_fwd_es_ctx;
+              structure;
+              source_spans;
+              justifications;
+              fwd_es_ctx;
             }
 
   (* Test 4: Read-don't-modify RMW (VALID) *)
@@ -800,7 +788,7 @@ module TestWriteCondition = struct
       let loop_indices = Hashtbl.create 0 in
         Hashtbl.add loop_indices read.label [ 0 ];
         Hashtbl.add loop_indices rdmw_write.label [ 0 ];
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e = e_set;
@@ -814,25 +802,17 @@ module TestWriteCondition = struct
             loop_indices;
           }
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
-        let symbolic_fwd_es_ctx =
-          EventStructureContext.create symbolic_structure
-        in
-          {
-            program = [];
-            symbolic_structure;
-            symbolic_source_spans;
-            symbolic_justifications;
-            symbolic_fwd_es_ctx;
-          }
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
+        let fwd_es_ctx = EventStructureContext.create structure in
+          { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
   (* Test 5: Empty loop (VALID) *)
   let test_empty_loop_setup () =
     let init = Event.create Init 0 () in
     let events = Hashtbl.create 1 in
       Hashtbl.add events init.label init;
-      let symbolic_structure =
+      let structure =
         {
           (SymbolicEventStructure.create ()) with
           e = USet.of_list [ init.label ];
@@ -840,18 +820,10 @@ module TestWriteCondition = struct
           loop_indices = Hashtbl.create 0;
         }
       in
-      let symbolic_source_spans = Hashtbl.create 0 in
-      let symbolic_justifications = USet.create () in
-      let symbolic_fwd_es_ctx =
-        EventStructureContext.create symbolic_structure
-      in
-        {
-          program = [];
-          symbolic_structure;
-          symbolic_source_spans;
-          symbolic_justifications;
-          symbolic_fwd_es_ctx;
-        }
+      let source_spans = Hashtbl.create 0 in
+      let justifications = USet.create () in
+      let fwd_es_ctx = EventStructureContext.create structure in
+        { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
   let write_test_cases =
     [
@@ -958,7 +930,7 @@ module TestBranchCondition = struct
       let loop_indices = Hashtbl.create 1 in
         Hashtbl.add loop_indices branch.label [ 0 ];
         let origin = create_origin_table [ ("α", pre_read.label) ] in
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e = USet.of_list [ init.label; pre_read.label; branch.label ];
@@ -1003,19 +975,11 @@ module TestBranchCondition = struct
               );
           ]
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
-        let symbolic_fwd_es_ctx =
-          EventStructureContext.create symbolic_structure
-        in
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
+        let fwd_es_ctx = EventStructureContext.create structure in
         let cache =
-          {
-            program;
-            symbolic_structure;
-            symbolic_source_spans;
-            symbolic_justifications;
-            symbolic_fwd_es_ctx;
-          }
+          { program; structure; source_spans; justifications; fwd_es_ctx }
         in
           (program, cache)
 
@@ -1038,7 +1002,7 @@ module TestBranchCondition = struct
         Hashtbl.add loop_indices loop_read.label [ 0 ];
         Hashtbl.add loop_indices branch.label [ 0 ];
         let origin = create_origin_table [ ("β", loop_read.label) ] in
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e = USet.of_list [ init.label; loop_read.label; branch.label ];
@@ -1085,19 +1049,11 @@ module TestBranchCondition = struct
               );
           ]
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
-        let symbolic_fwd_es_ctx =
-          EventStructureContext.create symbolic_structure
-        in
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
+        let fwd_es_ctx = EventStructureContext.create structure in
         let cache =
-          {
-            program;
-            symbolic_structure;
-            symbolic_source_spans;
-            symbolic_justifications;
-            symbolic_fwd_es_ctx;
-          }
+          { program; structure; source_spans; justifications; fwd_es_ctx }
         in
           (program, cache)
 
@@ -1125,7 +1081,7 @@ module TestBranchCondition = struct
         Hashtbl.add loop_indices outer_branch.label [ 0 ];
         Hashtbl.add loop_indices inner_branch.label [ 0 ];
         let origin = create_origin_table [ ("α", pre_read.label) ] in
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e =
@@ -1193,19 +1149,11 @@ module TestBranchCondition = struct
               );
           ]
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
-        let symbolic_fwd_es_ctx =
-          EventStructureContext.create symbolic_structure
-        in
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
+        let fwd_es_ctx = EventStructureContext.create structure in
         let cache =
-          {
-            program;
-            symbolic_structure;
-            symbolic_source_spans;
-            symbolic_justifications;
-            symbolic_fwd_es_ctx;
-          }
+          { program; structure; source_spans; justifications; fwd_es_ctx }
         in
           (program, cache)
 
@@ -1214,7 +1162,7 @@ module TestBranchCondition = struct
     let init = Event.create Init 0 () in
     let events = Hashtbl.create 1 in
       Hashtbl.add events init.label init;
-      let symbolic_structure =
+      let structure =
         {
           (SymbolicEventStructure.create ()) with
           e = USet.of_list [ init.label ];
@@ -1225,19 +1173,11 @@ module TestBranchCondition = struct
       let program =
         [ make_ir_node (While { condition = EBoolean false; body = [] }) ]
       in
-      let symbolic_source_spans = Hashtbl.create 0 in
-      let symbolic_justifications = USet.create () in
-      let symbolic_fwd_es_ctx =
-        EventStructureContext.create symbolic_structure
-      in
+      let source_spans = Hashtbl.create 0 in
+      let justifications = USet.create () in
+      let fwd_es_ctx = EventStructureContext.create structure in
       let cache =
-        {
-          program;
-          symbolic_structure;
-          symbolic_source_spans;
-          symbolic_justifications;
-          symbolic_fwd_es_ctx;
-        }
+        { program; structure; source_spans; justifications; fwd_es_ctx }
       in
         (program, cache)
 
@@ -1249,7 +1189,7 @@ module TestBranchCondition = struct
       List.iter (fun e -> Hashtbl.add events e.label e) [ init; branch ];
       let loop_indices = Hashtbl.create 1 in
         Hashtbl.add loop_indices branch.label [ 0 ];
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e = USet.of_list [ init.label; branch.label ];
@@ -1275,19 +1215,11 @@ module TestBranchCondition = struct
               );
           ]
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
-        let symbolic_fwd_es_ctx =
-          EventStructureContext.create symbolic_structure
-        in
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
+        let fwd_es_ctx = EventStructureContext.create structure in
         let cache =
-          {
-            program;
-            symbolic_structure;
-            symbolic_source_spans;
-            symbolic_justifications;
-            symbolic_fwd_es_ctx;
-          }
+          { program; structure; source_spans; justifications; fwd_es_ctx }
         in
           (program, cache)
 
@@ -1420,7 +1352,7 @@ module TestEventOrdering = struct
         Hashtbl.add loop_indices iter0_write.label [ 0 ];
         Hashtbl.add loop_indices iter1_read.label [ 1 ];
         let po_iter = USet.of_list [ (iter0_write.label, iter1_read.label) ] in
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e = USet.of_list [ init.label; iter0_write.label; iter1_read.label ];
@@ -1432,18 +1364,18 @@ module TestEventOrdering = struct
         let ppo =
           create_ppo_structure [] [ (iter0_write.label, iter1_read.label) ]
         in
-        let symbolic_fwd_es_ctx =
-          { (EventStructureContext.create symbolic_structure) with ppo }
+        let fwd_es_ctx =
+          { (EventStructureContext.create structure) with ppo }
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
           Lwt.return
             {
               program = [];
-              symbolic_structure;
-              symbolic_source_spans;
-              symbolic_justifications;
-              symbolic_fwd_es_ctx;
+              structure;
+              source_spans;
+              justifications;
+              fwd_es_ctx;
             }
 
   (* Test 2: Missing ordering between iterations (VIOLATION) *)
@@ -1463,7 +1395,7 @@ module TestEventOrdering = struct
         Hashtbl.add loop_indices iter0_write.label [ 0 ];
         Hashtbl.add loop_indices iter1_write.label [ 1 ];
         let po_iter = USet.of_list [ (iter0_write.label, iter1_write.label) ] in
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e =
@@ -1475,18 +1407,18 @@ module TestEventOrdering = struct
         in
         (* No ppo_iter ordering provided - violation *)
         let ppo = create_ppo_structure [] [] in
-        let symbolic_fwd_es_ctx =
-          { (EventStructureContext.create symbolic_structure) with ppo }
+        let fwd_es_ctx =
+          { (EventStructureContext.create structure) with ppo }
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
           Lwt.return
             {
               program = [];
-              symbolic_structure;
-              symbolic_source_spans;
-              symbolic_justifications;
-              symbolic_fwd_es_ctx;
+              structure;
+              source_spans;
+              justifications;
+              fwd_es_ctx;
             }
 
   (* Test 3: Empty loop (VALID) *)
@@ -1494,7 +1426,7 @@ module TestEventOrdering = struct
     let init = Event.create Init 0 () in
     let events = Hashtbl.create 1 in
       Hashtbl.add events init.label init;
-      let symbolic_structure =
+      let structure =
         {
           (SymbolicEventStructure.create ()) with
           e = USet.of_list [ init.label ];
@@ -1503,19 +1435,11 @@ module TestEventOrdering = struct
         }
       in
       let ppo = create_ppo_structure [] [] in
-      let symbolic_fwd_es_ctx =
-        { (EventStructureContext.create symbolic_structure) with ppo }
-      in
-      let symbolic_source_spans = Hashtbl.create 0 in
-      let symbolic_justifications = USet.create () in
+      let fwd_es_ctx = { (EventStructureContext.create structure) with ppo } in
+      let source_spans = Hashtbl.create 0 in
+      let justifications = USet.create () in
         Lwt.return
-          {
-            program = [];
-            symbolic_structure;
-            symbolic_source_spans;
-            symbolic_justifications;
-            symbolic_fwd_es_ctx;
-          }
+          { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
   (* Test 4: Multiple events same iteration (VALID) *)
   let test_same_iteration_events_setup () =
@@ -1531,7 +1455,7 @@ module TestEventOrdering = struct
       let loop_indices = Hashtbl.create 2 in
         Hashtbl.add loop_indices write1.label [ 0 ];
         Hashtbl.add loop_indices write2.label [ 0 ];
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e = USet.of_list [ init.label; write1.label; write2.label ];
@@ -1541,18 +1465,18 @@ module TestEventOrdering = struct
           }
         in
         let ppo = create_ppo_structure [] [] in
-        let symbolic_fwd_es_ctx =
-          { (EventStructureContext.create symbolic_structure) with ppo }
+        let fwd_es_ctx =
+          { (EventStructureContext.create structure) with ppo }
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
           Lwt.return
             {
               program = [];
-              symbolic_structure;
-              symbolic_source_spans;
-              symbolic_justifications;
-              symbolic_fwd_es_ctx;
+              structure;
+              source_spans;
+              justifications;
+              fwd_es_ctx;
             }
 
   (* Test 5: Chain of iterations (VALID) *)
@@ -1579,7 +1503,7 @@ module TestEventOrdering = struct
           USet.of_list
             [ (iter0.label, iter1.label); (iter1.label, iter2.label) ]
         in
-        let symbolic_structure =
+        let structure =
           {
             (SymbolicEventStructure.create ()) with
             e =
@@ -1594,18 +1518,18 @@ module TestEventOrdering = struct
           create_ppo_structure []
             [ (iter0.label, iter1.label); (iter1.label, iter2.label) ]
         in
-        let symbolic_fwd_es_ctx =
-          { (EventStructureContext.create symbolic_structure) with ppo }
+        let fwd_es_ctx =
+          { (EventStructureContext.create structure) with ppo }
         in
-        let symbolic_source_spans = Hashtbl.create 0 in
-        let symbolic_justifications = USet.create () in
+        let source_spans = Hashtbl.create 0 in
+        let justifications = USet.create () in
           Lwt.return
             {
               program = [];
-              symbolic_structure;
-              symbolic_source_spans;
-              symbolic_justifications;
-              symbolic_fwd_es_ctx;
+              structure;
+              source_spans;
+              justifications;
+              fwd_es_ctx;
             }
 
   let ordering_test_cases =
@@ -1746,28 +1670,25 @@ module TestBisection = struct
     (* No events in loop → only the ({},{}) bisection *)
     let structure = make_flat_structure 0 [] [] in
     let bisections = Bisection.all_bisections structure 0 in
-      check int "one bisection for empty loop" 1 (List.length bisections);
-      let l, r = List.hd bisections in
-        check bool "left empty" true (USet.is_empty l);
-        check bool "right empty" true (USet.is_empty r)
+      check int "no bisection for empty loop" 0 (List.length bisections)
 
   let test_all_bisections_single_event () =
     (* One event in loop → two subsets: {},{e} and {e},{} — both valid
        since no po constraint can be violated with a single event *)
     let structure = make_flat_structure 0 [ 1 ] [] in
     let bisections = Bisection.all_bisections structure 0 in
-      check int "two bisections for single event" 2 (List.length bisections)
+      check int "one bisection for single event" 1 (List.length bisections)
 
   let test_all_bisections_po_constraint () =
     (* Events 1 and 2 with po 1→2.
        {},{1,2}:           cross empty → VALID
-       {1,2},{}:           cross empty → VALID
+       {1,2},{}:           right empty → INVALID
        {left={1},right={2}}: cross(left,right) = {(1,2)} ⊆ po → VALID
        {left={2},right={1}}: cross(left,right) = {(2,1)} ⊄ po → INVALID
        Expected: 3 valid bisections. *)
     let structure = make_flat_structure 0 [ 1; 2 ] [ (1, 2) ] in
     let bisections = Bisection.all_bisections structure 0 in
-      check int "three bisections valid with po 1→2" 3 (List.length bisections);
+      check int "two bisections valid with po 1→2" 2 (List.length bisections);
       (* The invalid partition (left={2}, right={1}) must not appear *)
       let invalid_present =
         List.exists (fun (l, r) -> USet.mem l 2 && USet.mem r 1) bisections
@@ -1778,11 +1699,12 @@ module TestBisection = struct
     (* Events 1 and 2 with no po.
        {left={1}, right={2}}: cross(left,right) = {(1,2)} ⊄ po → INVALID
        {left={2}, right={1}}: cross(left,right) = {(2,1)} ⊄ po → INVALID
-       {},{1,2} and {1,2},{}: cross is empty → VALID
+       {},{1,2} : cross is empty → VALID
+       {1,2},{} : right is empty → INVALID
        Expected: 2 valid bisections *)
     let structure = make_flat_structure 0 [ 1; 2 ] [] in
     let bisections = Bisection.all_bisections structure 0 in
-      check int "two bisections when no po" 2 (List.length bisections);
+      check int "one bisections when no po" 1 (List.length bisections);
       List.iter
         (fun (l, r) ->
           check bool "one side empty" true (USet.is_empty l || USet.is_empty r)
@@ -1793,18 +1715,15 @@ module TestBisection = struct
   (* Tests for all_bisections — nested-loop sub-group constraint         *)
   (* ------------------------------------------------------------------ *)
 
-  (** Scenario from the spec:
-      loop_id = 2
-      Events:
-        e1 → path [1;2;3]     (in sub-loop 3)
-        e2 → path [1;2;3;4]   (in sub-loop 3 → 4, child of 3 under 2 is 3)
-        e3 → path [1;2;3;5]   (in sub-loop 3 → 5, child of 3 under 2 is 3)
-        e4 → path [1;2;6]     (in sub-loop 6)
-      po: none (simplifies bisection logic)
+  (** Scenario from the spec: loop_id = 2 Events: e1 → path [1;2;3] (in sub-loop
+      3) e2 → path [1;2;3;4] (in sub-loop 3 → 4, child of 3 under 2 is 3) e3 →
+      path [1;2;3;5] (in sub-loop 3 → 5, child of 3 under 2 is 3) e4 → path
+      [1;2;6] (in sub-loop 6) po: none (simplifies bisection logic)
 
-      Valid bisection: {e1,e2,e3} left, {e4} right — sub-loop 3 all-left, 6 all-right.
-      Invalid: {e2} left, {e1,e3,e4} right — e2 and e1 both in sub-loop 3, split.
-      Invalid: {e1,e2,e4} left, {e3} right — e1,e2,e3 in sub-loop 3, e3 on right. *)
+      Valid bisection: \{e1,e2,e3\} left, \{e4\} right — sub-loop 3 all-left, 6
+      all-right. Invalid: \{e2\} left, \{e1,e3,e4\} right — e2 and e1 both in
+      sub-loop 3, split. Invalid: \{e1,e2,e4\} left, \{e3\} right — e1,e2,e3 in
+      sub-loop 3, e3 on right. *)
 
   let test_nested_loops_valid_bisection () =
     (* loop_id = 2, events:
@@ -1904,7 +1823,7 @@ module TestBisection = struct
     in
       check bool "direct-in-loop events blocked by po filter (not nesting)"
         false split_found;
-      check int "only trivial bisections pass" 2 (List.length bisections)
+      check int "only trivial bisection passes" 1 (List.length bisections)
 
   let test_complex_nested_scenario () =
     (* Full example from spec:

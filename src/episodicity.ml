@@ -41,13 +41,13 @@ open Lwt.Syntax
 type episodicity_cache = {
   mutable program : ir_node list;
       (** The complete program as a list of IR nodes *)
-  mutable symbolic_structure : symbolic_event_structure;
+  mutable structure : symbolic_event_structure;
       (** Event structure with symbolic loop semantics *)
-  mutable symbolic_source_spans : (int, source_span) Hashtbl.t;
+  mutable source_spans : (int, source_span) Hashtbl.t;
       (** Source span mapping for symbolic events *)
-  mutable symbolic_fwd_es_ctx : Forwarding.event_structure_context;
+  mutable fwd_es_ctx : Forwarding.event_structure_context;
       (** Forwarding context for symbolic event structure *)
-  mutable symbolic_justifications : justification uset;
+  mutable justifications : justification uset;
       (** Justifications for symbolic event structure *)
 }
 
@@ -171,6 +171,7 @@ module Bisection = struct
         (fun _key (has_left, has_right) ok -> ok && not (has_left && has_right))
         group_sides true
 
+  (** Generate all compatible bisections of the events in a loop. *)
   let all_bisections structure loop_id =
     let events_in_loop = get_events_in_loop structure loop_id in
     let event_list = USet.to_list events_in_loop in
@@ -190,9 +191,13 @@ module Bisection = struct
         subsets
       |> List.filter (fun (left, right) ->
           USet.subset (URelation.cross left right) structure.po
+          && nested_loops_unsplit structure loop_id left right
+          && USet.size right > 0
       )
-      |> List.filter (fun (left, right) ->
-          nested_loops_unsplit structure loop_id left right
+      |> List.sort (fun (l1, r1) (l2, r2) ->
+          let size1 = USet.size l1 in
+          let size2 = USet.size l2 in
+            compare size1 size2
       )
 end
 
@@ -367,8 +372,8 @@ module WriteCondition = struct
       @return
         A condition result (async) indicating satisfaction and any violations *)
   let check cache (loop_id : int) : condition_result Lwt.t =
-    let { symbolic_structure; symbolic_source_spans; _ } = cache in
-    let structure = symbolic_structure in
+    let { structure; source_spans; _ } = cache in
+    let structure = structure in
     let events_in_loop =
       SymbolicEventStructure.events_in_loop structure loop_id
     in
@@ -444,8 +449,8 @@ module WriteCondition = struct
                            ( Events.get_loc structure read_event
                              |> Option.map show_expr
                              |> Option.value ~default:"",
-                             Hashtbl.find_opt symbolic_source_spans read_event,
-                             Hashtbl.find_opt symbolic_source_spans write_event
+                             Hashtbl.find_opt source_spans read_event,
+                             Hashtbl.find_opt source_spans write_event
                            )
                         )
                     in
@@ -476,8 +481,8 @@ module BranchCondition = struct
       @return A condition result indicating satisfaction and any violations *)
   let check cache (loop_id : int) : condition_result Lwt.t =
     Logs.debug (fun m -> m "Checking Condition 3 for Loop %d..." loop_id);
-    let { program; symbolic_structure; symbolic_source_spans; _ } = cache in
-    let structure = symbolic_structure in
+    let { program; structure; source_spans; _ } = cache in
+    let structure = structure in
       Logs.debug (fun m ->
           m "Symbolic Event Structure:\n%s"
             (show_symbolic_event_structure structure)
@@ -529,7 +534,7 @@ module BranchCondition = struct
                          ( sym,
                            Hashtbl.find_opt structure.origin sym
                            |> Option.value ~default:(-1),
-                           Hashtbl.find_opt symbolic_source_spans e
+                           Hashtbl.find_opt source_spans e
                          )
                       )
                   in
@@ -558,16 +563,8 @@ module EventsCondition = struct
       @param loop_id The identifier of the loop to check
       @return A condition result indicating satisfaction and any violations *)
   let check cache (loop_id : int) : condition_result Lwt.t =
-    let {
-      symbolic_structure;
-      symbolic_fwd_es_ctx;
-      symbolic_justifications;
-      symbolic_source_spans;
-      _;
-    } =
-      cache
-    in
-    let structure = symbolic_structure in
+    let { structure; fwd_es_ctx; justifications; source_spans; _ } = cache in
+    let structure = structure in
     let events_in_loop =
       SymbolicEventStructure.events_in_loop structure loop_id
     in
@@ -590,7 +587,7 @@ module EventsCondition = struct
       (* Compute (ppo ∪ dp)* for the loop *)
       let delta_loop = URelation.cross events_in_loop events_in_loop in
       (* TODO use contextual predicates *)
-      let fwd_es_ctx = symbolic_fwd_es_ctx in
+      let fwd_es_ctx = fwd_es_ctx in
         let* ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
         let ppo =
           fwd_es_ctx.ppo.ppo_sync
@@ -603,7 +600,7 @@ module EventsCondition = struct
             (fun acc just ->
               Freeze.freeze_dp structure just |> USet.inplace_union acc
             )
-            symbolic_justifications (USet.create ())
+            justifications (USet.create ())
         in
         let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
 
@@ -630,8 +627,8 @@ module EventsCondition = struct
                 LoopConditionViolation
                   (LoopIterationOrderingViolation
                      ( -1,
-                       Hashtbl.find_opt symbolic_source_spans e1,
-                       Hashtbl.find_opt symbolic_source_spans e2
+                       Hashtbl.find_opt source_spans e1,
+                       Hashtbl.find_opt source_spans e2
                      )
                   )
               in
@@ -645,7 +642,69 @@ end
 
 (** {1 Main Episodicity Check} *)
 
+(** Check if a specific bisection of a loop satisfies the episodicity
+    conditions.
+
+    This function takes a specific bisection of the loop's events and checks all
+    four conditions for that bisection. It returns a detailed result indicating
+    which conditions are satisfied and any violations found.
+
+    @param ctx The Mordor context containing the program and analysis results
+    @param cache The episodicity cache with precomputed structures
+    @param loop_id The identifier of the loop to check
+    @param left The set of events in the left partition of the bisection
+    @param right The set of events in the right partition of the bisection
+    @return A loop episodicity result indicating which conditions are satisfied
+*)
+let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
+    =
+  let structure = Bisection.bisect_loop cache.structure loop_id left right in
+  let ctx : mordor_ctx =
+    {
+      ctx with
+      options = { ctx.options with loop_semantics = Symbolic };
+      structure = Some structure;
+      source_spans = None;
+      fwd_es_ctx = None;
+      justifications = None;
+      executions = None;
+      is_episodic = None;
+    }
+  in
+    let* ctx = Lwt.return ctx |> Elaborations.step_generate_justifications in
+    let fwd_es_ctx = Option.get ctx.fwd_es_ctx in
+    let justifications = Option.get ctx.justifications in
+    let cache = { cache with structure; fwd_es_ctx; justifications } in
+
+    (* TODO generate new justifications and forwarding context for the
+             bisection structure, or adapt the existing ones *)
+    let* condition1 = RegisterCondition.check cache loop_id in
+      let* condition2 = WriteCondition.check cache loop_id in
+        let* condition3 = BranchCondition.check cache loop_id in
+          let* condition4 = EventsCondition.check cache loop_id in
+
+          let is_episodic =
+            condition1.satisfied
+            && condition2.satisfied
+            && condition3.satisfied
+            && condition4.satisfied
+          in
+
+          Lwt.return
+            {
+              loop_id;
+              condition1;
+              condition2;
+              condition3;
+              condition4;
+              is_episodic;
+            }
+
 (** Check if a specific loop is episodic by verifying all four conditions.
+
+    This tests all bisections of the loop, starting from the trivial bisection
+    without loop offset. The search terminates at the bisection with the least
+    offset, i.e. the smallest left side, confirming episodicity.
 
     @param ctx The Mordor context containing the program
     @param cache The episodicity cache with precomputed structures
@@ -653,31 +712,18 @@ end
     @return An optional loop episodicity result, or None if analysis fails *)
 let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
     loop_episodicity_result option Lwt.t =
-  match ctx.program_stmts with
-  | Some program ->
-      (* Check all four conditions *)
-      let* condition1 = RegisterCondition.check cache loop_id in
-        let* condition2 = WriteCondition.check cache loop_id in
-          let* condition3 = BranchCondition.check cache loop_id in
-            let* condition4 = EventsCondition.check cache loop_id in
-
-            let is_episodic =
-              condition1.satisfied
-              && condition2.satisfied
-              && condition3.satisfied
-              && condition4.satisfied
-            in
-
-            Lwt.return_some
-              {
-                loop_id;
-                condition1;
-                condition2;
-                condition3;
-                condition4;
-                is_episodic;
-              }
-  | _ -> Lwt.return_none
+  Bisection.all_bisections cache.structure loop_id
+  |> Lwt_list.fold_left_s
+       (fun acc (left, right) ->
+         match (acc : loop_episodicity_result option) with
+         | Some result when result.is_episodic -> Lwt.return (Some result)
+         | _ ->
+             let* result =
+               check_loop_bisection_episodicity ctx cache loop_id left right
+             in
+               Lwt.return_some result
+       )
+       None
 
 (** Main episodicity testing function called from the analysis pipeline.
 
@@ -705,7 +751,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
           }
         in
 
-        let symbolic_ctx =
+        let ctx =
           {
             ctx with
             options = { ctx.options with loop_semantics = Symbolic };
@@ -717,26 +763,18 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
             is_episodic = None;
           }
         in
-          let* symbolic_ctx =
-            Lwt.return symbolic_ctx
+          let* ctx =
+            Lwt.return ctx
             |> Interpret.step_interpret
             |> Elaborations.step_generate_justifications
           in
-          let symbolic_structure = Option.get symbolic_ctx.structure in
-          let symbolic_source_spans = Option.get symbolic_ctx.source_spans in
-          let symbolic_fwd_es_ctx = Option.get symbolic_ctx.fwd_es_ctx in
-          let symbolic_justifications =
-            Option.get symbolic_ctx.justifications
-          in
+          let structure = Option.get ctx.structure in
+          let source_spans = Option.get ctx.source_spans in
+          let fwd_es_ctx = Option.get ctx.fwd_es_ctx in
+          let justifications = Option.get ctx.justifications in
 
           let cache =
-            {
-              program;
-              symbolic_structure;
-              symbolic_source_spans;
-              symbolic_fwd_es_ctx;
-              symbolic_justifications;
-            }
+            { program; structure; source_spans; fwd_es_ctx; justifications }
           in
 
           let loop_episodicity_results = ref [] in
