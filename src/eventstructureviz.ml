@@ -231,34 +231,6 @@ module EventStructureViz = struct
       Functions for computing and simplifying relaxed memory model dependencies
       (data dependencies, preserved program order, and read-from relations). *)
 
-  (** [filter_predicates_for_event structure src preds] filters out predicates
-      that are already enforced by the structure's restrictions.
-
-      @param structure The symbolic event structure
-      @param src The source event ID
-      @param preds List of predicates to filter
-      @return
-        Filtered list containing only predicates not in structure restrictions
-  *)
-  let filter_predicates_for_event (structure : symbolic_event_structure)
-      (src : int) (preds : expr list) : expr list =
-    let src_preds =
-      Hashtbl.find_opt structure.restrict src |> Option.value ~default:[]
-    in
-      List.filter (fun p -> not (List.mem p src_preds)) preds
-
-  (** [format_predicate_string clause] converts a list of predicates to a
-      human-readable string for edge labels.
-
-      @param clause List of predicate expressions
-      @return
-        Empty string for trivially true predicates, otherwise predicates joined
-        with " AND " *)
-  let format_predicate_string (clause : expr list) : string =
-    match clause with
-    | [ EBoolean true ] | [] -> "" (* True predicate -> empty string *)
-    | _ -> clause |> List.map Expr.to_string |> String.concat " AND "
-
   (** [generate_relaxed_deps structure executions] generates relaxed dependency
       edges from a set of executions with DNF simplification.
 
@@ -292,9 +264,18 @@ module EventStructureViz = struct
                 edges
             in
 
+            (* filter ppo: remove edges from initial and to terminal events *)
+            let ppo =
+              USet.filter
+                (fun (src, dst) ->
+                  src > 0 && not (USet.mem structure.terminal_events dst)
+                )
+                exec.ppo
+            in
+
             (* Process each relation type with transitive reduction *)
             process_relation DP (URelation.transitive_reduction exec.dp);
-            process_relation PPO (URelation.transitive_reduction exec.ppo);
+            process_relation PPO (URelation.transitive_reduction ppo);
             process_relation RF (URelation.transitive_reduction exec.rf);
             process_relation RMW (URelation.transitive_reduction exec.rmw)
           )
@@ -439,16 +420,24 @@ module EventStructureViz = struct
             if Hashtbl.mem exec_events src && Hashtbl.mem exec_events dst then
               let v_src = Hashtbl.find vertex_map src in
               let v_dst = Hashtbl.find vertex_map dst in
-              let preds_str = format_predicate_string exec.ex_p in
-                G.add_edge_e g (G.E.create v_src (label_fn preds_str) v_dst)
+                G.add_edge_e g (G.E.create v_src (label_fn ()) v_dst)
           )
           (URelation.transitive_reduction relation)
       in
 
-      add_dep_edges exec.dp (fun _ -> DP);
-      add_dep_edges exec.ppo (fun _ -> PPO);
-      add_dep_edges exec.rf (fun _ -> RF);
-      add_dep_edges exec.rmw (fun _ -> RMW);
+      (* filter ppo: remove edges from initial and to terminal events *)
+      let ppo =
+        USet.filter
+          (fun (src, dst) ->
+            src > 0 && not (USet.mem structure.terminal_events dst)
+          )
+          exec.ppo
+      in
+
+      add_dep_edges exec.dp (fun () -> DP);
+      add_dep_edges ppo (fun () -> PPO);
+      add_dep_edges exec.rf (fun () -> RF);
+      add_dep_edges exec.rmw (fun () -> RMW);
 
       g
 
