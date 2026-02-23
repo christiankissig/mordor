@@ -242,7 +242,7 @@
         const programParam = hashParams.get('program');
         if (programParam) {
             try {
-                const decodedProgram = decodeURIComponent(programParam);
+                const decodedProgram = programParam;
                 const textarea = document.getElementById('litmus-input');
                 textarea.value = decodedProgram;
                 
@@ -258,7 +258,7 @@
                 console.error('Error loading program from URL:', error);
                 const logDiv = document.getElementById('log');
                 const timestamp = new Date().toLocaleTimeString();
-                logDiv.innerHTML = `<div class="log-entry error"><span class="log-time">${timestamp}</span>Error loading program from URL</div>` + logDiv.innerHTML;
+                logDiv.innerHTML = `<div class="log-entry error"><span class="log-time">${timestamp}</span>Error loading program from URL: ${error.message}</div>` + logDiv.innerHTML;
             }
         }
         
