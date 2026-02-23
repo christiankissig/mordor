@@ -237,9 +237,9 @@
         // Initialize Test Runner
         const testRunner = new TestRunner();
         
-        // Load program from URL parameter if present
-        const urlParams = new URLSearchParams(window.location.search);
-        const programParam = urlParams.get('program');
+        // Load program from URL hash if present (e.g. #program=...)
+        const hashParams = new URLSearchParams(window.location.hash.slice(1));
+        const programParam = hashParams.get('program');
         if (programParam) {
             try {
                 const decodedProgram = decodeURIComponent(programParam);
@@ -274,10 +274,10 @@
                 return;
             }
             
-            // Create URL with program parameter
+            // Create URL with program in hash (no server-side length limit)
             const encodedProgram = encodeURIComponent(program);
             const baseUrl = window.location.origin + window.location.pathname;
-            const shareUrl = `${baseUrl}?program=${encodedProgram}`;
+            const shareUrl = `${baseUrl}#program=${encodedProgram}`;
             
             // Copy to clipboard
             navigator.clipboard.writeText(shareUrl).then(() => {

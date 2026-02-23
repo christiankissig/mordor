@@ -421,14 +421,6 @@ module EventStructureContext = struct
       @param po The program order relation.
       @return The computed synchronization PPO template. *)
   let compute_ppo_sync structure e po =
-    Printf.printf "Computing synchronization PPO template...\ne=%s\n po=%s\n"
-      (String.concat ", " (List.map string_of_int (USet.values e)))
-      (String.concat ", "
-         (List.map
-            (fun (f, t) -> Printf.sprintf "(%d, %d)" f t)
-            (USet.values po)
-         )
-      );
     let r = USet.intersection structure.read_events e in
     let w = USet.intersection structure.write_events e in
     let f = USet.intersection structure.fence_events e in
@@ -556,13 +548,6 @@ module EventStructureContext = struct
       USet.inplace_union es_ctx.ppo.ppo_sync
         (compute_ppo_sync es_ctx.structure e po_nf)
       |> ignore;
-      Printf.printf "Computed synchronization PPO template: %s\n"
-        (String.concat ", "
-           (List.map
-              (fun (e1, e2) -> Printf.sprintf "(%d, %d)" e1 e2)
-              (USet.values es_ctx.ppo.ppo_sync)
-           )
-        );
 
       USet.clear es_ctx.ppo.ppo_iter_sync |> ignore;
       USet.inplace_union es_ctx.ppo.ppo_iter_sync

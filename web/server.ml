@@ -59,6 +59,11 @@ let visualize_to_stream program options step_counter stream =
         Dream.flush stream
     in
 
+    Logs.info(fun m ->
+        m "Visualize single program with options\n%s"
+          (show_options options)
+    );
+
     let* ctx =
       Lwt.return context
       |> Parse.step_parse_litmus
@@ -77,7 +82,7 @@ let visualize_to_stream program options step_counter stream =
     let total_executions =
       match ctx.executions with
       | Some exs -> USet.size exs
-      | None -> 0
+      | None -> (Logs.info (fun m -> m "no executions"); 0)
     in
       let* () = send_complete ~send_data total_executions in
 
@@ -202,15 +207,24 @@ let sse_data json_obj =
     @return An HTTP request handler that sets up SSE streaming for the pipeline
 *)
 let make_sse_handler pipeline_fn request =
-  let program = Dream.query request "program" |> Option.value ~default:"" in
+  let* body = Dream.body request in
 
-  let loop_semantics =
-    Dream.query request "loop_semantics"
-    |> Option.value ~default:"finite-step-counter"
+  let json = try Yojson.Basic.from_string body with _ -> `Assoc [] in
+
+  let get_field key =
+    match json with
+    | `Assoc fields -> (
+        match List.assoc_opt key fields with
+        | Some (`String s) -> s
+        | _ -> ""
+      )
+    | _ -> ""
   in
 
+  let program = get_field "program" in
+
   let loop_semantics =
-    match String.lowercase_ascii loop_semantics with
+    match String.lowercase_ascii (get_field "loop_semantics") with
     | "symbolic" -> Symbolic
     | "step-counter" -> StepCounterPerLoop
     | _ -> StepCounterPerLoop
@@ -219,10 +233,10 @@ let make_sse_handler pipeline_fn request =
   let step_counter =
     match loop_semantics with
     | Generic | Symbolic -> 0
-    | StepCounterPerLoop | FiniteStepCounter ->
-        Dream.query request "steps"
-        |> Option.map int_of_string
-        |> Option.value ~default:2
+    | StepCounterPerLoop | FiniteStepCounter -> (
+        let s = get_field "steps" in
+          try int_of_string s with Failure _ -> 2
+      )
   in
 
   Printf.printf "📥 SSE request: %d chars, %d steps\n%!" (String.length program)
@@ -245,7 +259,13 @@ let make_sse_handler pipeline_fn request =
           in
             let* () = Dream.flush stream in
 
-            let options = { default_options with loop_semantics } in
+            let options = { default_options with loop_semantics; step_counter; } in
+
+    Logs.info (fun m ->
+        m "Running single program with options\n%s"
+          (show_options options)
+    );
+
 
             let* () =
               Dream.write stream
@@ -659,11 +679,11 @@ let () =
          Dream.get "/static/**" (Dream.static "web/frontend/static");
          Dream.get "/health" health_handler;
          (* Visualization API - Pipeline stages *)
-         Dream.get "/api/visualize/stream" visualize_sse_handler;
-         Dream.get "/api/parse/stream" parse_sse_handler;
-         Dream.get "/api/interpret/stream" interpret_sse_handler;
-         Dream.get "/api/episodicity/stream" episodicity_sse_handler;
-         Dream.get "/api/assertions/stream" assertions_sse_handler;
+         Dream.post "/api/visualize/stream" visualize_sse_handler;
+         Dream.post "/api/parse/stream" parse_sse_handler;
+         Dream.post "/api/interpret/stream" interpret_sse_handler;
+         Dream.post "/api/episodicity/stream" episodicity_sse_handler;
+         Dream.post "/api/assertions/stream" assertions_sse_handler;
          (* Test Runner API *)
          Dream.get "/api/tests/list" TestRunner.list_tests_handler;
          Dream.post "/api/tests/run" TestRunner.run_test_handler;

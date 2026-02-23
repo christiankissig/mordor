@@ -751,7 +751,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
           }
         in
 
-        let ctx =
+        let symbolic_ctx =
           {
             ctx with
             options = { ctx.options with loop_semantics = Symbolic };
@@ -763,15 +763,15 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
             is_episodic = None;
           }
         in
-          let* ctx =
-            Lwt.return ctx
+          let* symbolic_ctx =
+            Lwt.return symbolic_ctx
             |> Interpret.step_interpret
             |> Elaborations.step_generate_justifications
           in
-          let structure = Option.get ctx.structure in
-          let source_spans = Option.get ctx.source_spans in
-          let fwd_es_ctx = Option.get ctx.fwd_es_ctx in
-          let justifications = Option.get ctx.justifications in
+          let structure = Option.get symbolic_ctx.structure in
+          let source_spans = Option.get symbolic_ctx.source_spans in
+          let fwd_es_ctx = Option.get symbolic_ctx.fwd_es_ctx in
+          let justifications = Option.get symbolic_ctx.justifications in
 
           let cache =
             { program; structure; source_spans; fwd_es_ctx; justifications }
@@ -788,7 +788,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
               (fun loop_id ->
                 Logs.info (fun m -> m "Analyzing Loop %d..." loop_id);
                 let* episodic_result =
-                  check_loop_episodicity ctx cache loop_id
+                  check_loop_episodicity symbolic_ctx cache loop_id
                 in
                   match episodic_result with
                   | Some result ->

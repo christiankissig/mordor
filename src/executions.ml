@@ -1776,9 +1776,6 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
   let* ctx = lwt_ctx in
 
   (* Create restrictions for coherence checking *)
-  Logs.debug (fun m ->
-      m "Setting up coherence restrictions...%s" ctx.options.coherent
-  );
   let coherence_restrictions =
     {
       Coherence.coherent =

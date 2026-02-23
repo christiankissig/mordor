@@ -1110,7 +1110,7 @@ class GraphVisualizer {
 
         this.log('Sending request to backend...');
 
-        // Prepare URL parameters with settings
+        // Prepare POST body with settings
         const params = {
             program: program,
             loop_semantics: this.settings.loopSemantics.toString(),
@@ -1118,77 +1118,104 @@ class GraphVisualizer {
             allow_uaf: this.settings.showUAF.toString(),
             allow_unbounded_deref: this.settings.showUnboundedDeref.toString(),
         };
-        
-        // Use Server-Sent Events with the current endpoint
-        const es = new EventSource(this.currentEndpoint + '?' + new URLSearchParams(params));
 
-        es.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                
-                if (data.status === 'interpreting') {
-                    this.log('Interpreting program...');
-                } else if (data.status === 'visualizing') {
-                    this.log('Generating visualizations...');
-                } else if (data.type === 'loop-info') {
-                    this.log('Received loop information');
-                    this.loops = data.loops || [];
-                    this.renderLoops();
-                } else if (data.type === 'episodicity-results') {
-                    this.log('Received episodicity results');
-                    // Store episodicity results indexed by loop_id
-                    if (data.loop_episodicity_results) {
-                        data.loop_episodicity_results.forEach(result => {
-                            this.episodicityResults[result.loop_id] = result;
-                        });
-                    }
-                    // Re-render loops to show episodicity information
-                    this.renderLoops();
-                } else if (data.valid !== undefined || data.instances !== undefined) {
-                    // Handle assertion results message
-                    this.log('Received assertion results');
-                    this.assertionResults = {
-                        valid: data.valid,
-                        instances: data.instances || []
-                    };
-                    this.renderAssertions();
-                } else if (data.type === 'event_structure') {
-                    this.log('Received event structure');
-                    this.graphs.push(data.graph);
-                    this.data.push(data);
-                    if (this.graphs.length === 1) {
-                        this.renderGraph(data.graph);
-                        this.updateCarouselUI();
-                    }
-                } else if (data.type === 'execution') {
-                    this.log('Received execution ' + data.index);
-                    this.graphs.push(data.graph);
-                    this.data.push(data);
-                } else if (data.type === 'complete') {
-                    this.executionCount = data.total_executions;
-                    document.getElementById('execution-count').textContent = this.executionCount;
-                    this.log(this.currentAction.charAt(0).toUpperCase() + this.currentAction.slice(1) + ' complete: ' + this.executionCount + ' executions', 'success');
-                    this.updateCarouselUI();
-                    document.getElementById('status').textContent = 'Complete';
-                    es.close();
-                    document.getElementById('action-btn').disabled = false;
-                } else if (data.error) {
-                    this.log('Error: ' + data.error, 'error');
-                    this.showError(data.error);
-                    es.close();
-                    document.getElementById('action-btn').disabled = false;
+        // Use fetch POST to avoid URL length limits, then read SSE stream manually
+        const abortController = new AbortController();
+
+        const handleMessage = (data) => {
+            if (data.status === 'interpreting') {
+                this.log('Interpreting program...');
+            } else if (data.status === 'visualizing') {
+                this.log('Generating visualizations...');
+            } else if (data.type === 'loop-info') {
+                this.log('Received loop information');
+                this.loops = data.loops || [];
+                this.renderLoops();
+            } else if (data.type === 'episodicity-results') {
+                this.log('Received episodicity results');
+                if (data.loop_episodicity_results) {
+                    data.loop_episodicity_results.forEach(result => {
+                        this.episodicityResults[result.loop_id] = result;
+                    });
                 }
-            } catch (e) {
-                console.error('Failed to parse SSE message:', e);
-                this.log('Parse error: ' + e.message, 'error');
+                this.renderLoops();
+            } else if (data.valid !== undefined || data.instances !== undefined) {
+                this.log('Received assertion results');
+                this.assertionResults = {
+                    valid: data.valid,
+                    instances: data.instances || []
+                };
+                this.renderAssertions();
+            } else if (data.type === 'event_structure') {
+                this.log('Received event structure');
+                this.graphs.push(data.graph);
+                this.data.push(data);
+                if (this.graphs.length === 1) {
+                    this.renderGraph(data.graph);
+                    this.updateCarouselUI();
+                }
+            } else if (data.type === 'execution') {
+                this.log('Received execution ' + data.index);
+                this.graphs.push(data.graph);
+                this.data.push(data);
+            } else if (data.type === 'complete') {
+                this.executionCount = data.total_executions;
+                document.getElementById('execution-count').textContent = this.executionCount;
+                this.log(this.currentAction.charAt(0).toUpperCase() + this.currentAction.slice(1) + ' complete: ' + this.executionCount + ' executions', 'success');
+                this.updateCarouselUI();
+                document.getElementById('status').textContent = 'Complete';
+                abortController.abort();
+                document.getElementById('action-btn').disabled = false;
+            } else if (data.error) {
+                this.log('Error: ' + data.error, 'error');
+                this.showError(data.error);
+                abortController.abort();
+                document.getElementById('action-btn').disabled = false;
             }
         };
 
-        es.onerror = () => { 
-            this.log('Connection error', 'error'); 
-            es.close(); 
-            document.getElementById('action-btn').disabled = false; 
-        };
+        fetch(this.currentEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params),
+            signal: abortController.signal,
+        }).then(async (response) => {
+            if (!response.ok) {
+                throw new Error('Server error: ' + response.status);
+            }
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                // SSE messages are separated by double newlines
+                const parts = buffer.split('\n\n');
+                buffer = parts.pop(); // keep incomplete trailing chunk
+
+                for (const part of parts) {
+                    for (const line of part.split('\n')) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                handleMessage(data);
+                            } catch (e) {
+                                console.error('Failed to parse SSE message:', e);
+                                this.log('Parse error: ' + e.message, 'error');
+                            }
+                        }
+                    }
+                }
+            }
+        }).catch((err) => {
+            if (err.name === 'AbortError') return; // clean close, not an error
+            this.log('Connection error: ' + err.message, 'error');
+            document.getElementById('action-btn').disabled = false;
+        });
     }
 
     renderGraph(graph, undefinedBehaviour = null) {
