@@ -34,6 +34,7 @@ class GraphVisualizer {
         this.loops = []; // Store loop information
         this.episodicityResults = {}; // Store episodicity results by loop_id
         this.assertionResults = null; // Store assertion results
+        this.uafResults = []; // Store executions with use-after-free
         this.currentEndpoint = '/api/visualize/stream'; // Default endpoint
         this.currentAction = 'visualize'; // Default action
         this.visibleRelations = null; // null means all visible
@@ -565,7 +566,65 @@ class GraphVisualizer {
         div.textContent = text;
         return div.innerHTML;
     }
-    
+
+    renderUAF() {
+        const uafContent = document.getElementById('uaf-content');
+
+        if (!this.uafResults || this.uafResults.length === 0) {
+            uafContent.innerHTML = '<p style="padding: 1rem; color: #6a6a6a;">No use-after-free violations found.</p>';
+            return;
+        }
+
+        let html = '<div style="padding: 0.5rem;">';
+
+        this.uafResults.forEach(entry => {
+            const { execId, dataIndex, uaf, graph } = entry;
+
+            const fmt = (node, id) => {
+                if (!node) return String(id);
+                let s = node.label !== undefined ? String(node.label) : String(id);
+                if (node.type) s += ':' + node.type;
+                if (node.location) s += ' ' + node.location;
+                if (node.value) s += ' ' + node.value;
+                return s;
+            };
+
+            const pairLabels = uaf.map(pair => {
+                const srcNode = graph.nodes.find(n => n.id === pair[0]);
+                const tgtNode = graph.nodes.find(n => n.id === pair[1]);
+                return fmt(srcNode, pair[0]) + ' \u2192 ' + fmt(tgtNode, pair[1]);
+            });
+
+            html += `
+                <div class="uaf-item" data-data-index="${dataIndex}"
+                     style="padding: 0.75rem; margin: 0.5rem 0; background: #2a1a1a; border: 1px solid #6b2020; border-radius: 4px; cursor: pointer; transition: background 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                        <strong style="color: #ff6b6b;">&#9888; Execution ${execId}</strong>
+                        <span style="font-size: 0.75rem; color: #6a6a6a;">${uaf.length} pair${uaf.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: #d4a0a0; line-height: 1.6;">
+                        ${pairLabels.map(l => `<div style="font-family: monospace;">${this.escapeHtml(l)}</div>`).join('')}
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        uafContent.innerHTML = html;
+
+        // Click: navigate to the execution
+        uafContent.querySelectorAll('.uaf-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const dataIndex = parseInt(item.getAttribute('data-data-index'));
+                if (!isNaN(dataIndex) && dataIndex >= 0 && dataIndex < this.graphs.length) {
+                    this.navigateTo(dataIndex);
+                }
+            });
+            item.addEventListener('mouseenter', () => { item.style.background = '#3a1f1f'; });
+            item.addEventListener('mouseleave', () => { item.style.background = '#2a1a1a'; });
+        });
+    }
+
     openSettingsModal() {
         // Populate current settings
         document.getElementById('show-uaf').checked = this.settings.showUAF;
@@ -805,6 +864,7 @@ class GraphVisualizer {
                     this.loops = [];
                     this.episodicityResults = {};
                     this.assertionResults = null;
+                    this.uafResults = [];
                     this.visibleRelations = null;
                     this.availableRelations = new Set();
                     document.getElementById('relations-checkboxes').innerHTML = '';
@@ -1164,9 +1224,11 @@ class GraphVisualizer {
         this.loops = [];
         this.episodicityResults = {};
         this.assertionResults = null;
+        this.uafResults = [];
         this.visibleRelations = null; // reset to show all
         this.availableRelations = new Set();
         document.getElementById('relations-checkboxes').innerHTML = '';
+        document.getElementById('uaf-content').innerHTML = '<p>Use-after-free analysis will appear here.</p>';
 
         // Update UI
         document.getElementById('status').textContent = 'Processing...';
@@ -1241,6 +1303,19 @@ class GraphVisualizer {
                 this.log('Received execution ' + data.index);
                 this.graphs.push(data.graph);
                 this.data.push(data);
+                // Check for use-after-free and update panel
+                if (data.undefined_behaviour && data.undefined_behaviour.length > 0) {
+                    const ub = data.undefined_behaviour[0];
+                    if (ub.uaf && ub.uaf.length > 0) {
+                        this.uafResults.push({
+                            execId: data.index,
+                            dataIndex: this.data.length - 1,
+                            uaf: ub.uaf,
+                            graph: data.graph
+                        });
+                        this.renderUAF();
+                    }
+                }
             } else if (data.type === 'complete') {
                 this.executionCount = data.total_executions;
                 document.getElementById('execution-count').textContent = this.executionCount;
