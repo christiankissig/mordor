@@ -1322,6 +1322,10 @@ class GraphVisualizer {
                 this.log(this.currentAction.charAt(0).toUpperCase() + this.currentAction.slice(1) + ' complete: ' + this.executionCount + ' executions', 'success');
                 this.updateCarouselUI();
                 document.getElementById('status').textContent = 'Complete';
+                // If no UAF found by the end, show a clean "none found" message
+                if (this.uafResults.length === 0) {
+                    document.getElementById('uaf-content').innerHTML = '<p style="padding: 1rem; color: #89d185;">&#10003; No use-after-free found.</p>';
+                }
                 abortController.abort();
                 document.getElementById('action-btn').disabled = false;
             } else if (data.error) {
