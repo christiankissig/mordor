@@ -1,0 +1,39 @@
+name=seqlock 1
+%%
+// Allocate the seqlock: seq counter + one data word
+rseq  := malloc 1;
+*rseq := 0;
+
+rdata := malloc 1;
+*rdata := 0;
+
+// --- write ---
+// Lock: bump seq to an odd value
+rs := *rseq;
+*rseq := rs + 1;
+
+// Critical section: store new data
+*rdata := 42;
+
+// Unlock: bump seq to the next even value
+rs2 := *rseq;
+*rseq := rs2 + 1;
+
+// --- read (retry loop) ---
+do {
+  // Sample seq before reading
+  rr1 := *rseq;
+
+  // Read the data
+  rval := *rdata;
+
+  // Sample seq after reading
+  rr2 := *rseq;
+
+  // Retry if seq changed or was odd (write in progress)
+  rodd  := rr1 & 1;
+  rdiff := rr1 | rr2;
+  rretry := rodd | rdiff;
+} while (rretry != 0);
+
+// rval now holds a consistent snapshot of *rdata

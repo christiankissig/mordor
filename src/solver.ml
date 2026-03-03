@@ -173,6 +173,13 @@ and expr_to_z3 context expr =
             let result_bv = Z3.BitVector.mk_or context.ctx l_bv r_bv in
               (* Convert back to integer *)
               Z3.BitVector.mk_bv2int context.ctx result_bv false
+        | "^" ->
+            let bitwidth = 64 in
+            let l_bv = to_bitvec context l bitwidth in
+            let r_bv = to_bitvec context r bitwidth in
+            let result_bv = Z3.BitVector.mk_xor context.ctx l_bv r_bv in
+              (* Convert back to integer *)
+              Z3.BitVector.mk_bv2int context.ctx result_bv false
         (* Logical operators *)
         | "&&" -> Z3.Boolean.mk_and context.ctx [ l; r ]
         | "||" -> Z3.Boolean.mk_or context.ctx [ l; r ]
