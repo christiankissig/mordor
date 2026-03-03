@@ -755,6 +755,89 @@ class GraphVisualizer {
             this.log('Graph exported as PNG');
         });
 
+        // Save JSON button
+        document.getElementById('save-json-btn').addEventListener('click', () => {
+            if (!this.data.length) {
+                this.log('No execution data to save.', 'error');
+                return;
+            }
+            const textarea = document.getElementById('litmus-input');
+            const payload = {
+                program: textarea.value,
+                executionIndex: this.currentIndex,
+                data: this.data
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.download = `execution-${this.currentIndex}.json`;
+            link.href = URL.createObjectURL(blob);
+            link.click();
+            URL.revokeObjectURL(link.href);
+            this.log(`Saved execution ${this.currentIndex} as JSON`);
+        });
+
+        // Load JSON file input
+        document.getElementById('json-file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const payload = JSON.parse(event.target.result);
+                    if (!payload.data || !Array.isArray(payload.data)) {
+                        this.log('Invalid JSON: missing data array.', 'error');
+                        return;
+                    }
+
+                    // Restore program text
+                    const textarea = document.getElementById('litmus-input');
+                    if (payload.program !== undefined) {
+                        textarea.value = payload.program;
+                        const inputEvent = new Event('input', { bubbles: true });
+                        textarea.dispatchEvent(inputEvent);
+                    }
+
+                    // Reset state
+                    this.graphs = [];
+                    this.data = [];
+                    this.currentIndex = 0;
+                    this.executionCount = 0;
+                    this.loops = [];
+                    this.episodicityResults = {};
+                    this.assertionResults = null;
+                    this.visibleRelations = null;
+                    this.availableRelations = new Set();
+                    document.getElementById('relations-checkboxes').innerHTML = '';
+                    this.cy.elements().remove();
+
+                    // Restore both data and graphs (graphs is derived from data)
+                    this.data = payload.data;
+                    this.graphs = payload.data.map(d => d.graph);
+                    this.executionCount = this.data.length > 1 ? this.data.length - 1 : 0;
+                    document.getElementById('execution-count').textContent = this.executionCount;
+
+                    // Show carousel
+                    document.getElementById('carousel-container').style.display = 'flex';
+                    document.getElementById('empty-state').style.display = 'none';
+                    document.getElementById('graph-controls').style.display = 'flex';
+                    document.getElementById('graph-stats').style.display = 'flex';
+
+                    // Navigate to saved index (or 0 if out of range)
+                    const targetIndex = (typeof payload.executionIndex === 'number' &&
+                        payload.executionIndex >= 0 &&
+                        payload.executionIndex < this.data.length)
+                        ? payload.executionIndex : 0;
+                    this.navigateTo(targetIndex);
+
+                    this.log(`Loaded ${file.name} — navigated to execution ${targetIndex}`);
+                } catch (err) {
+                    this.log('Error parsing JSON: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
         // Carousel controls
         document.getElementById('prev-btn').addEventListener('click', () => {
             this.navigateTo(this.currentIndex - 1);

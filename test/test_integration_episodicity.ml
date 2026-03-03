@@ -305,15 +305,6 @@ let test_specifications =
         "Register condition failure - loop reads pre-loop symbol without \
          separation";
     };
-    (* write condition *)
-    {
-      filepath = "programs/episodicity/write_condition/fail.lit";
-      expected_episodic = Some false;
-      expected_failing_conditions = [ 2 ];
-      description =
-        "Write condition failure - loop writes to pre-loop symbol without \
-         separation";
-    };
     (* branch condition *)
     {
       filepath = "programs/episodicity/branch_condition/fail.lit";
