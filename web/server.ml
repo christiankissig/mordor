@@ -59,9 +59,8 @@ let visualize_to_stream program options step_counter stream =
         Dream.flush stream
     in
 
-    Logs.info(fun m ->
-        m "Visualize single program with options\n%s"
-          (show_options options)
+    Logs.info (fun m ->
+        m "Visualize single program with options\n%s" (show_options options)
     );
 
     let* ctx =
@@ -82,7 +81,9 @@ let visualize_to_stream program options step_counter stream =
     let total_executions =
       match ctx.executions with
       | Some exs -> USet.size exs
-      | None -> (Logs.info (fun m -> m "no executions"); 0)
+      | None ->
+          Logs.info (fun m -> m "no executions");
+          0
     in
       let* () = send_complete ~send_data total_executions in
 
@@ -259,13 +260,14 @@ let make_sse_handler pipeline_fn request =
           in
             let* () = Dream.flush stream in
 
-            let options = { default_options with loop_semantics; step_counter; } in
+            let options =
+              { default_options with loop_semantics; step_counter }
+            in
 
-    Logs.info (fun m ->
-        m "Running single program with options\n%s"
-          (show_options options)
-    );
-
+            Logs.info (fun m ->
+                m "Running single program with options\n%s"
+                  (show_options options)
+            );
 
             let* () =
               Dream.write stream
