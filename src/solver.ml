@@ -17,6 +17,7 @@
 
 open Expr
 open Lwt.Syntax
+open Lwt.Infix
 open Printf
 open Types
 open Uset
@@ -333,27 +334,30 @@ let quick_check exprs =
 
 (** Cache for conjunction satisfiability results. *)
 let quick_check_cache = ConjunctionCache.create 256
+let cache_mutex = Lwt_mutex.create ()
 
-(** Quick satisfiability check (cached).
-
-    Like {!quick_check} but caches results based on normalized constraint sets.
-
-    @param exprs Constraint expressions
-    @return SAT/UNSAT/UNKNOWN result *)
 let quick_check_cached exprs =
   let landmark = Landmark.register "quick_check_cached" in
-    Landmark.enter landmark;
-    (* Normalize expressions for consistent cache keys *)
-    let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
-      match ConjunctionCache.find_opt quick_check_cache exprs with
-      | Some result ->
-          Landmark.exit landmark;
-          Lwt.return result
-      | None ->
-          let* result = quick_check exprs in
+  Landmark.enter landmark;
+  let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
+  (* Check cache without holding lock (optimistic read) *)
+  match ConjunctionCache.find_opt quick_check_cache exprs with
+  | Some result ->
+      Landmark.exit landmark;
+      Lwt.return result
+  | None ->
+      (* Acquire lock before mutating *)
+      Lwt_mutex.with_lock cache_mutex (fun () ->
+        (* Re-check after acquiring lock to avoid redundant work *)
+        match ConjunctionCache.find_opt quick_check_cache exprs with
+        | Some result -> Lwt.return result
+        | None ->
+            let* result = quick_check exprs in
             ConjunctionCache.add quick_check_cache exprs result;
-            Landmark.exit landmark;
-            Lwt.return result
+            Lwt.return result)
+      >>= fun result ->
+      Landmark.exit landmark;
+      Lwt.return result
 
 (** Simplified satisfiability check.
 
