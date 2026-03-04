@@ -819,42 +819,6 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
         );
         Lwt.return ctx
 
-(** {1 Query Functions} *)
-
-(** Check if a specific loop is episodic.
-
-    @param ctx The Mordor context containing analysis results
-    @param loop_id The identifier of the loop to query
-    @return Some true if episodic, Some false if not, None if not analyzed *)
-let is_loop_episodic (ctx : mordor_ctx) (loop_id : int) : bool option =
-  match ctx.is_episodic with
-  | Some table -> Hashtbl.find_opt table loop_id
-  | None -> None
-
-(** Get all episodic loops from the analysis results.
-
-    @param ctx The Mordor context containing analysis results
-    @return A list of loop IDs that are episodic *)
-let get_episodic_loops (ctx : mordor_ctx) : int list =
-  match ctx.is_episodic with
-  | Some table ->
-      Hashtbl.fold
-        (fun lid is_episodic acc -> if is_episodic then lid :: acc else acc)
-        table []
-  | None -> []
-
-(** Get all non-episodic loops from the analysis results.
-
-    @param ctx The Mordor context containing analysis results
-    @return A list of loop IDs that are not episodic *)
-let get_non_episodic_loops (ctx : mordor_ctx) : int list =
-  match ctx.is_episodic with
-  | Some table ->
-      Hashtbl.fold
-        (fun lid is_episodic acc -> if not is_episodic then lid :: acc else acc)
-        table []
-  | None -> []
-
 (** Send episodicity results via a callback function.
 
     Serializes the episodicity results to JSON and sends them using the provided

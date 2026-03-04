@@ -302,28 +302,6 @@ let loce structure e x =
         in
           EVar (sprintf "l(%s)" loc_x)
 
-(* Event type filters *)
-let filter_events structure e_set typ ?mode () =
-  let events = structure.events in
-    USet.filter
-      (fun e ->
-        try
-          let event = Hashtbl.find events e in
-            event.typ = typ
-            &&
-            match mode with
-            | None -> true
-            | Some m -> (
-                match event.typ with
-                | Read -> event.rmod = m
-                | Write -> event.wmod = m
-                | Fence -> event.fmod = m
-                | _ -> false
-              )
-        with Not_found -> false
-      )
-      e_set
-
 let is_rdmw structure e =
   match Hashtbl.find_opt structure.events e with
   | Some event -> event.is_rdmw

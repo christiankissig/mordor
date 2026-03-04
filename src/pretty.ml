@@ -56,18 +56,6 @@ let pp_ternary_relation pp_a pp_b pp_c fmt rel =
       rel;
     Format.fprintf fmt "}@]"
 
-(** Pretty-print a ternary relation with compact notation *)
-let pp_ternary_relation_compact pp_a pp_b pp_c fmt rel =
-  Format.fprintf fmt "{@[<hov 2>";
-  let first = ref true in
-    USet.iter
-      (fun (a, b, c) ->
-        if !first then first := false else Format.fprintf fmt ";@ ";
-        Format.fprintf fmt "(%a,%a,%a)" pp_a a pp_b b pp_c c
-      )
-      rel;
-    Format.fprintf fmt "@]}"
-
 let pair_int_uset_to_yojson uset =
   [%to_yojson: (int * int) list] (USet.values uset)
 

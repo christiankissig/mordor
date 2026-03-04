@@ -9,7 +9,6 @@ let is_symbol s =
   && (String.contains greek_alpha s.[0] || String.contains zh_alpha s.[0])
 
 let is_register_name s = String.length s > 0 && String.starts_with ~prefix:"r" s
-let is_global_name s = (not (is_symbol s)) && not (is_register_name s)
 
 (** Mutual recursion for Value and Expr *)
 module rec Value : sig

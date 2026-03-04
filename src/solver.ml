@@ -334,30 +334,32 @@ let quick_check exprs =
 
 (** Cache for conjunction satisfiability results. *)
 let quick_check_cache = ConjunctionCache.create 256
+
 let cache_mutex = Lwt_mutex.create ()
 
 let quick_check_cached exprs =
   let landmark = Landmark.register "quick_check_cached" in
-  Landmark.enter landmark;
-  let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
-  (* Check cache without holding lock (optimistic read) *)
-  match ConjunctionCache.find_opt quick_check_cache exprs with
-  | Some result ->
-      Landmark.exit landmark;
-      Lwt.return result
-  | None ->
-      (* Acquire lock before mutating *)
-      Lwt_mutex.with_lock cache_mutex (fun () ->
-        (* Re-check after acquiring lock to avoid redundant work *)
-        match ConjunctionCache.find_opt quick_check_cache exprs with
-        | Some result -> Lwt.return result
-        | None ->
-            let* result = quick_check exprs in
-            ConjunctionCache.add quick_check_cache exprs result;
-            Lwt.return result)
-      >>= fun result ->
-      Landmark.exit landmark;
-      Lwt.return result
+    Landmark.enter landmark;
+    let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
+      (* Check cache without holding lock (optimistic read) *)
+      match ConjunctionCache.find_opt quick_check_cache exprs with
+      | Some result ->
+          Landmark.exit landmark;
+          Lwt.return result
+      | None ->
+          (* Acquire lock before mutating *)
+          Lwt_mutex.with_lock cache_mutex (fun () ->
+              (* Re-check after acquiring lock to avoid redundant work *)
+              match ConjunctionCache.find_opt quick_check_cache exprs with
+              | Some result -> Lwt.return result
+              | None ->
+                  let* result = quick_check exprs in
+                    ConjunctionCache.add quick_check_cache exprs result;
+                    Lwt.return result
+          )
+          >>= fun result ->
+          Landmark.exit landmark;
+          Lwt.return result
 
 (** Simplified satisfiability check.
 

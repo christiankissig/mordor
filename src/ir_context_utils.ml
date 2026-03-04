@@ -54,9 +54,6 @@ let collect_loop_ids_and_spans (program : ir_node list) :
   List.concat_map collect_loop_ids_and_spans_from_node program
   |> List.sort_uniq (fun (id1, _) (id2, _) -> compare id1 id2)
 
-let collect_loop_ids_from_node (node : ir_node) : int list =
-  collect_loop_ids_and_spans_from_node node |> List.map fst
-
 let collect_loop_ids (program : ir_node list) : int list =
   collect_loop_ids_and_spans program |> List.map fst
 
