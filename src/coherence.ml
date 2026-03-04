@@ -2,6 +2,7 @@
 
 open Algorithms
 open Expr
+open Solver
 open Types
 open Uset
 
@@ -949,9 +950,7 @@ let check_for_coherence structure execution restrictions =
                         match (ev_a.loc, ev_b.loc) with
                         | Some loc_a, Some loc_b ->
                             (* Use solver to check semantic equality *)
-                            Solver.Semeq.exeq
-                              (Solver.Semeq.create_state ())
-                              loc_a loc_b
+                            exeq loc_a loc_b
                         | _ -> Lwt.return false
                     with Not_found -> Lwt.return false
                 )
