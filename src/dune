@@ -33,8 +33,6 @@
   parser_state
   pretty
   solver
-  solver_threadsafe
-  solver_threadsafe_local
   source_info
   types
   uset)
