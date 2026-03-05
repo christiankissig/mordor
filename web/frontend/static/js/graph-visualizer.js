@@ -1228,6 +1228,8 @@ class GraphVisualizer {
         this.visibleRelations = null; // reset to show all
         this.availableRelations = new Set();
         document.getElementById('relations-checkboxes').innerHTML = '';
+        document.getElementById('loops-content').innerHTML = '<p>Episodicity results will appear here.</p>';
+        document.getElementById('assertions-content').innerHTML = '<p>Assertion results will appear here.</p>';
         document.getElementById('uaf-content').innerHTML = '<p>Use-after-free analysis will appear here.</p>';
 
         // Update UI
