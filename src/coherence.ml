@@ -812,7 +812,10 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
   let landmark = Landmark.register "try_all_coherence_orders" in
     Landmark.enter landmark;
 
-    if USet.size execution.e = 0 then Lwt.return false
+    if USet.size execution.e = 0 then (
+      Landmark.exit landmark;
+      false
+    )
     else
       let ({ po; restrict; _ } : symbolic_event_structure) = structure in
       let writes =
@@ -826,7 +829,10 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
           execution.e
       in
 
-      if USet.size writes < 2 then Lwt.return true
+      if USet.size writes < 2 then (
+        Landmark.exit landmark;
+        true
+      )
       else
         (* Check if reads from init *)
         let reads_from_init = USet.exists (fun (_, w) -> w = 0) execution.rf in
@@ -904,13 +910,13 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
         let rec choose_one i vals =
           if i < 0 then
             let co = URelation.transitive_closure (USet.of_list vals) in
-              Lwt.return (check_coherence cache co)
+              check_coherence cache co
           else
             let rec try_perms = function
-              | [] -> Lwt.return false
+              | [] -> false
               | p :: ps ->
-                  let%lwt result = choose_one (i - 1) (vals @ p) in
-                    if result then Lwt.return true else try_perms ps
+                  let result = choose_one (i - 1) (vals @ p) in
+                    if result then true else try_perms ps
             in
               try_perms (List.nth writes_per_location i)
         in
@@ -925,21 +931,21 @@ let check_for_coherence structure execution restrictions =
   let landmark = Landmark.register "check_for_coherence" in
     Landmark.enter landmark;
 
-    if USet.size execution.e = 0 then Lwt.return false
+    if USet.size execution.e = 0 then false
     else
       match ModelRegistry.lookup restrictions.coherent with
       | None ->
           Logs.warn (fun m -> m "Unknown model: %s" restrictions.coherent);
           Landmark.exit landmark;
-          Lwt.return false
+          false
       | Some model ->
           let module M = (val model : MEMORY_MODEL) in
           (* Create location equivalence relation using semantic equality *)
-          let%lwt eqlocs =
+          let eqlocs =
             let all_events = execution.e in
-              USet.async_filter
+              USet.filter
                 (fun (a, b) ->
-                  if a = b then Lwt.return true
+                  if a = b then true
                   else
                     try
                       let ev_a = Hashtbl.find structure.events a in
@@ -948,8 +954,8 @@ let check_for_coherence structure execution restrictions =
                         | Some loc_a, Some loc_b ->
                             (* Use solver to check semantic equality *)
                             exeq loc_a loc_b
-                        | _ -> Lwt.return false
-                    with Not_found -> Lwt.return false
+                        | _ -> false
+                    with Not_found -> false
                 )
                 (URelation.cross all_events all_events
                 |> USet.filter (fun (a, b) -> a <= b)
@@ -968,7 +974,7 @@ let check_for_coherence structure execution restrictions =
           (* Check thin-air *)
           if not (M.check_thin_air cache execution) then (
             Landmark.exit landmark;
-            Lwt.return false
+            false
           )
           else
             (* Try all coherence orders *)

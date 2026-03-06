@@ -176,9 +176,9 @@ let test_interpret_empty_statements =
   run_lwt (fun () ->
       let env = Hashtbl.create 16 in
       let events = create_events [] in
-        let* result = interpret_statements [] env [] events in
-          Alcotest.(check int) "only terminal event" 1 (USet.size result.e);
-          Lwt.return_unit
+      let result = interpret_statements [] env [] events in
+        Alcotest.(check int) "only terminal event" 1 (USet.size result.e);
+        Lwt.return_unit
   )
 
 (** Test interpret GlobalStore statement *)
@@ -192,15 +192,13 @@ let test_interpret_global_store =
       let stmt =
         GlobalStore { global = "x"; expr; assign = { mode; volatile = false } }
       in
-        let* result =
-          interpret_statements [ make_ir_node stmt ] env [] events
-        in
-          Alcotest.(check int) "two events created" 2 (USet.size result.e);
-          (* includes terminal event *)
-          Alcotest.(check int)
-            "two events in table" 2
-            (Hashtbl.length events.events);
-          Lwt.return_unit
+      let result = interpret_statements [ make_ir_node stmt ] env [] events in
+        Alcotest.(check int) "two events created" 2 (USet.size result.e);
+        (* includes terminal event *)
+        Alcotest.(check int)
+          "two events in table" 2
+          (Hashtbl.length events.events);
+        Lwt.return_unit
   )
 
 (** Test interpret GlobalLoad statement *)
@@ -214,12 +212,10 @@ let test_interpret_global_load =
         GlobalLoad
           { register = "r"; global = "x"; load = { mode; volatile = false } }
       in
-        let* result =
-          interpret_statements [ make_ir_node stmt ] env [] events
-        in
-          Alcotest.(check int) "one event created" 1 (USet.size result.e);
-          Alcotest.(check bool) "register in env" true (Hashtbl.mem env "r");
-          Lwt.return_unit
+      let result = interpret_statements [ make_ir_node stmt ] env [] events in
+        Alcotest.(check int) "one event created" 1 (USet.size result.e);
+        Alcotest.(check bool) "register in env" true (Hashtbl.mem env "r");
+        Lwt.return_unit
   )
 
 (** Test interpret Fence statement *)
@@ -230,15 +226,13 @@ let test_interpret_fence =
       let events = create_events [] in
       let mode = Types.SC in
       let stmt = Ir.Fence { mode } in
-        let* result =
-          interpret_statements [ make_ir_node stmt ] env [] events
-        in
-          Alcotest.(check int)
-            "one fence event SymbolicEventStructure.plus terminal event" 2
-            (USet.size result.e);
-          let evt = Hashtbl.find events.events 0 in
-            Alcotest.(check bool) "is fence" true (evt.typ = Fence);
-            Lwt.return_unit
+      let result = interpret_statements [ make_ir_node stmt ] env [] events in
+        Alcotest.(check int)
+          "one fence event SymbolicEventStructure.plus terminal event" 2
+          (USet.size result.e);
+        let evt = Hashtbl.find events.events 0 in
+          Alcotest.(check bool) "is fence" true (evt.typ = Fence);
+          Lwt.return_unit
   )
 
 (** Test interpret multiple statements *)
@@ -259,13 +253,13 @@ let test_interpret_multiple_statements =
               };
           ]
       in
-        let* result = interpret_statements stmts env [] events in
-          Alcotest.(check int) "three events" 3 (USet.size result.e);
-          (* includes terminal event *)
-          Alcotest.(check int)
-            "three events in table" 3
-            (Hashtbl.length events.events);
-          Lwt.return_unit
+      let result = interpret_statements stmts env [] events in
+        Alcotest.(check int) "three events" 3 (USet.size result.e);
+        (* includes terminal event *)
+        Alcotest.(check int)
+          "three events in table" 3
+          (Hashtbl.length events.events);
+        Lwt.return_unit
   )
 
 (** Test main interpret function *)
@@ -283,16 +277,15 @@ let test_interpret_main =
               };
           ]
       in
-        let* structure, _ = interpret ast in
-          Alcotest.(check int)
-            "has init and store and terminal events" 3 (USet.size structure.e);
-          Alcotest.(check bool)
-            "init event present" true (USet.mem structure.e 0);
-          (* includes terminal event *)
-          Alcotest.(check int)
-            "three events in table" 3
-            (Hashtbl.length structure.events);
-          Lwt.return_unit
+      let structure, _ = interpret ast in
+        Alcotest.(check int)
+          "has init and store and terminal events" 3 (USet.size structure.e);
+        Alcotest.(check bool) "init event present" true (USet.mem structure.e 0);
+        (* includes terminal event *)
+        Alcotest.(check int)
+          "three events in table" 3
+          (Hashtbl.length structure.events);
+        Lwt.return_unit
   )
 
 let test_interpret_main_with_po =
@@ -315,11 +308,11 @@ let test_interpret_main_with_po =
               };
           ]
       in
-        let* structure, _ = interpret ast in
-          Alcotest.(check int) "has four events" 4 (USet.size structure.e);
-          (* Check that po relations exist *)
-          Alcotest.(check bool) "po not empty" true (USet.size structure.po > 0);
-          Lwt.return_unit
+      let structure, _ = interpret ast in
+        Alcotest.(check int) "has four events" 4 (USet.size structure.e);
+        (* Check that po relations exist *)
+        Alcotest.(check bool) "po not empty" true (USet.size structure.po > 0);
+        Lwt.return_unit
   )
 
 (** Test suite *)

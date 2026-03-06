@@ -10,14 +10,9 @@
     - Solver creation and management
     - Satisfiability checking (with caching)
     - Model extraction and analysis
-    - Semantic equality checking
-
-    @author Your Name
-    @version 1.0 *)
+    - Semantic equality checking *)
 
 open Expr
-open Lwt.Syntax
-open Lwt.Infix
 open Printf
 open Types
 open Uset
@@ -275,17 +270,13 @@ let try_eval_constant = function
     @param solver The solver to check
     @return [Some true] if SAT, [Some false] if UNSAT, [None] if unknown *)
 let check solver =
-  (* Enter monadic context *)
-  let* _ = Lwt.return_unit in
-
   (* Quick check: any contradictions? *)
   let has_contradiction =
     List.exists Expr.is_contradiction solver.expressions
   in
-    if has_contradiction then Lwt.return_some false
-    else if List.length solver.expressions = 0 then Lwt.return_some true
-    else if List.for_all Expr.is_tautology solver.expressions then
-      Lwt.return_some true
+    if has_contradiction then Some false
+    else if List.length solver.expressions = 0 then Some true
+    else if List.for_all Expr.is_tautology solver.expressions then Some true
     else
       (* Try constant evaluation *)
       let all_constant_true =
@@ -299,7 +290,7 @@ let check solver =
           solver.expressions
       in
 
-      if not all_constant_true then Lwt.return_some false
+      if not all_constant_true then Some false
       else
         (* Convert to Z3 and solve *)
         let z3_exprs =
@@ -311,9 +302,9 @@ let check solver =
           let result = Z3.Solver.check solver.context.solver [] in
 
           match result with
-          | Z3.Solver.SATISFIABLE -> Lwt.return_some true
-          | Z3.Solver.UNSATISFIABLE -> Lwt.return_some false
-          | Z3.Solver.UNKNOWN -> Lwt.return_none
+          | Z3.Solver.SATISFIABLE -> Some true
+          | Z3.Solver.UNSATISFIABLE -> Some false
+          | Z3.Solver.UNKNOWN -> None
         with e ->
           Logs.err (fun m ->
               m "Error adding expressions to Z3 solver: %s\n %s"
@@ -335,7 +326,7 @@ let quick_check exprs =
 (** Cache for conjunction satisfiability results. *)
 let quick_check_cache = ConjunctionCache.create 256
 
-let cache_mutex = Lwt_mutex.create ()
+let cache_mutex = Mutex.create ()
 
 let quick_check_cached exprs =
   let landmark = Landmark.register "quick_check_cached" in
@@ -345,61 +336,49 @@ let quick_check_cached exprs =
       match ConjunctionCache.find_opt quick_check_cache exprs with
       | Some result ->
           Landmark.exit landmark;
-          Lwt.return result
+          result
       | None ->
           (* Acquire lock before mutating *)
-          Lwt_mutex.with_lock cache_mutex (fun () ->
-              (* Re-check after acquiring lock to avoid redundant work *)
-              match ConjunctionCache.find_opt quick_check_cache exprs with
-              | Some result -> Lwt.return result
-              | None ->
-                  let* result = quick_check exprs in
-                    ConjunctionCache.add quick_check_cache exprs result;
-                    Lwt.return result
-          )
-          >>= fun result ->
+          Mutex.lock cache_mutex;
+          let result =
+            (* Re-check after acquiring lock to avoid redundant work *)
+            match ConjunctionCache.find_opt quick_check_cache exprs with
+            | Some result -> result
+            | None ->
+                let result = quick_check exprs in
+                  ConjunctionCache.add quick_check_cache exprs result;
+                  result
+          in
+
+          Mutex.unlock cache_mutex;
           Landmark.exit landmark;
-          Lwt.return result
+          result
 
 (** Simplified satisfiability check.
 
     @param exprs Constraint expressions
     @return [true] if satisfiable, [false] otherwise *)
-let is_sat exprs =
-  let* result = quick_check exprs in
-    match result with
-    | Some true -> Lwt.return_true
-    | _ -> Lwt.return_false
+let is_sat exprs = quick_check exprs |> Option.value ~default:false
 
 (** Simplified satisfiability check (cached).
 
     @param exprs Constraint expressions
     @return [true] if satisfiable, [false] otherwise *)
 let is_sat_cached exprs =
-  let* result = quick_check_cached exprs in
-    match result with
-    | Some true -> Lwt.return_true
-    | _ -> Lwt.return_false
+  quick_check_cached exprs |> Option.value ~default:false
 
 (** Simplified unsatisfiability check.
 
     @param exprs Constraint expressions
     @return [true] if unsatisfiable, [false] otherwise *)
-let is_unsat exprs =
-  let* result = quick_check exprs in
-    match result with
-    | Some false -> Lwt.return_true
-    | _ -> Lwt.return_false
+let is_unsat exprs = quick_check exprs |> Option.value ~default:true |> not
 
 (** Simplified unsatisfiability check (cached).
 
     @param exprs Constraint expressions
     @return [true] if unsatisfiable, [false] otherwise *)
 let is_unsat_cached exprs =
-  let* result = quick_check_cached exprs in
-    match result with
-    | Some false -> Lwt.return_true
-    | _ -> Lwt.return_false
+  quick_check_cached exprs |> Option.value ~default:true |> not
 
 (** Check if constraints imply a conclusion.
 
@@ -412,11 +391,10 @@ let is_unsat_cached exprs =
 let implies constraints conclusion =
   let negated = Expr.inverse conclusion in
   let solver = create (constraints @ [ negated ]) in
-    let* result = check solver in
-      match result with
-      | Some false ->
-          Lwt.return_true (* Negation is UNSAT => implication holds *)
-      | _ -> Lwt.return_false
+  let result = check solver in
+    match result with
+    | Some false -> true (* Negation is UNSAT => implication holds *)
+    | _ -> false
 
 (** Advanced solve using multiple strategies.
 
@@ -429,11 +407,11 @@ let solve_advanced solver =
   let has_contradiction =
     List.exists Expr.is_contradiction solver.expressions
   in
-    if has_contradiction then Lwt.return_some false
+    if has_contradiction then Some false
     else
       (* Check if all tautologies *)
       let all_taut = List.for_all Expr.is_tautology solver.expressions in
-        if all_taut then Lwt.return_some true
+        if all_taut then Some true
         else
           (* Use Z3 for complex cases *)
           check solver
@@ -449,7 +427,7 @@ let solve_advanced solver =
     @param solver The solver to solve
     @return [Some bindings] if SAT, [None] if UNSAT/UNKNOWN *)
 let solve solver =
-  let* result = check solver in
+  let result = check solver in
     match result with
     | Some true -> (
         let model = Z3.Solver.get_model solver.context.solver in
@@ -469,11 +447,11 @@ let solve solver =
                     | None -> ()
                   )
                   solver.context.vars;
-                Lwt.return_some bindings
-          | None -> Lwt.return_none
+                Some bindings
+          | None -> None
       )
-    | Some false -> Lwt.return_none
-    | None -> Lwt.return_none
+    | Some false -> None
+    | None -> None
 
 (** Quick solve and model extraction.
 
@@ -499,9 +477,9 @@ let concrete_value bindings var =
     @param var_names List of variable names to extract
     @return [Some bindings] for requested vars if SAT, [None] otherwise *)
 let solve_for_vars solver var_names =
-  let* model_opt = solve solver in
+  let model_opt = solve solver in
     match model_opt with
-    | None -> Lwt.return_none
+    | None -> None
     | Some bindings ->
         let results = Hashtbl.create (List.length var_names) in
           List.iter
@@ -511,7 +489,7 @@ let solve_for_vars solver var_names =
               | None -> ()
             )
             var_names;
-          Lwt.return_some results
+          Some results
 
 (** Convert model to human-readable string.
 
@@ -564,7 +542,7 @@ let all_flat exprs = List.for_all Expr.is_flat exprs
     @param clauses List of clauses (each is a conjunction)
     @return [Some simplified] if SAT, [None] if UNSAT *)
 let simplify_disjunction clauses =
-  let* _ = Lwt.return_unit in
+  let _ = () in
 
   (* Remove clauses containing contradictions *)
   let filtered_clauses =
@@ -587,15 +565,14 @@ let simplify_disjunction clauses =
 
   if has_empty_clause then
     (* Empty clause => that clause is a tautology => entire disjunction is tautology *)
-    Lwt.return_some [ [] ]
+    Some [ [] ]
   else
     let non_empty =
       List.filter (fun c -> List.length c > 0) filtered_clauses2
     in
 
     (* Empty result means unsatisfiable *)
-    if List.length non_empty = 0 then Lwt.return_none
-    else Lwt.return_some non_empty
+    if List.length non_empty = 0 then None else Some non_empty
 
 (** Solve with Z3 and return ranges for each variable.
 
@@ -605,9 +582,9 @@ let simplify_disjunction clauses =
     @param solver The solver to solve
     @return [Some ranges] mapping vars to range lists if SAT, [None] if UNSAT *)
 let solve_with_ranges solver =
-  let* result = solve solver in
+  let result = solve solver in
     match result with
-    | None -> Lwt.return_none
+    | None -> None
     | Some bindings ->
         let ranges = Hashtbl.create 16 in
         let all_symbols = get_all_symbols solver.expressions in
@@ -628,7 +605,7 @@ let solve_with_ranges solver =
           )
           all_symbols;
 
-        Lwt.return_some ranges
+        Some ranges
 
 (** {1 Solver Introspection} *)
 
@@ -657,16 +634,11 @@ let get_statistics solver =
     @param b Second expression
     @return [true] if semantically equal *)
 let exeq ?(state = []) a b =
-  if Expr.equal a b then Lwt.return_true
+  if Expr.equal a b then true
   else
     (* Check if state && (a != b) is UNSAT *)
     let neq_expr = Expr.binop a "!=" b in
-      let* result =
-        quick_check_cached (neq_expr :: state |> List.sort Expr.compare)
-      in
-        match result with
-        | Some false -> Lwt.return_true
-        | _ -> Lwt.return_false
+      is_unsat_cached (neq_expr :: state |> List.sort Expr.compare)
 
 (** Check if two expressions could potentially be equal.
 
@@ -682,20 +654,10 @@ let exeq ?(state = []) a b =
 let expoteq ?(state = []) a b =
   let landmark = Landmark.register "expoteq" in
     Landmark.enter landmark;
-    if Expr.equal a b then (
-      Landmark.exit landmark;
-      Lwt.return_true
-    )
-    else
+    let result =
       (* Check if a = b is satisfiable *)
-      let eq_expr = Expr.binop a "=" b in
-        let* result =
-          quick_check_cached (eq_expr :: state |> List.sort Expr.compare)
-        in
-          match result with
-          | Some true ->
-              Landmark.exit landmark;
-              Lwt.return_true
-          | _ ->
-              Landmark.exit landmark;
-              Lwt.return_false
+      Expr.equal a b
+      || is_sat_cached (Expr.binop a "=" b :: state |> List.sort Expr.compare)
+    in
+      Landmark.exit landmark;
+      result

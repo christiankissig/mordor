@@ -590,12 +590,12 @@ module ConditionChecker = struct
       in
         (* Still check rf_conditions with solver if needed *)
         if List.length rf_conditions > 0 then
-          let%lwt rf_ok = Solver.is_sat rf_conditions in
-            Lwt.return (set_result && rf_ok)
-        else Lwt.return set_result
+          let rf_ok = Solver.is_sat rf_conditions in
+            set_result && rf_ok
+        else set_result
     with Failure msg ->
       Logs.err (fun m -> m "Error evaluating set expression: %s" msg);
-      Lwt.return false
+      false
 
   (** [check_with_solver cond_expr rf_conditions execution] uses SMT solver.
 
@@ -646,9 +646,9 @@ module ConditionChecker = struct
              (Expr.evaluate ~env:(Hashtbl.find_opt last_writes_to_variables))
       in
       let cond_expr_and_rf_conditions = inst_cond_expr @ rf_conditions in
-        let* is_sat = Solver.is_sat cond_expr_and_rf_conditions in
-          Logs.debug (fun m -> m "Solver result: %b" is_sat);
-          Lwt.return is_sat
+      let is_sat = Solver.is_sat cond_expr_and_rf_conditions in
+        Logs.debug (fun m -> m "Solver result: %b" is_sat);
+        is_sat
 
   (** [check_condition cond_expr structure execution] checks if condition holds.
 
@@ -662,13 +662,13 @@ module ConditionChecker = struct
     let rf_conditions =
       ExecutionAnalysis.build_rf_conditions structure execution
     in
-      let* set_valid =
-        check_with_set_operations cond_expr rf_conditions structure execution
-      in
-        let* solver_valid =
-          check_with_solver cond_expr rf_conditions structure execution
-        in
-          Lwt.return (set_valid && solver_valid)
+    let set_valid =
+      check_with_set_operations cond_expr rf_conditions structure execution
+    in
+    let solver_valid =
+      check_with_solver cond_expr rf_conditions structure execution
+    in
+      set_valid && solver_valid
 end
 
 (** {1 Refinement Checking} *)
@@ -984,16 +984,16 @@ module PerExecutionChecker = struct
 
       (* Check condition if needed *)
       if should_skip_condition !already_satisfied is_ub_assertion then
-        Lwt.return (!already_satisfied, !ub_reasons, None)
+        (!already_satisfied, !ub_reasons, None)
       else
         match condition_expr_opt with
         | None -> failwith "Unexpected missing condition expression"
         | Some cond_expr ->
-            let%lwt conds_satisfied =
+            let conds_satisfied =
               ConditionChecker.check_condition cond_expr structure execution
             in
             (* Check extended assertions (currently always true) *)
-            let%lwt extended_ok = Lwt.return true in
+            let extended_ok = true in
             let final_satisfied = conds_satisfied && extended_ok in
               already_satisfied := final_satisfied;
               (* Create instance detail *)
@@ -1001,7 +1001,7 @@ module PerExecutionChecker = struct
                 AssertionInstanceTracking.create_instance_detail
                   (Some cond_expr) structure execution final_satisfied
               in
-                Lwt.return (!already_satisfied, !ub_reasons, Some detail)
+                (!already_satisfied, !ub_reasons, Some detail)
 
   (** [check assertion execution structure already_satisfied ~exhaustive] checks
       single execution.
@@ -1014,12 +1014,11 @@ module PerExecutionChecker = struct
       @return Promise of [(satisfied, ub_reasons, instance_detail_opt)] tuple.
       @raise Failure if assertion type is unexpected. *)
   let check assertion execution structure already_satisfied ~exhaustive =
-    let%lwt () = Lwt.return () in
-      match assertion with
-      | Outcome { outcome; condition; model } ->
-          check_outcome_assertion outcome condition structure execution
-            already_satisfied
-      | _ -> failwith "unexpected assertion to be checked per execution"
+    match assertion with
+    | Outcome { outcome; condition; model } ->
+        check_outcome_assertion outcome condition structure execution
+          already_satisfied
+    | _ -> failwith "unexpected assertion to be checked per execution"
 end
 
 (** {1 Main Assertion Checking} *)
@@ -1143,7 +1142,7 @@ module AssertionChecker = struct
     let%lwt () =
       lwt_piter
         (fun execution ->
-          let%lwt exec_satisfied, local_ub_reasons, detail_opt =
+          let exec_satisfied, local_ub_reasons, detail_opt =
             PerExecutionChecker.check assertion execution structure satisfied
               ~exhaustive:true
           in

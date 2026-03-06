@@ -391,23 +391,23 @@ module ReadFromValidation = struct
       |> USet.intersection structure.po
     in
 
-    USet.async_filter
+    USet.filter
       (fun (e_1, e_2) ->
         (* Check if there's no intermediate FREE event between e_1 and e_2 *)
-        let* has_intermediate =
-          USet.async_exists
+        let has_intermediate =
+          USet.exists
             (fun ep ->
               if not (USet.mem rhb (e_1, ep) && USet.mem rhb (ep, e_2)) then
-                Lwt.return_false
+                false
               else
                 (* Check if loc(e_1) = loc(ep) under env_rf using semeq *)
                 match (get_loc structure e_1, get_loc structure ep) with
-                | None, _ | _, None -> Lwt.return_false
+                | None, _ | _, None -> false
                 | Some loc_e1, Some loc_ep -> Solver.exeq ~state:p loc_e1 loc_ep
             )
             free_events
         in
-          Lwt.return (not has_intermediate)
+          not has_intermediate
       )
       allocation_events_in_po
 end
@@ -477,9 +477,7 @@ module JustValidation = struct
     let w, just = pair in
     let combo = List.map snd combo in
 
-    let ( let*? ) (condition, msg) f =
-      if condition then f () else Lwt.return false
-    in
+    let ( let*? ) (condition, msg) f = if condition then f () else false in
 
     (* Prune if any origins of symbols in d of current justification are not on the path *)
     let sym_origins =
@@ -566,7 +564,7 @@ module JustValidation = struct
             )
           in
 
-          Lwt.return true
+          true
 
   (** [check_final structure path combo] validates complete combination.
 
@@ -582,9 +580,7 @@ module JustValidation = struct
     (* conduit code between pair-based and tuple output *)
     let combo = List.map snd combo in
 
-    let ( let*? ) (condition, msg) f =
-      if condition then f () else Lwt.return false
-    in
+    let ( let*? ) (condition, msg) f = if condition then f () else false in
 
     let delta =
       List.map (fun j -> USet.union j.fwd j.we) combo
@@ -601,7 +597,7 @@ module JustValidation = struct
       )
     in
 
-    let* satisfiable =
+    let satisfiable =
       List.filter (fun just -> not (USet.mem elided just.w.label)) combo
       |> List.map (fun (just : justification) -> just.p)
       |> List.flatten
@@ -629,7 +625,7 @@ module JustValidation = struct
             )
       );
 
-      Lwt.return true
+      true
 end
 
 (** {1 Freezing} *)
@@ -672,13 +668,12 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
           )
     );
 
-    (* let* _ = Lwt.return_unit in *)
     let ( let*? ) (condition, msg) f =
       if condition then f ()
       else (
         Logs.debug (fun m -> m "  [instantiate_execution] Rejected: %s" msg);
         Landmark.exit landmark;
-        Lwt.return_none
+        None
       )
     in
 
@@ -706,8 +701,8 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
     in
 
     (* Filter RMW relation to execution events and predicates only *)
-    let* rmw_filtered =
-      USet.async_filter
+    let rmw_filtered =
+      USet.filter
         (fun (er, expr, ew) ->
           Solver.exeq ~state:p_combined expr (EBoolean true)
         )
@@ -793,7 +788,7 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
             let check_rf = ReadFromValidation.check_rf structure rf in
 
             (* atomicity constraint *)
-            let* af =
+            let af =
               ReadFromValidation.adjacent_same_location_allocation_events
                 structure path rhb (USet.values env_rf)
             in
@@ -867,7 +862,7 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
             );
 
             (* Check satisfiability of combined predicates *)
-            let* satisfiable = Solver.is_sat_cached execution_predicates in
+            let satisfiable = Solver.is_sat_cached execution_predicates in
               Logs.debug (fun m ->
                   m "  [instantiate_execution] Satisfiability check result: %b"
                     satisfiable
@@ -893,7 +888,7 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
                       (USet.size e) (USet.size rf)
                 );
                 Landmark.exit landmark;
-                Lwt.return_some freeze_result
+                Some freeze_result
 
 (** [compute_path_rf structure path ~elided ~constraints statex ppo dp
      p_combined] computes candidate read-from relations.
@@ -949,8 +944,8 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
             (USet.size w_cross_r_minus_po)
             (USet.size w_cross_r - USet.size w_cross_r_minus_po)
       );
-      let* all_rf =
-        USet.async_filter
+      let all_rf =
+        USet.filter
           (fun rf_edge ->
             let landmark = Landmark.register "compute_path_rf_edge_filter" in
               Landmark.enter landmark;
@@ -958,7 +953,7 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
                 if condition then f ()
                 else (
                   Landmark.exit landmark;
-                  Lwt.return false
+                  false
                 )
               in
               let w, r = rf_edge in
@@ -966,25 +961,23 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
                 Hashtbl.find_opt structure.restrict r
                 |> Option.value ~default:[]
               in
-                (* Check that loc(w) = loc(r) is satisfiable *)
-                let* loc_eq =
-                  if w = 0 then
-                    (* init write: skip location check *)
-                    Lwt.return true
-                  else
-                    match (get_loc structure w, get_loc structure r) with
-                    | Some loc_w, Some loc_r ->
-                        Solver.expoteq ~state:preds loc_w loc_r
-                    | _ -> Lwt.return false
-                in
-                  let*? () = (loc_eq, "RF locs not equal") in
-                    (* Check that writes are not shadowed for read-from *)
-                    let* has_dslwb = dslwb structure w r in
-                      let*? () =
-                        (not has_dslwb, "RF edge is shadowed (dslwb)")
-                      in
-                        Landmark.exit landmark;
-                        Lwt.return true
+              (* Check that loc(w) = loc(r) is satisfiable *)
+              let loc_eq =
+                if w = 0 then
+                  (* init write: skip location check *)
+                  true
+                else
+                  match (get_loc structure w, get_loc structure r) with
+                  | Some loc_w, Some loc_r ->
+                      Solver.expoteq ~state:preds loc_w loc_r
+                  | _ -> false
+              in
+                let*? () = (loc_eq, "RF locs not equal") in
+                (* Check that writes are not shadowed for read-from *)
+                let has_dslwb = dslwb structure w r in
+                  let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
+                    Landmark.exit landmark;
+                    true
           )
           w_cross_r_minus_po
       in
@@ -1000,43 +993,43 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
       in
 
       let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
-        let* rf_candidates =
-          ListMapCombinationBuilder.build_combinations all_rf_inv_map
-            ~check_partial:(fun combo ?alternatives pair ->
-              let r, w = pair in
-                (* discard the combination if we have alternatives to reading
+      let rf_candidates =
+        ListMapCombinationBuilder.build_combinations all_rf_inv_map
+          ~check_partial:(fun combo ?alternatives pair ->
+            let r, w = pair in
+              (* discard the combination if we have alternatives to reading
                    from init *)
-                if
-                  w = 0
-                  && Option.map (fun alts -> List.length alts > 1) alternatives
-                     |> Option.value ~default:false
-                then Lwt.return false
-                else
-                  let new_combo_inv =
-                    URelation.inverse (USet.of_list (pair :: combo))
-                  in
-                  let env_rf =
-                    ReadFromValidation.env_rf structure new_combo_inv
-                  in
-                  let check_rf =
-                    ReadFromValidation.check_rf structure new_combo_inv
-                  in
-                  let combined_preds =
-                    USet.of_list p_combined
-                    |> USet.inplace_union env_rf
-                    |> USet.inplace_union check_rf
-                    |> USet.values
-                  in
-                    Solver.is_sat_cached combined_preds
-            )
-            (USet.values read_events) ()
-        in
-          Logs.debug (fun m ->
-              m "[compute_path_rf] Generated %d RF combinations"
-                (List.length rf_candidates)
-          );
-          Landmark.exit landmark;
-          Lwt.return rf_candidates
+              if
+                w = 0
+                && Option.map (fun alts -> List.length alts > 1) alternatives
+                   |> Option.value ~default:false
+              then false
+              else
+                let new_combo_inv =
+                  URelation.inverse (USet.of_list (pair :: combo))
+                in
+                let env_rf =
+                  ReadFromValidation.env_rf structure new_combo_inv
+                in
+                let check_rf =
+                  ReadFromValidation.check_rf structure new_combo_inv
+                in
+                let combined_preds =
+                  USet.of_list p_combined
+                  |> USet.inplace_union env_rf
+                  |> USet.inplace_union check_rf
+                  |> USet.values
+                in
+                  Solver.is_sat_cached combined_preds
+          )
+          (USet.values read_events) ()
+      in
+        Logs.debug (fun m ->
+            m "[compute_path_rf] Generated %d RF combinations"
+              (List.length rf_candidates)
+        );
+        Landmark.exit landmark;
+        rf_candidates
 
 module Freeze = struct
   (** [freeze_dp structure just] freezes semantic dependency relations from
@@ -1083,34 +1076,34 @@ module Freeze = struct
       let e_squared = URelation.cross path.path path.path in
 
       (* Compute PPO for each justification *)
-      let* ppos =
-        Lwt_list.map_s
+      let ppos =
+        List.map
           (fun just ->
             let just_con =
               ForwardingContext.create fwd_es_ctx ~fwd:just.fwd ~we:just.we ()
             in
-              let* ppo_j = ForwardingContext.ppo just_con just.p in
+            let ppo_j = ForwardingContext.ppo just_con just.p in
 
-              (* TODO path should be po-downward closed *)
-              (* Intersect with po pairs ending at or before this write *)
-              let po_to_w =
-                USet.filter (fun (_, t) -> t = just.w.label) structure.po
-              in
-              (* Include the write event itself in the cross product
+            (* TODO path should be po-downward closed *)
+            (* Intersect with po pairs ending at or before this write *)
+            let po_to_w =
+              USet.filter (fun (_, t) -> t = just.w.label) structure.po
+            in
+            (* Include the write event itself in the cross product
                  so ppo edges TO the write are preserved *)
-              let po_predecessors_and_w =
-                USet.add (URelation.pi_1 po_to_w) just.w.label
-              in
-              let po_to_w_squared =
-                URelation.cross po_predecessors_and_w po_predecessors_and_w
-              in
-                Lwt.return (USet.intersection ppo_j po_to_w_squared)
+            let po_predecessors_and_w =
+              USet.add (URelation.pi_1 po_to_w) just.w.label
+            in
+            let po_to_w_squared =
+              URelation.cross po_predecessors_and_w po_predecessors_and_w
+            in
+              USet.intersection ppo_j po_to_w_squared
           )
           j_list
       in
 
       (* Compute ppo_loc *)
-      let* ppo_loc_base = ForwardingContext.ppo_loc fwd_ctx p_combined in
+      let ppo_loc_base = ForwardingContext.ppo_loc fwd_ctx p_combined in
       let ppo_loc =
         USet.union ppo_loc_base fwd_es_ctx.ppo.ppo_init
         |> USet.intersection e_squared
@@ -1135,7 +1128,7 @@ module Freeze = struct
             (USet.size ppo_loc)
       );
       Landmark.exit landmark;
-      Lwt.return (ppo, ppo_loc)
+      (ppo, ppo_loc)
 
   (** [freeze structure path j_list statex ~elided ~constraints ~include_rf]
       creates executions from justifications.
@@ -1167,13 +1160,12 @@ module Freeze = struct
             (String.concat "\n\t" (List.map Justification.to_string j_list))
       );
 
-      (* let* _ = Lwt.return_unit in *)
       let ( let*? ) (condition, msg) f =
         if condition then f ()
         else (
           Logs.debug (fun m -> m "[freeze] Early exit: %s" msg);
           Landmark.exit landmark;
-          Lwt.return []
+          []
         )
       in
 
@@ -1257,7 +1249,7 @@ module Freeze = struct
       );
 
       (* Check if predicates are satisfiable *)
-      let* combined_p_sat = Solver.is_sat_cached p_combined in
+      let combined_p_sat = Solver.is_sat_cached p_combined in
         Logs.debug (fun m ->
             m
               "[freeze] Combined predicates satisfiable: %b (checked %d \
@@ -1265,50 +1257,48 @@ module Freeze = struct
               combined_p_sat (List.length p_combined)
         );
         let*? () = (combined_p_sat, "predicates unsatisfiable") in
-          let* ppo, ppo_loc =
-            freeze_ppo structure path j_list fwd_ctx p_combined
-          in
+        let ppo, ppo_loc =
+          freeze_ppo structure path j_list fwd_ctx p_combined
+        in
 
-          let* all_fr =
-            if include_rf then
-              compute_path_rf structure path ~elided ~constraints statex ppo dp
-                p_combined
-            else Lwt.return [ [] ]
-          in
-          let all_rf =
+        let all_fr =
+          if include_rf then
+            compute_path_rf structure path ~elided ~constraints statex ppo dp
+              p_combined
+          else [ [] ]
+        in
+        let all_rf =
+          List.map
+            (fun fr -> List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
+            all_fr
+        in
+          Logs.debug (fun m ->
+              m "[freeze] Computed %d RF combination for path"
+                (List.length all_rf)
+          );
+          Logs.debug (fun m ->
+              m "[freeze] Starting instantiate_execution for %d RF combinations"
+                (List.length all_rf)
+          );
+          let all_validations =
             List.map
-              (fun fr -> List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
-              all_fr
+              (fun rf ->
+                instantiate_execution structure path dp ppo j_list path.p
+                  p_combined rf elided
+              )
+              all_rf
           in
-            Logs.debug (fun m ->
-                m "[freeze] Computed %d RF combination for path"
-                  (List.length all_rf)
-            );
+          let results = all_validations in
+          let filtered_results = List.filter_map Fun.id results in
             Logs.debug (fun m ->
                 m
-                  "[freeze] Starting instantiate_execution for %d RF \
-                   combinations"
+                  "[freeze] instantiate_execution produced %d valid results \
+                   from %d RF combos"
+                  (List.length filtered_results)
                   (List.length all_rf)
             );
-            let all_validations =
-              List.map
-                (fun rf ->
-                  instantiate_execution structure path dp ppo j_list path.p
-                    p_combined rf elided
-                )
-                all_rf
-            in
-              let* results = Lwt.all all_validations in
-              let filtered_results = List.filter_map Fun.id results in
-                Logs.debug (fun m ->
-                    m
-                      "[freeze] instantiate_execution produced %d valid \
-                       results from %d RF combos"
-                      (List.length filtered_results)
-                      (List.length all_rf)
-                );
-                Landmark.exit landmark;
-                Lwt.return filtered_results
+            Landmark.exit landmark;
+            filtered_results
 end
 
 (** [compute_justification_combinations fwd_es_ctx structure paths statex
@@ -1350,7 +1340,7 @@ let compute_justification_combinations fwd_es_ctx structure paths statex
       in
 
       (* TODO no need to select justifications for elided events *)
-      let%lwt js_combinations =
+      let js_combinations =
         ListMapCombinationBuilder.build_combinations justmap path_writes
           ~check_partial:(fun combo ?alternatives just ->
             JustValidation.check_partial structure path combo ?alternatives just
@@ -1369,11 +1359,10 @@ let compute_justification_combinations fwd_es_ctx structure paths statex
         List.map (fun combo -> (path, List.map snd combo)) js_combinations
       in
         Landmark.exit landmark;
-        Lwt.return result
+        result
   in
 
-  Lwt_stream.of_list paths
-  |> Lwt_stream.map_list_s combine_justifications_for_path
+  paths |> List.map combine_justifications_for_path |> List.flatten
 
 (** {1 Generate executions} *)
 
@@ -1458,7 +1447,7 @@ let generate_executions ?(include_rf = true)
             List.flatten (List.map (fun (j : justification) -> j.p) just_combo)
           in
 
-          let* freeze_results =
+          let freeze_results =
             Freeze.freeze structure fwd_es_ctx path j_remapped statex ~elided
               ~constraints ~include_rf
           in
@@ -1469,11 +1458,11 @@ let generate_executions ?(include_rf = true)
                   (List.length freeze_results)
                   (List.length just_combo) (USet.size path.path)
             );
-            Lwt.return freeze_results
+            freeze_results
         in
 
         (* Use map_list_s to handle the list results and flatten them into the stream *)
-        Lwt_stream.map_list_s freeze_just_combo input_stream
+        List.concat_map freeze_just_combo input_stream
       in
 
       let stream_freeze_to_execution input_stream =
@@ -1574,14 +1563,14 @@ let generate_executions ?(include_rf = true)
               );
 
               Landmark.exit landmark;
-              Lwt.return exec
+              exec
         in
 
-        Lwt_stream.map_s freeze_to_execution input_stream
+        List.map freeze_to_execution input_stream
       in
 
       let stream_filter_coherent_executions input_stream =
-        Lwt_stream.filter_s
+        List.filter
           (fun exec -> check_for_coherence structure exec restrictions)
           input_stream
       in
@@ -1589,7 +1578,7 @@ let generate_executions ?(include_rf = true)
       let dedup_freeze_results stream =
         let seen = FreezeResultCache.create 1024 in
 
-        Lwt_stream.filter_map
+        List.filter_map
           (fun fr ->
             if FreezeResultCache.mem seen fr then None
             else begin
@@ -1603,7 +1592,7 @@ let generate_executions ?(include_rf = true)
       let dedup_executions stream =
         let seen = ExecutionCache.create 1024 in
 
-        Lwt_stream.filter_map
+        List.filter_map
           (fun ex ->
             if ExecutionCache.mem seen ex then None
             else begin
@@ -1647,12 +1636,11 @@ let generate_executions ?(include_rf = true)
       in
 
       (* Build justcombos for all paths *)
-      let* freeze_results =
+      let freeze_results =
         compute_justification_combinations fwd_es_ctx structure paths statex
           justmap
         |> stream_freeze
         |> dedup_freeze_results
-        |> Lwt_stream.to_list
       in
 
       Logs.debug (fun m ->
@@ -1666,12 +1654,11 @@ let generate_executions ?(include_rf = true)
               (List.length minimal_freeze_results)
         );
 
-        let* executions =
-          Lwt_stream.of_list minimal_freeze_results
+        let executions =
+          minimal_freeze_results
           |> stream_freeze_to_execution
           |> dedup_executions
           |> stream_filter_coherent_executions
-          |> Lwt_stream.to_list
         in
 
         Logs.debug (fun m ->
@@ -1685,7 +1672,7 @@ let generate_executions ?(include_rf = true)
           );
 
           Landmark.exit landmark;
-          Lwt.return minimal_executions
+          minimal_executions
 
 (** Calculate dependencies and justifications *)
 
@@ -1710,7 +1697,7 @@ let generate_executions ?(include_rf = true)
 let calculate_dependencies ?(include_rf = true)
     (structure : symbolic_event_structure) (final_justs : justification uset)
     (fwd_es_ctx : Forwarding.event_structure_context) ~(exhaustive : bool)
-    ~(restrictions : Coherence.restrictions) : symbolic_execution list Lwt.t =
+    ~(restrictions : Coherence.restrictions) : symbolic_execution list =
   Logs.debug (fun m -> m "Generating executions...");
 
   (* Compute statex: allocation disjointness constraints *)
@@ -1756,14 +1743,14 @@ let calculate_dependencies ?(include_rf = true)
   in
 
   (* Build executions if not just structure *)
-  let* executions =
+  let executions =
     generate_executions ~include_rf structure fwd_es_ctx final_justs statex
       ~restrictions
   in
 
   Logs.debug (fun m -> m "Executions generated: %d" (List.length executions));
 
-  Lwt.return executions
+  executions
 
 (** [step_calculate_dependencies lwt_ctx] is the main entry point for the
     dependency calculation step. It checks for necessary data, sets up coherence
@@ -1797,13 +1784,13 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
                 let* () = Forwarding.EventStructureContext.init fwd_es_ctx in
                   Lwt.return fwd_es_ctx
         in
-          let* executions =
-            calculate_dependencies structure final_justs fwd_es_ctx
-              ~exhaustive:(ctx.options.exhaustive || false)
-              ~restrictions:coherence_restrictions
-          in
-            ctx.executions <- Some (USet.of_list executions);
-            Lwt.return ctx
+        let executions =
+          calculate_dependencies structure final_justs fwd_es_ctx
+            ~exhaustive:(ctx.options.exhaustive || false)
+            ~restrictions:coherence_restrictions
+        in
+          ctx.executions <- Some (USet.of_list executions);
+          Lwt.return ctx
     | _ ->
         Logs.err (fun m ->
             m

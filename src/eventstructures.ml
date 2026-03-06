@@ -1,6 +1,5 @@
 open Events
 open Expr
-open Lwt.Syntax
 open Types
 open Uset
 
@@ -348,26 +347,26 @@ let dslwb structure w r =
     let r_restrict =
       Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
     in
-      let* result =
-        USet.async_exists
-          (fun (w2, r2) ->
-            if
-              r2 = r (* w2 po bfore r *)
-              && w2 <> w (* w2 is not w *)
-              && USet.mem write_events w2 (* w2 is a write *)
-              && USet.mem structure.po (w, w2)
-              (* w2 po after w, thus in between w and r *)
-            then
-              (* w2 potentially shadows w *)
-              match (get_loc structure w, get_loc structure w2) with
-              | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
-              | _ -> Lwt.return false
-            else Lwt.return false
-          )
-          structure.po
-      in
-        Landmark.exit landmark;
-        Lwt.return result
+    let result =
+      USet.exists
+        (fun (w2, r2) ->
+          if
+            r2 = r (* w2 po bfore r *)
+            && w2 <> w (* w2 is not w *)
+            && USet.mem write_events w2 (* w2 is a write *)
+            && USet.mem structure.po (w, w2)
+            (* w2 po after w, thus in between w and r *)
+          then
+            (* w2 potentially shadows w *)
+            match (get_loc structure w, get_loc structure w2) with
+            | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
+            | _ -> false
+          else false
+        )
+        structure.po
+    in
+      Landmark.exit landmark;
+      result
 
 let init_ppo structure =
   let events = structure.events in

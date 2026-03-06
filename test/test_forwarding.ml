@@ -417,24 +417,24 @@ let test_check (data : DataProviders.check_data) =
      let ctx =
        { (ForwardingContext.create fwd_es_ctx ()) with psi = data.psi }
      in
-       let* result = ForwardingContext.check ctx in
+     let result = ForwardingContext.check ctx in
+       Alcotest.(check bool)
+         (Printf.sprintf "%s satisfiability" data.name)
+         data.expected_result result;
+
+       if data.should_be_good then
          Alcotest.(check bool)
-           (Printf.sprintf "%s satisfiability" data.name)
-           data.expected_result result;
+           (Printf.sprintf "%s marked as good" data.name)
+           true
+           (ContextCache.is_good fwd_es_ctx.context_cache ctx.fwd ctx.we);
 
-         if data.should_be_good then
-           Alcotest.(check bool)
-             (Printf.sprintf "%s marked as good" data.name)
-             true
-             (ContextCache.is_good fwd_es_ctx.context_cache ctx.fwd ctx.we);
+       if data.should_be_bad then
+         Alcotest.(check bool)
+           (Printf.sprintf "%s marked as bad" data.name)
+           true
+           (ContextCache.is_bad fwd_es_ctx.context_cache ctx.fwd ctx.we);
 
-         if data.should_be_bad then
-           Alcotest.(check bool)
-             (Printf.sprintf "%s marked as bad" data.name)
-             true
-             (ContextCache.is_bad fwd_es_ctx.context_cache ctx.fwd ctx.we);
-
-         Lwt.return_unit
+       Lwt.return_unit
     )
 
 (** Test PPO computation *)
@@ -496,10 +496,10 @@ let test_ppo_returns_remapped () =
 
      let* () = EventStructureContext.init fwd_es_ctx in
      let ctx = ForwardingContext.create fwd_es_ctx () in
-       let* ppo = ForwardingContext.ppo ctx [] in
-         (* Should return some relation *)
-         Alcotest.(check bool) "PPO is a uset" true (USet.size ppo >= 0);
-         Lwt.return_unit
+     let ppo = ForwardingContext.ppo ctx [] in
+       (* Should return some relation *)
+       Alcotest.(check bool) "PPO is a uset" true (USet.size ppo >= 0);
+       Lwt.return_unit
     )
 
 let test_ppo_caches_result () =
@@ -512,12 +512,12 @@ let test_ppo_caches_result () =
      let predicates = [] in
 
      (* First call *)
-     let* ppo1 = ForwardingContext.ppo ctx predicates in
-       (* Second call - should hit cache *)
-       let* ppo2 = ForwardingContext.ppo ctx predicates in
+     let ppo1 = ForwardingContext.ppo ctx predicates in
+     (* Second call - should hit cache *)
+     let ppo2 = ForwardingContext.ppo ctx predicates in
 
-       Alcotest.(check bool) "PPO cached" true (USet.equal ppo1 ppo2);
-       Lwt.return_unit
+     Alcotest.(check bool) "PPO cached" true (USet.equal ppo1 ppo2);
+     Lwt.return_unit
     )
 
 let test_ppo_with_different_predicates () =
@@ -531,25 +531,25 @@ let test_ppo_with_different_predicates () =
      let pred1 = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] in
      let pred2 = [ EBinOp (ENum (Z.of_int 2), "=", ENum (Z.of_int 2)) ] in
 
-     let* ppo1 = ForwardingContext.ppo ctx pred1 in
-       let* ppo2 = ForwardingContext.ppo ctx pred2 in
+     let ppo1 = ForwardingContext.ppo ctx pred1 in
+     let ppo2 = ForwardingContext.ppo ctx pred2 in
 
-       (* Both should succeed and be cached separately *)
-       Alcotest.(check bool)
-         "Both PPOs computed" true
-         (USet.size ppo1 >= 0 && USet.size ppo2 >= 0);
+     (* Both should succeed and be cached separately *)
+     Alcotest.(check bool)
+       "Both PPOs computed" true
+       (USet.size ppo1 >= 0 && USet.size ppo2 >= 0);
 
-       (* Verify they're cached separately *)
-       let cached1 = ForwardingContext.cache_get ctx pred1 in
-       let cached2 = ForwardingContext.cache_get ctx pred2 in
+     (* Verify they're cached separately *)
+     let cached1 = ForwardingContext.cache_get ctx pred1 in
+     let cached2 = ForwardingContext.cache_get ctx pred2 in
 
-       Alcotest.(check bool)
-         "Different predicates cached separately" true
-         ( match (cached1.ppo, cached2.ppo) with
-         | Some _, Some _ -> true
-         | _ -> false
-         );
-       Lwt.return_unit
+     Alcotest.(check bool)
+       "Different predicates cached separately" true
+       ( match (cached1.ppo, cached2.ppo) with
+       | Some _, Some _ -> true
+       | _ -> false
+       );
+     Lwt.return_unit
     )
 
 let test_ppo_with_context_psi () =
@@ -567,7 +567,7 @@ let test_ppo_with_context_psi () =
 
      let predicates = [ EBinOp (ESymbol "y", "<", ENum (Z.of_int 10)) ] in
 
-     let* ppo = ForwardingContext.ppo ctx predicates in
+     let ppo = ForwardingContext.ppo ctx predicates in
 
      (* Should combine predicates and psi for computation *)
      Alcotest.(check bool)
@@ -591,7 +591,7 @@ let test_ppo_applies_remapping () =
        (* Event 2 forwards to event 1 *)
        let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
 
-       let* ppo = ForwardingContext.ppo ctx [] in
+       let ppo = ForwardingContext.ppo ctx [] in
 
        (* Verify that edges involving event 2 are remapped to event 1 *)
        (* The result should not contain self-edges after remapping *)
@@ -611,7 +611,7 @@ let test_ppo_includes_rmw_orderings () =
      let ctx = ForwardingContext.create fwd_es_ctx () in
 
      (* The test structure includes RMW edges, PPO should include RMW-related orderings *)
-     let* ppo = ForwardingContext.ppo ctx [] in
+     let ppo = ForwardingContext.ppo ctx [] in
 
      Alcotest.(check bool) "PPO includes orderings" true (USet.size ppo >= 0);
 
@@ -627,7 +627,7 @@ let test_ppo_with_debug_flag () =
      let ctx = ForwardingContext.create fwd_es_ctx () in
 
      (* Test with debug flag enabled *)
-     let* ppo = ForwardingContext.ppo ~debug:true ctx [] in
+     let ppo = ForwardingContext.ppo ~debug:true ctx [] in
 
      Alcotest.(check bool)
        "PPO computed with debug flag" true
@@ -645,10 +645,10 @@ let test_ppo_loc_returns_remapped () =
 
      let* () = EventStructureContext.init fwd_es_ctx in
      let ctx = ForwardingContext.create fwd_es_ctx () in
-       let* ppo_loc = ForwardingContext.ppo_loc ctx [] in
-         (* Should return some relation *)
-         Alcotest.(check bool) "PPO_loc is a uset" true (USet.size ppo_loc >= 0);
-         Lwt.return_unit
+     let ppo_loc = ForwardingContext.ppo_loc ctx [] in
+       (* Should return some relation *)
+       Alcotest.(check bool) "PPO_loc is a uset" true (USet.size ppo_loc >= 0);
+       Lwt.return_unit
     )
 
 let test_ppo_loc_caches_result () =
@@ -661,22 +661,22 @@ let test_ppo_loc_caches_result () =
      let predicates = [] in
 
      (* First call *)
-     let* ppo_loc1 = ForwardingContext.ppo_loc ctx predicates in
-       (* Second call - should hit cache *)
-       let* ppo_loc2 = ForwardingContext.ppo_loc ctx predicates in
+     let ppo_loc1 = ForwardingContext.ppo_loc ctx predicates in
+     (* Second call - should hit cache *)
+     let ppo_loc2 = ForwardingContext.ppo_loc ctx predicates in
 
-       Alcotest.(check bool) "PPO_loc cached" true (USet.equal ppo_loc1 ppo_loc2);
+     Alcotest.(check bool) "PPO_loc cached" true (USet.equal ppo_loc1 ppo_loc2);
 
-       (* Verify it's actually in cache *)
-       let cached = ForwardingContext.cache_get ctx predicates in
-         Alcotest.(check bool)
-           "PPO_loc in cache" true
-           ( match cached.ppo_loc with
-           | Some _ -> true
-           | None -> false
-           );
+     (* Verify it's actually in cache *)
+     let cached = ForwardingContext.cache_get ctx predicates in
+       Alcotest.(check bool)
+         "PPO_loc in cache" true
+         ( match cached.ppo_loc with
+         | Some _ -> true
+         | None -> false
+         );
 
-         Lwt.return_unit
+       Lwt.return_unit
     )
 
 let test_ppo_loc_subset_of_ppo () =
@@ -687,15 +687,15 @@ let test_ppo_loc_subset_of_ppo () =
      let* () = EventStructureContext.init fwd_es_ctx in
      let ctx = ForwardingContext.create fwd_es_ctx () in
 
-     let* ppo = ForwardingContext.ppo ctx [] in
-       let* ppo_loc = ForwardingContext.ppo_loc ctx [] in
+     let ppo = ForwardingContext.ppo ctx [] in
+     let ppo_loc = ForwardingContext.ppo_loc ctx [] in
 
-       (* ppo_loc should be a subset or equal to ppo (more restrictive) *)
-       Alcotest.(check bool)
-         "PPO_loc size <= PPO size" true
-         (USet.size ppo_loc <= USet.size ppo);
+     (* ppo_loc should be a subset or equal to ppo (more restrictive) *)
+     Alcotest.(check bool)
+       "PPO_loc size <= PPO size" true
+       (USet.size ppo_loc <= USet.size ppo);
 
-       Lwt.return_unit
+     Lwt.return_unit
     )
 
 let test_ppo_loc_with_predicates () =
@@ -708,7 +708,7 @@ let test_ppo_loc_with_predicates () =
 
      let predicates = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] in
 
-     let* ppo_loc = ForwardingContext.ppo_loc ctx predicates in
+     let ppo_loc = ForwardingContext.ppo_loc ctx predicates in
 
      Alcotest.(check bool)
        "PPO_loc computed with predicates" true
@@ -733,18 +733,18 @@ let test_ppo_loc_normalizes_predicates () =
        ]
      in
 
-     let* ppo_loc1 = ForwardingContext.ppo_loc ctx predicates in
+     let ppo_loc1 = ForwardingContext.ppo_loc ctx predicates in
 
      (* Try again with single predicate *)
      let predicates2 = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] in
-       let* ppo_loc2 = ForwardingContext.ppo_loc ctx predicates2 in
+     let ppo_loc2 = ForwardingContext.ppo_loc ctx predicates2 in
 
-       (* Should produce same result (predicates are normalized via USet) *)
-       Alcotest.(check bool)
-         "Duplicate predicates normalized" true
-         (USet.equal ppo_loc1 ppo_loc2);
+     (* Should produce same result (predicates are normalized via USet) *)
+     Alcotest.(check bool)
+       "Duplicate predicates normalized" true
+       (USet.equal ppo_loc1 ppo_loc2);
 
-       Lwt.return_unit
+     Lwt.return_unit
     )
 
 let test_ppo_loc_uses_cache_subset () =
@@ -757,20 +757,20 @@ let test_ppo_loc_uses_cache_subset () =
 
      (* First compute with a subset of predicates *)
      let predicates1 = [ EBinOp (ENum Z.one, "=", ENum Z.one) ] in
-       let* _ppo_loc1 = ForwardingContext.ppo_loc ctx predicates1 in
+     let _ppo_loc1 = ForwardingContext.ppo_loc ctx predicates1 in
 
-       (* Now compute with superset - should use cached subset as base *)
-       let predicates2 =
-         [
-           EBinOp (ENum Z.one, "=", ENum Z.one);
-           EBinOp (ENum (Z.of_int 2), "=", ENum (Z.of_int 2));
-         ]
-       in
-         let* ppo_loc2 = ForwardingContext.ppo_loc ctx predicates2 in
+     (* Now compute with superset - should use cached subset as base *)
+     let predicates2 =
+       [
+         EBinOp (ENum Z.one, "=", ENum Z.one);
+         EBinOp (ENum (Z.of_int 2), "=", ENum (Z.of_int 2));
+       ]
+     in
+     let ppo_loc2 = ForwardingContext.ppo_loc ctx predicates2 in
 
-         Alcotest.(check bool) "Cache subset used" true (USet.size ppo_loc2 >= 0);
+     Alcotest.(check bool) "Cache subset used" true (USet.size ppo_loc2 >= 0);
 
-         Lwt.return_unit
+     Lwt.return_unit
     )
 
 let test_ppo_loc_applies_remapping () =
@@ -787,7 +787,7 @@ let test_ppo_loc_applies_remapping () =
        (* Event 3 forwards to event 1 *)
        let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
 
-       let* ppo_loc = ForwardingContext.ppo_loc ctx [] in
+       let ppo_loc = ForwardingContext.ppo_loc ctx [] in
 
        (* Verify no self-edges after remapping *)
        let has_self_edge =
@@ -920,15 +920,15 @@ let test_ppo_ppo_loc_relationship () =
 
      let predicates = [] in
 
-     let* ppo = ForwardingContext.ppo ctx predicates in
-       let* ppo_loc = ForwardingContext.ppo_loc ctx predicates in
+     let ppo = ForwardingContext.ppo ctx predicates in
+     let ppo_loc = ForwardingContext.ppo_loc ctx predicates in
 
-       (* ppo_loc should be subset of or equal to ppo *)
-       let is_subset = USet.for_all (fun edge -> USet.mem ppo edge) ppo_loc in
+     (* ppo_loc should be subset of or equal to ppo *)
+     let is_subset = USet.for_all (fun edge -> USet.mem ppo edge) ppo_loc in
 
-       Alcotest.(check bool) "PPO_loc is subset of PPO" true is_subset;
+     Alcotest.(check bool) "PPO_loc is subset of PPO" true is_subset;
 
-       Lwt.return_unit
+     Lwt.return_unit
     )
 
 let test_all_ppo_functions_with_same_context () =
@@ -943,19 +943,19 @@ let test_all_ppo_functions_with_same_context () =
 
        let ctx = ForwardingContext.create fwd_es_ctx ~fwd () in
 
-       let* ppo = ForwardingContext.ppo ctx [] in
-         let* ppo_loc = ForwardingContext.ppo_loc ctx [] in
-         let ppo_sync = ForwardingContext.ppo_sync ctx in
+       let ppo = ForwardingContext.ppo ctx [] in
+       let ppo_loc = ForwardingContext.ppo_loc ctx [] in
+       let ppo_sync = ForwardingContext.ppo_sync ctx in
 
-         (* All should complete successfully and return valid relations *)
-         Alcotest.(check bool)
-           "All PPO functions complete" true
-           (USet.size ppo >= 0
-           && USet.size ppo_loc >= 0
-           && USet.size ppo_sync >= 0
-           );
+       (* All should complete successfully and return valid relations *)
+       Alcotest.(check bool)
+         "All PPO functions complete" true
+         (USet.size ppo >= 0
+         && USet.size ppo_loc >= 0
+         && USet.size ppo_sync >= 0
+         );
 
-         Lwt.return_unit
+       Lwt.return_unit
     )
 
 let test_ppo_with_empty_structure () =
@@ -966,7 +966,7 @@ let test_ppo_with_empty_structure () =
      let* () = EventStructureContext.init fwd_es_ctx in
      let ctx = ForwardingContext.create fwd_es_ctx () in
 
-     let* ppo = ForwardingContext.ppo ctx [] in
+     let ppo = ForwardingContext.ppo ctx [] in
 
      (* Should handle empty structure gracefully *)
      Alcotest.(check int) "Empty structure produces empty PPO" 0 (USet.size ppo);
@@ -1084,7 +1084,7 @@ let test_ppo_rmw_read_dont_modify () =
            (* Create context - write 3 is justified by read 2 only *)
            let ctx = ForwardingContext.create fwd_es_ctx () in
 
-           let* ppo = ForwardingContext.ppo ctx [] in
+           let ppo = ForwardingContext.ppo ctx [] in
 
            (* Verify PPO relations: 1,2 and 3,4 should be in PPO *)
            let has_1_2 = USet.mem ppo (1, 2) in

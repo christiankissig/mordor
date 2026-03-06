@@ -184,95 +184,116 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
   | node :: rest ->
       let stmt = Ir.get_stmt node in
       let annotation = node.annotations in
-        let* structure =
-          match stmt with
-          | Threads { threads } ->
-              let interpret_threads ts =
-                List.fold_left
-                  (fun acc t ->
-                    let* t_structure = recurse t env phi events in
-                      let* acc_structure = acc in
-                        Lwt.return
-                          (SymbolicEventStructure.cross acc_structure
-                             t_structure
-                          )
-                  )
-                  (Lwt.return (SymbolicEventStructure.create ()))
-                  ts
-              in
-                interpret_threads threads
-          | RegisterStore { register; expr } ->
-              let expr_value =
-                Expr.evaluate ~env:(Hashtbl.find_opt env) expr
-                |> Expr.apply_constraints
-              in
-              let env' = update_env env register expr_value in
-                let* cont = recurse rest env' phi events in
-                  Lwt.return cont
-          | RegisterRefAssign { register; global } ->
-              let env' = update_env env register (EVar global) in
-                let* cont = recurse rest env' phi events in
-                  Lwt.return cont
-          | GlobalStore { global; expr; assign } ->
-              let wval =
-                Expr.evaluate ~env:(Hashtbl.find_opt env) expr
-                |> Expr.apply_constraints
-              in
-              let evt =
-                {
-                  (Event.create Write 0 ()) with
-                  id = Some (VVar global);
-                  loc = Some (EVar global);
-                  wval = Some wval;
-                  wmod = assign.mode;
-                  volatile = assign.volatile;
-                }
-              in
-                USet.add events.globals global |> ignore;
-                let event' : event = add_event events evt env annotation in
-                let defacto =
-                  List.map
-                    (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                    events.defacto
-                in
-                  let* cont = recurse rest env phi events in
-                    Lwt.return
-                      (SymbolicEventStructure.dot event' cont phi defacto)
-          | DerefStore { address; expr; assign } ->
-              let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-              let wval =
-                Expr.evaluate ~env:(Hashtbl.find_opt env) expr
-                |> Expr.apply_constraints
-              in
-              let evt =
-                {
-                  (Event.create Write 0 ()) with
-                  loc = Some loc;
-                  wval = Some wval;
-                  wmod = assign.mode;
-                  volatile = assign.volatile;
-                }
-              in
+      let structure =
+        match stmt with
+        | Threads { threads } ->
+            let interpret_threads ts =
+              List.fold_left
+                (fun acc t ->
+                  let t_structure = recurse t env phi events in
+                  let acc_structure = acc in
+                    SymbolicEventStructure.cross acc_structure t_structure
+                )
+                (SymbolicEventStructure.create ())
+                ts
+            in
+              interpret_threads threads
+        | RegisterStore { register; expr } ->
+            let expr_value =
+              Expr.evaluate ~env:(Hashtbl.find_opt env) expr
+              |> Expr.apply_constraints
+            in
+            let env' = update_env env register expr_value in
+            let cont = recurse rest env' phi events in
+              cont
+        | RegisterRefAssign { register; global } ->
+            let env' = update_env env register (EVar global) in
+            let cont = recurse rest env' phi events in
+              cont
+        | GlobalStore { global; expr; assign } ->
+            let wval =
+              Expr.evaluate ~env:(Hashtbl.find_opt env) expr
+              |> Expr.apply_constraints
+            in
+            let evt =
+              {
+                (Event.create Write 0 ()) with
+                id = Some (VVar global);
+                loc = Some (EVar global);
+                wval = Some wval;
+                wmod = assign.mode;
+                volatile = assign.volatile;
+              }
+            in
+              USet.add events.globals global |> ignore;
               let event' : event = add_event events evt env annotation in
               let defacto =
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
               in
-                let* cont = recurse rest env phi events in
-                  Lwt.return (SymbolicEventStructure.dot event' cont phi defacto)
-          | DerefLoad { register; address; load } ->
-              let symbol = next_greek () in
-              let rval = VSymbol symbol in
-              let evt =
-                {
-                  (Event.create Read 0 ()) with
-                  loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
-                  rval = Some rval;
-                  rmod = load.mode;
-                  volatile = load.volatile;
-                }
+              let cont = recurse rest env phi events in
+                SymbolicEventStructure.dot event' cont phi defacto
+        | DerefStore { address; expr; assign } ->
+            let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
+            let wval =
+              Expr.evaluate ~env:(Hashtbl.find_opt env) expr
+              |> Expr.apply_constraints
+            in
+            let evt =
+              {
+                (Event.create Write 0 ()) with
+                loc = Some loc;
+                wval = Some wval;
+                wmod = assign.mode;
+                volatile = assign.volatile;
+              }
+            in
+            let event' : event = add_event events evt env annotation in
+            let defacto =
+              List.map
+                (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                events.defacto
+            in
+            let cont = recurse rest env phi events in
+              SymbolicEventStructure.dot event' cont phi defacto
+        | DerefLoad { register; address; load } ->
+            let symbol = next_greek () in
+            let rval = VSymbol symbol in
+            let evt =
+              {
+                (Event.create Read 0 ()) with
+                loc = Some (Expr.evaluate ~env:(Hashtbl.find_opt env) address);
+                rval = Some rval;
+                rmod = load.mode;
+                volatile = load.volatile;
+              }
+            in
+            let event' : event = add_event events evt env annotation in
+              Hashtbl.replace events.origin symbol event'.label;
+              let defacto =
+                List.map
+                  (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                  events.defacto
               in
+              let env' = Hashtbl.copy env in
+                Hashtbl.replace env' register (Expr.of_value rval);
+                let cont = recurse rest env' phi events in
+                  SymbolicEventStructure.dot event' cont phi defacto
+        | GlobalLoad { register; global; load } ->
+            let symbol = next_greek () in
+            let rval = VSymbol symbol in
+            let evt =
+              {
+                (Event.create Read 0 ()) with
+                id = Some (VVar global);
+                loc = Some (EVar global);
+                rval = Some rval;
+                rmod = load.mode;
+                volatile = load.volatile;
+              }
+            in
+              USet.add events.globals global |> ignore;
               let event' : event = add_event events evt env annotation in
                 Hashtbl.replace events.origin symbol event'.label;
                 let defacto =
@@ -280,365 +301,318 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                     (Expr.evaluate ~env:(Hashtbl.find_opt env))
                     events.defacto
                 in
+
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
-                  let* cont = recurse rest env' phi events in
-                    Lwt.return
-                      (SymbolicEventStructure.dot event' cont phi defacto)
-          | GlobalLoad { register; global; load } ->
-              let symbol = next_greek () in
-              let rval = VSymbol symbol in
-              let evt =
-                {
-                  (Event.create Read 0 ()) with
-                  id = Some (VVar global);
-                  loc = Some (EVar global);
-                  rval = Some rval;
-                  rmod = load.mode;
-                  volatile = load.volatile;
-                }
+                  let cont = recurse rest env' phi events in
+                    SymbolicEventStructure.dot event' cont phi defacto
+        | Fadd { register; address; operand; rmw_mode; load_mode; assign_mode }
+          ->
+            let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
+            let symbol = next_greek () in
+            let rval = VSymbol symbol in
+            let base_evt_load : event = Event.create Read 0 () in
+            let evt_load =
+              {
+                base_evt_load with
+                loc = Some loc;
+                rval = Some rval;
+                rmod = load_mode;
+                volatile = false;
+              }
+            in
+            let event_load' : event =
+              add_event events evt_load env annotation
+            in
+              Hashtbl.replace events.origin symbol event_load'.label;
+              let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
+              let result_expr =
+                Expr.evaluate ~env:(Hashtbl.find_opt env)
+                  (Expr.binop loaded_expr "+" operand)
+                |> Expr.apply_constraints
               in
-                USet.add events.globals global |> ignore;
-                let event' : event = add_event events evt env annotation in
-                  Hashtbl.replace events.origin symbol event'.label;
-                  let defacto =
-                    List.map
-                      (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                      events.defacto
-                  in
-
-                  let env' = Hashtbl.copy env in
-                    Hashtbl.replace env' register (Expr.of_value rval);
-                    let* cont = recurse rest env' phi events in
-                      Lwt.return
-                        (SymbolicEventStructure.dot event' cont phi defacto)
-          | Fadd
-              { register; address; operand; rmw_mode; load_mode; assign_mode }
-            ->
-              let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-              let symbol = next_greek () in
-              let rval = VSymbol symbol in
-              let base_evt_load : event = Event.create Read 0 () in
-              let evt_load =
-                {
-                  base_evt_load with
-                  loc = Some loc;
-                  rval = Some rval;
-                  rmod = load_mode;
-                  volatile = false;
-                }
-              in
-              let event_load' : event =
-                add_event events evt_load env annotation
-              in
-                Hashtbl.replace events.origin symbol event_load'.label;
-                let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
-                let result_expr =
-                  Expr.evaluate ~env:(Hashtbl.find_opt env)
-                    (Expr.binop loaded_expr "+" operand)
-                  |> Expr.apply_constraints
-                in
-                (* if the operand evaluates to zero, this is a read-don't
+              (* if the operand evaluates to zero, this is a read-don't
                    modify-write *)
-                let is_rdmw =
-                  Expr.evaluate ~env:(Hashtbl.find_opt env) operand
-                  == ENum Z.zero
-                in
-                let evt_store =
-                  {
-                    (Event.create Write 0 ()) with
-                    loc = Some loc;
-                    wval = Some result_expr;
-                    wmod = assign_mode;
-                    volatile = false;
-                    is_rdmw;
-                  }
-                in
-                let event_store' : event =
-                  add_event events evt_store env annotation
-                in
-                let defacto =
-                  List.map
-                    (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                    events.defacto
-                in
-
-                let env' = Hashtbl.copy env in
-                  Hashtbl.replace env' register result_expr;
-                  let* cont = recurse rest env' phi events in
-                    Lwt.return
-                      (add_rmw_edge
-                         (SymbolicEventStructure.dot event_load'
-                            (SymbolicEventStructure.dot event_store' cont phi
-                               defacto
-                            )
-                            phi defacto
-                         )
-                         event_load'.label (EBoolean true) event_store'.label
-                      )
-          | Cas { register; address; expected; desired; load_mode; assign_mode }
-            ->
-              let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-              let symbol = next_greek () in
-              let rval = VSymbol symbol in
-              let evt_load =
+              let is_rdmw =
+                Expr.evaluate ~env:(Hashtbl.find_opt env) operand == ENum Z.zero
+              in
+              let evt_store =
                 {
-                  (Event.create Read 0 ()) with
+                  (Event.create Write 0 ()) with
                   loc = Some loc;
-                  rval = Some rval;
-                  rmod = load_mode;
+                  wval = Some result_expr;
+                  wmod = assign_mode;
+                  volatile = false;
+                  is_rdmw;
+                }
+              in
+              let event_store' : event =
+                add_event events evt_store env annotation
+              in
+              let defacto =
+                List.map
+                  (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                  events.defacto
+              in
+
+              let env' = Hashtbl.copy env in
+                Hashtbl.replace env' register result_expr;
+                let cont = recurse rest env' phi events in
+                  add_rmw_edge
+                    (SymbolicEventStructure.dot event_load'
+                       (SymbolicEventStructure.dot event_store' cont phi defacto)
+                       phi defacto
+                    )
+                    event_load'.label (EBoolean true) event_store'.label
+        | Cas { register; address; expected; desired; load_mode; assign_mode }
+          ->
+            let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
+            let symbol = next_greek () in
+            let rval = VSymbol symbol in
+            let evt_load =
+              {
+                (Event.create Read 0 ()) with
+                loc = Some loc;
+                rval = Some rval;
+                rmod = load_mode;
+                volatile = false;
+              }
+            in
+            let event_load' : event =
+              add_event events evt_load env annotation
+            in
+              Hashtbl.replace events.origin symbol event_load'.label;
+              let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
+              let expected_expr =
+                Expr.evaluate ~env:(Hashtbl.find_opt env) expected
+              in
+              let cond_expr = Expr.binop loaded_expr "=" expected_expr in
+              let base_evt_store : event = Event.create Write 0 () in
+              let wval =
+                Expr.evaluate ~env:(Hashtbl.find_opt env) desired
+                |> Expr.apply_constraints
+              in
+              let evt_store =
+                {
+                  base_evt_store with
+                  loc = Some loc;
+                  wval = Some wval;
+                  wmod = assign_mode;
                   volatile = false;
                 }
               in
-              let event_load' : event =
-                add_event events evt_load env annotation
+              let event_store' : event =
+                add_event events evt_store env annotation
               in
-                Hashtbl.replace events.origin symbol event_load'.label;
-                let loaded_expr = Expr.of_value (Option.get event_load'.rval) in
-                let expected_expr =
-                  Expr.evaluate ~env:(Hashtbl.find_opt env) expected
-                in
-                let cond_expr = Expr.binop loaded_expr "=" expected_expr in
-                let base_evt_store : event = Event.create Write 0 () in
-                let wval =
-                  Expr.evaluate ~env:(Hashtbl.find_opt env) desired
-                  |> Expr.apply_constraints
-                in
-                let evt_store =
-                  {
-                    base_evt_store with
-                    loc = Some loc;
-                    wval = Some wval;
-                    wmod = assign_mode;
-                    volatile = false;
-                  }
-                in
-                let event_store' : event =
-                  add_event events evt_store env annotation
-                in
-                let phi_succ = cond_expr :: phi in
-                let phi_fail =
-                  (Expr.inverse cond_expr |> Expr.evaluate) :: phi
-                in
-                let defacto =
-                  List.map
-                    (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                    events.defacto
+              let phi_succ = cond_expr :: phi in
+              let phi_fail = (Expr.inverse cond_expr |> Expr.evaluate) :: phi in
+              let defacto =
+                List.map
+                  (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                  events.defacto
+              in
+
+              let env_succ = Hashtbl.copy env in
+              let env_fail = Hashtbl.copy env in
+                Hashtbl.replace env_succ register (ENum Z.one);
+                Hashtbl.replace env_fail register (ENum Z.zero);
+                let cont_succ = recurse rest env_succ phi_succ events in
+                let cont_fail = recurse rest env_fail phi_fail events in
+                  SymbolicEventStructure.dot event_load'
+                    (SymbolicEventStructure.plus
+                       (add_rmw_edge
+                          (SymbolicEventStructure.dot event_store' cont_succ
+                             phi_succ defacto
+                          )
+                          event_load'.label cond_expr event_store'.label
+                       )
+                       cont_fail
+                    )
+                    phi defacto
+        | If { condition; then_body; else_body } -> (
+            (* TODO prune semantically impossible branches against phi *)
+            let cond_val =
+              Expr.evaluate ~env:(Hashtbl.find_opt env) condition
+              |> Expr.apply_constraints
+            in
+            let new_then_phi =
+              if cond_val = EBoolean true then phi else cond_val :: phi
+            in
+            let new_then_phi_sat = Solver.is_sat_cached new_then_phi in
+            let new_then_phi =
+              if new_then_phi_sat then new_then_phi else [ EBoolean false ]
+            in
+            let cond_val =
+              if new_then_phi_sat then cond_val else EBoolean false
+            in
+            let else_cond_val = Expr.evaluate (Expr.inverse cond_val) in
+            let new_else_phi =
+              if cond_val = EBoolean false then phi else else_cond_val :: phi
+            in
+            let new_else_phi_sat = Solver.is_sat_cached new_else_phi in
+            let else_cond_val =
+              if new_else_phi_sat then else_cond_val else EBoolean false
+            in
+            let new_else_phi =
+              if new_else_phi_sat then new_else_phi else [ EBoolean false ]
+            in
+
+            let then_structure events =
+              recurse (then_body @ rest) env new_then_phi events
+            in
+
+            let defacto =
+              List.map
+                (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                events.defacto
+            in
+            let branch_event =
+              { (Event.create Branch 0 ()) with cond = Some cond_val }
+            in
+            let branch_event' = add_event events branch_event env annotation in
+
+            match else_body with
+            | Some eb -> (
+                let else_structure events =
+                  recurse (eb @ rest) env new_else_phi events
                 in
 
-                let env_succ = Hashtbl.copy env in
-                let env_fail = Hashtbl.copy env in
-                  Hashtbl.replace env_succ register (ENum Z.one);
-                  Hashtbl.replace env_fail register (ENum Z.zero);
-                  let* cont_succ = recurse rest env_succ phi_succ events in
-                    let* cont_fail = recurse rest env_fail phi_fail events in
-                      Lwt.return
-                        (SymbolicEventStructure.dot event_load'
-                           (SymbolicEventStructure.plus
-                              (add_rmw_edge
-                                 (SymbolicEventStructure.dot event_store'
-                                    cont_succ phi_succ defacto
-                                 )
-                                 event_load'.label cond_expr event_store'.label
-                              )
-                              cont_fail
-                           )
-                           phi defacto
+                match cond_val with
+                | EBoolean true -> then_structure events
+                | EBoolean false -> else_structure events
+                | _ ->
+                    let then_structure = then_structure events in
+                    let else_structure = else_structure events in
+                      SymbolicEventStructure.dot branch_event'
+                        (SymbolicEventStructure.plus then_structure
+                           else_structure
                         )
-          | If { condition; then_body; else_body } -> (
-              (* TODO prune semantically impossible branches against phi *)
-              let cond_val =
-                Expr.evaluate ~env:(Hashtbl.find_opt env) condition
-                |> Expr.apply_constraints
-              in
-              let new_then_phi =
-                if cond_val = EBoolean true then phi else cond_val :: phi
-              in
-                let* new_then_phi_sat = Solver.is_sat_cached new_then_phi in
-                let new_then_phi =
-                  if new_then_phi_sat then new_then_phi else [ EBoolean false ]
-                in
-                let cond_val =
-                  if new_then_phi_sat then cond_val else EBoolean false
-                in
-                let else_cond_val = Expr.evaluate (Expr.inverse cond_val) in
-                let new_else_phi =
-                  if cond_val = EBoolean false then phi
-                  else else_cond_val :: phi
-                in
-                  let* new_else_phi_sat = Solver.is_sat_cached new_else_phi in
-                  let else_cond_val =
-                    if new_else_phi_sat then else_cond_val else EBoolean false
-                  in
-                  let new_else_phi =
-                    if new_else_phi_sat then new_else_phi
-                    else [ EBoolean false ]
-                  in
+                        phi defacto
+              )
+            | None -> (
+                match cond_val with
+                | EBoolean false -> recurse rest env phi events
+                | EBoolean true -> then_structure events
+                | _ ->
+                    let then_structure = then_structure events in
+                    let rest_structure = recurse rest env new_else_phi events in
+                      SymbolicEventStructure.dot branch_event'
+                        (SymbolicEventStructure.plus then_structure
+                           rest_structure
+                        )
+                        phi defacto
+              )
+          )
+        | Fence { mode } ->
+            let base_evt : event = Event.create Fence 0 () in
+            let evt = { base_evt with fmod = mode } in
+            let event' : event = add_event events evt env annotation in
+            let defacto =
+              List.map
+                (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                events.defacto
+            in
 
-                  let then_structure events =
-                    recurse (then_body @ rest) env new_then_phi events
-                  in
+            let cont = recurse rest env phi events in
+              SymbolicEventStructure.dot event' cont phi defacto
+        | Lock { global } ->
+            let base_evt : event = Event.create Lock 0 () in
+            let evt =
+              match global with
+              | Some g ->
+                  USet.add events.globals g |> ignore;
+                  { base_evt with id = Some (VVar g) }
+              | None -> base_evt
+            in
+            let event' : event = add_event events evt env annotation in
+            let defacto =
+              List.map
+                (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                events.defacto
+            in
 
-                  let defacto =
-                    List.map
-                      (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                      events.defacto
-                  in
-                  let branch_event =
-                    { (Event.create Branch 0 ()) with cond = Some cond_val }
-                  in
-                  let branch_event' =
-                    add_event events branch_event env annotation
-                  in
+            let cont = recurse rest env phi events in
+              SymbolicEventStructure.dot event' cont phi defacto
+        | Unlock { global } ->
+            let base_evt : event = Event.create Unlock 0 () in
+            let evt =
+              match global with
+              | Some g ->
+                  USet.add events.globals g |> ignore;
+                  { base_evt with id = Some (VVar g) }
+              | None -> base_evt
+            in
+            let event' : event = add_event events evt env annotation in
+            let defacto =
+              List.map
+                (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                events.defacto
+            in
 
-                  match else_body with
-                  | Some eb -> (
-                      let else_structure events =
-                        recurse (eb @ rest) env new_else_phi events
-                      in
-
-                      match cond_val with
-                      | EBoolean true -> then_structure events
-                      | EBoolean false -> else_structure events
-                      | _ ->
-                          let* then_structure = then_structure events in
-                            let* else_structure = else_structure events in
-                              Lwt.return
-                                (SymbolicEventStructure.dot branch_event'
-                                   (SymbolicEventStructure.plus then_structure
-                                      else_structure
-                                   )
-                                   phi defacto
-                                )
-                    )
-                  | None -> (
-                      match cond_val with
-                      | EBoolean false -> recurse rest env phi events
-                      | EBoolean true -> then_structure events
-                      | _ ->
-                          let* then_structure = then_structure events in
-                            let* rest_structure =
-                              recurse rest env new_else_phi events
-                            in
-                              Lwt.return
-                                (SymbolicEventStructure.dot branch_event'
-                                   (SymbolicEventStructure.plus then_structure
-                                      rest_structure
-                                   )
-                                   phi defacto
-                                )
-                    )
-            )
-          | Fence { mode } ->
-              let base_evt : event = Event.create Fence 0 () in
-              let evt = { base_evt with fmod = mode } in
-              let event' : event = add_event events evt env annotation in
+            let cont = recurse rest env phi events in
+              SymbolicEventStructure.dot event' cont phi defacto
+        | RegMalloc { register; size } ->
+            let symbol = next_zh () in
+            let rval = VSymbol symbol in
+            let loc = ESymbol symbol in
+            let base_evt : event = Event.create Malloc 0 () in
+            let evt = { base_evt with rval = Some rval; loc = Some loc } in
+            let event' : event = add_event events evt env annotation in
+              Hashtbl.replace events.origin symbol event'.label;
               let defacto =
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
               in
 
-              let* cont = recurse rest env phi events in
-                Lwt.return (SymbolicEventStructure.dot event' cont phi defacto)
-          | Lock { global } ->
-              let base_evt : event = Event.create Lock 0 () in
-              let evt =
-                match global with
-                | Some g ->
-                    USet.add events.globals g |> ignore;
-                    { base_evt with id = Some (VVar g) }
-                | None -> base_evt
-              in
-              let event' : event = add_event events evt env annotation in
+              let env' = Hashtbl.copy env in
+                Hashtbl.replace env' register (Expr.of_value rval);
+                let cont = recurse rest env' phi events in
+
+                SymbolicEventStructure.dot event' cont phi defacto
+        | GlobalMalloc { global; size } ->
+            let symbol = next_zh () in
+            let rval = VSymbol symbol in
+            let loc = ESymbol symbol in
+            let base_evt : event = Event.create Malloc 0 () in
+            let evt = { base_evt with rval = Some rval; loc = Some loc } in
+            let event' : event = add_event events evt env annotation in
+              USet.add events.globals global |> ignore;
+              Hashtbl.replace events.origin symbol event'.label;
               let defacto =
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
               in
 
-              let* cont = recurse rest env phi events in
-                Lwt.return (SymbolicEventStructure.dot event' cont phi defacto)
-          | Unlock { global } ->
-              let base_evt : event = Event.create Unlock 0 () in
-              let evt =
-                match global with
-                | Some g ->
-                    USet.add events.globals g |> ignore;
-                    { base_evt with id = Some (VVar g) }
-                | None -> base_evt
-              in
-              let event' : event = add_event events evt env annotation in
-              let defacto =
-                List.map
-                  (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                  events.defacto
-              in
+              let env' = Hashtbl.copy env in
+              let cont = recurse rest env' phi events in
 
-              let* cont = recurse rest env phi events in
-                Lwt.return (SymbolicEventStructure.dot event' cont phi defacto)
-          | RegMalloc { register; size } ->
-              let symbol = next_zh () in
-              let rval = VSymbol symbol in
-              let loc = ESymbol symbol in
-              let base_evt : event = Event.create Malloc 0 () in
-              let evt = { base_evt with rval = Some rval; loc = Some loc } in
-              let event' : event = add_event events evt env annotation in
-                Hashtbl.replace events.origin symbol event'.label;
-                let defacto =
-                  List.map
-                    (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                    events.defacto
-                in
+              SymbolicEventStructure.dot event' cont phi defacto
+        | Free { register } ->
+            let base_evt : event = Event.create Free 0 () in
+            let loc = Hashtbl.find_opt env register in
+            let evt = { base_evt with loc } in
+            let event' : event = add_event events evt env annotation in
+            let defacto =
+              List.map
+                (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                events.defacto
+            in
 
-                let env' = Hashtbl.copy env in
-                  Hashtbl.replace env' register (Expr.of_value rval);
-                  let* cont = recurse rest env' phi events in
-                    Lwt.return
-                      (SymbolicEventStructure.dot event' cont phi defacto)
-          | GlobalMalloc { global; size } ->
-              let symbol = next_zh () in
-              let rval = VSymbol symbol in
-              let loc = ESymbol symbol in
-              let base_evt : event = Event.create Malloc 0 () in
-              let evt = { base_evt with rval = Some rval; loc = Some loc } in
-              let event' : event = add_event events evt env annotation in
-                USet.add events.globals global |> ignore;
-                Hashtbl.replace events.origin symbol event'.label;
-                let defacto =
-                  List.map
-                    (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                    events.defacto
-                in
-
-                let env' = Hashtbl.copy env in
-                  let* cont = recurse rest env' phi events in
-                    Lwt.return
-                      (SymbolicEventStructure.dot event' cont phi defacto)
-          | Free { register } ->
-              let base_evt : event = Event.create Free 0 () in
-              let loc = Hashtbl.find_opt env register in
-              let evt = { base_evt with loc } in
-              let event' : event = add_event events evt env annotation in
-              let defacto =
-                List.map
-                  (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                  events.defacto
-              in
-
-              let* cont = recurse rest env phi events in
-                Lwt.return (SymbolicEventStructure.dot event' cont phi defacto)
-          | Skip ->
-              let* cont = recurse rest env phi events in
-                Lwt.return cont
-          | _ ->
-              (* Simplified - return empty structure for unhandled cases *)
-              Logs.err (fun m ->
-                  m "Statement not handled: %s" (ir_node_to_string node)
-              );
-              Lwt.return (SymbolicEventStructure.create ())
-        in
-          Lwt.return structure
+            let cont = recurse rest env phi events in
+              SymbolicEventStructure.dot event' cont phi defacto
+        | Skip ->
+            let cont = recurse rest env phi events in
+              cont
+        | _ ->
+            (* Simplified - return empty structure for unhandled cases *)
+            Logs.err (fun m ->
+                m "Statement not handled: %s" (ir_node_to_string node)
+            );
+            SymbolicEventStructure.create ()
+      in
+        structure
 
 (** {1 Terminal Structure} *)
 
@@ -686,7 +660,7 @@ let make_generic_terminal_structure ~add_event env phi events =
     List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
   in
 
-  Lwt.return (SymbolicEventStructure.dot terminal_evt cont phi defacto)
+  SymbolicEventStructure.dot terminal_evt cont phi defacto
 
 (** {1 Basic Interpretation} *)
 
@@ -732,7 +706,7 @@ let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
   in
 
   (* Interpret program statements *)
-  let* structure = stmt_semantics stmts env [] events in
+  let structure = stmt_semantics stmts env [] events in
 
   (* Prefix with initial event *)
   let defacto =
@@ -752,7 +726,7 @@ let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
     }
   in
 
-  Lwt.return (structure, events.source_spans)
+  (structure, events.source_spans)
 
 (** Default interpretation function with basic statement semantics.
 
@@ -781,24 +755,24 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
     | Some stmts ->
         let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
         let constraints = ctx.litmus_constraints |> Option.value ~default:[] in
-          let* structure, source_spans =
-            interpret_generic ~stmt_semantics ~defacto ~constraints stmts
-          in
-            Logs.debug (fun m ->
-                m "Completed program interpretation: \n%s\nand events\n%s"
-                  (show_symbolic_event_structure structure)
-                  (Hashtbl.fold
-                     (fun label evt acc ->
-                       acc
-                       ^ Printf.sprintf "Event %d: %s\n" label
-                           (Event.to_string evt)
-                     )
-                     structure.events ""
-                  )
-            );
-            ctx.structure <- Some structure;
-            ctx.source_spans <- Some source_spans;
-            Lwt.return ctx
+        let structure, source_spans =
+          interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+        in
+          Logs.debug (fun m ->
+              m "Completed program interpretation: \n%s\nand events\n%s"
+                (show_symbolic_event_structure structure)
+                (Hashtbl.fold
+                   (fun label evt acc ->
+                     acc
+                     ^ Printf.sprintf "Event %d: %s\n" label
+                         (Event.to_string evt)
+                   )
+                   structure.events ""
+                )
+          );
+          ctx.structure <- Some structure;
+          ctx.source_spans <- Some source_spans;
+          Lwt.return ctx
     | _ ->
         Logs.err (fun m -> m "No program statements for interpretation.");
         Lwt.return ctx
@@ -827,8 +801,8 @@ module StepCounterSemantics : sig
       @return A tuple of (symbolic event structure, source spans table). *)
   val interpret :
     step_counter:int ->
-    mordor_ctx Lwt.t ->
-    (symbolic_event_structure * (int, source_span) Hashtbl.t) Lwt.t
+    mordor_ctx ->
+    symbolic_event_structure * (int, source_span) Hashtbl.t
 end = struct
   (** Create an IR node with no annotations.
 
@@ -931,7 +905,7 @@ end = struct
   let rec interpret_statements_step_counter step_counter per_loop nodes env phi
       events =
     assert (step_counter >= 0);
-    if step_counter = 0 then Lwt.return (SymbolicEventStructure.create ())
+    if step_counter = 0 then SymbolicEventStructure.create ()
     else
       match nodes with
       | node :: rest -> (
@@ -980,7 +954,7 @@ end = struct
         lwt_ctx
 
   let interpret ~step_counter lwt_ctx =
-    let* ctx = lwt_ctx in
+    let ctx = lwt_ctx in
       greek_counter := 0;
       zh_counter := 0;
       let stmt_semantics =
@@ -991,10 +965,10 @@ end = struct
       | Some stmts ->
           let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
           let constraints = ctx.litmus_constraints in
-            let* structure, source_spans =
-              interpret_generic ~stmt_semantics ~defacto ~constraints stmts
-            in
-              Lwt.return (structure, source_spans)
+          let structure, source_spans =
+            interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+          in
+            (structure, source_spans)
       | _ -> failwith "No program statements or constraints for interpretation."
 end
 
@@ -1017,8 +991,7 @@ module SymbolicLoopSemantics : sig
       @param ctx The Mordor context.
       @return A tuple of (symbolic event structure, source spans table). *)
   val interpret :
-    mordor_ctx Lwt.t ->
-    (symbolic_event_structure * (int, source_span) Hashtbl.t) Lwt.t
+    mordor_ctx -> symbolic_event_structure * (int, source_span) Hashtbl.t
 end = struct
   (** Generate program order relations for a symbolic event structure.
 
@@ -1126,29 +1099,29 @@ end = struct
                   ~env:(fun v -> Hashtbl.find_opt env v)
                   (Expr.inverse condition)
               in
-                let* after_structure =
-                  interpret_statements_symbolic_loop ~final_structure ~add_event
-                    rest env (after_val :: phi) events
-                in
-                let final_structure ~add_event:_ _env _phi _events =
-                  Lwt.return after_structure
-                in
-                let recurse nodes env phi events =
-                  interpret_statements_symbolic_loop ~final_structure ~add_event
-                    nodes env phi events
-                in
-                let loop_index =
-                  node.annotations.loop_ctx
-                  |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
-                in
-                  Option.iter
-                    (fun lid ->
-                      Hashtbl.replace events.loop_conditions lid continue_val
-                      |> ignore
-                    )
-                    loop_index;
-                  interpret_statements_open ~recurse ~final_structure ~add_event
-                    body env phi events
+              let after_structure =
+                interpret_statements_symbolic_loop ~final_structure ~add_event
+                  rest env (after_val :: phi) events
+              in
+              let final_structure ~add_event:_ _env _phi _events =
+                after_structure
+              in
+              let recurse nodes env phi events =
+                interpret_statements_symbolic_loop ~final_structure ~add_event
+                  nodes env phi events
+              in
+              let loop_index =
+                node.annotations.loop_ctx
+                |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
+              in
+                Option.iter
+                  (fun lid ->
+                    Hashtbl.replace events.loop_conditions lid continue_val
+                    |> ignore
+                  )
+                  loop_index;
+                interpret_statements_open ~recurse ~final_structure ~add_event
+                  body env phi events
             in
 
             (* Interpret the first unravelling of the loop body before the
@@ -1175,23 +1148,23 @@ end = struct
                 )
                 loop_index;
 
-              let* after_structure =
+              let after_structure =
                 interpret_statements_symbolic_loop ~final_structure ~add_event
                   rest env (after_val :: phi) events
               in
               let final_structure ~add_event:_ _env _phi _events =
-                Lwt.return after_structure
+                after_structure
               in
               let recurse nodes env phi events =
                 interpret_statements_symbolic_loop ~final_structure ~add_event
                   nodes env phi events
               in
-                let* loop_structure =
-                  interpret_statements_open ~recurse ~final_structure ~add_event
-                    body env phi events
-                in
-                  Lwt.return
-                    (SymbolicEventStructure.plus loop_structure after_structure)
+              let loop_structure =
+                interpret_statements_open ~recurse ~final_structure ~add_event
+                  body env phi events
+              in
+
+              SymbolicEventStructure.plus loop_structure after_structure
         | _ ->
             let recurse nodes env phi events =
               interpret_statements_symbolic_loop ~final_structure ~add_event
@@ -1208,7 +1181,8 @@ end = struct
       interpret_statements_symbolic_loop
         ~final_structure:make_generic_terminal_structure ~add_event
     in
-      let* ctx = generic_step_interpret ~stmt_semantics lwt_ctx in
+    let lwt_ctx = generic_step_interpret ~stmt_semantics lwt_ctx in
+      let* ctx = lwt_ctx in
         ctx.structure <-
           Some
             {
@@ -1217,27 +1191,26 @@ end = struct
             };
         Lwt.return ctx
 
-  let interpret lwt_ctx =
-    let* ctx = lwt_ctx in
-      greek_counter := 0;
-      zh_counter := 0;
-      let stmt_semantics =
-        interpret_statements_symbolic_loop
-          ~final_structure:make_generic_terminal_structure ~add_event
-      in
+  let interpret ctx =
+    greek_counter := 0;
+    zh_counter := 0;
+    let stmt_semantics =
+      interpret_statements_symbolic_loop
+        ~final_structure:make_generic_terminal_structure ~add_event
+    in
 
-      match ctx.program_stmts with
-      | Some stmts ->
-          let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
-          let constraints = ctx.litmus_constraints in
-            let* structure, source_spans =
-              interpret_generic ~stmt_semantics ~defacto ~constraints stmts
-            in
-            let structure =
-              { structure with po_iter = generate_po_iter structure }
-            in
-              Lwt.return (structure, source_spans)
-      | _ -> failwith "No program statements or constraints for interpretation."
+    match ctx.program_stmts with
+    | Some stmts ->
+        let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
+        let constraints = ctx.litmus_constraints in
+        let structure, source_spans =
+          interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+        in
+        let structure =
+          { structure with po_iter = generate_po_iter structure }
+        in
+          (structure, source_spans)
+    | _ -> failwith "No program statements or constraints for interpretation."
 end
 
 (** {1 Main Pipeline Step} *)

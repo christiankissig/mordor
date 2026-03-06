@@ -5,7 +5,6 @@
     Used extensively in elaboration algorithms to explore valid combinations of
     symbol relabelings and event orderings. *)
 
-open Lwt.Syntax
 open Uset
 
 (** {1 List-Based Combination Builder} *)
@@ -89,45 +88,43 @@ module ListMapCombinationBuilder = struct
         (* combos = [[("x",1);("y",3)]; [("x",1);("y",4)]; [("x",2);("y",3)]] *)
       ]} *)
   let build_combinations (type a) (type b) (listmap : (a, b list) Hashtbl.t)
-      (keys : a list)
-      ?(check_partial = fun _ ?alternatives:_ _ -> Lwt.return true)
-      ?(check_final = fun _ -> Lwt.return true) () =
+      (keys : a list) ?(check_partial = fun _ ?alternatives:_ _ -> true)
+      ?(check_final = fun _ -> true) () =
     let rec combine_and_check combinations keys =
       match keys with
-      | [] -> Lwt_list.filter_s check_final combinations
+      | [] -> List.filter check_final combinations
       | key :: rest_keys ->
           let justs = try Hashtbl.find listmap key with Not_found -> [] in
-            (* OPTIMIZATION 1: Process combinations in a streaming fashion *)
-            (* Instead of collecting all new_combinations at once, process incrementally *)
-            let* new_combinations =
-              Lwt_list.fold_left_s
-                (fun acc just ->
-                  (* OPTIMIZATION 2: Filter first, then extend *)
-                  let* filtered =
-                    Lwt_list.filter_s
-                      (fun combo ->
-                        check_partial combo ?alternatives:(Some justs)
-                          (key, just)
-                      )
-                      combinations
-                  in
-                  (* OPTIMIZATION 3: Use cons (::) instead of append (@) *)
-                  (* Reverse the list once at the end instead of maintaining order *)
-                  let extended =
-                    List.map (fun combo -> (key, just) :: combo) filtered
-                  in
-                    (* OPTIMIZATION 4: Use rev_append for efficient concatenation *)
-                    Lwt.return (List.rev_append extended acc)
-                )
-                [] justs
-            in
-              (* Note: Combinations are now in reverse order within each combo *)
-              (* If order matters, reverse each combo at the end *)
-              combine_and_check new_combinations rest_keys
+          (* OPTIMIZATION 1: Process combinations in a streaming fashion *)
+          (* Instead of collecting all new_combinations at once, process incrementally *)
+          let new_combinations =
+            List.fold_left
+              (fun acc just ->
+                (* OPTIMIZATION 2: Filter first, then extend *)
+                let filtered =
+                  List.filter
+                    (fun combo ->
+                      check_partial combo ?alternatives:(Some justs) (key, just)
+                    )
+                    combinations
+                in
+                (* OPTIMIZATION 3: Use cons (::) instead of append (@) *)
+                (* Reverse the list once at the end instead of maintaining order *)
+                let extended =
+                  List.map (fun combo -> (key, just) :: combo) filtered
+                in
+                  (* OPTIMIZATION 4: Use rev_append for efficient concatenation *)
+                  List.rev_append extended acc
+              )
+              [] justs
+          in
+            (* Note: Combinations are now in reverse order within each combo *)
+            (* If order matters, reverse each combo at the end *)
+            combine_and_check new_combinations rest_keys
     in
-      let* result = combine_and_check [ [] ] keys in
-        (* OPTIMIZATION 5: Reverse each combination to restore original order *)
-        Lwt.return (List.map List.rev result)
+    let result = combine_and_check [ [] ] keys in
+      (* OPTIMIZATION 5: Reverse each combination to restore original order *)
+      List.map List.rev result
 end
 
 (** {1 USet-Based Combination Builder} *)
@@ -172,17 +169,16 @@ module USetMapCombinationBuilder = struct
         (* Each element of relabelings is a USet of (symbol, symbol) pairs *)
       ]} *)
   let build_combinations (type a) (type b) (usetmap : (a, b USet.t) Hashtbl.t)
-      (keys : a list)
-      ?(check_partial = fun _ ?alternatives:_ _ -> Lwt.return true)
-      ?(check_final = fun _ -> Lwt.return true) () =
+      (keys : a list) ?(check_partial = fun _ ?alternatives:_ _ -> true)
+      ?(check_final = fun _ -> true) () =
     let listmap = Hashtbl.create (Hashtbl.length usetmap) in
       Hashtbl.iter
         (fun k uset -> Hashtbl.add listmap k (USet.values uset))
         usetmap;
       ListMapCombinationBuilder.build_combinations listmap keys ~check_partial
         ~check_final ()
-      |> Lwt.map USet.of_list
-      |> Lwt.map (USet.map USet.of_list)
+      |> USet.of_list
+      |> USet.map USet.of_list
 end
 
 (** {1 Permutation Utilities} *)

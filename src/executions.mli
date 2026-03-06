@@ -58,7 +58,7 @@ module Freeze : sig
     elided:int USet.t ->
     constraints:expr list ->
     include_rf:bool ->
-    FreezeResult.t list Lwt.t
+    FreezeResult.t list
 
   (** [freeze_dp structure justs] computes the semantic dependency relation for
       a justification.
@@ -183,7 +183,7 @@ val generate_executions :
   justification uset ->
   expr list ->
   restrictions:Coherence.restrictions ->
-  symbolic_execution list Lwt.t
+  symbolic_execution list
 
 (** [calculate_dependencies ?include_rf structure final_justs context
      ~exhaustive ~restrictions] computes dependency information for symbolic
@@ -218,7 +218,7 @@ val calculate_dependencies :
   Forwarding.event_structure_context ->
   exhaustive:bool ->
   restrictions:Coherence.restrictions ->
-  symbolic_execution list Lwt.t
+  symbolic_execution list
 
 (** [step_calculate_dependencies ctx] performs one step of dependency
     calculation within a Mordor context.

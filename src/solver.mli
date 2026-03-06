@@ -160,7 +160,7 @@ val add_assertions : solver -> expr list -> solver
     @return
       [Some true] if satisfiable, [Some false] if unsatisfiable, [None] if
       unknown/timeout *)
-val check : solver -> bool option Lwt.t
+val check : solver -> bool option
 
 (** Quick satisfiability check without caching.
 
@@ -171,7 +171,7 @@ val check : solver -> bool option Lwt.t
     @return
       [Some true] if satisfiable, [Some false] if unsatisfiable, [None] if
       unknown *)
-val quick_check : expr list -> bool option Lwt.t
+val quick_check : expr list -> bool option
 
 (** Quick satisfiability check with result caching.
 
@@ -182,7 +182,7 @@ val quick_check : expr list -> bool option Lwt.t
     @return
       [Some true] if satisfiable, [Some false] if unsatisfiable, [None] if
       unknown *)
-val quick_check_cached : expr list -> bool option Lwt.t
+val quick_check_cached : expr list -> bool option
 
 (** Check if constraint expressions are satisfiable.
 
@@ -191,7 +191,7 @@ val quick_check_cached : expr list -> bool option Lwt.t
 
     @param exprs The constraint expressions
     @return [true] if satisfiable, [false] otherwise *)
-val is_sat : expr list -> bool Lwt.t
+val is_sat : expr list -> bool
 
 (** Check if constraint expressions are satisfiable (cached).
 
@@ -199,7 +199,7 @@ val is_sat : expr list -> bool Lwt.t
 
     @param exprs The constraint expressions
     @return [true] if satisfiable, [false] otherwise *)
-val is_sat_cached : expr list -> bool Lwt.t
+val is_sat_cached : expr list -> bool
 
 (** Check if constraint expressions are unsatisfiable.
 
@@ -208,7 +208,7 @@ val is_sat_cached : expr list -> bool Lwt.t
 
     @param exprs The constraint expressions
     @return [true] if unsatisfiable, [false] otherwise *)
-val is_unsat : expr list -> bool Lwt.t
+val is_unsat : expr list -> bool
 
 (** Check if constraint expressions are unsatisfiable (cached).
 
@@ -216,7 +216,7 @@ val is_unsat : expr list -> bool Lwt.t
 
     @param exprs The constraint expressions
     @return [true] if unsatisfiable, [false] otherwise *)
-val is_unsat_cached : expr list -> bool Lwt.t
+val is_unsat_cached : expr list -> bool
 
 (** Advanced solve using multiple strategies.
 
@@ -229,7 +229,7 @@ val is_unsat_cached : expr list -> bool Lwt.t
     @return
       [Some true] if satisfiable, [Some false] if unsatisfiable, [None] if
       unknown *)
-val solve_advanced : solver -> bool option Lwt.t
+val solve_advanced : solver -> bool option
 
 (** Check if constraints imply a conclusion.
 
@@ -239,7 +239,7 @@ val solve_advanced : solver -> bool option Lwt.t
     @param constraints The antecedent constraint expressions
     @param conclusion The consequent expression to prove
     @return [true] if the implication holds, [false] otherwise *)
-val implies : expr list -> expr -> bool Lwt.t
+val implies : expr list -> expr -> bool
 
 (** {1 Solution Extraction}
 
@@ -254,7 +254,7 @@ val implies : expr list -> expr -> bool Lwt.t
     @return
       [Some bindings] if satisfiable (where bindings map variables to values),
       [None] if unsatisfiable or unknown *)
-val solve : solver -> (string, value_type) Hashtbl.t option Lwt.t
+val solve : solver -> (string, value_type) Hashtbl.t option
 
 (** Quick solve and model extraction.
 
@@ -262,7 +262,7 @@ val solve : solver -> (string, value_type) Hashtbl.t option Lwt.t
 
     @param exprs The constraint expressions
     @return [Some bindings] if satisfiable, [None] otherwise *)
-val quick_solve : expr list -> (string, value_type) Hashtbl.t option Lwt.t
+val quick_solve : expr list -> (string, value_type) Hashtbl.t option
 
 (** Extract a concrete value for a variable from a model.
 
@@ -283,7 +283,7 @@ val concrete_value :
       [Some bindings] for the requested variables if satisfiable, [None] if
       unsatisfiable *)
 val solve_for_vars :
-  solver -> string list -> (string, value_type) Hashtbl.t option Lwt.t
+  solver -> string list -> (string, value_type) Hashtbl.t option
 
 (** Solve with Z3 and return ranges or concrete values.
 
@@ -294,7 +294,7 @@ val solve_for_vars :
     @return
       [Some ranges] mapping variables to lists of possible ranges, [None] if
       unsatisfiable *)
-val solve_with_ranges : solver -> (string, range list) Hashtbl.t option Lwt.t
+val solve_with_ranges : solver -> (string, range list) Hashtbl.t option
 
 (** Convert a model to a human-readable string.
 
@@ -337,7 +337,7 @@ val all_flat : expr list -> bool
 
     @param clauses The list of clauses (each clause is a list of expressions)
     @return [Some simplified_clauses] if satisfiable, [None] if unsatisfiable *)
-val simplify_disjunction : expr list list -> expr list list option Lwt.t
+val simplify_disjunction : expr list list -> expr list list option
 
 (** {1 Solver Introspection}
 
@@ -374,7 +374,7 @@ val get_statistics : solver -> string
     @param a The first expression
     @param b The second expression
     @return [true] if semantically equal, [false] otherwise *)
-val exeq : ?state:expr list -> expr -> expr -> bool Lwt.t
+val exeq : ?state:expr list -> expr -> expr -> bool
 
 (** Check if two expressions could potentially be equal.
 
@@ -387,4 +387,4 @@ val exeq : ?state:expr list -> expr -> expr -> bool Lwt.t
     @param a The first expression
     @param b The second expression
     @return [true] if potentially equal, [false] if never equal *)
-val expoteq : ?state:expr list -> expr -> expr -> bool Lwt.t
+val expoteq : ?state:expr list -> expr -> expr -> bool

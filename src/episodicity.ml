@@ -399,12 +399,12 @@ module WriteCondition = struct
               Hashtbl.find_opt structure.restrict write_event
               |> Option.value ~default:[]
             in
-              let* can_continue =
-                Lwt_list.filter_s
-                  (fun expr -> Solver.is_sat (expr :: write_valres))
-                  loop_conditions
-              in
-                Lwt.return (List.length can_continue > 0)
+            let can_continue =
+              List.filter
+                (fun expr -> Solver.is_sat (expr :: write_valres))
+                loop_conditions
+            in
+              Lwt.return (List.length can_continue > 0)
           )
           writes_in_loop
       in
@@ -430,12 +430,12 @@ module WriteCondition = struct
                           let state =
                             Hashtbl.find_opt structure.restrict read_event
                           in
-                            let* same_loc = Solver.expoteq ?state wloc rloc in
-                              if same_loc then
-                                (* Only invalid if not a read-don't-modify RMW *)
-                                Lwt.return
-                                  (not (Events.is_rdmw structure write_event))
-                              else Lwt.return false
+                          let same_loc = Solver.expoteq ?state wloc rloc in
+                            if same_loc then
+                              (* Only invalid if not a read-don't-modify RMW *)
+                              Lwt.return
+                                (not (Events.is_rdmw structure write_event))
+                            else Lwt.return false
                       | _ -> Lwt.return false
                   )
                   writes_in_loop
@@ -588,56 +588,56 @@ module EventsCondition = struct
       let delta_loop = URelation.cross events_in_loop events_in_loop in
       (* TODO use contextual predicates *)
       let fwd_es_ctx = fwd_es_ctx in
-        let* ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
-        let ppo =
-          fwd_es_ctx.ppo.ppo_sync
-          |> USet.union fwd_es_ctx.ppo.ppo_base
-          |> USet.union fwd_es_ctx.ppo.ppo_loc_base
-          |> USet.union fwd_es_ctx.ppo.ppo_base
-        in
-        let dp =
-          USet.fold
-            (fun acc just ->
-              Freeze.freeze_dp structure just |> USet.inplace_union acc
-            )
-            justifications (USet.create ())
-        in
-        let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
+      let ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
+      let ppo =
+        fwd_es_ctx.ppo.ppo_sync
+        |> USet.union fwd_es_ctx.ppo.ppo_base
+        |> USet.union fwd_es_ctx.ppo.ppo_loc_base
+        |> USet.union fwd_es_ctx.ppo.ppo_base
+      in
+      let dp =
+        USet.fold
+          (fun acc just ->
+            Freeze.freeze_dp structure just |> USet.inplace_union acc
+          )
+          justifications (USet.create ())
+      in
+      let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
 
-        let ppo_iter =
-          fwd_es_ctx.ppo.ppo_iter_sync
-          |> USet.union fwd_es_ctx.ppo.ppo_iter_base
-          |> USet.union fwd_es_ctx.ppo.ppo_iter_loc_base
-          |> USet.union fwd_es_ctx.ppo.ppo_iter_base
-        in
-        let cross_iter_ppo =
-          ppo_iter
-          |> USet.union (URelation.compose [ dp_ppo; ppo_iter ])
-          |> USet.union (URelation.compose [ ppo_iter; dp_ppo ])
-          |> USet.union (URelation.compose [ dp_ppo; ppo_iter; dp_ppo ])
-        in
+      let ppo_iter =
+        fwd_es_ctx.ppo.ppo_iter_sync
+        |> USet.union fwd_es_ctx.ppo.ppo_iter_base
+        |> USet.union fwd_es_ctx.ppo.ppo_iter_loc_base
+        |> USet.union fwd_es_ctx.ppo.ppo_iter_base
+      in
+      let cross_iter_ppo =
+        ppo_iter
+        |> USet.union (URelation.compose [ dp_ppo; ppo_iter ])
+        |> USet.union (URelation.compose [ ppo_iter; dp_ppo ])
+        |> USet.union (URelation.compose [ dp_ppo; ppo_iter; dp_ppo ])
+      in
 
-        let unordered_pairs = USet.set_minus structure.po_iter cross_iter_ppo in
+      let unordered_pairs = USet.set_minus structure.po_iter cross_iter_ppo in
 
-        let violations = ref [] in
-        let satisfied = ref true in
-          USet.iter
-            (fun (e1, e2) ->
-              let violation =
-                LoopConditionViolation
-                  (LoopIterationOrderingViolation
-                     ( -1,
-                       Hashtbl.find_opt source_spans e1,
-                       Hashtbl.find_opt source_spans e2
-                     )
-                  )
-              in
-                violations := violation :: !violations;
-                satisfied := false
-            )
-            unordered_pairs;
+      let violations = ref [] in
+      let satisfied = ref true in
+        USet.iter
+          (fun (e1, e2) ->
+            let violation =
+              LoopConditionViolation
+                (LoopIterationOrderingViolation
+                   ( -1,
+                     Hashtbl.find_opt source_spans e1,
+                     Hashtbl.find_opt source_spans e2
+                   )
+                )
+            in
+              violations := violation :: !violations;
+              satisfied := false
+          )
+          unordered_pairs;
 
-          Lwt.return { satisfied = !satisfied; violations = !violations }
+        Lwt.return { satisfied = !satisfied; violations = !violations }
 end
 
 (** {1 Main Episodicity Check} *)

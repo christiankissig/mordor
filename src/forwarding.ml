@@ -9,7 +9,6 @@
 open Algorithms
 open Eventstructures
 open Expr
-open Lwt.Syntax
 open Types
 open Uset
 
@@ -534,7 +533,7 @@ module EventStructureContext = struct
       @param po The program order relation.
       @return The computed location equality PPO component. *)
   let compute_ppo_loc_eq ?(iter = false) structure e po =
-    USet.async_filter
+    USet.filter
       (fun (e1, e2) ->
         let loc1 = Events.get_loc structure e1 in
         let loc2 =
@@ -557,7 +556,7 @@ module EventStructureContext = struct
         in
           match (loc1, loc2) with
           | Some l1, Some l2 -> Solver.exeq ~state:[] l1 l2
-          | _ -> Lwt.return false
+          | _ -> false
       )
       po
 
@@ -631,11 +630,11 @@ module EventStructureContext = struct
       |> ignore;
 
       (* Filter for location equality with semantic equality *)
-      let* ppo_loc_eq = compute_ppo_loc_eq structure e po_nf in
+      let ppo_loc_eq = compute_ppo_loc_eq structure e po_nf in
         USet.clear es_ctx.ppo.ppo_loc_eq |> ignore;
         USet.inplace_union es_ctx.ppo.ppo_loc_eq ppo_loc_eq |> ignore;
 
-        let* ppo_iter_loc_eq =
+        let ppo_iter_loc_eq =
           compute_ppo_loc_eq ~iter:true structure e po_iter_nf
         in
           USet.clear es_ctx.ppo.ppo_iter_loc_eq |> ignore;
@@ -827,20 +826,17 @@ module ForwardingContext = struct
       @param es_ctx The event structure context.
       @return The computed RMW-induced PPO orderings. *)
   let compute_ppo_rmw (es_ctx : EventStructureContext.t) predicates =
-    let* rmw_filtered =
-      USet.async_filter
+    let rmw_filtered =
+      USet.filter
         (fun (er, expr, ew) ->
           Solver.exeq ~state:predicates expr (EBoolean true)
         )
         es_ctx.structure.rmw
     in
     let rmw_inv = USet.map (fun (er, _, ew) -> (er, ew)) rmw_filtered in
-    let rmw_ppo =
       USet.union
         (URelation.compose [ es_ctx.ppo.ppo_sync; rmw_inv ])
         (URelation.compose [ rmw_inv; es_ctx.ppo.ppo_sync ])
-    in
-      Lwt.return rmw_ppo
 
   (** {1 PPO Computation} *)
 
@@ -862,9 +858,9 @@ module ForwardingContext = struct
         match cached.ppo with
         | Some v ->
             Landmark.exit landmark;
-            Lwt.return v
+            v
         | _ ->
-            let* result =
+            let result =
               let sub = cache_get_subset ctx p in
               let base =
                 match sub with
@@ -877,26 +873,26 @@ module ForwardingContext = struct
               in
                 (* Filter with alias analysis using solver - check if locations
                    are equal given predicates and psi of forwarding context *)
-                USet.async_filter
+                USet.filter
                   (fun (e1, e2) ->
                     let loc1 = Events.get_loc es_ctx.structure e1 in
                     let loc2 = Events.get_loc es_ctx.structure e2 in
                       match (loc1, loc2) with
                       | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
-                      | _ -> Lwt.return false
+                      | _ -> false
                   )
                   base
             in
 
             (* RMW ppo - add read-modify-write orderings *)
-            let* rmw_ppo = compute_ppo_rmw es_ctx predicates in
+            let rmw_ppo = compute_ppo_rmw es_ctx predicates in
             let result = USet.inplace_union result rmw_ppo in
             let result = USet.inplace_union result es_ctx.ppo.ppo_base in
 
             let remapped = remap_rel ctx result in
               cache_set_ppo ctx p remapped |> ignore;
               Landmark.exit landmark;
-              Lwt.return remapped
+              remapped
 
   (** [ppo_loc ctx predicates] computes location-based PPO.
 
@@ -921,36 +917,36 @@ module ForwardingContext = struct
         match cached.ppo_loc with
         | Some v ->
             Landmark.exit landmark;
-            Lwt.return v
+            v
         | None ->
             (* Get base ppo_alias from cache or compute it *)
-            let* ppo_alias =
+            let ppo_alias =
               let sub = cache_get_subset ctx p in
                 match sub with
                 | Some s -> (
                     match (s.ppo_loc, s.ppo) with
-                    | Some ppo_loc, _ -> Lwt.return ppo_loc
-                    | None, Some ppo -> Lwt.return ppo
+                    | Some ppo_loc, _ -> ppo_loc
+                    | None, Some ppo -> ppo
                     | None, None -> ppo ctx predicates
                   )
                 | None -> ppo ctx predicates
             in
-              (* Filter for exact location equality using the predicates P *)
-              let* filtered =
-                USet.async_filter
-                  (fun (e1, e2) ->
-                    let loc1 = Events.get_loc es_ctx.structure e1 in
-                    let loc2 = Events.get_loc es_ctx.structure e2 in
-                      match (loc1, loc2) with
-                      | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
-                      | _ -> Lwt.return false
-                  )
-                  ppo_alias
-              in
-              let remapped = remap_rel ctx filtered in
-                cache_set_ppo_loc ctx p remapped |> ignore;
-                Landmark.exit landmark;
-                Lwt.return remapped
+            (* Filter for exact location equality using the predicates P *)
+            let filtered =
+              USet.filter
+                (fun (e1, e2) ->
+                  let loc1 = Events.get_loc es_ctx.structure e1 in
+                  let loc2 = Events.get_loc es_ctx.structure e2 in
+                    match (loc1, loc2) with
+                    | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                    | _ -> false
+                )
+                ppo_alias
+            in
+            let remapped = remap_rel ctx filtered in
+              cache_set_ppo_loc ctx p remapped |> ignore;
+              Landmark.exit landmark;
+              remapped
 
   (** [ppo_sync ctx] computes synchronization PPO.
 
@@ -971,14 +967,13 @@ module ForwardingContext = struct
       @param ctx The forwarding context to validate.
       @return Promise of [true] if satisfiable, [false] otherwise. *)
   let check ctx =
-    let* result = Solver.quick_check_cached ctx.psi in
-      match result with
-      | Some true ->
-          ContextCache.mark_good ctx.es_ctx.context_cache ctx.fwd ctx.we;
-          Lwt.return_true
-      | _ ->
-          ContextCache.mark_bad ctx.es_ctx.context_cache ctx.fwd ctx.we;
-          Lwt.return_false
+    let result =
+      Solver.quick_check_cached ctx.psi |> Option.value ~default:false
+    in
+      if result then
+        ContextCache.mark_good ctx.es_ctx.context_cache ctx.fwd ctx.we
+      else ContextCache.mark_bad ctx.es_ctx.context_cache ctx.fwd ctx.we;
+      result
 
   (** {1 Utilities} *)
 

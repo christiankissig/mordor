@@ -4,7 +4,6 @@ open Alcotest
 
 open Events
 open Expr
-open Lwt.Syntax
 open Types
 open Uset
 
@@ -378,7 +377,6 @@ end
 module TestElaborationSequences = struct
   let test_str_va_weak_sequence () =
     (* Example: strengthen with α=0, value assign, then weaken with Ω *)
-    let open Lwt.Infix in
     (* Initial: y = 1/!α with dependency on α *)
     (* Step 1: Strengthen with !α ≠ 0 *)
     let after_str = [ EUnOp ("!", EBinOp (ESymbol "α", "!=", ENum Z.zero)) ] in
@@ -392,9 +390,8 @@ module TestElaborationSequences = struct
       [ EUnOp ("!", EBinOp (ESymbol "α", "!=", ENum Z.zero)) ]
     in
 
-    Solver.is_sat constraints_after_str >>= fun sat_result ->
-    check bool "strengthened_satisfiable" true sat_result;
-    Lwt.return_unit
+    let sat_result = Solver.is_sat constraints_after_str in
+      check bool "strengthened_satisfiable" true sat_result
 
   let test_fwd_lift_sequence () =
     (* Forward r1->r2, then lift equivalent writes *)
@@ -454,8 +451,7 @@ module TestElaborationSequences = struct
     in
 
     check bool "fwd_has_edges" true (USet.size e3_after_fwd.fwd > 0);
-    check int "lift_removes_pred" 0 (List.length e3_after_lift.p);
-    Lwt.return_unit
+    check int "lift_removes_pred" 0 (List.length e3_after_lift.p)
 end
 
 (** Test Module 7: Preserved Program Order (≤) *)
@@ -582,12 +578,10 @@ let suite =
         TestExample13_1.test_lifting_multiple_reads;
       Alcotest.test_case "Store-Store Forwarding" `Quick
         TestStoreStoreForwarding.test_store_store_forwarding;
-      Alcotest.test_case "Elaboration Sequence: str→va→weak" `Quick (fun () ->
-          Lwt_main.run (TestElaborationSequences.test_str_va_weak_sequence ())
-      );
-      Alcotest.test_case "Elaboration Sequence: fwd→lift" `Quick (fun () ->
-          Lwt_main.run (TestElaborationSequences.test_fwd_lift_sequence ())
-      );
+      Alcotest.test_case "Elaboration Sequence: str→va→weak" `Quick
+        TestElaborationSequences.test_str_va_weak_sequence;
+      Alcotest.test_case "Elaboration Sequence: fwd→lift" `Quick
+        TestElaborationSequences.test_fwd_lift_sequence;
       Alcotest.test_case "Preserved Program Order: Synchronization" `Quick
         TestPreservedProgramOrder.test_ppo_synchronization;
       Alcotest.test_case "Preserved Program Order: Same Location" `Quick

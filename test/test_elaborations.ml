@@ -159,11 +159,11 @@ let test_value_assign_operations () =
          d = USet.create ();
        }
      in
-       let* result2 = ValueAssignElab.elab ctx just_var in
-         check bool "value_assign processes variables" true
-           (List.length result2 > 0);
+     let result2 = ValueAssignElab.elab ctx just_var in
+       check bool "value_assign processes variables" true
+         (List.length result2 > 0);
 
-         Lwt.return_unit
+       Lwt.return_unit
     )
 
 (** Forward-related tests *)
@@ -187,9 +187,9 @@ let test_fprime_operations () =
        (fun (name, ppo_loc, pred_fn, e1, e2, expected) ->
          let ctx = TestData.make_context () in
          let just = TestData.make_justification 3 in
-           let* result = ForwardElab.fprime ctx pred_fn ppo_loc just e1 e2 in
-             check bool name expected result;
-             Lwt.return_unit
+         let result = ForwardElab.fprime ctx pred_fn ppo_loc just e1 e2 in
+           check bool name expected result;
+           Lwt.return_unit
        )
        test_cases
     )
@@ -203,7 +203,7 @@ let test_fwd_operations () =
 
   Lwt_main.run
     ((* Basic *)
-     let* result1 = ForwardElab.fwd ctx pred_fn fwd_ctx ppo_loc just in
+     let result1 = ForwardElab.fwd ctx pred_fn fwd_ctx ppo_loc just in
        check bool "fwd returns edges" true (USet.size result1 >= 0);
 
        (* Filters volatile *)
@@ -218,11 +218,11 @@ let test_fwd_operations () =
          let pred_fn2 _e = USet.singleton 1 in
          let ppo_loc2 = USet.of_list [ (1, 4) ] in
          let just2 = TestData.make_justification 5 in
-           let* result2 = ForwardElab.fwd ctx pred_fn2 fwd_ctx ppo_loc2 just2 in
-             check bool "fwd filters volatile" true
-               (not (USet.exists (fun (_, e) -> e = 4) result2));
+         let result2 = ForwardElab.fwd ctx pred_fn2 fwd_ctx ppo_loc2 just2 in
+           check bool "fwd filters volatile" true
+             (not (USet.exists (fun (_, e) -> e = 4) result2));
 
-             Lwt.return_unit
+           Lwt.return_unit
     )
 
 let test_we_operations () =
@@ -234,7 +234,7 @@ let test_we_operations () =
 
   Lwt_main.run
     ((* Basic *)
-     let* result1 = ForwardElab.we ctx pred_fn we_ctx ppo_loc just in
+     let result1 = ForwardElab.we ctx pred_fn we_ctx ppo_loc just in
        check bool "we returns edges" true (USet.size result1 >= 0);
 
        (* Write-to-write *)
@@ -242,10 +242,10 @@ let test_we_operations () =
        let structure = { ctx.structure with po } in
        let ctx = { ctx with structure } in
        let pred_fn2 _e = USet.singleton 1 in
-         let* result2 = ForwardElab.we ctx pred_fn2 we_ctx ppo_loc just in
-           check bool "we write-to-write" true (USet.size result2 >= 0);
+       let result2 = ForwardElab.we ctx pred_fn2 we_ctx ppo_loc just in
+         check bool "we write-to-write" true (USet.size result2 >= 0);
 
-           Lwt.return_unit
+         Lwt.return_unit
     )
 
 let test_forward_operations () =
@@ -255,10 +255,10 @@ let test_forward_operations () =
   Lwt_main.run
     ((* Single justification *)
      let just = TestData.make_justification 1 ~predicates:[ pred ] in
-       let* result2 = ForwardElab.elab ctx just in
-         check bool "forward produces results" true (List.length result2 >= 0);
+     let result2 = ForwardElab.elab ctx just in
+       check bool "forward produces results" true (List.length result2 >= 0);
 
-         Lwt.return_unit
+       Lwt.return_unit
     )
 
 (** Lift, weaken, strengthen tests *)
@@ -270,27 +270,27 @@ let test_lift_and_weaken () =
 
   Lwt_main.run
     ((* Lift identity *)
-     let* lift_result = LiftElab.elab ctx just just in
+     let lift_result = LiftElab.elab ctx just just in
        check int "lift identity" 0 (List.length lift_result);
 
        (* Weaken no pwg *)
        let just2 = TestData.make_justification 1 ~predicates:[ pred; pred ] in
-         let* weaken_result1 = WeakElab.elab ctx just2 in
-           check int "weaken no pwg" 1 (List.length weaken_result1);
+       let weaken_result1 = WeakElab.elab ctx just2 in
+         check int "weaken no pwg" 1 (List.length weaken_result1);
 
-           (* Weaken with pwg *)
-           let defacto = Hashtbl.create 10 in
-             Hashtbl.add defacto 1 [ pred ];
-             let structure = { ctx.structure with defacto } in
-             let elab_ctx = { ctx with structure } in
-               let* weaken_result2 = WeakElab.elab elab_ctx just2 in
-                 check bool "weaken with defacto" true
-                   (List.length weaken_result2 > 0);
-                 let just' = List.hd weaken_result2 in
-                   check bool "weaken removes implied" true
-                     (List.length just'.p <= List.length just2.p);
+         (* Weaken with pwg *)
+         let defacto = Hashtbl.create 10 in
+           Hashtbl.add defacto 1 [ pred ];
+           let structure = { ctx.structure with defacto } in
+           let elab_ctx = { ctx with structure } in
+           let weaken_result2 = WeakElab.elab elab_ctx just2 in
+             check bool "weaken with defacto" true
+               (List.length weaken_result2 > 0);
+             let just' = List.hd weaken_result2 in
+               check bool "weaken removes implied" true
+                 (List.length just'.p <= List.length just2.p);
 
-                   Lwt.return_unit
+               Lwt.return_unit
     )
 
 (** Pre-justification tests *)
@@ -298,7 +298,7 @@ let test_lift_and_weaken () =
 let test_pre_justifications_basic () =
   let structure = SymbolicEventStructure.create () in
     Lwt_main.run
-      (let* result = pre_justifications structure in
+      (let result = pre_justifications structure in
          check int "empty structure" 0 (USet.size result);
          Lwt.return_unit
       )
@@ -312,7 +312,7 @@ let test_pre_justifications_parameterized
       { structure with events; e = e_set; write_events; read_events }
     in
       Lwt_main.run
-        (let* result = pre_justifications structure in
+        (let result = pre_justifications structure in
            check int name expected_count (USet.size result);
            Lwt.return_unit
         )
@@ -334,7 +334,7 @@ let test_pre_justifications_structure_details () =
       }
     in
       Lwt_main.run
-        (let* result = pre_justifications structure in
+        (let result = pre_justifications structure in
          let justs = USet.values result in
            check int "count" 1 (List.length justs);
 
@@ -359,7 +359,7 @@ let test_pre_justifications_symbol_extraction (name, event, validator) () =
       }
     in
       Lwt_main.run
-        (let* result = pre_justifications structure in
+        (let result = pre_justifications structure in
          let justs = USet.values result in
            ( match justs with
            | [ just ] -> check bool name true (validator just)
@@ -376,7 +376,7 @@ let test_pre_justifications_edge_cases () =
     { structure1 with events = events1; e = USet.of_list [ 1 ] }
   in
     Lwt_main.run
-      (let* result1 = pre_justifications structure1 in
+      (let result1 = pre_justifications structure1 in
          check int "missing events filtered" 0 (USet.size result1);
          Lwt.return_unit
       );
@@ -402,7 +402,7 @@ let test_pre_justifications_edge_cases () =
         }
       in
         Lwt_main.run
-          (let* result2 = pre_justifications structure2 in
+          (let result2 = pre_justifications structure2 in
            let justs = USet.values result2 in
              check int "multiple writes count" 2 (List.length justs);
              let labels = List.map (fun j -> j.w.label) justs in
@@ -658,7 +658,7 @@ module LiftElabTests = struct
     let con_2 = ForwardingContext.create fwd_es_ctx () in
 
     Lwt_main.run
-      (let* relabelings =
+      (let relabelings =
          LiftElab.generate_relabelings elab_ctx just_1 just_2 ppo_1 ppo_2 con_1
            con_2
        in
@@ -696,7 +696,7 @@ module LiftElabTests = struct
     let just_2 = TestData.create_justification events test_case.just_2_spec in
 
     Lwt_main.run
-      (let* liftings = LiftElab.elab elab_ctx just_1 just_2 in
+      (let liftings = LiftElab.elab elab_ctx just_1 just_2 in
          check int
            (Printf.sprintf "%s: number of liftings" test_case.name)
            test_case.expected_lifting_count (List.length liftings);

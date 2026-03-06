@@ -74,7 +74,7 @@ val generate_max_conflictfree_sets : symbolic_event_structure -> path_info list
     @param write The write event label
     @param read The read event label
     @return [Lwt.t] of [true] if condition holds, [false] otherwise *)
-val dslwb : symbolic_event_structure -> int -> int -> bool Lwt.t
+val dslwb : symbolic_event_structure -> int -> int -> bool
 
 (** [structure] Get PPO relation from initial events and to terminal events.
 

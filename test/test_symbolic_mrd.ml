@@ -280,27 +280,27 @@ module TestSolver = struct
 
   let test_satisfiable_constraint (constraints, expected) () =
     let open Lwt.Infix in
-    Solver.is_sat constraints >>= fun result ->
-    check bool "simple_sat_constraint" expected result;
-    Lwt.return_unit
+    let result = Solver.is_sat constraints in
+      check bool "simple_sat_constraint" expected result;
+      Lwt.return_unit
 
   let test_unsatisfiable_constraint (constraints, expected) () =
     let open Lwt.Infix in
-    Solver.is_unsat constraints >>= fun result ->
-    check bool "simple_unsat_constraint" expected result;
-    Lwt.return_unit
+    let result = Solver.is_unsat constraints in
+      check bool "simple_unsat_constraint" expected result;
+      Lwt.return_unit
 
   let test_implies (premises, conclusion, expected) () =
     let open Lwt.Infix in
-    Solver.implies premises conclusion >>= fun result ->
-    check bool "implication_test" expected result;
-    Lwt.return_unit
+    let result = Solver.implies premises conclusion in
+      check bool "implication_test" expected result;
+      Lwt.return_unit
 
   let test_semantic_equality (expr1, expr2, expected) () =
     let open Lwt.Infix in
-    Solver.exeq expr1 expr2 >>= fun result ->
-    check bool "commutativity" expected result;
-    Lwt.return_unit
+    let result = Solver.exeq expr1 expr2 in
+      check bool "commutativity" expected result;
+      Lwt.return_unit
 
   let suite =
     List.map

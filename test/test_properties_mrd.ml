@@ -105,9 +105,9 @@ module PropertyElaborationSoundness = struct
       EBinOp (EBinOp (ESymbol "α", "+", ENum Z.one), "=", ENum (Z.of_int 2))
     in
 
-    Solver.implies premises conclusion >>= fun result ->
-    check bool "va_soundness" true result;
-    Lwt.return_unit
+    let result = Solver.implies premises conclusion in
+      check bool "va_soundness" true result;
+      Lwt.return_unit
 
   let test_strengthening_soundness () =
     let open Lwt.Infix in
@@ -126,9 +126,9 @@ module PropertyElaborationSoundness = struct
       List.concat [ p_strengthened; [ EOr p_original ] ]
     in
 
-    Solver.is_sat stronger_implies_weaker >>= fun result ->
-    check bool "str_soundness" true result;
-    Lwt.return_unit
+    let result = Solver.is_sat stronger_implies_weaker in
+      check bool "str_soundness" true result;
+      Lwt.return_unit
 
   let test_weakening_soundness () =
     let open Lwt.Infix in
@@ -139,9 +139,9 @@ module PropertyElaborationSoundness = struct
     (* Ω should imply P *)
     let implication = List.concat [ omega; [ EOr p ] ] in
 
-    Solver.is_sat implication >>= fun result ->
-    check bool "weak_soundness" true result;
-    Lwt.return_unit
+    let result = Solver.is_sat implication in
+      check bool "weak_soundness" true result;
+      Lwt.return_unit
 
   let test_lifting_soundness () =
     let open Lwt.Infix in
@@ -153,9 +153,9 @@ module PropertyElaborationSoundness = struct
     (* P1 ∨ P2 should be ⊤ *)
     let disjunction = EOr [ p1; p2 ] in
 
-    Solver.is_sat [ disjunction ] >>= fun result ->
-    check bool "lift_soundness" true result;
-    Lwt.return_unit
+    let result = Solver.is_sat [ disjunction ] in
+      check bool "lift_soundness" true result;
+      Lwt.return_unit
 
   let suite =
     [
@@ -205,7 +205,7 @@ module PropertySemanticEquality = struct
   let test_semantic_equality_is_reflexive () =
     let open Lwt.Infix in
     let expr = EBinOp (ESymbol "x", "+", ENum Z.one) in
-      Solver.exeq expr expr >>= fun result ->
+    let result = Solver.exeq expr expr in
       check bool "exeq_reflexive" true result;
       Lwt.return_unit
 
@@ -214,10 +214,10 @@ module PropertySemanticEquality = struct
     let e1 = EBinOp (ESymbol "x", "+", ENum Z.one) in
     let e2 = EBinOp (ENum Z.one, "+", ESymbol "x") in
 
-    Solver.exeq e1 e2 >>= fun r1 ->
-    Solver.exeq e2 e1 >>= fun r2 ->
-    check bool "exeq_symmetric" true (r1 = r2);
-    Lwt.return_unit
+    let r1 = Solver.exeq e1 e2 in
+    let r2 = Solver.exeq e2 e1 in
+      check bool "exeq_symmetric" true (r1 = r2);
+      Lwt.return_unit
 
   let test_semantic_equality_is_transitive () =
     let open Lwt.Infix in
@@ -226,11 +226,11 @@ module PropertySemanticEquality = struct
     let e3 = EBinOp (ENum Z.zero, "+", ESymbol "x") in
 
     (* e1 ≡ e2 and e2 ≡ e3 should imply e1 ≡ e3 *)
-    Solver.exeq e1 e2 >>= fun r12 ->
-    Solver.exeq e2 e3 >>= fun r23 ->
-    Solver.exeq e1 e3 >>= fun r13 ->
-    check bool "exeq_transitive" true (r12 && r23 && r13);
-    Lwt.return_unit
+    let r12 = Solver.exeq e1 e2 in
+    let r23 = Solver.exeq e2 e3 in
+    let r13 = Solver.exeq e1 e3 in
+      check bool "exeq_transitive" true (r12 && r23 && r13);
+      Lwt.return_unit
 
   let suite =
     [
