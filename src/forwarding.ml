@@ -37,7 +37,10 @@ type ppo_cache_value = {
 (** PPO computation cache.
 
     Caches preserved program order (PPO) computations to avoid redundant solver
-    queries. Provides both exact-match and subset-based lookups. *)
+    queries. Provides both exact-match and subset-based lookups.
+
+    All operations are thread-safe: a mutex serialises concurrent access to the
+    [exact] and [by_context] hashtables. *)
 module PpoCache : sig
   (** Cache type. *)
   type t
@@ -127,54 +130,76 @@ end = struct
 
             Groups cache entries by context, allowing lookup of entries whose
             predicates are subsets of a query. *)
+    mutex : Mutex.t;
+        (** Mutex protecting concurrent access to [exact] and [by_context]. *)
   }
 
   let create () =
-    { exact = Hashtbl.create 256; by_context = Hashtbl.create 256 }
+    {
+      exact = Hashtbl.create 256;
+      by_context = Hashtbl.create 256;
+      mutex = Mutex.create ();
+    }
+
+  let with_lock cache f =
+    Mutex.lock cache.mutex;
+    match f () with
+    | result ->
+        Mutex.unlock cache.mutex;
+        result
+    | exception exn ->
+        Mutex.unlock cache.mutex;
+        raise exn
 
   let clear cache =
-    Hashtbl.clear cache.exact;
-    Hashtbl.clear cache.by_context
+    with_lock cache (fun () ->
+        Hashtbl.clear cache.exact;
+        Hashtbl.clear cache.by_context
+    )
 
   let get cache con predicates =
     let key = { con; predicates } in
-      match Hashtbl.find_opt cache.exact key with
-      | Some v -> v
-      | None -> { ppo = None; ppo_loc = None }
+      with_lock cache (fun () ->
+          match Hashtbl.find_opt cache.exact key with
+          | Some v -> v
+          | None -> { ppo = None; ppo_loc = None }
+      )
 
   let get_subset cache con predicates =
-    match Hashtbl.find_opt cache.by_context con with
-    | None -> None
-    | Some entries -> (
-        let pred_set = USet.of_list predicates in
-        let matching =
-          List.filter
-            (fun (preds, _) -> USet.subset (USet.of_list preds) pred_set)
-            entries
-        in
-          match matching with
-          | [] -> None
-          | _ ->
-              let sorted =
-                List.sort
-                  (fun (_, v1) (_, v2) ->
-                    let size1 =
-                      match v1.ppo with
-                      | Some s -> USet.size s
-                      | None -> 0
-                    in
-                    let size2 =
-                      match v2.ppo with
-                      | Some s -> USet.size s
-                      | None -> 0
-                    in
-                      compare size2 size1
-                  )
-                  matching
-              in
-              let v = snd (List.hd sorted) in
-                Some v
-      )
+    with_lock cache (fun () ->
+        match Hashtbl.find_opt cache.by_context con with
+        | None -> None
+        | Some entries -> (
+            let pred_set = USet.of_list predicates in
+            let matching =
+              List.filter
+                (fun (preds, _) -> USet.subset (USet.of_list preds) pred_set)
+                entries
+            in
+              match matching with
+              | [] -> None
+              | _ ->
+                  let sorted =
+                    List.sort
+                      (fun (_, v1) (_, v2) ->
+                        let size1 =
+                          match v1.ppo with
+                          | Some s -> USet.size s
+                          | None -> 0
+                        in
+                        let size2 =
+                          match v2.ppo with
+                          | Some s -> USet.size s
+                          | None -> 0
+                        in
+                          compare size2 size1
+                      )
+                      matching
+                  in
+                  let v = snd (List.hd sorted) in
+                    Some v
+          )
+    )
 
   (** [set_field cache con predicates field value] internal helper for updating
       cache fields.
@@ -188,24 +213,27 @@ end = struct
       @param value The new value.
       @return The value that was stored. *)
   let set_field cache con predicates field value =
-    let key = { con; predicates } in
-    let current =
-      match Hashtbl.find_opt cache.exact key with
-      | Some v -> v
-      | None -> { ppo = None; ppo_loc = None }
-    in
-    let updated = field current value in
-      Hashtbl.replace cache.exact key updated;
+    with_lock cache (fun () ->
+        let key = { con; predicates } in
+        let current =
+          match Hashtbl.find_opt cache.exact key with
+          | Some v -> v
+          | None -> { ppo = None; ppo_loc = None }
+        in
+        let updated = field current value in
+          Hashtbl.replace cache.exact key updated;
 
-      (* Update by_context index *)
-      let entries =
-        match Hashtbl.find_opt cache.by_context con with
-        | Some e -> e
-        | None -> []
-      in
-      let filtered = List.filter (fun (p, _) -> p <> predicates) entries in
-        Hashtbl.replace cache.by_context con ((predicates, updated) :: filtered);
-        value
+          (* Update by_context index *)
+          let entries =
+            match Hashtbl.find_opt cache.by_context con with
+            | Some e -> e
+            | None -> []
+          in
+          let filtered = List.filter (fun (p, _) -> p <> predicates) entries in
+            Hashtbl.replace cache.by_context con
+              ((predicates, updated) :: filtered)
+    );
+    value
 
   let set_ppo cache con predicates value =
     set_field cache con predicates
@@ -217,13 +245,16 @@ end = struct
       (fun v ppo_loc -> { v with ppo_loc = Some ppo_loc })
       value
 
-  let size cache = Hashtbl.length cache.exact
+  let size cache = with_lock cache (fun () -> Hashtbl.length cache.exact)
 end
 
 (** Context caching.
 
     Tracks which (fwd, we) contexts have been proven satisfiable (good) or
-    unsatisfiable (bad) to avoid redundant solver queries. *)
+    unsatisfiable (bad) to avoid redundant solver queries.
+
+    All operations are thread-safe: a mutex serialises concurrent access to the
+    [good] and [bad] sets, which are backed by mutable hash sets. *)
 module ContextCache : sig
   (** Cache type. *)
   type t
@@ -271,18 +302,63 @@ end = struct
         (** Set of satisfiable contexts. *)
     bad : ((int * int) uset * (int * int) uset) uset;
         (** Set of unsatisfiable contexts. *)
+    mutex : Mutex.t;
+        (** Mutex protecting concurrent access to [good] and [bad]. *)
   }
 
-  let create () = { good = USet.create (); bad = USet.create () }
+  let create () =
+    { good = USet.create (); bad = USet.create (); mutex = Mutex.create () }
 
   let clear cache =
-    USet.clear cache.good |> ignore;
-    USet.clear cache.bad |> ignore
+    Mutex.lock cache.mutex;
+    ( try
+        USet.clear cache.good |> ignore;
+        USet.clear cache.bad |> ignore
+      with exn ->
+        Mutex.unlock cache.mutex;
+        raise exn
+    );
+    Mutex.unlock cache.mutex
 
-  let is_good cache fwd we = USet.mem cache.good (fwd, we)
-  let is_bad cache fwd we = USet.mem cache.bad (fwd, we)
-  let mark_good cache fwd we = USet.add cache.good (fwd, we) |> ignore
-  let mark_bad cache fwd we = USet.add cache.bad (fwd, we) |> ignore
+  let is_good cache fwd we =
+    Mutex.lock cache.mutex;
+    let result =
+      try USet.mem cache.good (fwd, we)
+      with exn ->
+        Mutex.unlock cache.mutex;
+        raise exn
+    in
+      Mutex.unlock cache.mutex;
+      result
+
+  let is_bad cache fwd we =
+    Mutex.lock cache.mutex;
+    let result =
+      try USet.mem cache.bad (fwd, we)
+      with exn ->
+        Mutex.unlock cache.mutex;
+        raise exn
+    in
+      Mutex.unlock cache.mutex;
+      result
+
+  let mark_good cache fwd we =
+    Mutex.lock cache.mutex;
+    ( try USet.add cache.good (fwd, we) |> ignore
+      with exn ->
+        Mutex.unlock cache.mutex;
+        raise exn
+    );
+    Mutex.unlock cache.mutex
+
+  let mark_bad cache fwd we =
+    Mutex.lock cache.mutex;
+    ( try USet.add cache.bad (fwd, we) |> ignore
+      with exn ->
+        Mutex.unlock cache.mutex;
+        raise exn
+    );
+    Mutex.unlock cache.mutex
 end
 
 (** Precomputed PPO relations.

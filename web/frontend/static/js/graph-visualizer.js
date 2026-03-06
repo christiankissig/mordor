@@ -236,7 +236,7 @@ class GraphVisualizer {
                 const highlightText = lineText.substring(startColForLine, endColForLine);
                 
                 const charWidth = 9.5 * 0.95;
-                const topPos = (lineNum - 1) * lineHeight;
+                const topPos = lineNum * lineHeight;
                 const leftPos = beforeText.length * charWidth;
                 const width = highlightText.length * charWidth;
                 

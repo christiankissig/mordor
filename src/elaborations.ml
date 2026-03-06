@@ -37,7 +37,31 @@ let op_to_string = function
         (Justification.to_string just2)
   | WeakElab just -> Printf.sprintf "WeakElab %s" (Justification.to_string just)
 
-module OpTrace = Hashtbl.Make (JustificationCacheKey)
+module OpTraceTable = Hashtbl.Make (JustificationCacheKey)
+
+(** Thread-safe wrapper around [OpTraceTable].
+
+    Concurrent elaboration passes write to the trace from multiple Lwt threads.
+    All mutations are serialised through an [Lwt_mutex] so that interleaving at
+    Lwt yield points cannot corrupt the underlying hash table. *)
+module OpTrace = struct
+  type 'a t = { tbl : 'a OpTraceTable.t; mutex : Lwt_mutex.t }
+
+  let create n = { tbl = OpTraceTable.create n; mutex = Lwt_mutex.create () }
+
+  (** [add t key value] appends [value] for [key] under the mutex. *)
+  let add t key value =
+    Lwt_mutex.with_lock t.mutex (fun () ->
+        OpTraceTable.add t.tbl key value;
+        Lwt.return_unit
+    )
+
+  (** [find_opt t key] looks up [key] under the mutex. *)
+  let find_opt t key =
+    Lwt_mutex.with_lock t.mutex (fun () ->
+        Lwt.return (OpTraceTable.find_opt t.tbl key)
+    )
+end
 
 (** Elaboration context containing the symbolic event structure and caches.
 
@@ -1222,22 +1246,31 @@ let batch_elaborations elab_ctx pre_justs =
           new_elab_justs
       in
 
-      let* new_va_justs =
-        USet.async_map
-          (fun just ->
-            let* elaborated = ValueAssignElab.elab elab_ctx just in
-              List.iter
-                (fun just' ->
-                  OpTrace.add elab_ctx.op_trace just' (ValueAssignElab just)
-                  |> ignore
-                )
-                elaborated;
-              Lwt.return elaborated
-          )
-          new_justs
+      let run_elab elab_fn optrace_fn justs =
+        let* elaborated =
+          USet.async_map
+            (fun just ->
+              let* elaborated = elab_fn elab_ctx just in
+                List.iter
+                  (fun just' ->
+                    OpTrace.add elab_ctx.op_trace just' (optrace_fn just)
+                    |> ignore
+                  )
+                  elaborated;
+                Lwt.return elaborated
+            )
+            justs
+        in
+        let elaborated =
+          USet.map USet.of_list elaborated |> USet.flatten |> filter_justs
+        in
+          Lwt.return elaborated
       in
-      let new_va_justs =
-        USet.map USet.of_list new_va_justs |> USet.flatten |> filter_justs
+
+      let* new_va_justs =
+        run_elab ValueAssignElab.elab
+          (fun just -> ValueAssignElab just)
+          new_justs
       in
         Logs.debug (fun m ->
             m "Value assignment produced %d new justifications."
@@ -1245,21 +1278,7 @@ let batch_elaborations elab_ctx pre_justs =
         );
 
         let* new_fwd_justs =
-          USet.async_map
-            (fun just ->
-              let* elaborated = ForwardElab.elab elab_ctx just in
-                List.iter
-                  (fun just' ->
-                    OpTrace.add elab_ctx.op_trace just' (Forwarding just)
-                    |> ignore
-                  )
-                  elaborated;
-                Lwt.return elaborated
-            )
-            new_justs
-        in
-        let new_fwd_justs =
-          USet.map USet.of_list new_fwd_justs |> USet.flatten |> filter_justs
+          run_elab ForwardElab.elab (fun just -> Forwarding just) new_justs
         in
           Logs.debug (fun m ->
               m "Forwarding produced %d new justifications."
@@ -1272,23 +1291,10 @@ let batch_elaborations elab_ctx pre_justs =
             |> USet.union (URelation.cross justs new_justs)
           in
             let* new_lift_justs =
-              USet.async_map
-                (fun (j1, j2) ->
-                  let* elaborated = LiftElab.elab elab_ctx j1 j2 in
-                    List.iter
-                      (fun just' ->
-                        OpTrace.add elab_ctx.op_trace just' (LiftElab (j1, j2))
-                        |> ignore
-                      )
-                      elaborated;
-                    Lwt.return elaborated
-                )
+              run_elab
+                (fun elab_ctx (j1, j2) -> LiftElab.elab elab_ctx j1 j2)
+                (fun (j1, j2) -> LiftElab (j1, j2))
                 justs_to_lift
-            in
-            let new_lift_justs =
-              USet.map USet.of_list new_lift_justs
-              |> USet.flatten
-              |> filter_justs
             in
               Logs.debug (fun m ->
                   m "Lifting produced %d new justifications."
@@ -1296,23 +1302,7 @@ let batch_elaborations elab_ctx pre_justs =
               );
 
               let* new_weaken_justs =
-                USet.async_map
-                  (fun just ->
-                    let* elaborated = WeakElab.elab elab_ctx just in
-                      List.iter
-                        (fun just' ->
-                          OpTrace.add elab_ctx.op_trace just' (WeakElab just)
-                          |> ignore
-                        )
-                        elaborated;
-                      Lwt.return elaborated
-                  )
-                  new_justs
-              in
-              let new_weaken_justs =
-                USet.map USet.of_list new_weaken_justs
-                |> USet.flatten
-                |> filter_justs
+                run_elab WeakElab.elab (fun just -> WeakElab just) new_justs
               in
                 Logs.debug (fun m ->
                     m "Weakening produced %d new justifications."
@@ -1349,22 +1339,24 @@ let batch_elaborations elab_ctx pre_justs =
     in
 
     let* final_justs = fixed_point (USet.create ()) pre_justs in
+      let* just_str =
+        Lwt_list.map_s
+          (fun just ->
+            let* op_trace = OpTrace.find_opt elab_ctx.op_trace just in
+            let s =
+              Printf.sprintf "\t%s - %s"
+                (Justification.to_string just)
+                (Option.map op_to_string op_trace |> Option.value ~default:"")
+            in
+              Lwt.return s
+          )
+          (USet.values final_justs)
+      in
+
       Logs.debug (fun m ->
           m "Batch elaborations completed with %d justifications:\n%s"
             (USet.size final_justs)
-            (String.concat "\n"
-               (List.map
-                  (fun just ->
-                    Printf.sprintf "\t%s - %s"
-                      (Justification.to_string just)
-                      (OpTrace.find_opt elab_ctx.op_trace just
-                      |> Option.map op_to_string
-                      |> Option.value ~default:""
-                      )
-                  )
-                  (USet.values final_justs)
-               )
-            )
+            (String.concat "\n" just_str)
       );
       Landmark.exit landmark;
       Lwt.return final_justs
