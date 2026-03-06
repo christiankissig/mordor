@@ -28,6 +28,7 @@
   justifications
   lexer
   lwt_utils
+  monad
   parse
   parser
   parser_state

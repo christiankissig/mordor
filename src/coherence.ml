@@ -311,13 +311,10 @@ module IMM : MEMORY_MODEL = struct
 
         (* eco = rf ∪ co;rf ∪ co ∪ fr;rf ∪ fr *)
         let eco =
-          URelation.compose_adj_map [ (co, dummy_adj_map); (rf, rf_adj_map) ]
+          URelation.compose [ co; rf ]
           |> USet.inplace_union rf
           |> USet.inplace_union co
-          |> USet.inplace_union
-               (URelation.compose_adj_map
-                  [ (fr, dummy_adj_map); (rf, rf_adj_map) ]
-               )
+          |> USet.inplace_union (URelation.compose [ fr; rf ])
           |> USet.inplace_union fr
         in
 
