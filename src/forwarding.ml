@@ -504,8 +504,14 @@ module EventStructureContext = struct
     let w_sc = filter_order structure w SC in
     let r_acq = filter_order structure r Acquire in
     let r_sc = filter_order structure r SC in
-    let f_rel = filter_order structure f Release in
-    let f_acq = filter_order structure f Acquire in
+    let f_rel =
+      filter_order structure f Release
+      |> USet.inplace_union (filter_order structure f ReleaseAcquire)
+    in
+    let f_acq =
+      filter_order structure f Acquire
+      |> USet.inplace_union (filter_order structure f ReleaseAcquire)
+    in
     let f_sc = filter_order structure f SC in
 
     let e_acq = USet.union r_acq f_sc |> USet.union f_acq |> USet.union f_sc in
@@ -592,25 +598,6 @@ module EventStructureContext = struct
          the same loop. *)
     let po_iter = es_ctx.structure.po_iter in
 
-    (* Program order without fences *)
-    (* TODO 1) why this? 2) how about initial and terminal events? *)
-    let po_nf =
-      USet.filter
-        (fun (f, t) ->
-          (not (USet.mem es_ctx.structure.fence_events f))
-          && not (USet.mem es_ctx.structure.fence_events t)
-        )
-        po
-    in
-    let po_iter_nf =
-      USet.filter
-        (fun (f, t) ->
-          (not (USet.mem es_ctx.structure.fence_events f))
-          && not (USet.mem es_ctx.structure.fence_events t)
-        )
-        po_iter
-    in
-
     (* PPO from initial events and to terminal events *)
     USet.clear es_ctx.ppo.ppo_init |> ignore;
     USet.inplace_union es_ctx.ppo.ppo_init (compute_ppo_init structure)
@@ -619,34 +606,32 @@ module EventStructureContext = struct
     (* PPO based on memory order *)
     USet.clear es_ctx.ppo.ppo_sync |> ignore;
     USet.inplace_union es_ctx.ppo.ppo_sync
-      (compute_ppo_sync es_ctx.structure e po_nf)
+      (compute_ppo_sync es_ctx.structure e po)
     |> ignore;
 
     USet.clear es_ctx.ppo.ppo_iter_sync |> ignore;
     USet.inplace_union es_ctx.ppo.ppo_iter_sync
-      (compute_ppo_sync es_ctx.structure e po_iter_nf)
+      (compute_ppo_sync es_ctx.structure e po_iter)
     |> ignore;
 
     (* Filter for location equality with semantic equality *)
-    let ppo_loc_eq = compute_ppo_loc_eq structure e po_nf in
+    let ppo_loc_eq = compute_ppo_loc_eq structure e po in
       USet.clear es_ctx.ppo.ppo_loc_eq |> ignore;
       USet.inplace_union es_ctx.ppo.ppo_loc_eq ppo_loc_eq |> ignore;
 
-      let ppo_iter_loc_eq =
-        compute_ppo_loc_eq ~iter:true structure e po_iter_nf
-      in
+      let ppo_iter_loc_eq = compute_ppo_loc_eq ~iter:true structure e po_iter in
         USet.clear es_ctx.ppo.ppo_iter_loc_eq |> ignore;
         USet.inplace_union es_ctx.ppo.ppo_iter_loc_eq ppo_iter_loc_eq |> ignore;
 
         (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
            computed in that complement for each execution later on. *)
         USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
-        USet.set_minus po_nf es_ctx.ppo.ppo_loc_eq
+        USet.set_minus po es_ctx.ppo.ppo_loc_eq
         |> USet.inplace_union es_ctx.ppo.ppo_loc_base
         |> ignore;
 
         USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
-        USet.set_minus po_nf ppo_iter_loc_eq
+        USet.set_minus po ppo_iter_loc_eq
         |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base
         |> ignore;
 
