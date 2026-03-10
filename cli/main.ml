@@ -60,6 +60,7 @@ module Config = struct
     output_file : string option;  (** Output file path (if applicable) *)
     step_counter : int option;  (** Loop iteration bound (if applicable) *)
     options : Context.options;  (** Detailed analysis options *)
+    num_threads : int;  (** Number of threads for parallel execution *)
   }
   [@@deriving show]
 end
@@ -521,6 +522,7 @@ module CLI = struct
     mutable recursive : bool;  (** Recursive directory scanning *)
     mutable litmus_dir : string;  (** Directory for litmus tests *)
     mutable log_level : Logs.level option;  (** Logging level *)
+    mutable num_threads : int;  (** Number of threads for parallel execution *)
   }
 
   (** Create initial parse state with defaults. *)
@@ -535,6 +537,7 @@ module CLI = struct
       recursive = false;
       litmus_dir = "litmus_tests";
       log_level = None;
+      num_threads = 1;
     }
 
   (** Convert parse state to immutable configuration.
@@ -570,6 +573,7 @@ module CLI = struct
             output_file = state.output_file;
             step_counter = state.step_counter;
             options;
+            num_threads = state.num_threads;
           }
 
   (** Usage message displayed on error or with --help. *)
@@ -641,6 +645,10 @@ module CLI = struct
       ( "--error",
         Arg.Unit (fun () -> state.log_level <- Some Logs.Error),
         " Set log level to Error (least verbose)"
+      );
+      ( "--threads",
+        Arg.Int (fun n -> state.num_threads <- n),
+        " Number of threads for parallel execution (default: 1)"
       );
       (* Loop semantics - these are mutually exclusive *)
       ( "--symbolic-loop-semantics",

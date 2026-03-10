@@ -583,92 +583,88 @@ module EventStructureContext = struct
       @param es_ctx The event structure context.
       @return Promise that resolves when initialization is complete. *)
   let init es_ctx =
-    let landmark = Landmark.register "ForwardingContext.init" in
-      Landmark.enter landmark;
-      let rmw = es_ctx.structure.rmw in
+    let rmw = es_ctx.structure.rmw in
 
-      let structure = es_ctx.structure in
-      let e = es_ctx.e in
-      let po = es_ctx.structure.po in
-      (* po_iter is the program order between events in successive iterations of
+    let structure = es_ctx.structure in
+    let e = es_ctx.e in
+    let po = es_ctx.structure.po in
+    (* po_iter is the program order between events in successive iterations of
          the same loop. *)
-      let po_iter = es_ctx.structure.po_iter in
+    let po_iter = es_ctx.structure.po_iter in
 
-      (* Program order without fences *)
-      (* TODO 1) why this? 2) how about initial and terminal events? *)
-      let po_nf =
-        USet.filter
-          (fun (f, t) ->
-            (not (USet.mem es_ctx.structure.fence_events f))
-            && not (USet.mem es_ctx.structure.fence_events t)
-          )
-          po
+    (* Program order without fences *)
+    (* TODO 1) why this? 2) how about initial and terminal events? *)
+    let po_nf =
+      USet.filter
+        (fun (f, t) ->
+          (not (USet.mem es_ctx.structure.fence_events f))
+          && not (USet.mem es_ctx.structure.fence_events t)
+        )
+        po
+    in
+    let po_iter_nf =
+      USet.filter
+        (fun (f, t) ->
+          (not (USet.mem es_ctx.structure.fence_events f))
+          && not (USet.mem es_ctx.structure.fence_events t)
+        )
+        po_iter
+    in
+
+    (* PPO from initial events and to terminal events *)
+    USet.clear es_ctx.ppo.ppo_init |> ignore;
+    USet.inplace_union es_ctx.ppo.ppo_init (compute_ppo_init structure)
+    |> ignore;
+
+    (* PPO based on memory order *)
+    USet.clear es_ctx.ppo.ppo_sync |> ignore;
+    USet.inplace_union es_ctx.ppo.ppo_sync
+      (compute_ppo_sync es_ctx.structure e po_nf)
+    |> ignore;
+
+    USet.clear es_ctx.ppo.ppo_iter_sync |> ignore;
+    USet.inplace_union es_ctx.ppo.ppo_iter_sync
+      (compute_ppo_sync es_ctx.structure e po_iter_nf)
+    |> ignore;
+
+    (* Filter for location equality with semantic equality *)
+    let ppo_loc_eq = compute_ppo_loc_eq structure e po_nf in
+      USet.clear es_ctx.ppo.ppo_loc_eq |> ignore;
+      USet.inplace_union es_ctx.ppo.ppo_loc_eq ppo_loc_eq |> ignore;
+
+      let ppo_iter_loc_eq =
+        compute_ppo_loc_eq ~iter:true structure e po_iter_nf
       in
-      let po_iter_nf =
-        USet.filter
-          (fun (f, t) ->
-            (not (USet.mem es_ctx.structure.fence_events f))
-            && not (USet.mem es_ctx.structure.fence_events t)
-          )
-          po_iter
-      in
+        USet.clear es_ctx.ppo.ppo_iter_loc_eq |> ignore;
+        USet.inplace_union es_ctx.ppo.ppo_iter_loc_eq ppo_iter_loc_eq |> ignore;
 
-      (* PPO from initial events and to terminal events *)
-      USet.clear es_ctx.ppo.ppo_init |> ignore;
-      USet.inplace_union es_ctx.ppo.ppo_init (compute_ppo_init structure)
-      |> ignore;
-
-      (* PPO based on memory order *)
-      USet.clear es_ctx.ppo.ppo_sync |> ignore;
-      USet.inplace_union es_ctx.ppo.ppo_sync
-        (compute_ppo_sync es_ctx.structure e po_nf)
-      |> ignore;
-
-      USet.clear es_ctx.ppo.ppo_iter_sync |> ignore;
-      USet.inplace_union es_ctx.ppo.ppo_iter_sync
-        (compute_ppo_sync es_ctx.structure e po_iter_nf)
-      |> ignore;
-
-      (* Filter for location equality with semantic equality *)
-      let ppo_loc_eq = compute_ppo_loc_eq structure e po_nf in
-        USet.clear es_ctx.ppo.ppo_loc_eq |> ignore;
-        USet.inplace_union es_ctx.ppo.ppo_loc_eq ppo_loc_eq |> ignore;
-
-        let ppo_iter_loc_eq =
-          compute_ppo_loc_eq ~iter:true structure e po_iter_nf
-        in
-          USet.clear es_ctx.ppo.ppo_iter_loc_eq |> ignore;
-          USet.inplace_union es_ctx.ppo.ppo_iter_loc_eq ppo_iter_loc_eq
-          |> ignore;
-
-          (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
+        (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
            computed in that complement for each execution later on. *)
-          USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
-          USet.set_minus po_nf es_ctx.ppo.ppo_loc_eq
-          |> USet.inplace_union es_ctx.ppo.ppo_loc_base
-          |> ignore;
+        USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
+        USet.set_minus po_nf es_ctx.ppo.ppo_loc_eq
+        |> USet.inplace_union es_ctx.ppo.ppo_loc_base
+        |> ignore;
 
-          USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
-          USet.set_minus po_nf ppo_iter_loc_eq
-          |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base
-          |> ignore;
+        USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
+        USet.set_minus po_nf ppo_iter_loc_eq
+        |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base
+        |> ignore;
 
-          USet.clear es_ctx.ppo.ppo_base |> ignore;
-          es_ctx.ppo.ppo_sync
-          |> USet.union es_ctx.ppo.ppo_loc_eq
-          |> USet.inplace_union es_ctx.ppo.ppo_base
-          |> ignore;
+        USet.clear es_ctx.ppo.ppo_base |> ignore;
+        es_ctx.ppo.ppo_sync
+        |> USet.union es_ctx.ppo.ppo_loc_eq
+        |> USet.inplace_union es_ctx.ppo.ppo_base
+        |> ignore;
 
-          USet.clear es_ctx.ppo.ppo_iter_base |> ignore;
-          es_ctx.ppo.ppo_iter_sync
-          |> USet.union es_ctx.ppo.ppo_iter_loc_eq
-          |> USet.inplace_union es_ctx.ppo.ppo_base
-          |> ignore;
+        USet.clear es_ctx.ppo.ppo_iter_base |> ignore;
+        es_ctx.ppo.ppo_iter_sync
+        |> USet.union es_ctx.ppo.ppo_iter_loc_eq
+        |> USet.inplace_union es_ctx.ppo.ppo_base
+        |> ignore;
 
-          clear_caches es_ctx;
+        clear_caches es_ctx;
 
-          Landmark.exit landmark;
-          Lwt.return_unit
+        Lwt.return_unit
 end
 
 (** Forwarding context.
@@ -701,40 +697,38 @@ module ForwardingContext = struct
       @param we Write-exclusion edges to add.
       @return The created forwarding context. *)
   let create es_ctx ?(fwd = USet.create ()) ?(we = USet.create ()) () =
-    let landmark = Landmark.register "ForwardingContext.create" in
-      Landmark.enter landmark;
-      let fwdwe = USet.union fwd we in
+    let fwdwe = USet.union fwd we in
 
-      (* valmap is filtered by non-None values *)
-      let valmap =
-        USet.values fwd
-        |> List.filter_map (fun (e1, e2) ->
-            match (es_ctx.val_fn e1, es_ctx.val_fn e2) with
-            | Some v1, Some v2 -> Some (v1, v2)
-            | _ -> None
+    (* valmap is filtered by non-None values *)
+    let valmap =
+      USet.values fwd
+      |> List.filter_map (fun (e1, e2) ->
+          match (es_ctx.val_fn e1, es_ctx.val_fn e2) with
+          | Some v1, Some v2 -> Some (v1, v2)
+          | _ -> None
+      )
+    in
+
+    (* Build path condition from forwarding *)
+    let psi =
+      List.filter_map
+        (fun (e1, e2) ->
+          let expr = Expr.evaluate (EBinOp (e1, "=", e2)) in
+            match expr with
+            | EBoolean true -> None
+            | _ -> Some expr
         )
-      in
+        valmap
+    in
 
-      (* Build path condition from forwarding *)
-      let psi =
-        List.filter_map
-          (fun (e1, e2) ->
-            let expr = Expr.evaluate (EBinOp (e1, "=", e2)) in
-              match expr with
-              | EBoolean true -> None
-              | _ -> Some expr
-          )
-          valmap
-      in
+    (* Build remap map *)
+    let remap_map =
+      URelation.inverse fwdwe |> URelation.to_map |> map_transitive_closure
+    in
 
-      (* Build remap map *)
-      let remap_map =
-        URelation.inverse fwdwe |> URelation.to_map |> map_transitive_closure
-      in
+    let ctx = { es_ctx; fwd; we; fwdwe; remap_map; psi } in
 
-      let ctx = { es_ctx; fwd; we; fwdwe; remap_map; psi } in
-        Landmark.exit landmark;
-        ctx
+    ctx
 
   (** {1 Remapping Operations} *)
 
@@ -850,49 +844,44 @@ module ForwardingContext = struct
       @param predicates Additional predicate constraints.
       @return Promise of the PPO relation. *)
   let ppo ?(debug = false) ctx predicates =
-    let landmark = Landmark.register "ForwardingContext.ppo" in
-      Landmark.enter landmark;
-      let es_ctx = ctx.es_ctx in
-      let p = predicates @ ctx.psi in
-      let cached = cache_get ctx p in
-        match cached.ppo with
-        | Some v ->
-            Landmark.exit landmark;
-            v
-        | _ ->
-            let result =
-              let sub = cache_get_subset ctx p in
-              let base =
-                match sub with
-                | Some s -> (
-                    match s.ppo with
-                    | Some ppo -> ppo
-                    | None -> es_ctx.ppo.ppo_loc_base
-                  )
-                | None -> es_ctx.ppo.ppo_loc_base
-              in
-                (* Filter with alias analysis using solver - check if locations
-                   are equal given predicates and psi of forwarding context *)
-                USet.filter
-                  (fun (e1, e2) ->
-                    let loc1 = Events.get_loc es_ctx.structure e1 in
-                    let loc2 = Events.get_loc es_ctx.structure e2 in
-                      match (loc1, loc2) with
-                      | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
-                      | _ -> false
-                  )
-                  base
+    let es_ctx = ctx.es_ctx in
+    let p = predicates @ ctx.psi in
+    let cached = cache_get ctx p in
+      match cached.ppo with
+      | Some v -> v
+      | _ ->
+          let result =
+            let sub = cache_get_subset ctx p in
+            let base =
+              match sub with
+              | Some s -> (
+                  match s.ppo with
+                  | Some ppo -> ppo
+                  | None -> es_ctx.ppo.ppo_loc_base
+                )
+              | None -> es_ctx.ppo.ppo_loc_base
             in
+              (* Filter with alias analysis using solver - check if locations
+                   are equal given predicates and psi of forwarding context *)
+              USet.clone base
+              |> USet.filter (fun (e1, e2) ->
+                  let loc1 = Events.get_loc es_ctx.structure e1 in
+                  let loc2 = Events.get_loc es_ctx.structure e2 in
+                    match (loc1, loc2) with
+                    | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                    | _ -> false
+              )
+          in
 
-            (* RMW ppo - add read-modify-write orderings *)
-            let rmw_ppo = compute_ppo_rmw es_ctx predicates in
-            let result = USet.inplace_union result rmw_ppo in
-            let result = USet.inplace_union result es_ctx.ppo.ppo_base in
+          (* RMW ppo - add read-modify-write orderings *)
+          let rmw_ppo = compute_ppo_rmw es_ctx predicates in
+          let result = USet.inplace_union result rmw_ppo in
+          let result = USet.inplace_union result es_ctx.ppo.ppo_base in
 
-            let remapped = remap_rel ctx result in
-              cache_set_ppo ctx p remapped |> ignore;
-              Landmark.exit landmark;
-              remapped
+          let remapped = remap_rel ctx result in
+            cache_set_ppo ctx p remapped |> ignore;
+
+            remapped
 
   (** [ppo_loc ctx predicates] computes location-based PPO.
 
@@ -904,49 +893,45 @@ module ForwardingContext = struct
       @param predicates The predicate constraints.
       @return Promise of the location-based PPO relation. *)
   let ppo_loc ctx predicates =
-    let landmark = Landmark.register "ForwardingContext.ppo_loc" in
-      Landmark.enter landmark;
-      let es_ctx = ctx.es_ctx in
-      let p =
-        predicates @ ctx.psi
-        |> USet.of_list
-        |> USet.values
-        |> List.sort Expr.compare
-      in
-      let cached = cache_get ctx p in
-        match cached.ppo_loc with
-        | Some v ->
-            Landmark.exit landmark;
-            v
-        | None ->
-            (* Get base ppo_alias from cache or compute it *)
-            let ppo_alias =
-              let sub = cache_get_subset ctx p in
-                match sub with
-                | Some s -> (
-                    match (s.ppo_loc, s.ppo) with
-                    | Some ppo_loc, _ -> ppo_loc
-                    | None, Some ppo -> ppo
-                    | None, None -> ppo ctx predicates
-                  )
-                | None -> ppo ctx predicates
-            in
-            (* Filter for exact location equality using the predicates P *)
-            let filtered =
-              USet.filter
-                (fun (e1, e2) ->
-                  let loc1 = Events.get_loc es_ctx.structure e1 in
-                  let loc2 = Events.get_loc es_ctx.structure e2 in
-                    match (loc1, loc2) with
-                    | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
-                    | _ -> false
+    let es_ctx = ctx.es_ctx in
+    let p =
+      predicates @ ctx.psi
+      |> USet.of_list
+      |> USet.values
+      |> List.sort Expr.compare
+    in
+    let cached = cache_get ctx p in
+      match cached.ppo_loc with
+      | Some v -> v
+      | None ->
+          (* Get base ppo_alias from cache or compute it *)
+          let ppo_alias =
+            let sub = cache_get_subset ctx p in
+              match sub with
+              | Some s -> (
+                  match (s.ppo_loc, s.ppo) with
+                  | Some ppo_loc, _ -> ppo_loc
+                  | None, Some ppo -> ppo
+                  | None, None -> ppo ctx predicates
                 )
-                ppo_alias
-            in
-            let remapped = remap_rel ctx filtered in
-              cache_set_ppo_loc ctx p remapped |> ignore;
-              Landmark.exit landmark;
-              remapped
+              | None -> ppo ctx predicates
+          in
+          (* Filter for exact location equality using the predicates P *)
+          let filtered =
+            USet.filter
+              (fun (e1, e2) ->
+                let loc1 = Events.get_loc es_ctx.structure e1 in
+                let loc2 = Events.get_loc es_ctx.structure e2 in
+                  match (loc1, loc2) with
+                  | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                  | _ -> false
+              )
+              ppo_alias
+          in
+          let remapped = remap_rel ctx filtered in
+            cache_set_ppo_loc ctx p remapped |> ignore;
+
+            remapped
 
   (** [ppo_sync ctx] computes synchronization PPO.
 

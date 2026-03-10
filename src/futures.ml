@@ -128,7 +128,7 @@ let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
     | None -> ""
   in
 
-  Logs.info (fun m -> m "Computing futures for program %s." name);
+  Logs_safe.info (fun m -> m "Computing futures for program %s." name);
   (* Generate output based on output mode *)
   match ctx.output_mode with
   | Json -> (
@@ -170,18 +170,20 @@ let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
               Lwt.return ctx
     )
   | _ ->
-      Logs.err (fun m -> m "Unsupported output mode for futures.");
+      Logs_safe.err (fun m -> m "Unsupported output mode for futures.");
       Lwt.return ctx
 
 let step_futures (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
     match ctx.executions with
     | Some execs ->
-        Logs.debug (fun m -> m "Calculating futures...");
+        Logs_safe.debug (fun m -> m "Calculating futures...");
         let future_set = calculate_future_set execs in
           ctx.futures <- Some future_set;
-          Logs.debug (fun m -> m "Futures calculated.");
+          Logs_safe.debug (fun m -> m "Futures calculated.");
           Lwt.return ctx
     | None ->
-        Logs.err (fun m -> m "No executions available to calculate futures.");
+        Logs_safe.err (fun m ->
+            m "No executions available to calculate futures."
+        );
         Lwt.return ctx

@@ -180,10 +180,10 @@ val generate_executions :
   ?include_rf:bool ->
   symbolic_event_structure ->
   Forwarding.event_structure_context ->
-  justification uset ->
+  justification list ->
   expr list ->
   restrictions:Coherence.restrictions ->
-  symbolic_execution list
+  symbolic_execution list Lwt.t
 
 (** [calculate_dependencies ?include_rf structure final_justs context
      ~exhaustive ~restrictions] computes dependency information for symbolic
@@ -214,11 +214,11 @@ val generate_executions :
 val calculate_dependencies :
   ?include_rf:bool ->
   symbolic_event_structure ->
-  justification uset ->
+  justification list ->
   Forwarding.event_structure_context ->
   exhaustive:bool ->
   restrictions:Coherence.restrictions ->
-  symbolic_execution list
+  symbolic_execution list Lwt.t
 
 (** [step_calculate_dependencies ctx] performs one step of dependency
     calculation within a Mordor context.

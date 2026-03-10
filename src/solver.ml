@@ -306,7 +306,7 @@ let check solver =
           | Z3.Solver.UNSATISFIABLE -> Some false
           | Z3.Solver.UNKNOWN -> None
         with e ->
-          Logs.err (fun m ->
+          Logs_safe.err (fun m ->
               m "Error adding expressions to Z3 solver: %s\n %s"
                 (Printexc.to_string e)
                 (String.concat "\n" (List.map Expr.to_string solver.expressions))
@@ -329,30 +329,24 @@ let quick_check_cache = ConjunctionCache.create 256
 let cache_mutex = Mutex.create ()
 
 let quick_check_cached exprs =
-  let landmark = Landmark.register "quick_check_cached" in
-    Landmark.enter landmark;
-    let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
-      (* Check cache without holding lock (optimistic read) *)
-      match ConjunctionCache.find_opt quick_check_cache exprs with
-      | Some result ->
-          Landmark.exit landmark;
-          result
-      | None ->
-          (* Acquire lock before mutating *)
-          Mutex.lock cache_mutex;
-          let result =
-            (* Re-check after acquiring lock to avoid redundant work *)
-            match ConjunctionCache.find_opt quick_check_cache exprs with
-            | Some result -> result
-            | None ->
-                let result = quick_check exprs in
-                  ConjunctionCache.add quick_check_cache exprs result;
-                  result
-          in
+  let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
+  (* Check cache without holding lock (optimistic read) *)
 
-          Mutex.unlock cache_mutex;
-          Landmark.exit landmark;
-          result
+  Mutex.lock cache_mutex;
+  let cached_result = ConjunctionCache.find_opt quick_check_cache exprs in
+    Mutex.unlock cache_mutex;
+    let result =
+      match cached_result with
+      | Some result -> result
+      | None ->
+          let result = quick_check exprs in
+            Mutex.lock cache_mutex;
+            ConjunctionCache.add quick_check_cache exprs result;
+            Mutex.unlock cache_mutex;
+            result
+    in
+
+    result
 
 (** Simplified satisfiability check.
 
@@ -652,12 +646,10 @@ let exeq ?(state = []) a b =
     @param b Second expression
     @return [true] if potentially equal *)
 let expoteq ?(state = []) a b =
-  let landmark = Landmark.register "expoteq" in
-    Landmark.enter landmark;
-    let result =
-      (* Check if a = b is satisfiable *)
-      Expr.equal a b
-      || is_sat_cached (Expr.binop a "=" b :: state |> List.sort Expr.compare)
-    in
-      Landmark.exit landmark;
-      result
+  let result =
+    (* Check if a = b is satisfiable *)
+    Expr.equal a b
+    || is_sat_cached (Expr.binop a "=" b :: state |> List.sort Expr.compare)
+  in
+
+  result

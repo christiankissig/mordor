@@ -607,7 +607,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               cont
         | _ ->
             (* Simplified - return empty structure for unhandled cases *)
-            Logs.err (fun m ->
+            Logs_safe.err (fun m ->
                 m "Statement not handled: %s" (ir_node_to_string node)
             );
             SymbolicEventStructure.create ()
@@ -758,7 +758,7 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
         let structure, source_spans =
           interpret_generic ~stmt_semantics ~defacto ~constraints stmts
         in
-          Logs.debug (fun m ->
+          Logs_safe.debug (fun m ->
               m "Completed program interpretation: \n%s\nand events\n%s"
                 (show_symbolic_event_structure structure)
                 (Hashtbl.fold
@@ -774,7 +774,7 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
           ctx.source_spans <- Some source_spans;
           Lwt.return ctx
     | _ ->
-        Logs.err (fun m -> m "No program statements for interpretation.");
+        Logs_safe.err (fun m -> m "No program statements for interpretation.");
         Lwt.return ctx
 
 (** {1 Step Counter Semantics} *)
@@ -1004,10 +1004,10 @@ end = struct
       @param structure The symbolic event structure to analyze.
       @return A set of program order edges between events in the same loop. *)
   let generate_po_iter (structure : symbolic_event_structure) =
-    Logs.debug (fun m ->
+    Logs_safe.debug (fun m ->
         m "Generating program order relations for symbolic loop semantics."
     );
-    Logs.debug (fun m ->
+    Logs_safe.debug (fun m ->
         m "Loop indices by event: %s"
           (Hashtbl.fold
              (fun e loops acc ->
@@ -1034,7 +1034,7 @@ end = struct
             loops
         )
         structure.loop_indices;
-      Logs.debug (fun m ->
+      Logs_safe.debug (fun m ->
           m "Events by loop: %s"
             (Hashtbl.fold
                (fun l events acc ->
@@ -1224,7 +1224,7 @@ end
     @return Updated context with interpretation results. *)
 let step_interpret lwt_ctx =
   let* ctx = lwt_ctx in
-    Logs.debug (fun m ->
+    Logs_safe.debug (fun m ->
         m "Interpreting program with %s loop semantics."
           ( match ctx.options.loop_semantics with
           | Symbolic -> "symbolic"

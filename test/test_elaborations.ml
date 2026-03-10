@@ -299,7 +299,7 @@ let test_pre_justifications_basic () =
   let structure = SymbolicEventStructure.create () in
     Lwt_main.run
       (let result = pre_justifications structure in
-         check int "empty structure" 0 (USet.size result);
+         check int "empty structure" 0 (List.length result);
          Lwt.return_unit
       )
 
@@ -313,7 +313,7 @@ let test_pre_justifications_parameterized
     in
       Lwt_main.run
         (let result = pre_justifications structure in
-           check int name expected_count (USet.size result);
+           check int name expected_count (List.length result);
            Lwt.return_unit
         )
 
@@ -335,7 +335,7 @@ let test_pre_justifications_structure_details () =
     in
       Lwt_main.run
         (let result = pre_justifications structure in
-         let justs = USet.values result in
+         let justs = result in
            check int "count" 1 (List.length justs);
 
            let just = List.hd justs in
@@ -360,7 +360,7 @@ let test_pre_justifications_symbol_extraction (name, event, validator) () =
     in
       Lwt_main.run
         (let result = pre_justifications structure in
-         let justs = USet.values result in
+         let justs = result in
            ( match justs with
            | [ just ] -> check bool name true (validator just)
            | _ -> fail (name ^ ": Expected single justification")
@@ -377,7 +377,7 @@ let test_pre_justifications_edge_cases () =
   in
     Lwt_main.run
       (let result1 = pre_justifications structure1 in
-         check int "missing events filtered" 0 (USet.size result1);
+         check int "missing events filtered" 0 (List.length result1);
          Lwt.return_unit
       );
 
@@ -403,7 +403,7 @@ let test_pre_justifications_edge_cases () =
       in
         Lwt_main.run
           (let result2 = pre_justifications structure2 in
-           let justs = USet.values result2 in
+           let justs = result2 in
              check int "multiple writes count" 2 (List.length justs);
              let labels = List.map (fun j -> j.w.label) justs in
              let labels_set = List.sort_uniq compare labels in

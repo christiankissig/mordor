@@ -633,7 +633,7 @@ module TestWriteCondition = struct
               { start_line = 6; start_col = 1; end_line = 6; end_col = 10 };
             Hashtbl.add source_spans mod_write.label
               { start_line = 7; start_col = 1; end_line = 7; end_col = 10 };
-            let justifications = USet.create () in
+            let justifications = [] in
             let fwd_es_ctx = EventStructureContext.create structure in
               {
                 program = [];
@@ -684,7 +684,7 @@ module TestWriteCondition = struct
           }
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
         let fwd_es_ctx = EventStructureContext.create structure in
           { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
@@ -739,7 +739,7 @@ module TestWriteCondition = struct
             }
           in
           let source_spans = Hashtbl.create 0 in
-          let justifications = USet.create () in
+          let justifications = [] in
           let fwd_es_ctx = EventStructureContext.create structure in
             {
               program = [];
@@ -803,7 +803,7 @@ module TestWriteCondition = struct
           }
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
         let fwd_es_ctx = EventStructureContext.create structure in
           { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
@@ -821,7 +821,7 @@ module TestWriteCondition = struct
         }
       in
       let source_spans = Hashtbl.create 0 in
-      let justifications = USet.create () in
+      let justifications = [] in
       let fwd_es_ctx = EventStructureContext.create structure in
         { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
@@ -976,7 +976,7 @@ module TestBranchCondition = struct
           ]
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
         let fwd_es_ctx = EventStructureContext.create structure in
         let cache =
           { program; structure; source_spans; justifications; fwd_es_ctx }
@@ -1050,7 +1050,7 @@ module TestBranchCondition = struct
           ]
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
         let fwd_es_ctx = EventStructureContext.create structure in
         let cache =
           { program; structure; source_spans; justifications; fwd_es_ctx }
@@ -1150,7 +1150,7 @@ module TestBranchCondition = struct
           ]
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
         let fwd_es_ctx = EventStructureContext.create structure in
         let cache =
           { program; structure; source_spans; justifications; fwd_es_ctx }
@@ -1174,7 +1174,7 @@ module TestBranchCondition = struct
         [ make_ir_node (While { condition = EBoolean false; body = [] }) ]
       in
       let source_spans = Hashtbl.create 0 in
-      let justifications = USet.create () in
+      let justifications = [] in
       let fwd_es_ctx = EventStructureContext.create structure in
       let cache =
         { program; structure; source_spans; justifications; fwd_es_ctx }
@@ -1216,7 +1216,7 @@ module TestBranchCondition = struct
           ]
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
         let fwd_es_ctx = EventStructureContext.create structure in
         let cache =
           { program; structure; source_spans; justifications; fwd_es_ctx }
@@ -1368,7 +1368,7 @@ module TestEventOrdering = struct
           { (EventStructureContext.create structure) with ppo }
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
           Lwt.return
             {
               program = [];
@@ -1411,7 +1411,7 @@ module TestEventOrdering = struct
           { (EventStructureContext.create structure) with ppo }
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
           Lwt.return
             {
               program = [];
@@ -1437,7 +1437,7 @@ module TestEventOrdering = struct
       let ppo = create_ppo_structure [] [] in
       let fwd_es_ctx = { (EventStructureContext.create structure) with ppo } in
       let source_spans = Hashtbl.create 0 in
-      let justifications = USet.create () in
+      let justifications = [] in
         Lwt.return
           { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
@@ -1469,7 +1469,7 @@ module TestEventOrdering = struct
           { (EventStructureContext.create structure) with ppo }
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
           Lwt.return
             {
               program = [];
@@ -1522,7 +1522,7 @@ module TestEventOrdering = struct
           { (EventStructureContext.create structure) with ppo }
         in
         let source_spans = Hashtbl.create 0 in
-        let justifications = USet.create () in
+        let justifications = [] in
           Lwt.return
             {
               program = [];

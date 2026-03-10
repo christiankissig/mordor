@@ -268,7 +268,7 @@ and convert_litmus ast_litmus =
 (** Parse litmus to AST and convert from AST to IR *)
 
 let parse_and_convert_litmus ~validate_ast src =
-  Logs.debug (fun m -> m "Parsing program...");
+  Logs_safe.debug (fun m -> m "Parsing program...");
 
   try
     let litmus_ast = parse_litmus src in
@@ -276,10 +276,10 @@ let parse_and_convert_litmus ~validate_ast src =
       convert_litmus litmus_ast
   with
   | Failure msg ->
-      Logs.err (fun m -> m "Parse error: %s" msg);
+      Logs_safe.err (fun m -> m "Parse error: %s" msg);
       failwith ("Parse error: " ^ msg)
   | e ->
-      Logs.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
+      Logs_safe.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
       failwith ("Unexpected error: " ^ Printexc.to_string e)
 
 (** Post-parse validation on ASTs *)
@@ -348,7 +348,9 @@ let step_parse_litmus (ctx_lwt : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                   match a with
                   | Ir.Outcome { model = Some model; _ } | Ir.Model { model } ->
                       apply_model_options ctx model;
-                      Logs.info (fun m -> m "Applied model options for %s" model);
+                      Logs_safe.info (fun m ->
+                          m "Applied model options for %s" model
+                      );
                       Some a
                   | _ -> Some a
                 )
@@ -356,5 +358,5 @@ let step_parse_litmus (ctx_lwt : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
               );
             Lwt.return ctx
       | None ->
-          Logs.err (fun m -> m "No program provided for parsing.");
+          Logs_safe.err (fun m -> m "No program provided for parsing.");
           Lwt.return ctx

@@ -706,91 +706,78 @@ end = struct
       map
 
   let compose (rels : 'a t list) : 'a t =
-    let landmark = Landmark.register "URelation.compose" in
-      Landmark.enter landmark;
-      let composition =
-        match rels with
-        | [] -> USet.create ()
-        | [ r ] -> USet.clone r
-        | r :: rest ->
-            List.fold_left
-              (fun acc rel ->
-                (* Build index: c -> list of d where (c, d) in rel *)
-                let index = adjacency_list_map rel in
-                (* Compose using index *)
-                let result = USet.create () in
-                  USet.iter
-                    (fun (a, b) ->
-                      match Hashtbl.find_opt index b with
-                      | Some ds ->
-                          List.iter
-                            (fun d -> USet.add result (a, d) |> ignore)
-                            ds
-                      | None -> ()
-                    )
-                    acc;
-                  result
-              )
-              (USet.clone r) rest
-      in
-        Landmark.exit landmark;
-        composition
+    let composition =
+      match rels with
+      | [] -> USet.create ()
+      | [ r ] -> USet.clone r
+      | r :: rest ->
+          List.fold_left
+            (fun acc rel ->
+              (* Build index: c -> list of d where (c, d) in rel *)
+              let index = adjacency_list_map rel in
+              (* Compose using index *)
+              let result = USet.create () in
+                USet.iter
+                  (fun (a, b) ->
+                    match Hashtbl.find_opt index b with
+                    | Some ds ->
+                        List.iter (fun d -> USet.add result (a, d) |> ignore) ds
+                    | None -> ()
+                  )
+                  acc;
+                result
+            )
+            (USet.clone r) rest
+    in
+      composition
 
   let compose_adj_map (rels : ('a t * ('a, 'a USet.t) Hashtbl.t) list) : 'a t =
-    let landmark = Landmark.register "URelation.compose" in
-      Landmark.enter landmark;
-      let composition =
-        match rels with
-        | [] -> USet.create ()
-        | [ (r, _) ] -> USet.clone r
-        | (r, _) :: rest ->
-            List.fold_left
-              (fun acc (r, index) ->
-                let result = USet.create () in
-                  USet.iter
-                    (fun (a, b) ->
-                      match Hashtbl.find_opt index b with
-                      | Some ds ->
-                          USet.iter
-                            (fun d -> USet.add result (a, d) |> ignore)
-                            ds
-                      | None -> ()
-                    )
-                    acc;
-                  result
-              )
-              (USet.clone r) rest
-      in
-        Landmark.exit landmark;
-        composition
+    let composition =
+      match rels with
+      | [] -> USet.create ()
+      | [ (r, _) ] -> USet.clone r
+      | (r, _) :: rest ->
+          List.fold_left
+            (fun acc (r, index) ->
+              let result = USet.create () in
+                USet.iter
+                  (fun (a, b) ->
+                    match Hashtbl.find_opt index b with
+                    | Some ds ->
+                        USet.iter (fun d -> USet.add result (a, d) |> ignore) ds
+                    | None -> ()
+                  )
+                  acc;
+                result
+            )
+            (USet.clone r) rest
+    in
+      composition
 
   let identity s = USet.map (fun x -> (x, x)) s
   let inverse s = USet.map (fun (a, b) -> (b, a)) s
 
   let transitive_closure s =
-    let landmark = Landmark.register "URelation.transitive_closure" in
-      Landmark.enter landmark;
-      let result = USet.clone s in
-      let changed = ref true in
-        while !changed do
-          changed := false;
-          let vals = USet.to_list result in
-            List.iter
-              (fun (a, b) ->
-                List.iter
-                  (fun (c, d) ->
-                    if b = c && not (USet.mem result (a, d)) then (
-                      USet.add result (a, d) |> ignore;
-                      changed := true;
-                      ()
-                    )
+    let result = USet.clone s in
+    let changed = ref true in
+      while !changed do
+        changed := false;
+        let vals = USet.to_list result in
+          List.iter
+            (fun (a, b) ->
+              List.iter
+                (fun (c, d) ->
+                  if b = c && not (USet.mem result (a, d)) then (
+                    USet.add result (a, d) |> ignore;
+                    changed := true;
+                    ()
                   )
-                  vals
-              )
-              vals
-        done;
-        Landmark.exit landmark;
-        result
+                )
+                vals
+            )
+            vals
+      done;
+      result
 
   let transitive_reduction rel =
     USet.filter
@@ -830,23 +817,17 @@ end = struct
   let symmetric_closure s = inverse s |> USet.union s
 
   let acyclic s =
-    let landmark = Landmark.register "URelation.acyclic" in
-      Landmark.enter landmark;
-      let s_tc = transitive_closure s in
-      let result = USet.for_all (fun (a, b) -> not (a = b)) s_tc in
-        Landmark.exit landmark;
-        result
+    let s_tc = transitive_closure s in
+    let result = USet.for_all (fun (a, b) -> not (a = b)) s_tc in
+      result
 
   let is_irreflexive s = USet.for_all (fun (a, b) -> not (a = b)) s
 
   let is_function s =
-    let landmark = Landmark.register "URelation.is_function" in
-      Landmark.enter landmark;
-      let result =
-        USet.for_all
-          (fun a -> USet.size (USet.filter (fun (x, _) -> x = a) s) <= 1)
-          (pi_1 s)
-      in
-        Landmark.exit landmark;
-        result
+    let result =
+      USet.for_all
+        (fun a -> USet.size (USet.filter (fun (x, _) -> x = a) s) <= 1)
+        (pi_1 s)
+    in
+      result
 end

@@ -594,7 +594,7 @@ module ConditionChecker = struct
             set_result && rf_ok
         else set_result
     with Failure msg ->
-      Logs.err (fun m -> m "Error evaluating set expression: %s" msg);
+      Logs_safe.err (fun m -> m "Error evaluating set expression: %s" msg);
       false
 
   (** [check_with_solver cond_expr rf_conditions execution] uses SMT solver.
@@ -607,7 +607,7 @@ module ConditionChecker = struct
       @param execution The execution.
       @return Promise of [true] if satisfiable. *)
   let check_with_solver cond_expr rf_conditions structure execution =
-    Logs.debug (fun m ->
+    Logs_safe.debug (fun m ->
         m "Checking condition with solver: %s\n%s" (show_expr cond_expr)
           (show_symbolic_execution execution)
     );
@@ -647,7 +647,7 @@ module ConditionChecker = struct
       in
       let cond_expr_and_rf_conditions = inst_cond_expr @ rf_conditions in
       let is_sat = Solver.is_sat cond_expr_and_rf_conditions in
-        Logs.debug (fun m -> m "Solver result: %b" is_sat);
+        Logs_safe.debug (fun m -> m "Solver result: %b" is_sat);
         is_sat
 
   (** [check_condition cond_expr structure execution] checks if condition holds.
@@ -1093,7 +1093,7 @@ module AssertionChecker = struct
       @param structure The event structure.
       @return Promise of assertion result. *)
   let check_model_assertion model executions structure =
-    Logs.info (fun m -> m "Using memory model: %s" model);
+    Logs_safe.info (fun m -> m "Using memory model: %s" model);
     (* Run UB validation even for model assertions *)
     let%lwt ub_reasons, execution_results =
       run_ub_validation_all executions structure
@@ -1213,7 +1213,7 @@ module AssertionChecker = struct
       @return Promise of assertion result. *)
   let check_outcome_assertion outcome condition model executions structure
       ~exhaustive =
-    Logs.info (fun m ->
+    Logs_safe.info (fun m ->
         m "Checking assertion: %s (%s)"
           (string_of_outcome outcome)
           ( match condition with
@@ -1249,7 +1249,7 @@ module AssertionChecker = struct
           compute_validity outcome is_ub_assertion satisfied expected ub
         in
 
-        Logs.info (fun m -> m "Assertion result: valid=%b, ub=%b" valid ub);
+        Logs_safe.info (fun m -> m "Assertion result: valid=%b, ub=%b" valid ub);
 
         Lwt.return
           {
@@ -1270,7 +1270,9 @@ module AssertionChecker = struct
       @param structure The event structure.
       @return Promise of assertion result. *)
   let check_chained_assertion model outcome rest executions structure =
-    Logs.info (fun m -> m "Performing refinement check for chained assertion");
+    Logs_safe.info (fun m ->
+        m "Performing refinement check for chained assertion"
+    );
 
     (* Run UB validation on all executions *)
     let%lwt ub_reasons, execution_results =
@@ -1388,7 +1390,7 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
             ctx.assertion_instances <- assertion_result.assertion_instances;
             Lwt.return ctx
     | _ ->
-        Logs.err (fun m ->
+        Logs_safe.err (fun m ->
             m "Event structure or executions not available for assertion check."
         );
         Lwt.return ctx

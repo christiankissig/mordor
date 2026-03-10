@@ -28,6 +28,7 @@
   justifications
   lexer
   lwt_utils
+  logs_safe
   monad
   parse
   parser

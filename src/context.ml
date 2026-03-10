@@ -359,7 +359,7 @@ type mordor_ctx = {
   mutable source_spans : event_source_code_span option;
       (** Source code locations for events *)
   (* Justifications *)
-  mutable justifications : justification USet.t option;
+  mutable justifications : justification list option;
       (** Justification relations (for RC11/promising semantics) *)
   (* Executions *)
   mutable executions : symbolic_execution USet.t option;
@@ -505,11 +505,11 @@ let model_names =
     @param model Model name to apply *)
 let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
   ctx.options.model <- model;
-  Logs.info (fun m -> m "applying model options for model %s" model);
+  Logs_safe.info (fun m -> m "applying model options for model %s" model);
   Hashtbl.find_opt model_options_table model
   |> Option.map (fun options -> options.coherent)
   |> Option.value ~default:None
   |> Option.iter (fun coherent ->
-      Logs.debug (fun m -> m "setting coherent %s" coherent);
+      Logs_safe.debug (fun m -> m "setting coherent %s" coherent);
       ctx.options.coherent <- coherent
   )

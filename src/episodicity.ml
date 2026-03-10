@@ -47,7 +47,7 @@ type episodicity_cache = {
       (** Source span mapping for symbolic events *)
   mutable fwd_es_ctx : Forwarding.event_structure_context;
       (** Forwarding context for symbolic event structure *)
-  mutable justifications : justification uset;
+  mutable justifications : justification list;
       (** Justifications for symbolic event structure *)
 }
 
@@ -480,10 +480,10 @@ module BranchCondition = struct
       @param loop_id The identifier of the loop to check
       @return A condition result indicating satisfaction and any violations *)
   let check cache (loop_id : int) : condition_result Lwt.t =
-    Logs.debug (fun m -> m "Checking Condition 3 for Loop %d..." loop_id);
+    Logs_safe.debug (fun m -> m "Checking Condition 3 for Loop %d..." loop_id);
     let { program; structure; source_spans; _ } = cache in
     let structure = structure in
-      Logs.debug (fun m ->
+      Logs_safe.debug (fun m ->
           m "Symbolic Event Structure:\n%s"
             (show_symbolic_event_structure structure)
       );
@@ -494,7 +494,7 @@ module BranchCondition = struct
       let branch_events_in_loop =
         USet.intersection events_in_loop structure.branch_events
       in
-        Logs.debug (fun m ->
+        Logs_safe.debug (fun m ->
             m "  Found %d events in loop" (USet.size events_in_loop)
         );
         USet.iter
@@ -518,7 +518,7 @@ module BranchCondition = struct
                 )
                 symbols
             in
-              Logs.debug (fun m ->
+              Logs_safe.debug (fun m ->
                   m
                     "  Event %d: Found %d branch condition symbols read before \
                      loop"
@@ -596,11 +596,11 @@ module EventsCondition = struct
         |> USet.union fwd_es_ctx.ppo.ppo_base
       in
       let dp =
-        USet.fold
+        List.fold_left
           (fun acc just ->
             Freeze.freeze_dp structure just |> USet.inplace_union acc
           )
-          justifications (USet.create ())
+          (USet.create ()) justifications
       in
       let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
 
@@ -786,7 +786,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
           let* () =
             Lwt_list.iter_s
               (fun loop_id ->
-                Logs.info (fun m -> m "Analyzing Loop %d..." loop_id);
+                Logs_safe.info (fun m -> m "Analyzing Loop %d..." loop_id);
                 let* episodic_result =
                   check_loop_episodicity symbolic_ctx cache loop_id
                 in
@@ -797,7 +797,9 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                         result :: !loop_episodicity_results;
                       Lwt.return_unit
                   | None ->
-                      Logs.info (fun m -> m "Loop %d: Could not analyze" loop_id);
+                      Logs_safe.info (fun m ->
+                          m "Loop %d: Could not analyze" loop_id
+                      );
                       Hashtbl.add is_episodic_table loop_id false;
                       Lwt.return_unit
               )
@@ -814,7 +816,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
               };
           Lwt.return ctx
     | None ->
-        Logs.warn (fun m ->
+        Logs_safe.warn (fun m ->
             m "No program statements available for episodicity analysis"
         );
         Lwt.return ctx

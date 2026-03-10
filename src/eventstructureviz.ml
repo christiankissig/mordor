@@ -801,7 +801,7 @@ module EventStructureViz = struct
               close_out oc;
               Some content
     | _ ->
-        Logs.err (fun m -> m "Unsupported output format for visualization.");
+        Logs_safe.err (fun m -> m "Unsupported output format for visualization.");
         None
 end
 
@@ -829,12 +829,12 @@ let step_visualize_event_structure (lwt_ctx : mordor_ctx Lwt.t) :
           structure ctx.executions
       in
         ctx.output <- output;
-        Logs.info (fun m ->
+        Logs_safe.info (fun m ->
             m "Event structure visualization written to %s" ctx.output_file
         );
         Lwt.return ctx
   | None ->
-      Logs.err (fun m ->
+      Logs_safe.err (fun m ->
           m "Event structure or events not available for visualization."
       );
       Lwt.return ctx
@@ -884,10 +884,12 @@ let step_send_event_structure_graph ~(send_data : string -> unit Lwt.t)
         Yojson.Safe.to_string (EventStructureViz.graph_message_to_yojson message)
       in
         let* () = send_data es_message in
-          Logs.info (fun m -> m "Event structure graph sent after interpret");
+          Logs_safe.info (fun m ->
+              m "Event structure graph sent after interpret"
+          );
           Lwt.return ctx
   | None ->
-      Logs.err (fun m ->
+      Logs_safe.err (fun m ->
           m "Event structure not available for visualization after interpret."
       );
       Lwt.return ctx
@@ -1012,10 +1014,12 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
             Lwt.return_unit
       in
 
-      Logs.info (fun m -> m "Execution graphs sent after dependency calculation");
+      Logs_safe.info (fun m ->
+          m "Execution graphs sent after dependency calculation"
+      );
       Lwt.return ctx
   | None ->
-      Logs.err (fun m ->
+      Logs_safe.err (fun m ->
           m "Event structure not available for execution graph streaming."
       );
       Lwt.return ctx

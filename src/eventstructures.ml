@@ -37,7 +37,7 @@ module SymbolicEventStructure = struct
 
   let dot (event : event) structure phi defacto : symbolic_event_structure =
     if List.exists (fun p -> p = EBoolean false) phi then
-      Logs.warn (fun m ->
+      Logs_safe.warn (fun m ->
           m "Adding event %d under unsatisfiable path condition.\n" event.label
       );
     Hashtbl.replace structure.restrict event.label phi;
@@ -308,7 +308,7 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
       USet.set_minus all_events has_predecessor
   in
 
-  Logs.debug (fun m ->
+  Logs_safe.debug (fun m ->
       m "Generating paths from roots: %s"
         (String.concat ", " (USet.values (USet.map (Printf.sprintf "%d") roots)))
   );
@@ -332,7 +332,7 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
           { path; p }
     )
   in
-    Logs.debug (fun m ->
+    Logs_safe.debug (fun m ->
         m "Generated %d paths through the control flow" (List.length paths)
     );
     paths
@@ -341,32 +341,29 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
    prevents r reading from shadowed writes w.*)
 (* TODO optimize; pregenerate *)
 let dslwb structure w r =
-  let landmark = Landmark.register "dslwb" in
-    Landmark.enter landmark;
-    let write_events = structure.write_events in
-    let r_restrict =
-      Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
-    in
-    let result =
-      USet.exists
-        (fun (w2, r2) ->
-          if
-            r2 = r (* w2 po bfore r *)
-            && w2 <> w (* w2 is not w *)
-            && USet.mem write_events w2 (* w2 is a write *)
-            && USet.mem structure.po (w, w2)
-            (* w2 po after w, thus in between w and r *)
-          then
-            (* w2 potentially shadows w *)
-            match (get_loc structure w, get_loc structure w2) with
-            | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
-            | _ -> false
-          else false
-        )
-        structure.po
-    in
-      Landmark.exit landmark;
-      result
+  let write_events = structure.write_events in
+  let r_restrict =
+    Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
+  in
+  let result =
+    USet.exists
+      (fun (w2, r2) ->
+        if
+          r2 = r (* w2 po bfore r *)
+          && w2 <> w (* w2 is not w *)
+          && USet.mem write_events w2 (* w2 is a write *)
+          && USet.mem structure.po (w, w2)
+          (* w2 po after w, thus in between w and r *)
+        then
+          (* w2 potentially shadows w *)
+          match (get_loc structure w, get_loc structure w2) with
+          | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
+          | _ -> false
+        else false
+      )
+      structure.po
+  in
+    result
 
 let init_ppo structure =
   let events = structure.events in
