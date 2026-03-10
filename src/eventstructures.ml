@@ -358,7 +358,14 @@ let dslwb structure w r =
           (* w2 potentially shadows w *)
           match (get_loc structure w, get_loc structure w2) with
           | Some loc, Some loc2 -> Solver.exeq ~state:r_restrict loc loc2
-          | _ -> false
+          | None, Some loc2 -> (
+              if w > 0 then false
+              else
+                match get_loc structure r with
+                | Some locr -> Solver.exeq ~state:r_restrict loc2 locr
+                | None -> false
+            )
+          | _, _ -> false
         else false
       )
       structure.po
