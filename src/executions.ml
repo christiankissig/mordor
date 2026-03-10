@@ -703,15 +703,12 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
 
   (* Check 1.1: Various consistency checks *)
   let delta =
-    USet.inplace_union
+    USet.union
       (List.fold_left
-         (fun acc j -> USet.inplace_union acc j.fwd)
+         (fun acc j -> USet.union acc j.fwd)
          (USet.create ()) j_list
       )
-      (List.fold_left
-         (fun acc j -> USet.inplace_union acc j.we)
-         (USet.create ()) j_list
-      )
+      (List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list)
   in
 
   Logs_safe.debug (fun m ->
@@ -824,9 +821,9 @@ let instantiate_execution (structure : symbolic_event_structure) path dp ppo
 
           let execution_predicates =
             USet.of_list p_combined
-            |> USet.inplace_union env_rf
-            |> USet.inplace_union check_rf
-            |> USet.inplace_union disj
+            |> USet.union env_rf
+            |> USet.union check_rf
+            |> USet.union disj
             |> USet.filter (fun e -> not (Expr.equal e (EBoolean true)))
             |> USet.values
             |> List.sort Expr.compare
@@ -986,8 +983,8 @@ let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
               in
               let combined_preds =
                 USet.of_list p_combined
-                |> USet.inplace_union env_rf
-                |> USet.inplace_union check_rf
+                |> USet.union env_rf
+                |> USet.union check_rf
                 |> USet.values
               in
                 Solver.is_sat_cached combined_preds
@@ -1081,10 +1078,10 @@ module Freeze = struct
     in
 
     let ppo =
-      List.fold_left USet.inplace_union (USet.create ()) ppos
-      |> USet.inplace_union (ForwardingContext.ppo_sync fwd_ctx)
-      |> USet.inplace_union fwd_es_ctx.ppo.ppo_init
-      |> USet.inplace_union ppo_loc
+      List.fold_left USet.union (USet.create ()) ppos
+      |> USet.union (ForwardingContext.ppo_sync fwd_ctx)
+      |> USet.union fwd_es_ctx.ppo.ppo_init
+      |> USet.union ppo_loc
       |> USet.intersection e_squared
       |> URelation.transitive_closure
     in
@@ -1144,14 +1141,10 @@ module Freeze = struct
 
     (* Compute combined fwd and we *)
     let fwd =
-      USet.fold
-        (fun acc just -> USet.inplace_union acc just.fwd)
-        justs (USet.create ())
+      USet.fold (fun acc just -> USet.union acc just.fwd) justs (USet.create ())
     in
     let we =
-      USet.fold
-        (fun acc just -> USet.inplace_union acc just.we)
-        justs (USet.create ())
+      USet.fold (fun acc just -> USet.union acc just.we) justs (USet.create ())
     in
     let delta = USet.union fwd we in
 
@@ -1175,9 +1168,9 @@ module Freeze = struct
     let p_combined =
       USet.map (fun j -> USet.of_list j.p) justs
       |> USet.flatten
-      |> USet.inplace_union (USet.of_list fwd_ctx.psi)
-      |> USet.inplace_union (USet.of_list path.p)
-      |> USet.inplace_union (USet.of_list statex)
+      |> USet.union (USet.of_list fwd_ctx.psi)
+      |> USet.union (USet.of_list path.p)
+      |> USet.union (USet.of_list statex)
       |> USet.values
       |> List.sort Expr.compare
     in
@@ -1408,22 +1401,23 @@ let generate_executions ?(include_rf = true)
       justs;
 
     let stream_freeze input_stream =
+      let* input_stream = input_stream in
       let freeze_just_combo (path, just_combo) =
         let fwd =
           List.fold_left
-            (fun acc j -> USet.inplace_union acc j.fwd)
+            (fun acc j -> USet.union acc j.fwd)
             (USet.create ()) just_combo
         in
         let we =
           List.fold_left
-            (fun acc j -> USet.inplace_union acc j.we)
+            (fun acc j -> USet.union acc j.we)
             (USet.create ()) just_combo
         in
         let con = ForwardingContext.create fwd_es_ctx ~fwd ~we () in
         let j_remapped =
           List.map (fun j -> ForwardingContext.remap_just con j) just_combo
         in
-        let elided = URelation.pi_2 (USet.inplace_union fwd we) in
+        let elided = URelation.pi_2 (USet.union fwd we) in
         let constraints =
           List.flatten (List.map (fun (j : justification) -> j.p) just_combo)
         in
@@ -1442,11 +1436,41 @@ let generate_executions ?(include_rf = true)
           freeze_results
       in
 
+      let compute input_stream =
+        List.concat_map freeze_just_combo input_stream |> Lwt.return
+      in
+
+      let compute_parallel input_stream =
+        let pool = Lwt_domain.setup_pool 10 in
+        let promises =
+          List.map
+            (fun item ->
+              Lwt_domain.detach pool
+                (fun () ->
+                  match freeze_just_combo item with
+                  | result -> result
+                  | exception exn ->
+                      let bt = Printexc.get_raw_backtrace () in
+                        Printf.eprintf "Error in freeze_just_combo: %s\n%s%!"
+                          (Printexc.to_string exn)
+                          (Printexc.raw_backtrace_to_string bt);
+                        Printexc.raise_with_backtrace exn bt
+                )
+                ()
+            )
+            input_stream
+        in
+          let* results = Lwt.all promises in
+            Lwt_domain.teardown_pool pool;
+            Lwt.return (List.flatten results)
+      in
+
       (* Use map_list_s to handle the list results and flatten them into the stream *)
-      List.concat_map freeze_just_combo input_stream
+      compute_parallel input_stream
     in
 
     let stream_freeze_to_execution input_stream =
+      let* input_stream = input_stream in
       let id = ref 0 in
       let freeze_to_execution (freeze_res : FreezeResult.t) =
         (* Fixed point computation for RF mapping *)
@@ -1541,16 +1565,40 @@ let generate_executions ?(include_rf = true)
           exec
       in
 
-      List.map freeze_to_execution input_stream
-    in
+      let compute input_stream =
+        List.map freeze_to_execution input_stream |> Lwt.return
+      in
 
-    let stream_filter_coherent_executions input_stream =
-      List.filter
-        (fun exec -> check_for_coherence structure exec restrictions)
-        input_stream
+      let compute_parallel input_stream =
+        let pool = Lwt_domain.setup_pool 10 in
+        let promises =
+          List.map
+            (fun item ->
+              Lwt_domain.detach pool
+                (fun () ->
+                  match freeze_to_execution item with
+                  | result -> result
+                  | exception exn ->
+                      let bt = Printexc.get_raw_backtrace () in
+                        Printf.eprintf "Error in freeze_to_execution: %s\n%s%!"
+                          (Printexc.to_string exn)
+                          (Printexc.raw_backtrace_to_string bt);
+                        Printexc.raise_with_backtrace exn bt
+                )
+                ()
+            )
+            input_stream
+        in
+          let* results = Lwt.all promises in
+            Lwt_domain.teardown_pool pool;
+            Lwt.return results
+      in
+
+      compute_parallel input_stream
     in
 
     let dedup_freeze_results stream =
+      let* stream = stream in
       let seen = FreezeResultCache.create 1024 in
 
       List.filter_map
@@ -1562,23 +1610,11 @@ let generate_executions ?(include_rf = true)
           end
         )
         stream
-    in
-
-    let dedup_executions stream =
-      let seen = ExecutionCache.create 1024 in
-
-      List.filter_map
-        (fun ex ->
-          if ExecutionCache.mem seen ex then None
-          else begin
-            ExecutionCache.add seen ex ();
-            Some ex
-          end
-        )
-        stream
+      |> Lwt.return
     in
 
     let keep_minimal_freeze_results fr_list =
+      let* fr_list = fr_list in
       let indexed_list = List.mapi (fun i fr -> (i, fr)) fr_list in
         List.filter_map
           (fun (i, fr1) ->
@@ -1592,9 +1628,11 @@ let generate_executions ?(include_rf = true)
               else Some fr1 (* Keep if NOT contained by any other *)
           )
           indexed_list
+        |> Lwt.return
     in
 
     let keep_minimal_executions exec_list =
+      let* exec_list = exec_list in
       let indexed_list = List.mapi (fun i exec -> (i, exec)) exec_list in
         List.filter_map
           (fun (i, exec1) ->
@@ -1608,45 +1646,83 @@ let generate_executions ?(include_rf = true)
               else Some exec1 (* Keep if NOT contained by any other *)
           )
           indexed_list
+        |> Lwt.return
+    in
+
+    let dedup_executions stream =
+      let* stream = stream in
+      let seen = ExecutionCache.create 1024 in
+
+      List.filter_map
+        (fun ex ->
+          if ExecutionCache.mem seen ex then None
+          else begin
+            ExecutionCache.add seen ex ();
+            Some ex
+          end
+        )
+        stream
+      |> Lwt.return
+    in
+
+    let stream_filter_coherent_executions input_stream =
+      let* input_stream = input_stream in
+      let compute input_stream =
+        List.filter_map
+          (fun exec ->
+            if check_for_coherence structure exec restrictions then Some exec
+            else None
+          )
+          input_stream
+        |> Lwt.return
+      in
+
+      let compute_parallel input_stream =
+        let pool = Lwt_domain.setup_pool 10 in
+        let promises =
+          List.map
+            (fun item ->
+              Lwt_domain.detach pool
+                (fun () ->
+                  match check_for_coherence structure item restrictions with
+                  | true -> Some item
+                  | false -> None
+                  | exception exn ->
+                      let bt = Printexc.get_raw_backtrace () in
+                        Printf.eprintf "Error in check_for_coherence: %s\n%s%!"
+                          (Printexc.to_string exn)
+                          (Printexc.raw_backtrace_to_string bt);
+                        Printexc.raise_with_backtrace exn bt
+                )
+                ()
+            )
+            input_stream
+        in
+          let* results = Lwt.all promises in
+            Lwt_domain.teardown_pool pool;
+            Lwt.return (List.filter_map Fun.id results)
+      in
+
+      compute_parallel input_stream
     in
 
     (* Build justcombos for all paths *)
-    let* combinations =
+    let* executions =
       compute_justification_combinations fwd_es_ctx structure paths statex
         justmap
+      |> stream_freeze
+      |> dedup_freeze_results
+      |> keep_minimal_freeze_results
+      |> stream_freeze_to_execution
+      |> dedup_executions
+      |> stream_filter_coherent_executions
+      |> keep_minimal_executions
     in
-    let freeze_results =
-      combinations |> stream_freeze |> dedup_freeze_results
-    in
-
-    Logs_safe.debug (fun m ->
-        m "Generated %d freeze results before minimization"
-          (List.length freeze_results)
-    );
-
-    let minimal_freeze_results = keep_minimal_freeze_results freeze_results in
       Logs_safe.debug (fun m ->
-          m "Minimized to %d freeze results" (List.length minimal_freeze_results)
+          m "Minimized to %d executions" (List.length executions)
       );
 
-      let executions =
-        minimal_freeze_results
-        |> stream_freeze_to_execution
-        |> dedup_executions
-        |> stream_filter_coherent_executions
-      in
-
-      Logs_safe.debug (fun m ->
-          m "Generated %d executions after coherence filtering"
-            (List.length executions)
-      );
-
-      let minimal_executions = keep_minimal_executions executions in
-        Logs_safe.debug (fun m ->
-            m "Minimized to %d executions" (List.length minimal_executions)
-        );
-
-        Lwt.return minimal_executions
+      Lwt.return executions
 
 (** Calculate dependencies and justifications *)
 
