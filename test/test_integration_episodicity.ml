@@ -284,80 +284,116 @@ let run_cli_episodicity filepath =
       in
         (status, List.rev !output)
 
+(* Per-loop expectation: check a specific loop by its id *)
+type loop_expectation = {
+  loop_id : int;
+  expected_episodic : bool;
+  expected_failing_conditions : int list;
+      (* Condition numbers expected to fail for this loop *)
+}
+
 (* Test specification type *)
 type episodicity_test_spec = {
   filepath : string;
-  expected_episodic : bool option; (* None means don't check *)
-  expected_failing_conditions : int list;
-      (* List of condition numbers expected to fail *)
+  loop_expectations : loop_expectation list;
+      (* Per-loop expectations; loops not listed are not checked *)
   description : string;
 }
+
+(* Convenience constructors *)
+
+(* Single-loop file where the one loop should be episodic *)
+let single_episodic filepath description =
+  {
+    filepath;
+    loop_expectations = [ { loop_id = 1; expected_episodic = true; expected_failing_conditions = [] } ];
+    description;
+  }
+
+(* Single-loop file where the one loop fails *)
+let single_failing filepath failing_conditions description =
+  {
+    filepath;
+    loop_expectations =
+      [ { loop_id = 1; expected_episodic = false; expected_failing_conditions = failing_conditions } ];
+    description;
+  }
 
 (* Predefined test specifications *)
 let test_specifications =
   [
     (* register condition *)
-    {
-      filepath = "programs/episodicity/register_condition/fail.lit";
-      expected_episodic = Some false;
-      expected_failing_conditions = [ 1 ];
-      description =
-        "Register condition failure - loop reads pre-loop symbol without \
-         separation";
-    };
+    single_failing
+      "programs/episodicity/register_condition/fail.lit"
+      [ 1 ]
+      "Register condition failure - loop reads pre-loop symbol without separation";
+
     (* branch condition *)
-    {
-      filepath = "programs/episodicity/branch_condition/fail.lit";
-      expected_episodic = Some false;
-      expected_failing_conditions = [ 3 ];
-      description = "Branch condition failure - constrains pre-loop symbol";
-    };
-    {
-      filepath = "programs/episodicity/branch_condition/nested_fail.lit";
-      expected_episodic = Some false;
-      expected_failing_conditions = [ 3; 4 ];
-      description =
-        "Branch condition failure - nested loop constrains pre-loop symbol";
-    };
+    single_failing
+      "programs/episodicity/branch_condition/fail.lit"
+      [ 3 ]
+      "Branch condition failure - constrains pre-loop symbol";
+
+    single_failing
+      "programs/episodicity/branch_condition/nested_fail.lit"
+      [ 3; 4 ]
+      "Branch condition failure - nested loop constrains pre-loop symbol";
+
     (* events condition *)
-    {
-      filepath = "programs/episodicity/events_condition/two_reads_fail.lit";
-      expected_episodic = Some false;
-      expected_failing_conditions = [ 4 ];
-      description =
-        "Event ordering failure - iterations don't separate two reads ";
-    };
-    {
-      filepath = "programs/episodicity/events_condition/cas_inc_loop.lit";
-      expected_episodic = Some true;
-      expected_failing_conditions = [];
-      description =
-        "Valid episodic loop with RMW events - should be episodic with no \
-         failing conditions";
-    };
+    single_failing
+      "programs/episodicity/events_condition/two_reads_fail.lit"
+      [ 4 ]
+      "Event ordering failure - iterations don't separate two reads";
+
+    single_episodic
+      "programs/episodicity/events_condition/cas_inc_loop.lit"
+      "Valid episodic loop with RMW events - should be episodic with no failing conditions";
+
     (* multiple violations *)
-    {
-      filepath = "programs/episodicity/multiple/register_events_fail.lit";
-      expected_episodic = Some false;
-      expected_failing_conditions = [ 1; 4 ];
-      description =
-        "Multiple condition failures - register and write conditions fail";
-    };
+    single_failing
+      "programs/episodicity/multiple/register_events_fail.lit"
+      [ 1; 4 ]
+      "Multiple condition failures - register and write conditions fail";
+
     (* valid cases *)
+    single_episodic
+      "programs/episodicity/valid/read.lit"
+      "Valid episodic loop - should be episodic with no failing conditions";
+
+    single_episodic
+      "programs/episodicity/valid/write_only.lit"
+      "Valid episodic loop with only writes - should be episodic with no failing conditions";
+
+    (* real-world locking protocols *)
+    single_episodic
+      "programs/episodicity/seqlock-1.lit"
+      "Seqlock - Loop 1 is episodic";
+
+    single_episodic
+      "programs/episodicity/spinlock-1.lit"
+      "Spinlock - Loop 1 is episodic";
+
     {
-      filepath = "programs/episodicity/valid/read.lit";
-      expected_episodic = Some true;
-      expected_failing_conditions = [];
-      description =
-        "Valid episodic loop - should be episodic with no failing conditions";
+      filepath = "programs/episodicity/hp-1.lit";
+      loop_expectations =
+        [
+          { loop_id = 1; expected_episodic = true;  expected_failing_conditions = [] };
+          { loop_id = 2; expected_episodic = true;  expected_failing_conditions = [] };
+          { loop_id = 3; expected_episodic = false; expected_failing_conditions = [ 1 ] };
+        ];
+      description = "Hazard pointers - Loops 1 and 2 episodic, Loop 3 fails Condition 1";
     };
+
     {
-      filepath = "programs/episodicity/valid/write_only.lit";
-      expected_episodic = Some true;
-      expected_failing_conditions = [];
-      description =
-        "Valid episodic loop with only writes - should be episodic with no \
-         failing conditions";
+      filepath = "programs/episodicity/rcu-1.lit";
+      loop_expectations =
+        [
+          { loop_id = 1; expected_episodic = true; expected_failing_conditions = [] };
+          { loop_id = 2; expected_episodic = true; expected_failing_conditions = [] };
+          { loop_id = 3; expected_episodic = true; expected_failing_conditions = [] };
+          { loop_id = 4; expected_episodic = true; expected_failing_conditions = [] };
+        ];
+      description = "RCU - Loops 1, 2, 3, 4 are all episodic";
     };
   ]
 
@@ -391,8 +427,18 @@ let test_episodicity_spec spec () =
     true
     (String.length output_str > 0);
 
-  (* Parse the episodicity results *)
+  (* Parse the episodicity results, indexed by loop_id for O(1) lookup *)
   let results = parse_episodicity_output output in
+  let results_by_id =
+    List.fold_left
+      (fun acc (r : episodicity_result) -> List.cons (r.loop_id, r) acc)
+      []
+      results
+  in
+  let find_loop id =
+    try Some (List.assoc id results_by_id)
+    with Not_found -> None
+  in
 
   (* Debug: print parsing results *)
   if List.length results = 0 then
@@ -405,62 +451,53 @@ let test_episodicity_spec spec () =
     true
     (List.length results > 0);
 
-  (* Check episodicity status if expected *)
-  ( match (spec.expected_episodic, results) with
-  | Some expected, _ :: _ ->
-      (* Use the last result (most complete from structured output) *)
-      let result = List.hd (List.rev results) in
-        Alcotest.(check bool)
-          (Printf.sprintf "Loop should %sbe episodic in %s"
-             (if expected then "" else "not ")
-             (Filename.basename spec.filepath)
-          )
-          expected result.is_episodic;
-
-        (* Report result *)
-        if result.is_episodic then
-          Printf.printf "✓ %s: Loop %d is EPISODIC\n"
-            (Filename.basename spec.filepath)
-            result.loop_id
-        else
-          Printf.printf "✗ %s: Loop %d is NOT EPISODIC (expected)\n"
-            (Filename.basename spec.filepath)
-            result.loop_id
-  | None, _ -> ()
-  | Some _, [] ->
-      Alcotest.fail
-        (Printf.sprintf "No loop analysis results found for %s" spec.filepath)
-  );
-
-  (* Check failing conditions if specified *)
-  if List.length spec.expected_failing_conditions > 0 then
-    match results with
-    | _ :: _ ->
-        (* Use the last result (most complete from structured output) *)
-        let result = List.hd (List.rev results) in
-        let failing_conditions =
-          List.filter (fun c -> not c.satisfied) result.conditions
-          |> List.map (fun c -> c.condition_num)
-        in
-        let expected_set = List.sort compare spec.expected_failing_conditions in
-        let actual_set = List.sort compare failing_conditions in
-          Alcotest.(check (list int))
-            (Printf.sprintf "Should have expected failing conditions in %s"
+  (* Check each per-loop expectation independently *)
+  List.iter
+    (fun exp ->
+      match find_loop exp.loop_id with
+      | None ->
+          Alcotest.fail
+            (Printf.sprintf "Loop %d not found in output for %s"
+               exp.loop_id (Filename.basename spec.filepath))
+      | Some result ->
+          (* Check episodicity *)
+          Alcotest.(check bool)
+            (Printf.sprintf "%s: Loop %d should %sbe episodic"
                (Filename.basename spec.filepath)
-            )
-            expected_set actual_set;
+               exp.loop_id
+               (if exp.expected_episodic then "" else "not "))
+            exp.expected_episodic result.is_episodic;
 
-          (* Report violations *)
-          List.iter
-            (fun c ->
-              if not c.satisfied then
-                Printf.printf "  Condition %d: %d violation(s)\n"
-                  c.condition_num c.violation_count
-            )
-            result.conditions
-    | [] ->
-        Alcotest.fail
-          (Printf.sprintf "No loop analysis results found for %s" spec.filepath)
+          (* Report *)
+          if result.is_episodic then
+            Printf.printf "✓ %s: Loop %d is EPISODIC\n"
+              (Filename.basename spec.filepath) result.loop_id
+          else
+            Printf.printf "✗ %s: Loop %d is NOT EPISODIC (expected)\n"
+              (Filename.basename spec.filepath) result.loop_id;
+
+          (* Check failing conditions if any are expected *)
+          if exp.expected_failing_conditions <> [] then begin
+            let failing_conditions =
+              List.filter (fun c -> not c.satisfied) result.conditions
+              |> List.map (fun c -> c.condition_num)
+            in
+            let expected_set = List.sort compare exp.expected_failing_conditions in
+            let actual_set   = List.sort compare failing_conditions in
+              Alcotest.(check (list int))
+                (Printf.sprintf "%s: Loop %d should have expected failing conditions"
+                   (Filename.basename spec.filepath) exp.loop_id)
+                expected_set actual_set;
+
+              List.iter
+                (fun c ->
+                  if not c.satisfied then
+                    Printf.printf "  Loop %d Condition %d: %d violation(s)\n"
+                      result.loop_id c.condition_num c.violation_count)
+                result.conditions
+          end
+    )
+    spec.loop_expectations
 
 (* Test that only checks for successful execution without specific expectations *)
 let test_episodicity_file filepath () =

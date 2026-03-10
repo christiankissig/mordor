@@ -1,0 +1,92 @@
+name=hp 1
+%%
+// global state
+rC  := malloc 1;
+*rC := 0;
+
+rhp := malloc 1;     // hp[N], N=1
+*rhp := 0;
+
+// rlist as raw pointer + size
+rlist  := malloc 1;  // rlist[0], capacity=1 (rcount < R=1 never triggers scan inline)
+rcount := 0;
+
+// --- inc ---
+// I5
+rn := malloc 1;
+*rn := 0;
+
+do {
+  // I6
+  *rhp := rC;
+
+  // I7-I10: re-load hp[tid] until stable through fence
+  do {
+    rp := *rhp;
+    fence(relacq);   // I8
+    rrC := *rC;
+    *rhp := rrC;               // I9: atomic read of C into hp[tid]
+    rrhp := *rhp
+  } while (rp != rrhp);       // I10
+
+  // I11-I13
+  rs := *rhp;
+  rv := *rs;
+  *rn := rv + 1;
+
+  // I14
+  rcas_succ := cas(acquire, release, rC, rs, rn);
+} while (rcas_succ = 0);      // I15
+
+// I16: clear hazard pointer
+*rhp := 0;
+
+// --- retire(s) inlined ---
+// R1: rlist[rcount] := s
+*(rlist + rcount) := rs;
+// R2
+rcount := rcount + 1;
+
+// R3: if rcount >= R (R=1 for N=1, R=N+1 conventionally; here R=1 so always scan)
+// --- scan inlined ---
+
+// S1-S5: build plist from hp[0..N-1], N=1
+rplist  := malloc 1;
+rpsize  := 0;
+rphp    := *rhp;               // hp[0]
+if (rphp != 0) {
+  *(rplist + rpsize) := rphp;
+  rpsize := rpsize + 1;
+};
+
+// S6: tmplist = rlist
+rtmplist := rlist;
+rtmpsize := rcount;
+
+// S7-S8: clear rlist
+rcount := 0;
+
+// S9-S14: for each node in tmplist (size=1, unrolled)
+rnode := *(rtmplist + 0);
+
+// S10: lookup rnode in plist
+rfound := 0;
+ri := 0;
+do {
+  rentry := *(rplist + ri);
+  if (rentry = rnode) {
+    rfound := 1;
+  };
+  ri := ri + 1;
+} while (ri < rpsize);
+
+// S11-S14
+if (rfound = 0) {
+  free(rnode);                 // S12
+} else {
+  *(rlist + rcount) := rnode; // S13
+  rcount := rcount + 1;       // S14
+};
+
+free(rplist);
+free(rtmplist);
