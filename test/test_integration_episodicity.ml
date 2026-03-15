@@ -500,7 +500,7 @@ let test_episodicity_spec spec () =
               result.loop_id;
 
           (* Check failing conditions if any are expected *)
-          if exp.expected_failing_conditions <> [] then begin
+          if exp.expected_failing_conditions <> [] then (
             let failing_conditions =
               List.filter (fun c -> not c.satisfied) result.conditions
               |> List.map (fun c -> c.condition_num)
@@ -524,7 +524,7 @@ let test_episodicity_spec spec () =
                       result.loop_id c.condition_num c.violation_count
                 )
                 result.conditions
-          end
+          )
     )
     spec.loop_expectations
 

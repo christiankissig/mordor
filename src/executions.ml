@@ -27,9 +27,7 @@ open Uset
 
 (** {1 Basic Types} *)
 
-(** Operations on symbolic executions.
-
-    Provides comparison, hashing, and subsumption checking for executions.
+(** Provides comparison, hashing, and subsumption checking for executions.
     Executions that are subsumed by others can be filtered out to reduce
     redundancy in the final result set. *)
 module Execution : sig
@@ -630,375 +628,399 @@ end
 
 (** {1 Freezing} *)
 
-(** [instantiate_execution structure path dp ppo j_list pp p_combined rf]
-    creates execution from justifications and RF.
+module Freeze = struct
+  (** [compute_path_rf structure path ~elided ~constraints statex ppo dp
+       p_combined] computes candidate read-from relations.
 
-    Validates all consistency constraints and creates a freeze result if
-    successful. This is the core validation step that checks:
-    - RF respects PPO
-    - RF is total and doesn't read elided writes
-    - RHB (reads-happen-before) is acyclic
-    - Atomicity of allocations
-    - Satisfiability of all predicates
+      Generates all valid read-from combinations for the given path by: 1.
+      Filtering potential RF edges by location equality 2. Checking edges don't
+      violate program order 3. Verifying writes aren't shadowed 4. Building
+      combinations incrementally with satisfiability checking
 
-    @param structure The event structure.
-    @param path Current path.
-    @param dp Dependency relation.
-    @param ppo Preserved program order.
-    @param j_list List of justifications.
-    @param pp Path predicates.
-    @param p_combined All combined predicates.
-    @param rf Read-from relation to validate.
-    @return Promise of [Some freeze_result] if valid, [None] otherwise. *)
-let instantiate_execution (structure : symbolic_event_structure) path dp ppo
-    j_list (pp : expr list) p_combined rf elided =
-  Logs_safe.debug (fun m ->
-      m "  [instantiate_execution] Starting validation for RF with %d edges: %s"
-        (USet.size rf)
-        (String.concat ", "
-           (List.map
-              (fun (w, r) -> Printf.sprintf "(%d->%d)" w r)
-              (USet.values rf)
-           )
-        )
-  );
-
-  let ( let*? ) (condition, msg) f =
-    if condition then f ()
-    else (
-      Logs_safe.debug (fun m -> m "  [instantiate_execution] Rejected: %s" msg);
-
-      None
-    )
-  in
-
-  (* remove elided events from execution *)
-  let e = USet.set_minus path.path elided in
-  let e_squared = URelation.cross e e in
-
-  (* Filter dp and ppo to execution events only *)
-  let dp = USet.intersection dp e_squared in
-  let ppo = USet.intersection ppo e_squared in
-
-  let po = USet.intersection structure.po (URelation.cross e e) in
-  let read_events = USet.intersection structure.read_events e in
-  let write_events = USet.intersection structure.write_events e in
-
-  (* Check 3: All rf edges respect ppo_loc *)
-  Logs_safe.debug (fun m ->
-      m "  [instantiate_execution] Checking RF respects PPO (PPO has %d edges)"
-        (USet.size ppo)
-  );
-  let*? () =
-    (ReadFromValidation.rf_respects_ppo rf ppo, "RF edges do not respect PPO")
-  in
-
-  (* Filter RMW relation to execution events and predicates only *)
-  let rmw_filtered =
-    USet.filter
-      (fun (er, expr, ew) -> Solver.exeq ~state:p_combined expr (EBoolean true))
-      structure.rmw
-  in
-  let rmw = USet.map (fun (er, _, ew) -> (er, ew)) rmw_filtered in
-
-  (* Check 1.1: Various consistency checks *)
-  let delta =
-    USet.union
-      (List.fold_left
-         (fun acc j -> USet.union acc j.fwd)
-         (USet.create ()) j_list
-      )
-      (List.fold_left (fun acc j -> USet.union acc j.we) (USet.create ()) j_list)
-  in
-
-  Logs_safe.debug (fun m ->
-      m "  [instantiate_execution] Delta (fwd U we) has %d edges"
-        (USet.size delta)
-  );
-
-  (* TODO this should be given by generation *)
-  let*? () =
-    (ReadFromValidation.check_rf_elided rf delta, "RF fails RF elided check")
-  in
-    Logs_safe.debug (fun m ->
-        m "  [instantiate_execution] RF elided check passed"
-    );
-    let*? () =
-      ( ReadFromValidation.check_rf_total rf read_events delta,
-        "RF fails RF total check"
-      )
+      @param structure The event structure.
+      @param path Current path.
+      @param elided Set of elided events.
+      @param constraints Additional constraints.
+      @param statex Static constraints.
+      @param ppo Preserved program order.
+      @param dp Dependency relation.
+      @param p_combined Combined predicates.
+      @return
+        Promise of list of RF combinations (as lists of [(read, write)] pairs).
+  *)
+  let compute_path_rf structure path ~elided ~constraints statex ppo dp
+      p_combined =
+    let write_events =
+      USet.intersection structure.write_events path.path |> fun e ->
+      USet.set_minus e elided |> fun e -> USet.add e 0 (* include init write *)
     in
-      Logs_safe.debug (fun m ->
-          m
-            "  [instantiate_execution] RF total check passed (reads: %d, RF \
-             edges: %d)"
-            (USet.size read_events) (USet.size rf)
-      );
+    let read_events =
+      USet.set_minus (USet.intersection structure.read_events path.path) elided
+    in
+    let w_with_init = USet.union write_events (USet.singleton 0) in
+    let w_cross_r = URelation.cross w_with_init read_events in
 
-      (* Check acyclicity of rhb = dp_ppo ∪ rf *)
-      let dp_ppo = USet.union dp ppo in
-      let rhb = USet.union dp_ppo rf in
-        Logs_safe.debug (fun m ->
-            m
-              "  [instantiate_execution] Checking RHB acyclicity (dp: %d, ppo: \
-               %d, rf: %d, rhb: %d)"
-              (USet.size dp) (USet.size ppo) (USet.size rf) (USet.size rhb)
-        );
-        if not (URelation.acyclic rhb) then (
-          Logs_safe.debug (fun m ->
-              m "dp = %s"
-                (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) dp)
-          );
-          Logs_safe.debug (fun m ->
-              m "ppo = %s"
-                (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) ppo)
-          );
-          Logs_safe.debug (fun m ->
-              m "rf = %s"
-                (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) rf)
-          )
-        );
-        (* TODO discern memory model *)
-        let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
-          Logs_safe.debug (fun m ->
-              m "  [instantiate_execution] RHB acyclicity check passed"
-          );
-
-          (* Create environment from RF *)
-          let env_rf = ReadFromValidation.env_rf structure rf in
-          let check_rf = ReadFromValidation.check_rf structure rf in
-
-          (* atomicity constraint *)
-          let af =
-            ReadFromValidation.adjacent_same_location_allocation_events
-              structure path rhb (USet.values env_rf)
-          in
-
-          (* Create disjointness predicates *)
-          let disj =
-            USet.map
-              (fun (a, b) ->
-                match
-                  ( Hashtbl.find_opt structure.events a,
-                    Hashtbl.find_opt structure.events b
-                  )
-                with
-                | None, _ ->
-                    failwith
-                      ("Event " ^ string_of_int a ^ " not found in structure!")
-                | _, None ->
-                    failwith
-                      ("Event " ^ string_of_int b ^ " not found in structure!")
-                | Some ea, Some eb -> (
-                    match
-                      ( get_loc structure a,
-                        get_val structure a,
-                        get_loc structure b,
-                        get_val structure b
-                      )
-                    with
-                    | None, _, _, _ ->
-                        failwith
-                          ("Event " ^ string_of_int a ^ " has no location!")
-                    | _, None, _, _ ->
-                        failwith ("Event " ^ string_of_int a ^ " has no value!")
-                    | _, _, None, _ ->
-                        failwith
-                          ("Event " ^ string_of_int b ^ " has no location!")
-                    | _, _, _, None ->
-                        failwith ("Event " ^ string_of_int b ^ " has no value!")
-                    | _ ->
-                        let loc_a = get_loc structure a |> Option.get in
-                        let val_a = get_val structure a |> Option.get in
-                        let loc_b = get_loc structure b |> Option.get in
-                        let val_b = get_val structure b |> Option.get in
-                          (* disjoint only uses location *)
-                          Expr.evaluate (disjoint (loc_a, val_a) (loc_b, val_b))
-                  )
-              )
-              af
-          in
-
-          let execution_predicates =
-            USet.of_list p_combined
-            |> USet.union env_rf
-            |> USet.union check_rf
-            |> USet.union disj
-            |> USet.filter (fun e -> not (Expr.equal e (EBoolean true)))
-            |> USet.values
-            |> List.sort Expr.compare
-          in
-
-          Logs_safe.debug (fun m ->
-              m
-                "  [instantiate_execution] Checking satisfiability of %d \
-                 predicates (env_rf: %d, check_rf: %d, disj: %d, p_combined: \
-                 %d)"
-                (List.length execution_predicates)
-                (USet.size env_rf) (USet.size check_rf) (USet.size disj)
-                (List.length p_combined)
-          );
-
-          (* Check satisfiability of combined predicates *)
-          let satisfiable = Solver.is_sat_cached execution_predicates in
-            Logs_safe.debug (fun m ->
-                m "  [instantiate_execution] Satisfiability check result: %b"
-                  satisfiable
-            );
-            let*? () = (satisfiable, "unsatisfiable combined predicates") in
-
-            (* Success! Return the freeze result *)
-            let freeze_result : FreezeResult.t =
-              {
-                e;
-                dp;
-                ppo;
-                rf;
-                rmw;
-                pp = execution_predicates;
-                conds = [ EBoolean true ];
-              }
-            in
-              Logs_safe.debug (fun m ->
-                  m
-                    "  [instantiate_execution] SUCCESS! Created freeze result \
-                     with %d events, %d RF edges"
-                    (USet.size e) (USet.size rf)
-              );
-
-              Some freeze_result
-
-(** [compute_path_rf structure path ~elided ~constraints statex ppo dp
-     p_combined] computes candidate read-from relations.
-
-    Generates all valid read-from combinations for the given path by: 1.
-    Filtering potential RF edges by location equality 2. Checking edges don't
-    violate program order 3. Verifying writes aren't shadowed 4. Building
-    combinations incrementally with satisfiability checking
-
-    @param structure The event structure.
-    @param path Current path.
-    @param elided Set of elided events.
-    @param constraints Additional constraints.
-    @param statex Static constraints.
-    @param ppo Preserved program order.
-    @param dp Dependency relation.
-    @param p_combined Combined predicates.
-    @return
-      Promise of list of RF combinations (as lists of [(read, write)] pairs). *)
-let compute_path_rf structure path ~elided ~constraints statex ppo dp p_combined
-    =
-  let write_events =
-    USet.intersection structure.write_events path.path |> fun e ->
-    USet.set_minus e elided |> fun e -> USet.add e 0 (* include init write *)
-  in
-  let read_events =
-    USet.set_minus (USet.intersection structure.read_events path.path) elided
-  in
-  let w_with_init = USet.union write_events (USet.singleton 0) in
-  let w_cross_r = URelation.cross w_with_init read_events in
-
-  Logs_safe.debug (fun m ->
-      m
-        "[compute_path_rf] Starting RF computation: %d writes (+ init), %d \
-         reads, %d potential edges"
-        (USet.size write_events) (USet.size read_events) (USet.size w_cross_r)
-  );
-
-  let preds = path.p @ constraints @ statex |> USet.of_list |> USet.values in
-
-  (* w must not be po-after r *)
-  let po =
-    USet.intersection structure.po (URelation.cross path.path path.path)
-  in
-  let po_inv = URelation.inverse po in
-  let w_cross_r_minus_po = USet.set_minus w_cross_r po_inv in
     Logs_safe.debug (fun m ->
         m
-          "[compute_path_rf] After PO filtering: %d edges (removed %d edges \
-           where w po-after r)"
-          (USet.size w_cross_r_minus_po)
-          (USet.size w_cross_r - USet.size w_cross_r_minus_po)
+          "[compute_path_rf] Starting RF computation: %d writes (+ init), %d \
+           reads, %d potential edges"
+          (USet.size write_events) (USet.size read_events) (USet.size w_cross_r)
     );
-    let all_rf =
-      USet.filter
-        (fun rf_edge ->
-          let ( let*? ) (condition, msg) f =
-            if condition then f () else false
-          in
-          let w, r = rf_edge in
-          let r_restrict =
-            Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
-          in
-          (* Check that loc(w) = loc(r) is satisfiable *)
-          let loc_eq =
-            if w = 0 then
-              (* init write: skip location check *)
-              true
-            else
-              match (get_loc structure w, get_loc structure r) with
-              | Some loc_w, Some loc_r ->
-                  Solver.expoteq ~state:preds loc_w loc_r
-              | _ -> false
-          in
-            let*? () = (loc_eq, "RF locs not equal") in
-            (* Check that writes are not shadowed for read-from *)
-            let has_dslwb = dslwb structure w r in
-              let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
 
-              true
-        )
-        w_cross_r_minus_po
+    let preds = path.p @ constraints @ statex |> USet.of_list |> USet.values in
+
+    (* w must not be po-after r *)
+    let po =
+      USet.intersection structure.po (URelation.cross path.path path.path)
     in
+    let po_inv = URelation.inverse po in
+    let w_cross_r_minus_po = USet.set_minus w_cross_r po_inv in
+      Logs_safe.debug (fun m ->
+          m
+            "[compute_path_rf] After PO filtering: %d edges (removed %d edges \
+             where w po-after r)"
+            (USet.size w_cross_r_minus_po)
+            (USet.size w_cross_r - USet.size w_cross_r_minus_po)
+      );
+      let all_rf =
+        USet.filter
+          (fun rf_edge ->
+            let ( let*? ) (condition, msg) f =
+              if condition then f () else false
+            in
+            let w, r = rf_edge in
+            let r_restrict =
+              Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
+            in
+            (* Check that loc(w) = loc(r) is satisfiable *)
+            let loc_eq =
+              if w = 0 then
+                (* init write: skip location check *)
+                true
+              else
+                match (get_loc structure w, get_loc structure r) with
+                | Some loc_w, Some loc_r ->
+                    Solver.expoteq ~state:preds loc_w loc_r
+                | _ -> false
+            in
+              let*? () = (loc_eq, "RF locs not equal") in
+              (* Check that writes are not shadowed for read-from *)
+              let has_dslwb = dslwb structure w r in
+                let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
 
-    let dp_ppo = USet.union dp ppo in
-    let dp_ppo_tc = URelation.transitive_closure dp_ppo in
+                true
+          )
+          w_cross_r_minus_po
+      in
 
-    (* exclude rf edges that form immediate cycles with ppo and dp *)
-    let all_rf_inv = URelation.inverse all_rf in
-    let all_rf_inv_before_cycle = URelation.inverse all_rf in
-    let all_rf_inv =
-      USet.filter (fun (r, w) -> not (USet.mem dp_ppo_tc (r, w))) all_rf_inv
-    in
+      let dp_ppo = USet.union dp ppo in
+      let dp_ppo_tc = URelation.transitive_closure dp_ppo in
 
-    let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
-    let rf_candidates =
-      ListMapCombinationBuilder.build_combinations all_rf_inv_map
-        ~check_partial:(fun combo ?alternatives pair ->
-          let r, w = pair in
-            (* discard the combination if we have alternatives to reading
+      (* exclude rf edges that form immediate cycles with ppo and dp *)
+      let all_rf_inv = URelation.inverse all_rf in
+      let all_rf_inv_before_cycle = URelation.inverse all_rf in
+      let all_rf_inv =
+        USet.filter (fun (r, w) -> not (USet.mem dp_ppo_tc (r, w))) all_rf_inv
+      in
+
+      let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
+      let rf_candidates =
+        ListMapCombinationBuilder.build_combinations all_rf_inv_map
+          ~check_partial:(fun combo ?alternatives pair ->
+            let r, w = pair in
+              (* discard the combination if we have alternatives to reading
                    from init *)
-            if
-              w = 0
-              && Option.map (fun alts -> List.length alts > 1) alternatives
-                 |> Option.value ~default:false
-            then false
-            else
-              let new_combo_inv =
-                URelation.inverse (USet.of_list (pair :: combo))
-              in
-              let env_rf = ReadFromValidation.env_rf structure new_combo_inv in
-              let check_rf =
-                ReadFromValidation.check_rf structure new_combo_inv
-              in
-              let combined_preds =
-                USet.of_list p_combined
-                |> USet.union env_rf
-                |> USet.union check_rf
-                |> USet.values
-              in
-                Solver.is_sat_cached combined_preds
+              if
+                w = 0
+                && Option.map (fun alts -> List.length alts > 1) alternatives
+                   |> Option.value ~default:false
+              then false
+              else
+                let new_combo_inv =
+                  URelation.inverse (USet.of_list (pair :: combo))
+                in
+                let env_rf =
+                  ReadFromValidation.env_rf structure new_combo_inv
+                in
+                let check_rf =
+                  ReadFromValidation.check_rf structure new_combo_inv
+                in
+                let combined_preds =
+                  USet.of_list p_combined
+                  |> USet.union env_rf
+                  |> USet.union check_rf
+                  |> USet.values
+                in
+                  Solver.is_sat_cached combined_preds
+          )
+          (USet.values read_events) ()
+      in
+        Logs_safe.debug (fun m ->
+            m "[compute_path_rf] Generated %d RF combinations"
+              (List.length rf_candidates)
+        );
+
+        rf_candidates
+
+  (** [instantiate_execution structure path dp ppo j_list pp p_combined rf]
+      creates execution from justifications and RF.
+
+      Validates all consistency constraints and creates a freeze result if
+      successful. This is the core validation step that checks:
+      - RF respects PPO
+      - RF is total and doesn't read elided writes
+      - RHB (reads-happen-before) is acyclic
+      - Atomicity of allocations
+      - Satisfiability of all predicates
+
+      @param structure The event structure.
+      @param path Current path.
+      @param dp Dependency relation.
+      @param ppo Preserved program order.
+      @param j_list List of justifications.
+      @param pp Path predicates.
+      @param p_combined All combined predicates.
+      @param rf Read-from relation to validate.
+      @return Promise of [Some freeze_result] if valid, [None] otherwise. *)
+  let instantiate_execution (structure : symbolic_event_structure) path dp ppo
+      j_list (pp : expr list) p_combined rf elided =
+    Logs_safe.debug (fun m ->
+        m
+          "  [instantiate_execution] Starting validation for RF with %d edges: \
+           %s"
+          (USet.size rf)
+          (String.concat ", "
+             (List.map
+                (fun (w, r) -> Printf.sprintf "(%d->%d)" w r)
+                (USet.values rf)
+             )
+          )
+    );
+
+    let ( let*? ) (condition, msg) f =
+      if condition then f ()
+      else (
+        Logs_safe.debug (fun m -> m "  [instantiate_execution] Rejected: %s" msg);
+
+        None
+      )
+    in
+
+    (* remove elided events from execution *)
+    let e = USet.set_minus path.path elided in
+    let e_squared = URelation.cross e e in
+
+    (* Filter dp and ppo to execution events only *)
+    let dp = USet.intersection dp e_squared in
+    let ppo = USet.intersection ppo e_squared in
+
+    let po = USet.intersection structure.po (URelation.cross e e) in
+    let read_events = USet.intersection structure.read_events e in
+    let write_events = USet.intersection structure.write_events e in
+
+    (* Check 3: All rf edges respect ppo_loc *)
+    Logs_safe.debug (fun m ->
+        m
+          "  [instantiate_execution] Checking RF respects PPO (PPO has %d \
+           edges)"
+          (USet.size ppo)
+    );
+    let*? () =
+      (ReadFromValidation.rf_respects_ppo rf ppo, "RF edges do not respect PPO")
+    in
+
+    (* Filter RMW relation to execution events and predicates only *)
+    let rmw_filtered =
+      USet.filter
+        (fun (er, expr, ew) ->
+          Solver.exeq ~state:p_combined expr (EBoolean true)
         )
-        (USet.values read_events) ()
+        structure.rmw
+    in
+    let rmw = USet.map (fun (er, _, ew) -> (er, ew)) rmw_filtered in
+
+    (* Check 1.1: Various consistency checks *)
+    let delta =
+      USet.union
+        (List.fold_left
+           (fun acc j -> USet.union acc j.fwd)
+           (USet.create ()) j_list
+        )
+        (List.fold_left
+           (fun acc j -> USet.union acc j.we)
+           (USet.create ()) j_list
+        )
+    in
+
+    Logs_safe.debug (fun m ->
+        m "  [instantiate_execution] Delta (fwd U we) has %d edges"
+          (USet.size delta)
+    );
+
+    (* TODO this should be given by generation *)
+    let*? () =
+      (ReadFromValidation.check_rf_elided rf delta, "RF fails RF elided check")
     in
       Logs_safe.debug (fun m ->
-          m "[compute_path_rf] Generated %d RF combinations"
-            (List.length rf_candidates)
+          m "  [instantiate_execution] RF elided check passed"
       );
+      let*? () =
+        ( ReadFromValidation.check_rf_total rf read_events delta,
+          "RF fails RF total check"
+        )
+      in
+        Logs_safe.debug (fun m ->
+            m
+              "  [instantiate_execution] RF total check passed (reads: %d, RF \
+               edges: %d)"
+              (USet.size read_events) (USet.size rf)
+        );
 
-      rf_candidates
+        (* Check acyclicity of rhb = dp_ppo ∪ rf *)
+        let dp_ppo = USet.union dp ppo in
+        let rhb = USet.union dp_ppo rf in
+          Logs_safe.debug (fun m ->
+              m
+                "  [instantiate_execution] Checking RHB acyclicity (dp: %d, \
+                 ppo: %d, rf: %d, rhb: %d)"
+                (USet.size dp) (USet.size ppo) (USet.size rf) (USet.size rhb)
+          );
+          if not (URelation.acyclic rhb) then (
+            Logs_safe.debug (fun m ->
+                m "dp = %s"
+                  (USet.to_string
+                     (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                     dp
+                  )
+            );
+            Logs_safe.debug (fun m ->
+                m "ppo = %s"
+                  (USet.to_string
+                     (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                     ppo
+                  )
+            );
+            Logs_safe.debug (fun m ->
+                m "rf = %s"
+                  (USet.to_string
+                     (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                     rf
+                  )
+            )
+          );
+          (* TODO discern memory model *)
+          let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
+            Logs_safe.debug (fun m ->
+                m "  [instantiate_execution] RHB acyclicity check passed"
+            );
 
-module Freeze = struct
+            (* Create environment from RF *)
+            let env_rf = ReadFromValidation.env_rf structure rf in
+            let check_rf = ReadFromValidation.check_rf structure rf in
+
+            (* atomicity constraint *)
+            let af =
+              ReadFromValidation.adjacent_same_location_allocation_events
+                structure path rhb (USet.values env_rf)
+            in
+
+            (* Create disjointness predicates *)
+            let disj =
+              USet.map
+                (fun (a, b) ->
+                  match
+                    ( Hashtbl.find_opt structure.events a,
+                      Hashtbl.find_opt structure.events b
+                    )
+                  with
+                  | None, _ ->
+                      failwith
+                        ("Event " ^ string_of_int a ^ " not found in structure!")
+                  | _, None ->
+                      failwith
+                        ("Event " ^ string_of_int b ^ " not found in structure!")
+                  | Some ea, Some eb -> (
+                      match
+                        ( get_loc structure a,
+                          get_val structure a,
+                          get_loc structure b,
+                          get_val structure b
+                        )
+                      with
+                      | None, _, _, _ ->
+                          failwith
+                            ("Event " ^ string_of_int a ^ " has no location!")
+                      | _, None, _, _ ->
+                          failwith
+                            ("Event " ^ string_of_int a ^ " has no value!")
+                      | _, _, None, _ ->
+                          failwith
+                            ("Event " ^ string_of_int b ^ " has no location!")
+                      | _, _, _, None ->
+                          failwith
+                            ("Event " ^ string_of_int b ^ " has no value!")
+                      | _ ->
+                          let loc_a = get_loc structure a |> Option.get in
+                          let val_a = get_val structure a |> Option.get in
+                          let loc_b = get_loc structure b |> Option.get in
+                          let val_b = get_val structure b |> Option.get in
+                            (* disjoint only uses location *)
+                            Expr.evaluate
+                              (disjoint (loc_a, val_a) (loc_b, val_b))
+                    )
+                )
+                af
+            in
+
+            let execution_predicates =
+              USet.of_list p_combined
+              |> USet.union env_rf
+              |> USet.union check_rf
+              |> USet.union disj
+              |> USet.filter (fun e -> not (Expr.equal e (EBoolean true)))
+              |> USet.values
+              |> List.sort Expr.compare
+            in
+
+            Logs_safe.debug (fun m ->
+                m
+                  "  [instantiate_execution] Checking satisfiability of %d \
+                   predicates (env_rf: %d, check_rf: %d, disj: %d, p_combined: \
+                   %d)"
+                  (List.length execution_predicates)
+                  (USet.size env_rf) (USet.size check_rf) (USet.size disj)
+                  (List.length p_combined)
+            );
+
+            (* Check satisfiability of combined predicates *)
+            let satisfiable = Solver.is_sat_cached execution_predicates in
+              Logs_safe.debug (fun m ->
+                  m "  [instantiate_execution] Satisfiability check result: %b"
+                    satisfiable
+              );
+              let*? () = (satisfiable, "unsatisfiable combined predicates") in
+
+              (* Success! Return the freeze result *)
+              let freeze_result : FreezeResult.t =
+                {
+                  e;
+                  dp;
+                  ppo;
+                  rf;
+                  rmw;
+                  pp = execution_predicates;
+                  conds = [ EBoolean true ];
+                }
+              in
+                Logs_safe.debug (fun m ->
+                    m
+                      "  [instantiate_execution] SUCCESS! Created freeze \
+                       result with %d events, %d RF edges"
+                      (USet.size e) (USet.size rf)
+                );
+
+                Some freeze_result
+
   (** [freeze_dp structure just] freezes semantic dependency relations from
       justification.
 
@@ -1266,7 +1288,7 @@ end
     @param statex Static constraints.
     @param justmap Hash table mapping write event IDs to justification lists.
     @return Stream of [(path, justification list)] pairs. *)
-let compute_justification_combinations fwd_es_ctx structure paths statex
+let compute_justification_combinations pool fwd_es_ctx structure paths statex
     (justmap : (int, justification list) Hashtbl.t) =
   (* Given a path, combine justifications for each write on the path. *)
   let combine_justifications_for_path path =
@@ -1305,18 +1327,14 @@ let compute_justification_combinations fwd_es_ctx structure paths statex
         m "  Found %d justification combinations" (List.length js_combinations)
     );
 
-    let result =
-      List.map (fun combo -> (path, List.map snd combo)) js_combinations
-    in
-
-    result
+    List.map (fun combo -> (path, List.map snd combo)) js_combinations
   in
 
   let compute paths =
     List.map combine_justifications_for_path paths |> List.flatten |> Lwt.return
   in
-  let compute_parallel path =
-    let pool = Lwt_domain.setup_pool 10 in
+
+  let compute_parallel paths =
     let promises =
       List.map
         (fun path ->
@@ -1337,8 +1355,7 @@ let compute_justification_combinations fwd_es_ctx structure paths statex
         paths
     in
       let* results = Lwt.all promises in
-        Lwt_domain.teardown_pool pool;
-        Lwt.return (List.flatten results)
+        List.flatten results |> Lwt.return
   in
 
   compute_parallel paths
@@ -1400,7 +1417,7 @@ let generate_executions ?(include_rf = true)
       )
       justs;
 
-    let stream_freeze input_stream =
+    let stream_freeze pool input_stream =
       let* input_stream = input_stream in
       let freeze_just_combo (path, just_combo) =
         let fwd =
@@ -1441,7 +1458,6 @@ let generate_executions ?(include_rf = true)
       in
 
       let compute_parallel input_stream =
-        let pool = Lwt_domain.setup_pool 10 in
         let promises =
           List.map
             (fun item ->
@@ -1461,15 +1477,14 @@ let generate_executions ?(include_rf = true)
             input_stream
         in
           let* results = Lwt.all promises in
-            Lwt_domain.teardown_pool pool;
-            Lwt.return (List.flatten results)
+            List.flatten results |> Lwt.return
       in
 
       (* Use map_list_s to handle the list results and flatten them into the stream *)
       compute_parallel input_stream
     in
 
-    let stream_freeze_to_execution input_stream =
+    let stream_freeze_to_execution pool input_stream =
       let* input_stream = input_stream in
       let id = ref 0 in
       let freeze_to_execution (freeze_res : FreezeResult.t) =
@@ -1570,7 +1585,6 @@ let generate_executions ?(include_rf = true)
       in
 
       let compute_parallel input_stream =
-        let pool = Lwt_domain.setup_pool 10 in
         let promises =
           List.map
             (fun item ->
@@ -1590,30 +1604,31 @@ let generate_executions ?(include_rf = true)
             input_stream
         in
           let* results = Lwt.all promises in
-            Lwt_domain.teardown_pool pool;
-            Lwt.return results
+
+          Lwt.return results
       in
 
       compute_parallel input_stream
     in
 
     let dedup_freeze_results stream =
-      let* stream = stream in
+      Logs_safe.debug (fun m -> m "Deduplicating freeze results...");
       let seen = FreezeResultCache.create 1024 in
-
-      List.filter_map
-        (fun fr ->
-          if FreezeResultCache.mem seen fr then None
-          else begin
-            FreezeResultCache.add seen fr ();
-            Some fr
-          end
-        )
-        stream
-      |> Lwt.return
+        let* stream = stream in
+          List.filter_map
+            (fun fr ->
+              if FreezeResultCache.mem seen fr then None
+              else (
+                FreezeResultCache.add seen fr ();
+                Some fr
+              )
+            )
+            stream
+          |> Lwt.return
     in
 
     let keep_minimal_freeze_results fr_list =
+      Logs_safe.debug (fun m -> m "Keeping minimal freeze results...");
       let* fr_list = fr_list in
       let indexed_list = List.mapi (fun i fr -> (i, fr)) fr_list in
         List.filter_map
@@ -1632,6 +1647,7 @@ let generate_executions ?(include_rf = true)
     in
 
     let keep_minimal_executions exec_list =
+      Logs_safe.debug (fun m -> m "Keeping minimal executions...");
       let* exec_list = exec_list in
       let indexed_list = List.mapi (fun i exec -> (i, exec)) exec_list in
         List.filter_map
@@ -1650,22 +1666,23 @@ let generate_executions ?(include_rf = true)
     in
 
     let dedup_executions stream =
+      Logs_safe.debug (fun m -> m "Deduplicating executions...");
       let* stream = stream in
       let seen = ExecutionCache.create 1024 in
 
       List.filter_map
         (fun ex ->
           if ExecutionCache.mem seen ex then None
-          else begin
+          else (
             ExecutionCache.add seen ex ();
             Some ex
-          end
+          )
         )
         stream
       |> Lwt.return
     in
 
-    let stream_filter_coherent_executions input_stream =
+    let stream_filter_coherent_executions pool input_stream =
       let* input_stream = input_stream in
       let compute input_stream =
         List.filter_map
@@ -1678,7 +1695,6 @@ let generate_executions ?(include_rf = true)
       in
 
       let compute_parallel input_stream =
-        let pool = Lwt_domain.setup_pool 10 in
         let promises =
           List.map
             (fun item ->
@@ -1699,30 +1715,31 @@ let generate_executions ?(include_rf = true)
             input_stream
         in
           let* results = Lwt.all promises in
-            Lwt_domain.teardown_pool pool;
-            Lwt.return (List.filter_map Fun.id results)
+            List.filter_map Fun.id results |> Lwt.return
       in
 
       compute_parallel input_stream
     in
 
     (* Build justcombos for all paths *)
-    let* executions =
-      compute_justification_combinations fwd_es_ctx structure paths statex
-        justmap
-      |> stream_freeze
-      |> dedup_freeze_results
-      |> keep_minimal_freeze_results
-      |> stream_freeze_to_execution
-      |> dedup_executions
-      |> stream_filter_coherent_executions
-      |> keep_minimal_executions
-    in
-      Logs_safe.debug (fun m ->
-          m "Minimized to %d executions" (List.length executions)
-      );
+    let pool = Lwt_domain.setup_pool 10 in
+      let* executions =
+        compute_justification_combinations pool fwd_es_ctx structure paths
+          statex justmap
+        |> stream_freeze pool
+        |> dedup_freeze_results
+        |> keep_minimal_freeze_results
+        |> stream_freeze_to_execution pool
+        |> dedup_executions
+        |> keep_minimal_executions
+        |> stream_filter_coherent_executions pool
+      in
+        Lwt_domain.teardown_pool pool;
+        Logs_safe.debug (fun m ->
+            m "Minimized to %d executions" (List.length executions)
+        );
 
-      Lwt.return executions
+        Lwt.return executions
 
 (** Calculate dependencies and justifications *)
 
