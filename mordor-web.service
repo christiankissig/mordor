@@ -1,0 +1,23 @@
+[Unit]
+Description=Mordor Web Application
+After=docker.service
+Requires=docker.service
+
+[Service]
+Restart=always
+RestartSec=5s
+TimeoutStartSec=120
+
+# Remove any stale container from a previous run
+ExecStartPre=-/usr/bin/docker rm -f mordor-web
+
+ExecStart=/usr/bin/docker run \
+    --name mordor-web \
+    --publish 8080:8080 \
+    --rm \
+    mordor-web
+
+ExecStop=/usr/bin/docker stop mordor-web
+
+[Install]
+WantedBy=multi-user.target
