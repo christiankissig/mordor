@@ -37,14 +37,12 @@ The build process:
 Place these files in the root of your project alongside the `Dockerfile`:
 
 ```
-your-project/
+mordor/
 ├── Dockerfile
-├── build_ova.sh              ← entry point
+├── build_ova.sh          ← entry point
 ├── mordor.pkr.hcl        ← Packer build definition
 ├── mordor-web.service    ← systemd unit for the container
-└── http/
-    └── preseed.cfg       ← unattended Debian installer config
-```
+├── preseed.cfg           ← unattended Debian installer config
 
 ---
 
@@ -121,10 +119,12 @@ The OVA is pre-configured with the following NAT port forwards:
 | Host port | Guest port | Purpose |
 |-----------|------------|---------|
 | `8080` | `8080` | Mordor Web UI |
-| `2222` | `22` | SSH (optional, for diagnostics) |
 
 If port `8080` is already in use on your machine, change it in VirtualBox under
 **Settings → Network → Advanced → Port Forwarding** before starting the VM.
+
+The SSH port is chosen by Packer, and Packer will set up a matching port
+forwarding.
 
 ---
 
@@ -136,13 +136,6 @@ If port `8080` is already in use on your machine, change it in VirtualBox under
   console)
 - Verify port forwarding is configured as above
 
-**Check service status (via SSH)**
-```bash
-ssh -p 2222 mordor@localhost
-# password: mordor
-sudo systemctl status mordor-web
-sudo journalctl -u mordor-web -f
-```
 
 **Restart the application**
 ```bash
@@ -166,5 +159,4 @@ https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/SHA256SUMS \
 ## Security Notes
 
 - The default VM password is `mordor` — advise customers to change it after first login (`passwd`)
-- SSH is available on host port `2222` for diagnostics but not required for normal use
 - The application runs as the unprivileged `mordor` user inside the container
