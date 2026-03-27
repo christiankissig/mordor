@@ -745,6 +745,8 @@ class GraphVisualizer {
                 
                 // Update button text and store current endpoint
                 actionBtn.textContent = item.textContent;
+                actionBtn.dataset.action = action;
+                actionBtn.dataset.endpoint = endpoint;
                 this.currentEndpoint = endpoint;
                 this.currentAction = action;
                 
