@@ -179,44 +179,129 @@ class TestRunner {
         }
     }
 
+    buildTestTree(tests) {
+        const root = {};
+        for (const testPath of tests) {
+            // Strip leading 'litmus-tests/' prefix for display, but keep full path as key
+            const displayPath = testPath.replace(/^litmus-tests\//, '');
+            const parts = displayPath.split('/');
+            let node = root;
+            for (let i = 0; i < parts.length - 1; i++) {
+                const dir = parts[i];
+                if (!node[dir]) node[dir] = { __children: {} };
+                node = node[dir].__children;
+            }
+            const fileName = parts[parts.length - 1];
+            node[fileName] = { __testPath: testPath };
+        }
+        return root;
+    }
+
+    renderTestTree(node, depth = 0) {
+        return Object.entries(node)
+            .sort(([aKey, aVal], [bKey, bVal]) => {
+                // Directories before files
+                const aIsDir = !aVal.__testPath;
+                const bIsDir = !bVal.__testPath;
+                if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
+                return aKey.localeCompare(bKey);
+            })
+            .map(([key, val]) => {
+                if (val.__testPath) {
+                    // Leaf: a test file
+                    const testPath = val.__testPath;
+                    const result = this.results[testPath];
+                    const isRunning = this.runningTests.has(testPath);
+                    const statusClass = result
+                        ? (result.success ? 'test-passed' : 'test-failed')
+                        : isRunning ? 'test-running' : '';
+                    const statusIcon = result
+                        ? (result.success ? '✓' : '✗')
+                        : isRunning ? '⟳' : '○';
+                    return `
+                        <div class="test-item ${statusClass}" data-test="${testPath}" style="padding-left: ${depth * 14 + 8}px">
+                            <div class="test-item-header">
+                                <span class="test-status-icon">${statusIcon}</span>
+                                <span class="test-name">${key}</span>
+                                <button class="test-run-btn" data-test="${testPath}" title="Run test">▶</button>
+                            </div>
+                            ${result ? `<div class="test-item-result">${this.formatResultSummary(result)}</div>` : ''}
+                        </div>
+                    `;
+                } else {
+                    // Directory node — compute aggregate status
+                    const allPaths = this.collectPaths(val.__children);
+                    const anyRunning = allPaths.some(p => this.runningTests.has(p));
+                    const results = allPaths.map(p => this.results[p]).filter(Boolean);
+                    const dirStatusClass = anyRunning
+                        ? 'test-running'
+                        : results.length === 0 ? ''
+                        : results.every(r => r.success) ? 'test-passed' : 'test-failed';
+                    const dirIcon = anyRunning ? '⟳'
+                        : results.length === 0 ? '📁'
+                        : results.every(r => r.success) ? '✓' : '✗';
+                    const nodeId = `tree-node-${depth}-${key.replace(/\W/g, '_')}`;
+                    const childrenHtml = this.renderTestTree(val.__children, depth + 1);
+                    return `
+                        <div class="test-tree-dir">
+                            <div class="test-dir-header ${dirStatusClass}" style="padding-left: ${depth * 14 + 8}px" data-toggle="${nodeId}">
+                                <span class="test-dir-toggle">▾</span>
+                                <span class="test-dir-icon">${dirIcon}</span>
+                                <span class="test-dir-name">${key}</span>
+                                <span class="test-dir-count">${allPaths.length}</span>
+                            </div>
+                            <div class="test-dir-children" id="${nodeId}">
+                                ${childrenHtml}
+                            </div>
+                        </div>
+                    `;
+                }
+            }).join('');
+    }
+
+    collectPaths(node) {
+        const paths = [];
+        for (const [, val] of Object.entries(node)) {
+            if (val.__testPath) {
+                paths.push(val.__testPath);
+            } else if (val.__children) {
+                paths.push(...this.collectPaths(val.__children));
+            }
+        }
+        return paths;
+    }
+
     renderTestList(filter = '') {
         const testList = document.getElementById('test-list');
-        
+
         if (this.tests.length === 0) {
             testList.innerHTML = '<div class="test-empty">No tests found</div>';
             return;
         }
 
-        const filtered = filter 
+        const filtered = filter
             ? this.tests.filter(t => t.toLowerCase().includes(filter.toLowerCase()))
             : this.tests;
 
-        const html = filtered.map(testPath => {
-            const result = this.results[testPath];
-            const isRunning = this.runningTests.has(testPath);
-            const statusClass = result 
-                ? (result.success ? 'test-passed' : 'test-failed')
-                : isRunning ? 'test-running' : '';
-            
-            const statusIcon = result
-                ? (result.success ? '✓' : '✗')
-                : isRunning ? '⟳' : '○';
+        const tree = this.buildTestTree(filtered);
+        testList.innerHTML = this.renderTestTree(tree);
 
-            return `
-                <div class="test-item ${statusClass}" data-test="${testPath}">
-                    <div class="test-item-header">
-                        <span class="test-status-icon">${statusIcon}</span>
-                        <span class="test-name">${this.getTestName(testPath)}</span>
-                        <button class="test-run-btn" data-test="${testPath}" title="Run test">▶</button>
-                    </div>
-                    ${result ? `<div class="test-item-result">${this.formatResultSummary(result)}</div>` : ''}
-                </div>
-            `;
-        }).join('');
+        // Collapse/expand directory nodes
+        testList.querySelectorAll('.test-dir-header').forEach(header => {
+            header.addEventListener('click', (e) => {
+                if (e.target.classList.contains('test-run-btn')) return;
+                const targetId = header.dataset.toggle;
+                const childrenEl = document.getElementById(targetId);
+                const toggle = header.querySelector('.test-dir-toggle');
+                if (childrenEl) {
+                    const collapsed = childrenEl.style.display === 'none';
+                    childrenEl.style.display = collapsed ? '' : 'none';
+                    if (toggle) toggle.textContent = collapsed ? '▾' : '▸';
+                }
+            });
+        });
 
-        testList.innerHTML = html;
-
-        // Add click handlers
+        // Click on test item to show detail
         testList.querySelectorAll('.test-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 if (!e.target.classList.contains('test-run-btn')) {
@@ -225,6 +310,7 @@ class TestRunner {
             });
         });
 
+        // Run button on individual test
         testList.querySelectorAll('.test-run-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -234,7 +320,8 @@ class TestRunner {
     }
 
     getTestName(path) {
-        return path.replace('litmus-tests/', '');
+        // Return just the filename portion for display in detail/result views
+        return path.split('/').pop();
     }
 
     formatResultSummary(result) {
