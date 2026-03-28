@@ -262,6 +262,12 @@ class TestRunner {
             return;
         }
 
+        // Save which nodes are currently collapsed so we can restore after re-render
+        const collapsedIds = new Set();
+        testList.querySelectorAll('.test-dir-children').forEach(el => {
+            if (el.style.display === 'none') collapsedIds.add(el.id);
+        });
+
         const filteredLitmus = filter
             ? this.litmusTests.filter(t => t.toLowerCase().includes(filter.toLowerCase()))
             : this.litmusTests;
@@ -300,6 +306,17 @@ class TestRunner {
                 </div>
             </div>
         `;
+
+        // Restore collapsed state from before the re-render
+        collapsedIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.display = 'none';
+                const header = testList.querySelector(`[data-toggle="${id}"]`);
+                const toggle = header?.querySelector('.test-dir-toggle');
+                if (toggle) toggle.textContent = '▸';
+            }
+        });
 
         // Collapse/expand directory nodes
         testList.querySelectorAll('.test-dir-header').forEach(header => {
