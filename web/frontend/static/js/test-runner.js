@@ -1,23 +1,29 @@
 /**
- * Test Runner for MoRDor Litmus Tests
+ * Test Runner for MoRDor Litmus Tests + Episodicity Tests
  * Provides UI overlay for running and viewing test results
  */
 
 class TestRunner {
     constructor() {
-        this.tests = [];
+        this.litmusTests = [];
+        this.episodicityTests = [];
         this.results = {};
         this.runningTests = new Set();
         this.currentView = 'overview'; // 'overview' or 'detail'
         this.selectedTest = null;
-        
+        this.selectedTestType = null; // 'litmus' or 'episodicity'
+
         this.init();
+    }
+
+    get tests() {
+        return [...this.litmusTests, ...this.episodicityTests];
     }
 
     init() {
         this.createOverlay();
         this.setupEventListeners();
-        this.loadTestList();
+        this.loadTestLists();
     }
 
     createOverlay() {
@@ -27,7 +33,7 @@ class TestRunner {
         overlay.innerHTML = `
             <div class="test-modal">
                 <div class="test-header">
-                    <h2>🧪 Litmus Test Runner</h2>
+                    <h2>🧪 Test Runner</h2>
                     <button class="test-close" id="close-test-runner">&times;</button>
                 </div>
                 <div class="test-toolbar">
@@ -88,89 +94,60 @@ class TestRunner {
                 </div>
             </div>
         `;
-        
+
         document.body.appendChild(overlay);
     }
 
     setupEventListeners() {
-        // Close overlay
-        document.getElementById('close-test-runner').addEventListener('click', () => {
-            this.hide();
-        });
+        document.getElementById('close-test-runner').addEventListener('click', () => this.hide());
 
-        // Close on background click
         document.getElementById('test-runner-overlay').addEventListener('click', (e) => {
-            if (e.target.id === 'test-runner-overlay') {
-                this.hide();
-            }
+            if (e.target.id === 'test-runner-overlay') this.hide();
         });
 
-        // Run all tests
-        document.getElementById('run-all-tests').addEventListener('click', () => {
-            this.runAllTests();
-        });
+        document.getElementById('run-all-tests').addEventListener('click', () => this.runAllTests());
+        document.getElementById('refresh-tests').addEventListener('click', () => this.loadTestLists());
+        document.getElementById('clear-results').addEventListener('click', () => this.clearResults());
+        document.getElementById('view-summary').addEventListener('click', () => this.showOverview());
+        document.getElementById('test-search-input').addEventListener('input', (e) => this.filterTests(e.target.value));
+        document.getElementById('back-to-overview').addEventListener('click', () => this.showOverview());
 
-        // Refresh test list
-        document.getElementById('refresh-tests').addEventListener('click', () => {
-            this.loadTestList();
-        });
-
-        // Clear results
-        document.getElementById('clear-results').addEventListener('click', () => {
-            this.clearResults();
-        });
-
-        // View summary button
-        document.getElementById('view-summary').addEventListener('click', () => {
-            this.showOverview();
-        });
-
-        // Search/filter tests
-        document.getElementById('test-search-input').addEventListener('input', (e) => {
-            this.filterTests(e.target.value);
-        });
-
-        // Back to overview
-        document.getElementById('back-to-overview').addEventListener('click', () => {
-            this.showOverview();
-        });
-
-        // Run single test
         document.getElementById('run-single-test').addEventListener('click', () => {
-            if (this.selectedTest) {
-                this.runTest(this.selectedTest);
-            }
+            if (this.selectedTest) this.runTest(this.selectedTest, this.selectedTestType);
         });
 
-        // Load test in editor
         document.getElementById('load-test-editor').addEventListener('click', () => {
-            if (this.selectedTest) {
-                this.loadTestInEditor(this.selectedTest);
-            }
+            if (this.selectedTest) this.loadTestInEditor(this.selectedTest, this.selectedTestType);
         });
 
-        // Copy output button
         document.getElementById('copy-output-btn').addEventListener('click', () => {
             this.copyToClipboard('test-output', 'copy-output-btn');
         });
 
-        // Copy source button
         document.getElementById('copy-source-btn').addEventListener('click', () => {
             this.copyToClipboard('test-source', 'copy-source-btn');
         });
     }
 
-    async loadTestList() {
+    async loadTestLists() {
         const testList = document.getElementById('test-list');
         testList.innerHTML = '<div class="test-loading">Loading tests...</div>';
 
         try {
-            const response = await fetch('/api/tests/list');
-            if (!response.ok) throw new Error('Failed to load test list');
-            
-            const data = await response.json();
-            this.tests = data.tests || [];
-            
+            const [litmusResp, episodicityResp] = await Promise.all([
+                fetch('/api/tests/list'),
+                fetch('/api/episodicity/list')
+            ]);
+
+            if (!litmusResp.ok) throw new Error('Failed to load litmus test list');
+            if (!episodicityResp.ok) throw new Error('Failed to load episodicity test list');
+
+            const litmusData = await litmusResp.json();
+            const episodicityData = await episodicityResp.json();
+
+            this.litmusTests = litmusData.tests || [];
+            this.episodicityTests = episodicityData.tests || [];
+
             this.renderTestList();
             this.updateStats();
         } catch (error) {
@@ -179,11 +156,15 @@ class TestRunner {
         }
     }
 
-    buildTestTree(tests) {
+    buildTestTree(tests, stripPrefix) {
         const root = {};
         for (const testPath of tests) {
-            // Strip leading 'litmus-tests/' prefix for display, but keep full path as key
-            const displayPath = testPath.replace(/^litmus-tests\//, '');
+            const escapedPrefix = stripPrefix
+                ? stripPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                : null;
+            const displayPath = (stripPrefix && escapedPrefix)
+                ? testPath.replace(new RegExp('^' + escapedPrefix + '/?'), '')
+                : testPath;
             const parts = displayPath.split('/');
             let node = root;
             for (let i = 0; i < parts.length - 1; i++) {
@@ -197,10 +178,9 @@ class TestRunner {
         return root;
     }
 
-    renderTestTree(node, depth = 0) {
+    renderTestTree(node, depth, testType) {
         return Object.entries(node)
             .sort(([aKey, aVal], [bKey, bVal]) => {
-                // Directories before files
                 const aIsDir = !aVal.__testPath;
                 const bIsDir = !bVal.__testPath;
                 if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
@@ -208,10 +188,10 @@ class TestRunner {
             })
             .map(([key, val]) => {
                 if (val.__testPath) {
-                    // Leaf: a test file
                     const testPath = val.__testPath;
-                    const result = this.results[testPath];
-                    const isRunning = this.runningTests.has(testPath);
+                    const resultKey = this._resultKey(testPath, testType);
+                    const result = this.results[resultKey];
+                    const isRunning = this.runningTests.has(resultKey);
                     const statusClass = result
                         ? (result.success ? 'test-passed' : 'test-failed')
                         : isRunning ? 'test-running' : '';
@@ -219,20 +199,19 @@ class TestRunner {
                         ? (result.success ? '✓' : '✗')
                         : isRunning ? '⟳' : '○';
                     return `
-                        <div class="test-item ${statusClass}" data-test="${testPath}" style="padding-left: ${depth * 14 + 8}px">
+                        <div class="test-item ${statusClass}" data-test="${testPath}" data-test-type="${testType}" style="padding-left: ${depth * 14 + 8}px">
                             <div class="test-item-header">
                                 <span class="test-status-icon">${statusIcon}</span>
                                 <span class="test-name">${key}</span>
-                                <button class="test-run-btn" data-test="${testPath}" title="Run test">▶</button>
+                                <button class="test-run-btn" data-test="${testPath}" data-test-type="${testType}" title="Run test">▶</button>
                             </div>
-                            ${result ? `<div class="test-item-result">${this.formatResultSummary(result)}</div>` : ''}
+                            ${result ? `<div class="test-item-result">${this.formatResultSummary(result, testType)}</div>` : ''}
                         </div>
                     `;
                 } else {
-                    // Directory node — compute aggregate status
                     const allPaths = this.collectPaths(val.__children);
-                    const anyRunning = allPaths.some(p => this.runningTests.has(p));
-                    const results = allPaths.map(p => this.results[p]).filter(Boolean);
+                    const anyRunning = allPaths.some(p => this.runningTests.has(this._resultKey(p, testType)));
+                    const results = allPaths.map(p => this.results[this._resultKey(p, testType)]).filter(Boolean);
                     const dirStatusClass = anyRunning
                         ? 'test-running'
                         : results.length === 0 ? ''
@@ -240,8 +219,8 @@ class TestRunner {
                     const dirIcon = anyRunning ? '⟳'
                         : results.length === 0 ? '📁'
                         : results.every(r => r.success) ? '✓' : '✗';
-                    const nodeId = `tree-node-${depth}-${key.replace(/\W/g, '_')}`;
-                    const childrenHtml = this.renderTestTree(val.__children, depth + 1);
+                    const nodeId = `tree-node-${testType}-${depth}-${key.replace(/\W/g, '_')}`;
+                    const childrenHtml = this.renderTestTree(val.__children, depth + 1, testType);
                     return `
                         <div class="test-tree-dir">
                             <div class="test-dir-header ${dirStatusClass}" style="padding-left: ${depth * 14 + 8}px" data-toggle="${nodeId}">
@@ -271,20 +250,56 @@ class TestRunner {
         return paths;
     }
 
+    _resultKey(testPath, testType) {
+        return `${testType}::${testPath}`;
+    }
+
     renderTestList(filter = '') {
         const testList = document.getElementById('test-list');
 
-        if (this.tests.length === 0) {
+        if (this.litmusTests.length === 0 && this.episodicityTests.length === 0) {
             testList.innerHTML = '<div class="test-empty">No tests found</div>';
             return;
         }
 
-        const filtered = filter
-            ? this.tests.filter(t => t.toLowerCase().includes(filter.toLowerCase()))
-            : this.tests;
+        const filteredLitmus = filter
+            ? this.litmusTests.filter(t => t.toLowerCase().includes(filter.toLowerCase()))
+            : this.litmusTests;
 
-        const tree = this.buildTestTree(filtered);
-        testList.innerHTML = this.renderTestTree(tree);
+        const filteredEpisodicity = filter
+            ? this.episodicityTests.filter(t => t.toLowerCase().includes(filter.toLowerCase()))
+            : this.episodicityTests;
+
+        const litmusTree = this.buildTestTree(filteredLitmus, 'litmus-tests');
+        const episodicityTree = this.buildTestTree(filteredEpisodicity, 'programs/episodicity');
+
+        const litmusId = 'top-level-litmus';
+        const episodicityId = 'top-level-episodicity';
+
+        testList.innerHTML = `
+            <div class="test-tree-dir">
+                <div class="test-dir-header test-top-level" style="padding-left: 8px" data-toggle="${litmusId}">
+                    <span class="test-dir-toggle">▾</span>
+                    <span class="test-dir-icon">📋</span>
+                    <span class="test-dir-name">Litmus Tests</span>
+                    <span class="test-dir-count">${filteredLitmus.length}</span>
+                </div>
+                <div class="test-dir-children" id="${litmusId}">
+                    ${this.renderTestTree(litmusTree, 1, 'litmus')}
+                </div>
+            </div>
+            <div class="test-tree-dir">
+                <div class="test-dir-header test-top-level" style="padding-left: 8px" data-toggle="${episodicityId}">
+                    <span class="test-dir-toggle">▾</span>
+                    <span class="test-dir-icon">🔁</span>
+                    <span class="test-dir-name">Episodicity Tests</span>
+                    <span class="test-dir-count">${filteredEpisodicity.length}</span>
+                </div>
+                <div class="test-dir-children" id="${episodicityId}">
+                    ${this.renderTestTree(episodicityTree, 1, 'episodicity')}
+                </div>
+            </div>
+        `;
 
         // Collapse/expand directory nodes
         testList.querySelectorAll('.test-dir-header').forEach(header => {
@@ -305,7 +320,7 @@ class TestRunner {
         testList.querySelectorAll('.test-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 if (!e.target.classList.contains('test-run-btn')) {
-                    this.showTestDetail(item.dataset.test);
+                    this.showTestDetail(item.dataset.test, item.dataset.testType);
                 }
             });
         });
@@ -314,30 +329,29 @@ class TestRunner {
         testList.querySelectorAll('.test-run-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.runTest(btn.dataset.test);
+                this.runTest(btn.dataset.test, btn.dataset.testType);
             });
         });
     }
 
     getTestName(path) {
-        // Return just the filename portion for display in detail/result views
         return path.split('/').pop();
     }
 
-    formatResultSummary(result) {
+    formatResultSummary(result, testType) {
+        if (testType === 'episodicity') {
+            if (!result.success) return 'Error';
+            if (result.loops_analyzed !== undefined) {
+                return `Loops: ${result.loops_analyzed} | ${result.all_episodic ? '✓ All episodic' : '✗ Non-episodic'}`;
+            }
+            return result.success ? 'OK' : 'Failed';
+        }
+        // Litmus
         if (!result.parsed) return 'Parse error';
-        
         const parts = [];
-        if (result.valid !== undefined) {
-            parts.push(`Valid: ${result.valid ? 'Yes' : 'No'}`);
-        }
-        if (result.executions !== undefined) {
-            parts.push(`Execs: ${result.executions}`);
-        }
-        if (result.undefined_behaviour) {
-            parts.push('⚠ UB');
-        }
-        
+        if (result.valid !== undefined) parts.push(`Valid: ${result.valid ? 'Yes' : 'No'}`);
+        if (result.executions !== undefined) parts.push(`Execs: ${result.executions}`);
+        if (result.undefined_behaviour) parts.push('⚠ UB');
         return parts.join(' | ');
     }
 
@@ -350,8 +364,11 @@ class TestRunner {
         runBtn.disabled = true;
         runBtn.textContent = '⟳ Running...';
 
-        for (const test of this.tests) {
-            await this.runTest(test, false);
+        for (const test of this.litmusTests) {
+            await this.runTest(test, 'litmus', false);
+        }
+        for (const test of this.episodicityTests) {
+            await this.runTest(test, 'episodicity', false);
         }
 
         runBtn.disabled = false;
@@ -359,68 +376,106 @@ class TestRunner {
         this.showOverview();
     }
 
-    async runTest(testPath, showDetail = true) {
-        this.runningTests.add(testPath);
+    async runTest(testPath, testType, showDetail = true) {
+        const resultKey = this._resultKey(testPath, testType);
+        this.runningTests.add(resultKey);
         this.updateStats();
         this.renderTestList();
 
         try {
-            const response = await fetch('/api/tests/run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ test: testPath })
-            });
+            const result = testType === 'episodicity'
+                ? await this._runEpisodicity(testPath)
+                : await this._runLitmus(testPath);
 
-            if (!response.ok) throw new Error('Test execution failed');
-
-            const result = await response.json();
-            this.results[testPath] = result;
-            
-            this.runningTests.delete(testPath);
+            this.results[resultKey] = result;
+            this.runningTests.delete(resultKey);
             this.updateStats();
             this.renderTestList();
 
             if (showDetail) {
-                this.showTestDetail(testPath);
+                this.showTestDetail(testPath, testType);
             }
         } catch (error) {
             console.error('Error running test:', error);
-            this.results[testPath] = {
+            this.results[resultKey] = {
                 success: false,
                 error: error.message,
                 output: error.message
             };
-            
-            this.runningTests.delete(testPath);
+            this.runningTests.delete(resultKey);
             this.updateStats();
             this.renderTestList();
         }
     }
 
-    async showTestDetail(testPath) {
+    async _runLitmus(testPath) {
+        const response = await fetch('/api/tests/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ test: testPath })
+        });
+        if (!response.ok) throw new Error('Test execution failed');
+        return await response.json();
+    }
+
+    async _runEpisodicity(testPath) {
+        const response = await fetch('/api/episodicity/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ test: testPath })
+        });
+        if (!response.ok) throw new Error('Episodicity execution failed');
+        return await response.json();
+    }
+
+    // Sync the main action button when an episodicity test is selected
+    _syncActionButton(testType) {
+        const actionBtn = document.getElementById('action-btn');
+        if (!actionBtn) return;
+
+        if (testType === 'episodicity') {
+            actionBtn.textContent = 'Episodicity';
+            actionBtn.dataset.action = 'episodicity';
+            actionBtn.dataset.endpoint = '/api/episodicity/stream';
+            // Keep the GraphVisualizer in sync if available
+            if (window._graphVisualizer) {
+                window._graphVisualizer.currentEndpoint = '/api/episodicity/stream';
+                window._graphVisualizer.currentAction = 'episodicity';
+            }
+        }
+    }
+
+    async showTestDetail(testPath, testType) {
         this.selectedTest = testPath;
+        this.selectedTestType = testType;
         this.currentView = 'detail';
+
+        // Update main action button
+        this._syncActionButton(testType);
 
         document.getElementById('test-overview').classList.remove('active');
         document.getElementById('test-detail').classList.add('active');
-
         document.getElementById('detail-test-name').textContent = this.getTestName(testPath);
 
-        // Load test output if available
-        const result = this.results[testPath];
+        const resultKey = this._resultKey(testPath, testType);
+        const result = this.results[resultKey];
         const outputEl = document.getElementById('test-output');
-        
+
         if (result) {
-            outputEl.textContent = result.output || 'No output';
+            outputEl.textContent = this._formatOutput(result, testType);
             outputEl.className = result.success ? 'test-output success' : 'test-output error';
         } else {
             outputEl.textContent = 'Test not run yet. Click "Run Test" to execute.';
             outputEl.className = 'test-output';
         }
 
-        // Load test source
+        // Load test source from the correct endpoint
+        const sourceEndpoint = testType === 'episodicity'
+            ? `/api/episodicity/source?test=${encodeURIComponent(testPath)}`
+            : `/api/tests/source?test=${encodeURIComponent(testPath)}`;
+
         try {
-            const response = await fetch(`/api/tests/source?test=${encodeURIComponent(testPath)}`);
+            const response = await fetch(sourceEndpoint);
             if (response.ok) {
                 const data = await response.json();
                 document.getElementById('test-source').textContent = data.source;
@@ -432,28 +487,59 @@ class TestRunner {
         }
     }
 
+    _formatOutput(result, testType) {
+        if (testType !== 'episodicity' || !result.results) {
+            return result.output || 'No output';
+        }
+
+        // Pretty-print structured episodicity results
+        const lines = [];
+        lines.push(`Exit code: ${result.exit_code}`);
+        lines.push(`Loops analysed: ${result.loops_analyzed}`);
+        lines.push(`All episodic: ${result.all_episodic ? 'Yes' : 'No'}`);
+        lines.push('');
+
+        result.results.forEach(loop => {
+            lines.push(`Loop ${loop.loop_id}: ${loop.is_episodic ? '✓ Episodic' : '✗ Non-episodic'}`);
+            loop.conditions.forEach(c => {
+                const icon = c.satisfied ? '  ✓' : '  ✗';
+                const detail = c.satisfied
+                    ? 'satisfied'
+                    : `violated (${c.violation_count} violation${c.violation_count !== 1 ? 's' : ''})`;
+                lines.push(`${icon} Condition ${c.condition_num}: ${detail}`);
+            });
+            lines.push('');
+        });
+
+        if (result.output) {
+            lines.push('--- Raw output ---');
+            lines.push(result.output);
+        }
+
+        return lines.join('\n');
+    }
+
     showOverview() {
         this.currentView = 'overview';
         this.selectedTest = null;
+        this.selectedTestType = null;
 
         document.getElementById('test-detail').classList.remove('active');
         document.getElementById('test-overview').classList.add('active');
 
-        // Update overview with summary
         this.renderOverview();
     }
 
     renderOverview() {
         const overview = document.getElementById('test-overview');
-        
         const totalTests = this.tests.length;
         const resultsCount = Object.keys(this.results).length;
-        
+
         if (resultsCount === 0) {
             overview.innerHTML = `
                 <div class="test-welcome">
                     <h3>Welcome to Test Runner</h3>
-                    <p>You have ${totalTests} test(s) available.</p>
+                    <p>You have ${this.litmusTests.length} litmus test(s) and ${this.episodicityTests.length} episodicity test(s) available.</p>
                     <p>Click "Run All Tests" or select individual tests to run.</p>
                 </div>
             `;
@@ -490,31 +576,36 @@ class TestRunner {
             </div>
         `;
 
-        // Add click handlers for result items
         overview.querySelectorAll('.result-item').forEach(item => {
             item.addEventListener('click', () => {
                 const testPath = item.getAttribute('data-test');
-                if (testPath) {
-                    this.showTestDetail(testPath);
-                }
+                const testType = item.getAttribute('data-test-type');
+                if (testPath && testType) this.showTestDetail(testPath, testType);
             });
         });
     }
 
     renderResultsList() {
-        const results = Object.entries(this.results)
+        return Object.entries(this.results)
             .sort(([, a], [, b]) => {
                 if (a.success === b.success) return 0;
                 return a.success ? 1 : -1;
-            });
-
-        return results.map(([test, result]) => `
-            <div class="result-item ${result.success ? 'success' : 'failed'}" data-test="${test}" style="cursor: pointer;">
-                <span class="result-icon">${result.success ? '✓' : '✗'}</span>
-                <span class="result-name">${this.getTestName(test)}</span>
-                <span class="result-summary">${this.formatResultSummary(result)}</span>
-            </div>
-        `).join('');
+            })
+            .map(([key, result]) => {
+                const sepIdx = key.indexOf('::');
+                const testType = key.substring(0, sepIdx);
+                const testPath = key.substring(sepIdx + 2);
+                const badge = testType === 'episodicity'
+                    ? '<span style="font-size:0.75rem;color:#9cdcfe;margin-left:4px;">[episodicity]</span>'
+                    : '<span style="font-size:0.75rem;color:#4ec9b0;margin-left:4px;">[litmus]</span>';
+                return `
+                    <div class="result-item ${result.success ? 'success' : 'failed'}" data-test="${testPath}" data-test-type="${testType}" style="cursor: pointer;">
+                        <span class="result-icon">${result.success ? '✓' : '✗'}</span>
+                        <span class="result-name">${this.getTestName(testPath)}${badge}</span>
+                        <span class="result-summary">${this.formatResultSummary(result, testType)}</span>
+                    </div>
+                `;
+            }).join('');
     }
 
     updateStats() {
@@ -527,18 +618,12 @@ class TestRunner {
         document.getElementById('test-failed').textContent = `${failed} failed`;
         document.getElementById('test-running').textContent = `${running} running`;
 
-        // Show/hide View Summary button based on whether results exist
         const viewSummaryBtn = document.getElementById('view-summary');
-        if (Object.keys(this.results).length > 0) {
-            viewSummaryBtn.style.display = 'inline-block';
-        } else {
-            viewSummaryBtn.style.display = 'none';
-        }
+        viewSummaryBtn.style.display = Object.keys(this.results).length > 0 ? 'inline-block' : 'none';
     }
 
     clearResults() {
         if (!confirm('Clear all test results?')) return;
-        
         this.results = {};
         this.runningTests.clear();
         this.updateStats();
@@ -546,33 +631,32 @@ class TestRunner {
         this.showOverview();
     }
 
-    async loadTestInEditor(testPath) {
+    async loadTestInEditor(testPath, testType) {
+        const sourceEndpoint = testType === 'episodicity'
+            ? `/api/episodicity/source?test=${encodeURIComponent(testPath)}`
+            : `/api/tests/source?test=${encodeURIComponent(testPath)}`;
+
         try {
-            const response = await fetch(`/api/tests/source?test=${encodeURIComponent(testPath)}`);
+            const response = await fetch(sourceEndpoint);
             if (!response.ok) throw new Error('Failed to load test source');
-            
+
             const data = await response.json();
-            
-            // Load into editor (assuming there's a global editor or function)
             const editor = document.getElementById('litmus-input');
             if (editor) {
                 editor.value = data.source;
-                // Trigger any syntax highlighting update
-                const event = new Event('input', { bubbles: true });
-                editor.dispatchEvent(event);
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
             }
 
-            // Close overlay
+            // Sync the action button
+            this._syncActionButton(testType);
+
             this.hide();
-            
-            // Show success message
+
             const status = document.getElementById('status');
             if (status) {
                 status.textContent = `Loaded: ${this.getTestName(testPath)}`;
                 status.className = 'status success';
-                setTimeout(() => {
-                    status.className = 'status';
-                }, 3000);
+                setTimeout(() => { status.className = 'status'; }, 3000);
             }
         } catch (error) {
             alert(`Failed to load test: ${error.message}`);
@@ -582,18 +666,13 @@ class TestRunner {
     async copyToClipboard(elementId, buttonId) {
         const element = document.getElementById(elementId);
         const button = document.getElementById(buttonId);
-        
         if (!element || !button) return;
-        
+
         try {
-            const text = element.textContent;
-            await navigator.clipboard.writeText(text);
-            
-            // Visual feedback
+            await navigator.clipboard.writeText(element.textContent);
             button.classList.add('copied');
             const originalText = button.textContent;
             button.textContent = 'Copied!';
-            
             setTimeout(() => {
                 button.classList.remove('copied');
                 button.textContent = originalText;
@@ -622,5 +701,4 @@ class TestRunner {
     }
 }
 
-// Export for use in main application
 window.TestRunner = TestRunner;

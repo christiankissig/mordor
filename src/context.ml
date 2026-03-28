@@ -68,10 +68,10 @@ type output_mode =
 
     Example usage:
     {[
-      (* Bounded verification with 3 iterations *)
-      { options with loop_semantics = FiniteStepCounter; step_counter = 3 }
-        (* Episodicity checking with symbolic loops *)
-        { options with loop_semantics = Symbolic }
+    (* Bounded verification with 3 iterations *)
+    { options with loop_semantics = FiniteStepCounter; step_counter = 3 }
+      (* Episodicity checking with symbolic loops *)
+      { options with loop_semantics = Symbolic }
     ]} *)
 type loop_semantics =
   | Symbolic  (** Symbolic representation for unbounded reasoning *)

@@ -642,8 +642,8 @@ end = struct
     let clause = List.map remove_double_negation clause in
 
     (* Check for contradictions *)
-    if is_clause_contradiction clause then None
-      (* Contradiction - this clause is false *)
+    if is_clause_contradiction clause then
+      None (* Contradiction - this clause is false *)
     else
       (* Check for tautologies and contradictions within literals *)
       let clause = List.filter (fun e -> not (is_contradiction e)) clause in

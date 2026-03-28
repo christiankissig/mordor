@@ -102,6 +102,8 @@ COPY --from=builder --chown=mordor:mordor /home/opam/web/frontend /home/mordor/w
 RUN chmod +x /usr/local/bin/mordor-web
 
 COPY --chown=mordor litmus-tests/ /home/mordor/litmus-tests/
+RUN mkdir -p /home/mordor/programs
+COPY --chown=mordor programs/episodicity /home/mordor/programs/
 RUN mkdir -p /home/mordor/_build/default/cli/
 COPY --from=builder --chown=mordor /home/opam/install/bin/mordor \
   /home/mordor/_build/default/cli/main.exe

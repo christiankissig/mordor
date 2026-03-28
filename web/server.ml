@@ -4,11 +4,12 @@
     tests. Provides Server-Sent Events (SSE) streaming for real-time
     visualization and a REST API for test execution. *)
 
-open Lwt.Syntax
 open Context
-open Types
+open Episodicity_runner_api
+open Lwt.Syntax
 open Source_info
 open Test_runner_api
+open Types
 open Uset
 
 (** Completion message sent at the end. *)
@@ -329,296 +330,6 @@ let assertions_sse_handler =
     @return A JSON response with status "ok" *)
 let health_handler _request = Dream.json "{\"status\": \"ok\"}"
 
-(** {2 Test Runner API}
-
-    Module providing test discovery, execution, and source retrieval for litmus
-    tests. *)
-module TestRunner = struct
-  (** Directory containing litmus test files *)
-  let litmus_dir = "litmus-tests"
-
-  (** Path to the CLI executable used for running tests *)
-  let cli_executable = "_build/default/cli/main.exe"
-
-  (** [read_litmus_files dir] recursively discovers all .lit files in a
-      directory.
-
-      @param dir The root directory to search
-      @return A list of file paths to litmus test files *)
-  let read_litmus_files dir =
-    let rec read_dir_recursive path =
-      try
-        let files = Sys.readdir path in
-          List.concat
-            (Array.to_list files
-            |> List.map (fun f ->
-                let full_path = Filename.concat path f in
-                  if Sys.is_directory full_path then
-                    read_dir_recursive full_path
-                  else if Filename.check_suffix f ".lit" then [ full_path ]
-                  else []
-            )
-            )
-      with Sys_error _ -> []
-    in
-      read_dir_recursive dir
-
-  (** Results from parsing the CLI verification output *)
-  type verification_result = {
-    valid : bool option;  (** Whether the test passed validation *)
-    undefined_behaviour : bool option;
-        (** Whether undefined behavior was detected *)
-    executions : int option;  (** Number of executions found *)
-    events : int option;  (** Number of events in the execution *)
-  }
-
-  (** [parse_verification_output output_lines] extracts verification results
-      from the CLI output.
-
-      Recognizes lines in the format:
-      - "Valid: true" or "Valid: false"
-      - "Undefined Behavior: true" or "Undefined Behavior: false"
-      - "Executions: <number>"
-      - "Events: <number>"
-
-      @param output_lines The output from the CLI as a list of strings
-      @return A [verification_result] record with parsed values *)
-  let parse_verification_output output_lines =
-    let result =
-      {
-        valid = None;
-        undefined_behaviour = None;
-        executions = None;
-        events = None;
-      }
-    in
-    let parse_bool_line prefix line =
-      if
-        String.length line > String.length prefix
-        && String.sub line 0 (String.length prefix) = prefix
-      then
-        let value_str =
-          String.sub line (String.length prefix)
-            (String.length line - String.length prefix)
-        in
-        let trimmed = String.trim value_str in
-          match trimmed with
-          | "true" -> Some true
-          | "false" -> Some false
-          | _ -> None
-      else None
-    in
-    let parse_int_line prefix line =
-      if
-        String.length line > String.length prefix
-        && String.sub line 0 (String.length prefix) = prefix
-      then
-        let value_str =
-          String.sub line (String.length prefix)
-            (String.length line - String.length prefix)
-        in
-          try Some (int_of_string (String.trim value_str))
-          with Failure _ -> None
-      else None
-    in
-    let rec process_lines result = function
-      | [] -> result
-      | line :: rest ->
-          let updated_result =
-            match parse_bool_line "Valid: " line with
-            | Some v -> { result with valid = Some v }
-            | None -> (
-                match parse_bool_line "Undefined Behavior: " line with
-                | Some ub -> { result with undefined_behaviour = Some ub }
-                | None -> (
-                    match parse_int_line "Executions: " line with
-                    | Some n -> { result with executions = Some n }
-                    | None -> (
-                        match parse_int_line "Events: " line with
-                        | Some n -> { result with events = Some n }
-                        | None -> result
-                      )
-                  )
-              )
-          in
-            process_lines updated_result rest
-    in
-      process_lines result output_lines
-
-  (** [run_cli_on_file filepath] executes the CLI tool on a single test file.
-
-      @param filepath Path to the litmus test file
-      @return
-        A tuple [(exit_code, output_lines)] where exit_code is 0 for success and
-        output_lines is the command output as a string list *)
-  let run_cli_on_file filepath =
-    let cmd =
-      Printf.sprintf "%s run --single \"%s\" 2>&1" cli_executable filepath
-    in
-    let ic = Unix.open_process_in cmd in
-    let output = ref [] in
-      try
-        while true do
-          output := input_line ic :: !output
-        done;
-        (0, [])
-      with End_of_file ->
-        let exit_code = Unix.close_process_in ic in
-        let status =
-          match exit_code with
-          | Unix.WEXITED code -> code
-          | Unix.WSIGNALED _ -> -1
-          | Unix.WSTOPPED _ -> -1
-        in
-          (status, List.rev !output)
-
-  (** [list_tests_handler request] handles GET requests to list all available
-      tests.
-
-      @param request The HTTP request (unused)
-      @return A JSON response with format: [{"tests": ["path1", "path2", ...]}]
-
-      Returns HTTP 500 on error with: [{"error": "<message>"}] *)
-  let list_tests_handler _request =
-    try
-      let tests = read_litmus_files litmus_dir in
-      let json =
-        `Assoc [ ("tests", `List (List.map (fun t -> `String t) tests)) ]
-      in
-        Dream.json (Yojson.Basic.to_string json)
-    with exn ->
-      let error = Printexc.to_string exn in
-        Dream.json ~status:`Internal_Server_Error
-          (Yojson.Basic.to_string (`Assoc [ ("error", `String error) ]))
-
-  (** [run_test_handler request] handles POST requests to run a specific test.
-
-      Expects JSON body: [{"test": "path/to/test.lit"}]
-
-      @param request The HTTP request containing the test path in JSON body
-      @return
-        A JSON response with test results including:
-        - [success]: Overall test success (exit code 0 and valid result)
-        - [exit_code]: The CLI exit code
-        - [output]: Raw CLI output
-        - [parsed]: Whether output was successfully parsed
-        - [valid], [undefined_behaviour], [executions], [events]: Parsed results
-
-      Returns HTTP 500 on error with:
-      [{"success": false, "error": "<message>", "output": "<message>"}] *)
-  let run_test_handler request =
-    let* body = Dream.body request in
-      try
-        let json = Yojson.Basic.from_string body in
-        let test_path =
-          match json with
-          | `Assoc fields -> (
-              match List.assoc_opt "test" fields with
-              | Some (`String path) -> path
-              | _ -> raise (Failure "Missing 'test' field")
-            )
-          | _ -> raise (Failure "Invalid JSON")
-        in
-
-        Printf.printf "🧪 Running test: %s\n%!" test_path;
-
-        let exit_code, output = run_cli_on_file test_path in
-        let output_str = String.concat "\n" output in
-        let results = parse_verification_output output in
-
-        let success = exit_code = 0 && results.valid <> Some false in
-
-        let response =
-          `Assoc
-            [
-              ("success", `Bool success);
-              ("exit_code", `Int exit_code);
-              ("output", `String output_str);
-              ("parsed", `Bool (results.valid <> None));
-              ( "valid",
-                match results.valid with
-                | Some v -> `Bool v
-                | None -> `Null
-              );
-              ( "undefined_behaviour",
-                match results.undefined_behaviour with
-                | Some v -> `Bool v
-                | None -> `Null
-              );
-              ( "executions",
-                match results.executions with
-                | Some n -> `Int n
-                | None -> `Null
-              );
-              ( "events",
-                match results.events with
-                | Some n -> `Int n
-                | None -> `Null
-              );
-            ]
-        in
-
-        Dream.json (Yojson.Basic.to_string response)
-      with exn ->
-        let error = Printexc.to_string exn in
-          Printf.printf "❌ Error running test: %s\n%!" error;
-          Dream.json ~status:`Internal_Server_Error
-            (Yojson.Basic.to_string
-               (`Assoc
-                  [
-                    ("success", `Bool false);
-                    ("error", `String error);
-                    ("output", `String error);
-                  ]
-               )
-            )
-
-  (** [get_test_source_handler request] handles GET requests to retrieve test
-      source code.
-
-      Expects query parameter: [test=path/to/test.lit]
-
-      @param request The HTTP request with [test] query parameter
-      @return A JSON response with format: [{"source": "<file contents>"}]
-
-      Returns:
-      - HTTP 400 if [test] parameter is missing:
-        [{"error": "Missing 'test' parameter"}]
-      - HTTP 404 if file not found: [{"error": "<system error>"}]
-      - HTTP 500 on other errors: [{"error": "<message>"}] *)
-  let get_test_source_handler request =
-    try
-      let test_path = Dream.query request "test" |> Option.value ~default:"" in
-
-      if test_path = "" then
-        Dream.json ~status:`Bad_Request
-          (Yojson.Basic.to_string
-             (`Assoc [ ("error", `String "Missing 'test' parameter") ])
-          )
-      else
-        let ic = open_in test_path in
-        let source = ref [] in
-          ( try
-              while true do
-                source := input_line ic :: !source
-              done
-            with End_of_file -> close_in ic
-          );
-
-          let source_str = String.concat "\n" (List.rev !source) in
-          let response = `Assoc [ ("source", `String source_str) ] in
-
-          Dream.json (Yojson.Basic.to_string response)
-    with
-    | Sys_error msg ->
-        Dream.json ~status:`Not_Found
-          (Yojson.Basic.to_string (`Assoc [ ("error", `String msg) ]))
-    | exn ->
-        let error = Printexc.to_string exn in
-          Dream.json ~status:`Internal_Server_Error
-            (Yojson.Basic.to_string (`Assoc [ ("error", `String error) ]))
-end
-
 (** {2 Server Setup and Configuration} *)
 
 (** [setup_logs ()] configures the logging system with timestamps.
@@ -675,19 +386,18 @@ let () =
   Dream.run ~interface:"0.0.0.0" ~port:8080
   @@ Dream.logger
   @@ Dream.router
-       [
-         Dream.get "/" (Dream.from_filesystem "web/frontend" "index.html");
-         Dream.get "/help/" (Dream.from_filesystem "web/frontend" "help.html");
-         Dream.get "/static/**" (Dream.static "web/frontend/static");
-         Dream.get "/health" health_handler;
-         (* Visualization API - Pipeline stages *)
-         Dream.post "/api/visualize/stream" visualize_sse_handler;
-         Dream.post "/api/parse/stream" parse_sse_handler;
-         Dream.post "/api/interpret/stream" interpret_sse_handler;
-         Dream.post "/api/episodicity/stream" episodicity_sse_handler;
-         Dream.post "/api/assertions/stream" assertions_sse_handler;
-         (* Test Runner API *)
-         Dream.get "/api/tests/list" TestRunner.list_tests_handler;
-         Dream.post "/api/tests/run" TestRunner.run_test_handler;
-         Dream.get "/api/tests/source" TestRunner.get_test_source_handler;
-       ]
+       ([
+          Dream.get "/" (Dream.from_filesystem "web/frontend" "index.html");
+          Dream.get "/help/" (Dream.from_filesystem "web/frontend" "help.html");
+          Dream.get "/static/**" (Dream.static "web/frontend/static");
+          Dream.get "/health" health_handler;
+          (* Visualization API - Pipeline stages *)
+          Dream.post "/api/visualize/stream" visualize_sse_handler;
+          Dream.post "/api/parse/stream" parse_sse_handler;
+          Dream.post "/api/interpret/stream" interpret_sse_handler;
+          Dream.post "/api/episodicity/stream" episodicity_sse_handler;
+          Dream.post "/api/assertions/stream" assertions_sse_handler;
+        ]
+       @ Test_runner_api.routes
+       @ Episodicity_runner_api.routes
+       )

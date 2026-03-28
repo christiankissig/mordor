@@ -24,19 +24,19 @@ open Uset
     and keys
 
     {[
-      [ (a, b) ]
+    [ (a, b) ]
     ]}
 
     produces
 
     {[
-      [
-        ( [ (a, 1); (b, 3) ],
-          [ (a, 1); (b, 4) ],
-          [ (a, 2); (b, 3) ],
-          [ (a, 2); (b, 4) ]
-        );
-      ]
+    [
+      ( [ (a, 1); (b, 3) ],
+        [ (a, 1); (b, 4) ],
+        [ (a, 2); (b, 3) ],
+        [ (a, 2); (b, 4) ]
+      );
+    ]
     ]} *)
 module ListMapCombinationBuilder = struct
   (** [build_combinations listmap keys ?check_partial ?check_final ()] generates
@@ -197,11 +197,11 @@ end
 
     Example:
     {[
-      permutations [ 1; 2; 3 ]
-        (* Returns: [[1;2;3]; [2;1;3]; [2;3;1]; [1;3;2]; [3;1;2]; [3;2;1]] *)
-        permutations [] (* Returns: [[]] *)
-        permutations [ 42 ]
-      (* Returns: [[42]] *)
+    permutations [ 1; 2; 3 ]
+      (* Returns: [[1;2;3]; [2;1;3]; [2;3;1]; [1;3;2]; [3;1;2]; [3;2;1]] *)
+      permutations [] (* Returns: [[]] *)
+      permutations [ 42 ]
+    (* Returns: [[42]] *)
     ]}
 
     Complexity: O(n! × n) time, O(n! × n) space where n is list length. *)
