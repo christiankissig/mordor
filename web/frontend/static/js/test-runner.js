@@ -437,10 +437,17 @@ class TestRunner {
             actionBtn.textContent = 'Episodicity';
             actionBtn.dataset.action = 'episodicity';
             actionBtn.dataset.endpoint = '/api/episodicity/stream';
-            // Keep the GraphVisualizer in sync if available
             if (window._graphVisualizer) {
                 window._graphVisualizer.currentEndpoint = '/api/episodicity/stream';
                 window._graphVisualizer.currentAction = 'episodicity';
+            }
+        } else if (testType === 'litmus') {
+            actionBtn.textContent = 'Assertions';
+            actionBtn.dataset.action = 'assertions';
+            actionBtn.dataset.endpoint = '/api/assertions/stream';
+            if (window._graphVisualizer) {
+                window._graphVisualizer.currentEndpoint = '/api/assertions/stream';
+                window._graphVisualizer.currentAction = 'assertions';
             }
         }
     }
