@@ -62,22 +62,26 @@ header h1 { font-size: 1.5rem; color: #cccccc; }
     position: relative;
     width: 100%;
     height: 100%;
+    overflow: hidden;
 }
 
-/* Highlighted code overlay */
+/* Highlighted code overlay — must scroll in lock-step with the textarea */
 #litmus-highlight {
     position: absolute;
     top: 0;
     left: 0;
-    right: 0;
-    bottom: 0;
+    /* wider than the panel so long lines don't wrap */
+    min-width: 100%;
+    width: max-content;
     pointer-events: none;
     margin: 0 !important;
     padding: 1rem 1rem 1rem 5.5em !important;
     background: transparent !important;
-    overflow: hidden;
-    white-space: pre-wrap;
-    word-wrap: break-word;
+    overflow: visible;
+    /* no wrapping — lines must stay on one row so Prism counts them correctly */
+    white-space: pre;
+    word-wrap: normal;
+    overflow-wrap: normal;
     font-family: 'Consolas', 'Courier New', monospace !important;
     font-size: 0.95rem !important;
     line-height: 1.5 !important;
@@ -88,6 +92,9 @@ header h1 { font-size: 1.5rem; color: #cccccc; }
     background: transparent !important;
     padding: 0 !important;
     margin: 0 !important;
+    white-space: pre;
+    word-wrap: normal;
+    overflow-wrap: normal;
 }
 
 /* Textarea for input */
@@ -95,8 +102,8 @@ header h1 { font-size: 1.5rem; color: #cccccc; }
     position: absolute;
     top: 0;
     left: 0;
-    right: 0;
-    bottom: 0;
+    /* must be at least as wide as the content so the scrollbar appears */
+    min-width: 100%;
     width: 100%;
     height: 100%;
     margin: 0 !important;
@@ -112,9 +119,11 @@ header h1 { font-size: 1.5rem; color: #cccccc; }
     caret-color: #d4d4d4;
     tab-size: 4;
     z-index: 1;
+    /* horizontal + vertical scroll; no wrapping */
     overflow: auto;
-    white-space: pre-wrap;
-    word-wrap: break-word;
+    white-space: pre;
+    word-wrap: normal;
+    overflow-wrap: normal;
 }
 
 #litmus-input:focus {
@@ -133,8 +142,9 @@ pre[class*="language-"] {
     font-family: 'Consolas', 'Courier New', monospace !important;
     font-size: 0.95rem !important;
     line-height: 1.5 !important;
-    white-space: pre-wrap !important;
-    word-wrap: break-word !important;
+    white-space: pre !important;
+    word-wrap: normal !important;
+    overflow-wrap: normal !important;
     tab-size: 4 !important;
 }
 
@@ -144,8 +154,9 @@ code[class*="language-"] {
     font-family: 'Consolas', 'Courier New', monospace !important;
     font-size: 0.95rem !important;
     line-height: 1.5 !important;
-    white-space: pre-wrap !important;
-    word-wrap: break-word !important;
+    white-space: pre !important;
+    word-wrap: normal !important;
+    overflow-wrap: normal !important;
     tab-size: 4 !important;
 }
 
@@ -160,7 +171,7 @@ code[class*="language-"] {
 /* Line numbers styling */
 pre.line-numbers {
     position: relative;
-    padding-left: 0 !important;
+    /* Let Prism control padding-left; its plugin sets it to match the gutter width */
     counter-reset: linenumber;
 }
 
@@ -174,13 +185,16 @@ pre.line-numbers > code {
     pointer-events: none;
     top: 0;
     font-size: 0.95rem;
-    left: -5em;
-    width: 4em;
+    /* Prism plugin sets left automatically; keep width/style only */
+    width: 3em;
     letter-spacing: -1px;
     border-right: 1px solid #3e3e42;
     user-select: none;
     padding-right: 0.5rem;
     padding-left: 0.5rem;
+    /* Ensure rows fill the full height of the pre */
+    bottom: 0;
+    overflow: hidden;
 }
 
 .line-numbers-rows > span {

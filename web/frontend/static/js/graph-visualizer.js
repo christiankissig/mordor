@@ -136,147 +136,137 @@ class GraphVisualizer {
     }
     
     highlightSourceSpan(startLine, startCol, endLine, endCol, color = 'rgba(255, 215, 0, 0.25)', borderColor = 'rgba(255, 215, 0, 0.5)') {
-        // Clear any existing highlight
         this.clearSourceHighlight();
-        
-        const textarea = document.getElementById('litmus-input');
+
+        const textarea    = document.getElementById('litmus-input');
         const highlightPre = document.getElementById('litmus-highlight');
-        
         if (!textarea || !highlightPre) return;
-        
+
         const lines = textarea.value.split('\n');
-        
-        // Validate line numbers
         if (startLine < 1 || startLine > lines.length || endLine < 1 || endLine > lines.length) {
             console.warn('Invalid line numbers:', startLine, endLine);
             return;
         }
-        
-        // Create a container for highlight overlays
+
+        // Read metrics directly from the textarea's computed style so markers
+        // share the exact same coordinate space as the rendered text.
+        const cs          = window.getComputedStyle(textarea);
+        const lineHeight  = parseFloat(cs.lineHeight)  || 21.6;
+        const paddingTop  = parseFloat(cs.paddingTop)  || 16;   // 1rem
+        const paddingLeft = parseFloat(cs.paddingLeft) || 88;   // 5.5em
+
+        // Measure real character width via canvas (accurate for the actual font/size).
+        if (!this._charWidth) {
+            const canvas = document.createElement('canvas');
+            const ctx    = canvas.getContext('2d');
+            ctx.font = `${cs.fontSize} ${cs.fontFamily}`;
+            this._charWidth = ctx.measureText('M').width;
+        }
+        const charWidth = this._charWidth;
+
+        // The overlay covers the whole editor-wrapper and clips to it.
+        // Markers are repositioned on every textarea scroll event.
         if (!this.highlightContainer) {
             this.highlightContainer = document.createElement('div');
             this.highlightContainer.id = 'source-highlight-overlay';
             this.highlightContainer.style.cssText = `
                 position: absolute;
-                top: 1em;
-                left: 5.5em;
-                right: 0;
-                bottom: 0;
+                top: 0; left: 0; right: 0; bottom: 0;
                 pointer-events: none;
                 z-index: 2;
-                margin: 0 !important;
-                padding: 1rem 1rem 1rem 5.5em !important;
-                font-family: 'Consolas', 'Courier New', monospace !important;
-                font-size: 0.95rem !important;
-                line-height: 1.5 !important;
-                white-space: pre-wrap;
-                word-wrap: break-word;
                 overflow: hidden;
-                background: transparent !important;
+                background: transparent;
             `;
             document.querySelector('.editor-wrapper').appendChild(this.highlightContainer);
+
+            this._highlightScrollHandler = () => this._repositionHighlightMarkers();
+            textarea.addEventListener('scroll', this._highlightScrollHandler);
         }
-        
-        // Calculate line height
-        const lineHeight = parseFloat(window.getComputedStyle(textarea).lineHeight) || 21.6; // 0.95rem * 1.5 * 16px
-        
-        // Handle single-line vs multi-line highlights
-        if (startLine === endLine) {
-            // Single line highlight
+
+        // Cache everything needed to rebuild markers after a scroll.
+        this._highlightParams = {
+            startLine, startCol, endLine, endCol,
+            lines, lineHeight, paddingTop, paddingLeft,
+            charWidth, color, borderColor
+        };
+        this._repositionHighlightMarkers();
+
+        // Scroll the highlighted region into view (upper third of the editor).
+        const targetScroll = Math.max(0, paddingTop + (startLine - 1) * lineHeight - textarea.clientHeight / 3);
+        textarea.scrollTop = targetScroll;
+        // Firing the scroll event updates the highlight overlay's transform automatically.
+    }
+
+    _repositionHighlightMarkers() {
+        if (!this.highlightContainer || !this._highlightParams) return;
+
+        const textarea = document.getElementById('litmus-input');
+        if (!textarea) return;
+
+        const {
+            startLine, startCol, endLine, endCol,
+            lines, lineHeight, paddingTop, paddingLeft,
+            charWidth, color, borderColor
+        } = this._highlightParams;
+
+        const scrollTop  = textarea.scrollTop;
+        const scrollLeft = textarea.scrollLeft;
+
+        this.highlightContainer.innerHTML = '';
+
+        const makeMarker = (lineNum, colStart, colEnd) => {
+            const lineText    = lines[lineNum - 1] || '';
+            const beforeText  = lineText.substring(0, colStart);
+            const highlighted = lineText.substring(colStart, colEnd);
+
+            const top   = paddingTop  + (lineNum - 1) * lineHeight - scrollTop;
+            const left  = paddingLeft + beforeText.length * charWidth - scrollLeft;
+            const width = Math.max(2, highlighted.length * charWidth);
+
             const marker = document.createElement('div');
             marker.className = 'highlight-marker';
-            
-            const lineText = lines[startLine - 1];
-            const beforeText = lineText.substring(0, startCol);
-            const highlightText = lineText.substring(startCol, endCol);
-            
-            // Calculate character width (approximate for monospace)
-            const charWidth = 9.5 * 0.95; // Rough estimate for Consolas at 0.95rem
-            
-            const topPos = (startLine - 1) * lineHeight;
-            const leftPos = beforeText.length * charWidth;
-            const width = highlightText.length * charWidth;
-            
             marker.style.cssText = `
                 position: absolute;
-                top: ${topPos}px;
-                left: ${leftPos}px;
+                top: ${top}px;
+                left: ${left}px;
                 width: ${width}px;
                 height: ${lineHeight}px;
                 background-color: ${color};
                 border: 1px solid ${borderColor};
                 box-sizing: border-box;
             `;
-            
-            this.highlightContainer.appendChild(marker);
-            this.highlightMarkers = [marker];
+            return marker;
+        };
+
+        if (startLine === endLine) {
+            this.highlightContainer.appendChild(makeMarker(startLine, startCol, endCol));
         } else {
-            // Multi-line highlight
-            this.highlightMarkers = [];
-            
-            for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
-                const marker = document.createElement('div');
-                marker.className = 'highlight-marker';
-                
-                const lineText = lines[lineNum - 1];
-                let startColForLine, endColForLine;
-                
-                if (lineNum === startLine) {
-                    startColForLine = startCol;
-                    endColForLine = lineText.length;
-                } else if (lineNum === endLine) {
-                    startColForLine = 0;
-                    endColForLine = endCol;
-                } else {
-                    startColForLine = 0;
-                    endColForLine = lineText.length;
-                }
-                
-                const beforeText = lineText.substring(0, startColForLine);
-                const highlightText = lineText.substring(startColForLine, endColForLine);
-                
-                const charWidth = 9.5 * 0.95;
-                const topPos = lineNum * lineHeight;
-                const leftPos = beforeText.length * charWidth;
-                const width = highlightText.length * charWidth;
-                
-                marker.style.cssText = `
-                    position: absolute;
-                    top: ${topPos}px;
-                    left: ${leftPos}px;
-                    width: ${width}px;
-                    height: ${lineHeight}px;
-                    background-color: ${color};
-                    border: 1px solid ${borderColor};
-                    box-sizing: border-box;
-                `;
-                
-                this.highlightContainer.appendChild(marker);
-                this.highlightMarkers.push(marker);
+            for (let ln = startLine; ln <= endLine; ln++) {
+                const lineText = lines[ln - 1] || '';
+                const s = (ln === startLine) ? startCol : 0;
+                const e = (ln === endLine)   ? endCol   : lineText.length;
+                this.highlightContainer.appendChild(makeMarker(ln, s, e));
             }
         }
-        
-        // Scroll the highlighted area into view
-        const topPos = (startLine - 1) * lineHeight;
-        const containerHeight = textarea.clientHeight;
-        const scrollTop = Math.max(0, topPos - containerHeight / 3);
-        
-        textarea.scrollTop = scrollTop;
-        highlightPre.scrollTop = scrollTop;
     }
-    
+
     clearSourceHighlight() {
-        if (this.highlightMarkers) {
-            this.highlightMarkers.forEach(marker => {
-                if (marker.parentElement) {
-                    marker.parentElement.removeChild(marker);
-                }
-            });
-            this.highlightMarkers = null;
+        const textarea = document.getElementById('litmus-input');
+        if (this._highlightScrollHandler && textarea) {
+            textarea.removeEventListener('scroll', this._highlightScrollHandler);
+            this._highlightScrollHandler = null;
         }
+        this._highlightParams = null;
+        this._charWidth = null; // reset so font changes are picked up next time
         if (this.highlightContainer) {
             this.highlightContainer.innerHTML = '';
+            // Remove the container from the DOM so it is recreated fresh next time.
+            if (this.highlightContainer.parentElement) {
+                this.highlightContainer.parentElement.removeChild(this.highlightContainer);
+            }
+            this.highlightContainer = null;
         }
+        this.highlightMarkers = null;
     }
     
     renderLoops() {
@@ -691,10 +681,11 @@ class GraphVisualizer {
             Prism.highlightElement(code);
         };
         
-        // Sync scrolling
+        // Sync scrolling: translate the highlight overlay to match the textarea scroll.
+        // (#litmus-highlight is overflow:visible so scrollLeft/scrollTop don't work on it directly.)
         textarea.addEventListener('scroll', () => {
-            highlight.scrollTop = textarea.scrollTop;
-            highlight.scrollLeft = textarea.scrollLeft;
+            highlight.style.transform =
+                `translate(-${textarea.scrollLeft}px, -${textarea.scrollTop}px)`;
         });
         
         // Update highlighting on input
