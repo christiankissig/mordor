@@ -1160,11 +1160,14 @@ end
     @param elab_ctx The elaboration context.
     @param pre_justs The initial set of justifications.
     @return Promise of justifications after batch elaborations. *)
-let batch_elaborations elab_ctx pre_justs =
+let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
   let landmark = Landmark.register "Elaborations.batch_elaborations" in
     Landmark.enter landmark;
 
-    let pool = Lwt_domain.setup_pool 10 in
+    (* Create a domain pool only when parallelism is requested. *)
+    let pool =
+      if num_threads > 1 then Some (Lwt_domain.setup_pool num_threads) else None
+    in
 
     List.iter
       (fun just -> OpTrace.add elab_ctx.op_trace just PreJustification |> ignore)
@@ -1230,13 +1233,13 @@ let batch_elaborations elab_ctx pre_justs =
           filter_elab_results new_justs results |> Lwt.return
       in
 
-      let run_elab_parallel elab_fn optrace_fn new_justs justs =
+      let run_elab_parallel p elab_fn optrace_fn new_justs justs =
         (* memory barrier - settle context objects *)
         let _ = Atomic.make 0 |> Atomic.get in
         let promises =
           List.map
             (fun just ->
-              Lwt_domain.detach pool
+              Lwt_domain.detach p
                 (fun () ->
                   match elab_fn elab_ctx just with
                   | result -> (just, result)
@@ -1256,9 +1259,16 @@ let batch_elaborations elab_ctx pre_justs =
             filter_elab_results new_justs results |> Lwt.return
       in
 
+      (* Dispatch: use parallel when a pool is available, sequential otherwise. *)
+      let run elab_fn optrace_fn new_justs justs =
+        match pool with
+        | Some p -> run_elab_parallel p elab_fn optrace_fn new_justs justs
+        | None   -> run_elab elab_fn optrace_fn new_justs justs
+      in
+
       let acc_justs = [] in
         let* new_va_justs =
-          run_elab_parallel ValueAssignElab.elab
+          run ValueAssignElab.elab
             (fun just -> ValueAssignElab just)
             acc_justs new_justs
         in
@@ -1269,7 +1279,7 @@ let batch_elaborations elab_ctx pre_justs =
           );
 
           let* new_fwd_justs =
-            run_elab_parallel ForwardElab.elab
+            run ForwardElab.elab
               (fun just -> Forwarding just)
               acc_justs new_justs
           in
@@ -1292,7 +1302,7 @@ let batch_elaborations elab_ctx pre_justs =
             in
 
             let* new_lift_justs =
-              run_elab_parallel
+              run
                 (fun elab_ctx (j1, j2) -> LiftElab.elab elab_ctx j1 j2)
                 (fun (j1, j2) -> LiftElab (j1, j2))
                 acc_justs justs_to_lift
@@ -1303,7 +1313,7 @@ let batch_elaborations elab_ctx pre_justs =
               );
 
               let* new_weaken_justs =
-                run_elab_parallel WeakElab.elab
+                run WeakElab.elab
                   (fun just -> WeakElab just)
                   acc_justs new_justs
               in
@@ -1357,7 +1367,7 @@ let batch_elaborations elab_ctx pre_justs =
               (String.concat "\n" just_str)
         );
 
-        Lwt_domain.teardown_pool pool;
+        Option.iter Lwt_domain.teardown_pool pool;
         Landmark.exit landmark;
         Lwt.return final_justs
 
@@ -1369,7 +1379,7 @@ let batch_elaborations elab_ctx pre_justs =
     @param structure The event structure.
     @param init_ppo Initial PPO relations.
     @return Promise of generated justifications. *)
-let generate_justifications structure fwd_es_ctx init_ppo =
+let generate_justifications ?(num_threads = 1) structure fwd_es_ctx init_ppo =
   let po = structure.po in
   let events = structure.events in
 
@@ -1389,7 +1399,7 @@ let generate_justifications structure fwd_es_ctx init_ppo =
 
   Logs_safe.debug (fun m -> m "Starting elaborations...");
 
-  batch_elaborations elab_ctx pre_justs
+  batch_elaborations ~num_threads elab_ctx pre_justs
 
 (** [step_generate_justifications lwt_ctx] step to generate justifications.
 
@@ -1416,7 +1426,8 @@ let step_generate_justifications (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
         in
         let init_ppo = Eventstructures.init_ppo structure in
           let* final_justs =
-            generate_justifications structure fwd_es_ctx init_ppo
+            generate_justifications ~num_threads:ctx.num_threads structure
+              fwd_es_ctx init_ppo
           in
             Logs_safe.debug (fun m ->
                 m "Generated %d justifications." (List.length final_justs)

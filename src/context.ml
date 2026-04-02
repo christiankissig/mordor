@@ -385,6 +385,10 @@ type mordor_ctx = {
       (** Per-loop episodicity determination *)
   mutable episodicity_results : loop_episodicity_result_summary option;
       (** Detailed episodicity analysis results *)
+  (* Execution mode *)
+  num_threads : int;
+      (** Number of threads for parallel execution (default: 1 =
+          single-threaded) *)
 }
 
 (** Create a new pipeline context with given configuration.
@@ -395,7 +399,7 @@ type mordor_ctx = {
     @param step_counter Loop iteration bound (default: 2)
     @return A fresh context with no analysis results *)
 let make_context options ?(output_mode = Json) ?(output_file = "stdout")
-    ?(step_counter = 2) () =
+    ?(step_counter = 2) ?(num_threads = 1) () =
   {
     options;
     litmus_name = "";
@@ -421,6 +425,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     assertion_instances = None;
     is_episodic = None;
     episodicity_results = None;
+    num_threads;
   }
 
 (** {1 Memory Model Options} *)

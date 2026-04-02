@@ -3,6 +3,23 @@ open Eventstructures
 open Types
 open Uset
 
+(** {1 Compute Abstraction} *)
+
+(** Abstract parallel computation strategy.
+
+    Encapsulates the choice between single-threaded and parallel execution.
+    Pipeline stages use [compute_fn] to map a pure worker over a list of items.
+
+    Use [sequential_compute] for single-threaded operation, or
+    [parallel_compute pool] to dispatch work across a domain pool. *)
+type compute_fn = { run: 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
+
+(** [sequential_compute] runs items sequentially with no parallelism. *)
+val sequential_compute : compute_fn
+
+(** [parallel_compute pool] dispatches items to [pool] via [Lwt_domain.detach]. *)
+val parallel_compute : Lwt_domain.pool -> compute_fn
+
 (** {1 Execution Generation for Symbolic Memory Model Checking}
 
     This module provides facilities for generating and analyzing symbolic
@@ -178,6 +195,7 @@ end
     @return Lwt promise resolving to a list of valid symbolic executions *)
 val generate_executions :
   ?include_rf:bool ->
+  ?compute:compute_fn ->
   symbolic_event_structure ->
   Forwarding.event_structure_context ->
   justification list ->
@@ -213,6 +231,7 @@ val generate_executions :
 *)
 val calculate_dependencies :
   ?include_rf:bool ->
+  ?num_threads:int ->
   symbolic_event_structure ->
   justification list ->
   Forwarding.event_structure_context ->

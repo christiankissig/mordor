@@ -284,7 +284,8 @@ module Pipeline = struct
   let make_program_context name program config =
     let context =
       make_context config.Config.options ?output_mode:config.output_mode
-        ?output_file:config.output_file ?step_counter:config.step_counter ()
+        ?output_file:config.output_file ?step_counter:config.step_counter
+        ~num_threads:config.num_threads ()
     in
       context.litmus_name <- name;
       context.litmus <- Some program;

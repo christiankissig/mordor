@@ -25,6 +25,47 @@ open Lwt.Syntax
 open Types
 open Uset
 
+(** {1 Compute Abstraction} *)
+
+(** Abstract parallel computation strategy.
+
+    Encapsulates the choice between single-threaded and parallel execution.
+    Each stage of the pipeline receives a [compute_fn] and uses it to map a
+    pure worker function over a list of items, returning results in an Lwt
+    promise.
+
+    - [sequential]: applies the worker with [List.map], no parallelism.
+    - [parallel pool]: dispatches each item to a domain pool via
+      [Lwt_domain.detach]. *)
+type compute_fn = { run: 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
+
+(** [sequential_compute] is a [compute_fn] that runs items one by one. *)
+let sequential_compute : compute_fn =
+  { run= (fun f items -> List.map f items |> Lwt.return) }
+
+(** [parallel_compute pool] is a [compute_fn] that dispatches items to [pool]. *)
+let parallel_compute pool : compute_fn =
+  { run=
+      (fun f items ->
+        let promises =
+          List.map
+            (fun item ->
+              Lwt_domain.detach pool
+                (fun () ->
+                  match f item with
+                  | result -> result
+                  | exception exn ->
+                      let bt = Printexc.get_raw_backtrace () in
+                        Printexc.raise_with_backtrace exn bt
+                )
+                ()
+            )
+            items
+        in
+          Lwt.all promises
+      )
+  }
+
 (** {1 Basic Types} *)
 
 (** Provides comparison, hashing, and subsumption checking for executions.
@@ -1288,7 +1329,7 @@ end
     @param statex Static constraints.
     @param justmap Hash table mapping write event IDs to justification lists.
     @return Stream of [(path, justification list)] pairs. *)
-let compute_justification_combinations pool fwd_es_ctx structure paths statex
+let compute_justification_combinations compute fwd_es_ctx structure paths statex
     (justmap : (int, justification list) Hashtbl.t) =
   (* Given a path, combine justifications for each write on the path. *)
   let combine_justifications_for_path path =
@@ -1330,35 +1371,8 @@ let compute_justification_combinations pool fwd_es_ctx structure paths statex
     List.map (fun combo -> (path, List.map snd combo)) js_combinations
   in
 
-  let compute paths =
-    List.map combine_justifications_for_path paths |> List.flatten |> Lwt.return
-  in
-
-  let compute_parallel paths =
-    let promises =
-      List.map
-        (fun path ->
-          Lwt_domain.detach pool
-            (fun () ->
-              match combine_justifications_for_path path with
-              | result -> result
-              | exception exn ->
-                  let bt = Printexc.get_raw_backtrace () in
-                    Printf.eprintf
-                      "Error in combine_justifications_for_path: %s\n%s%!"
-                      (Printexc.to_string exn)
-                      (Printexc.raw_backtrace_to_string bt);
-                    Printexc.raise_with_backtrace exn bt
-            )
-            ()
-        )
-        paths
-    in
-      let* results = Lwt.all promises in
-        List.flatten results |> Lwt.return
-  in
-
-  compute_parallel paths
+  let* results = compute.run combine_justifications_for_path paths in
+  List.flatten results |> Lwt.return
 
 (** {1 Generate executions} *)
 
@@ -1378,7 +1392,7 @@ let compute_justification_combinations pool fwd_es_ctx structure paths statex
     @param statex Static constraints.
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
-let generate_executions ?(include_rf = true)
+let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     (structure : symbolic_event_structure)
     (fwd_es_ctx : Forwarding.event_structure_context)
     (justs : justification list) statex ~restrictions =
@@ -1417,7 +1431,7 @@ let generate_executions ?(include_rf = true)
       )
       justs;
 
-    let stream_freeze pool input_stream =
+    let stream_freeze input_stream =
       let* input_stream = input_stream in
       let freeze_just_combo (path, just_combo) =
         let fwd =
@@ -1453,38 +1467,11 @@ let generate_executions ?(include_rf = true)
           freeze_results
       in
 
-      let compute input_stream =
-        List.concat_map freeze_just_combo input_stream |> Lwt.return
-      in
-
-      let compute_parallel input_stream =
-        let promises =
-          List.map
-            (fun item ->
-              Lwt_domain.detach pool
-                (fun () ->
-                  match freeze_just_combo item with
-                  | result -> result
-                  | exception exn ->
-                      let bt = Printexc.get_raw_backtrace () in
-                        Printf.eprintf "Error in freeze_just_combo: %s\n%s%!"
-                          (Printexc.to_string exn)
-                          (Printexc.raw_backtrace_to_string bt);
-                        Printexc.raise_with_backtrace exn bt
-                )
-                ()
-            )
-            input_stream
-        in
-          let* results = Lwt.all promises in
-            List.flatten results |> Lwt.return
-      in
-
-      (* Use map_list_s to handle the list results and flatten them into the stream *)
-      compute_parallel input_stream
+      let* results = compute.run freeze_just_combo input_stream in
+      List.flatten results |> Lwt.return
     in
 
-    let stream_freeze_to_execution pool input_stream =
+    let stream_freeze_to_execution input_stream =
       let* input_stream = input_stream in
       let id = ref 0 in
       let freeze_to_execution (freeze_res : FreezeResult.t) =
@@ -1584,31 +1571,7 @@ let generate_executions ?(include_rf = true)
         List.map freeze_to_execution input_stream |> Lwt.return
       in
 
-      let compute_parallel input_stream =
-        let promises =
-          List.map
-            (fun item ->
-              Lwt_domain.detach pool
-                (fun () ->
-                  match freeze_to_execution item with
-                  | result -> result
-                  | exception exn ->
-                      let bt = Printexc.get_raw_backtrace () in
-                        Printf.eprintf "Error in freeze_to_execution: %s\n%s%!"
-                          (Printexc.to_string exn)
-                          (Printexc.raw_backtrace_to_string bt);
-                        Printexc.raise_with_backtrace exn bt
-                )
-                ()
-            )
-            input_stream
-        in
-          let* results = Lwt.all promises in
-
-          Lwt.return results
-      in
-
-      compute_parallel input_stream
+      compute input_stream
     in
 
     let dedup_freeze_results stream =
@@ -1682,64 +1645,33 @@ let generate_executions ?(include_rf = true)
       |> Lwt.return
     in
 
-    let stream_filter_coherent_executions pool input_stream =
+    let stream_filter_coherent_executions input_stream =
       let* input_stream = input_stream in
-      let compute input_stream =
-        List.filter_map
-          (fun exec ->
-            if check_for_coherence structure exec restrictions then Some exec
-            else None
-          )
-          input_stream
-        |> Lwt.return
+      let check_exec exec =
+        if check_for_coherence structure exec restrictions then Some exec
+        else None
       in
-
-      let compute_parallel input_stream =
-        let promises =
-          List.map
-            (fun item ->
-              Lwt_domain.detach pool
-                (fun () ->
-                  match check_for_coherence structure item restrictions with
-                  | true -> Some item
-                  | false -> None
-                  | exception exn ->
-                      let bt = Printexc.get_raw_backtrace () in
-                        Printf.eprintf "Error in check_for_coherence: %s\n%s%!"
-                          (Printexc.to_string exn)
-                          (Printexc.raw_backtrace_to_string bt);
-                        Printexc.raise_with_backtrace exn bt
-                )
-                ()
-            )
-            input_stream
-        in
-          let* results = Lwt.all promises in
-            List.filter_map Fun.id results |> Lwt.return
-      in
-
-      compute_parallel input_stream
+      let* results = compute.run check_exec input_stream in
+      List.filter_map Fun.id results |> Lwt.return
     in
 
     (* Build justcombos for all paths *)
-    let pool = Lwt_domain.setup_pool 10 in
-      let* executions =
-        compute_justification_combinations pool fwd_es_ctx structure paths
-          statex justmap
-        |> stream_freeze pool
-        |> dedup_freeze_results
-        |> keep_minimal_freeze_results
-        |> stream_freeze_to_execution pool
-        |> dedup_executions
-        |> keep_minimal_executions
-        |> stream_filter_coherent_executions pool
-      in
-        Lwt_domain.teardown_pool pool;
-        Logs_safe.debug (fun m ->
-            m "Minimized to %d executions" (List.length executions)
-        );
+    let* executions =
+      compute_justification_combinations compute fwd_es_ctx structure paths
+        statex justmap
+      |> stream_freeze
+      |> dedup_freeze_results
+      |> keep_minimal_freeze_results
+      |> stream_freeze_to_execution
+      |> dedup_executions
+      |> keep_minimal_executions
+      |> stream_filter_coherent_executions
+    in
+      Logs_safe.debug (fun m ->
+          m "Minimized to %d executions" (List.length executions)
+      );
 
-        Lwt.return executions
+      Lwt.return executions
 
 (** Calculate dependencies and justifications *)
 
@@ -1761,7 +1693,7 @@ let generate_executions ?(include_rf = true)
       Whether to exhaustively explore all combinations (default: false).
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
-let calculate_dependencies ?(include_rf = true)
+let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
     (structure : symbolic_event_structure) (final_justs : justification list)
     (fwd_es_ctx : Forwarding.event_structure_context) ~(exhaustive : bool)
     ~(restrictions : Coherence.restrictions) : symbolic_execution list Lwt.t =
@@ -1809,11 +1741,25 @@ let calculate_dependencies ?(include_rf = true)
       !pairs @ structure.constraints
   in
 
+  (* Build compute_fn: sequential for 1 thread, parallel otherwise *)
+  let pool, compute =
+    if num_threads <= 1 then
+      (None, sequential_compute)
+    else
+      let p = Lwt_domain.setup_pool num_threads in
+      (Some p, parallel_compute p)
+  in
+
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions ~include_rf structure fwd_es_ctx final_justs statex
-      ~restrictions
+    generate_executions ~include_rf ~compute structure fwd_es_ctx
+      final_justs statex ~restrictions
   in
+
+  ( match pool with
+  | Some p -> Lwt_domain.teardown_pool p
+  | None -> ()
+  );
 
   Logs_safe.debug (fun m ->
       m "Executions generated: %d" (List.length executions)
@@ -1840,8 +1786,8 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
         (* default to IMM if not specified *);
     }
   in
-    match (ctx.structure, ctx.justifications) with
-    | Some structure, Some final_justs ->
+    match (ctx.structure, ctx.justifications, ctx.num_threads) with
+    | Some structure, Some final_justs, num_threads ->
         let* fwd_es_ctx =
           match ctx.fwd_es_ctx with
           | Some fwd_es_ctx -> Lwt.return fwd_es_ctx
@@ -1854,7 +1800,7 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
                   Lwt.return fwd_es_ctx
         in
           let* executions =
-            calculate_dependencies structure final_justs fwd_es_ctx
+            calculate_dependencies ~num_threads structure final_justs fwd_es_ctx
               ~exhaustive:(ctx.options.exhaustive || false)
               ~restrictions:coherence_restrictions
           in
