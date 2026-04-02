@@ -29,23 +29,24 @@ open Uset
 
 (** Abstract parallel computation strategy.
 
-    Encapsulates the choice between single-threaded and parallel execution.
-    Each stage of the pipeline receives a [compute_fn] and uses it to map a
-    pure worker function over a list of items, returning results in an Lwt
-    promise.
+    Encapsulates the choice between single-threaded and parallel execution. Each
+    stage of the pipeline receives a [compute_fn] and uses it to map a pure
+    worker function over a list of items, returning results in an Lwt promise.
 
     - [sequential]: applies the worker with [List.map], no parallelism.
     - [parallel pool]: dispatches each item to a domain pool via
       [Lwt_domain.detach]. *)
-type compute_fn = { run: 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
+type compute_fn = { run : 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
 
 (** [sequential_compute] is a [compute_fn] that runs items one by one. *)
 let sequential_compute : compute_fn =
-  { run= (fun f items -> List.map f items |> Lwt.return) }
+  { run = (fun f items -> List.map f items |> Lwt.return) }
 
-(** [parallel_compute pool] is a [compute_fn] that dispatches items to [pool]. *)
+(** [parallel_compute pool] is a [compute_fn] that dispatches items to [pool].
+*)
 let parallel_compute pool : compute_fn =
-  { run=
+  {
+    run =
       (fun f items ->
         let promises =
           List.map
@@ -63,7 +64,7 @@ let parallel_compute pool : compute_fn =
             items
         in
           Lwt.all promises
-      )
+      );
   }
 
 (** {1 Basic Types} *)
@@ -1372,7 +1373,7 @@ let compute_justification_combinations compute fwd_es_ctx structure paths statex
   in
 
   let* results = compute.run combine_justifications_for_path paths in
-  List.flatten results |> Lwt.return
+    List.flatten results |> Lwt.return
 
 (** {1 Generate executions} *)
 
@@ -1468,7 +1469,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
       in
 
       let* results = compute.run freeze_just_combo input_stream in
-      List.flatten results |> Lwt.return
+        List.flatten results |> Lwt.return
     in
 
     let stream_freeze_to_execution input_stream =
@@ -1651,8 +1652,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
         if check_for_coherence structure exec restrictions then Some exec
         else None
       in
-      let* results = compute.run check_exec input_stream in
-      List.filter_map Fun.id results |> Lwt.return
+        let* results = compute.run check_exec input_stream in
+          List.filter_map Fun.id results |> Lwt.return
     in
 
     (* Build justcombos for all paths *)
@@ -1743,17 +1744,16 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
 
   (* Build compute_fn: sequential for 1 thread, parallel otherwise *)
   let pool, compute =
-    if num_threads <= 1 then
-      (None, sequential_compute)
+    if num_threads <= 1 then (None, sequential_compute)
     else
       let p = Lwt_domain.setup_pool num_threads in
-      (Some p, parallel_compute p)
+        (Some p, parallel_compute p)
   in
 
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions ~include_rf ~compute structure fwd_es_ctx
-      final_justs statex ~restrictions
+    generate_executions ~include_rf ~compute structure fwd_es_ctx final_justs
+      statex ~restrictions
   in
 
   ( match pool with

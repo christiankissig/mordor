@@ -12,12 +12,13 @@ open Uset
 
     Use [sequential_compute] for single-threaded operation, or
     [parallel_compute pool] to dispatch work across a domain pool. *)
-type compute_fn = { run: 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
+type compute_fn = { run : 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
 
 (** [sequential_compute] runs items sequentially with no parallelism. *)
 val sequential_compute : compute_fn
 
-(** [parallel_compute pool] dispatches items to [pool] via [Lwt_domain.detach]. *)
+(** [parallel_compute pool] dispatches items to [pool] via [Lwt_domain.detach].
+*)
 val parallel_compute : Lwt_domain.pool -> compute_fn
 
 (** {1 Execution Generation for Symbolic Memory Model Checking}

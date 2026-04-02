@@ -1263,7 +1263,7 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
       let run elab_fn optrace_fn new_justs justs =
         match pool with
         | Some p -> run_elab_parallel p elab_fn optrace_fn new_justs justs
-        | None   -> run_elab elab_fn optrace_fn new_justs justs
+        | None -> run_elab elab_fn optrace_fn new_justs justs
       in
 
       let acc_justs = [] in
