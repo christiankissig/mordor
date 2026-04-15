@@ -7,17 +7,18 @@ class TestRunner {
     constructor() {
         this.litmusTests = [];
         this.episodicityTests = [];
+        this.programTests = [];
         this.results = {};
         this.runningTests = new Set();
         this.currentView = 'overview'; // 'overview' or 'detail'
         this.selectedTest = null;
-        this.selectedTestType = null; // 'litmus' or 'episodicity'
+        this.selectedTestType = null; // 'litmus' or 'episodicity' or 'program'
 
         this.init();
     }
 
     get tests() {
-        return [...this.litmusTests, ...this.episodicityTests];
+        return [...this.litmusTests, ...this.episodicityTests, ...this.programTests];
     }
 
     init() {
@@ -134,19 +135,23 @@ class TestRunner {
         testList.innerHTML = '<div class="test-loading">Loading tests...</div>';
 
         try {
-            const [litmusResp, episodicityResp] = await Promise.all([
+            const [litmusResp, episodicityResp, programResp] = await Promise.all([
                 fetch('/api/tests/list'),
-                fetch('/api/episodicity/list')
+                fetch('/api/episodicity/list'),
+                fetch('/api/program/list')
             ]);
 
             if (!litmusResp.ok) throw new Error('Failed to load litmus test list');
             if (!episodicityResp.ok) throw new Error('Failed to load episodicity test list');
+            if (!programResp.ok) throw new Error('Failed to load program list');
 
             const litmusData = await litmusResp.json();
             const episodicityData = await episodicityResp.json();
+            const programData = await programResp.json();
 
             this.litmusTests = litmusData.tests || [];
             this.episodicityTests = episodicityData.tests || [];
+            this.programTests = programData.programs || [];
 
             this.renderTestList();
             this.updateStats();
@@ -257,7 +262,7 @@ class TestRunner {
     renderTestList(filter = '') {
         const testList = document.getElementById('test-list');
 
-        if (this.litmusTests.length === 0 && this.episodicityTests.length === 0) {
+        if (this.litmusTests.length === 0 && this.episodicityTests.length === 0 && this.programTests.length === 0) {
             testList.innerHTML = '<div class="test-empty">No tests found</div>';
             return;
         }
@@ -276,11 +281,17 @@ class TestRunner {
             ? this.episodicityTests.filter(t => t.toLowerCase().includes(filter.toLowerCase()))
             : this.episodicityTests;
 
+        const filteredProgram = filter
+            ? this.programTests.filter(t => t.toLowerCase().includes(filter.toLowerCase()))
+            : this.programTests;
+
         const litmusTree = this.buildTestTree(filteredLitmus, 'litmus-tests');
         const episodicityTree = this.buildTestTree(filteredEpisodicity, 'programs/episodicity');
+        const programTree = this.buildTestTree(filteredProgram, 'programs');
 
         const litmusId = 'top-level-litmus';
         const episodicityId = 'top-level-episodicity';
+        const programId = 'top-level-program';
 
         testList.innerHTML = `
             <div class="test-tree-dir">
@@ -303,6 +314,17 @@ class TestRunner {
                 </div>
                 <div class="test-dir-children" id="${episodicityId}">
                     ${this.renderTestTree(episodicityTree, 1, 'episodicity')}
+                </div>
+            </div>
+            <div class="test-tree-dir">
+                <div class="test-dir-header test-top-level" style="padding-left: 8px" data-toggle="${programId}">
+                    <span class="test-dir-toggle">▾</span>
+                    <span class="test-dir-icon">📋</span>
+                    <span class="test-dir-name">Programs</span>
+                    <span class="test-dir-count">${filteredProgram.length}</span>
+                </div>
+                <div class="test-dir-children" id="${programId}">
+                    ${this.renderTestTree(programTree, 1, 'programs')}
                 </div>
             </div>
         `;
@@ -387,6 +409,10 @@ class TestRunner {
         for (const test of this.episodicityTests) {
             await this.runTest(test, 'episodicity', false);
         }
+        for (const test of this.programTests) {
+            await this.runTest(test, 'litmus', false);
+        }
+
 
         runBtn.disabled = false;
         runBtn.textContent = '▶ Run All Tests';

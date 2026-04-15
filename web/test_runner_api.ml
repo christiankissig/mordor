@@ -4,6 +4,7 @@ open Lwt.Syntax
 
 (* Configuration *)
 let litmus_dir = "litmus-tests"
+let programs_dir = "programs"
 let cli_executable = "_build/default/cli/main.exe"
 
 (* Read all .lit files from directory recursively *)
@@ -21,6 +22,30 @@ let read_litmus_files dir =
           )
           )
     with Sys_error _ -> []
+  in
+    read_dir_recursive dir
+
+(* Read all .lit files from programs/ recursively, excluding programs/episodicity/ *)
+let read_program_files dir =
+  let excluded = Filename.concat dir "episodicity" in
+  let rec read_dir_recursive path =
+    match Sys.readdir path with
+    | exception Sys_error _ -> []
+    | files ->
+        List.concat
+          (Array.to_list files
+          |> List.map (fun f ->
+              let full_path = Filename.concat path f in
+                match Sys.is_directory full_path with
+                | exception Sys_error _ -> []
+                | true ->
+                    if full_path = excluded then []
+                    else read_dir_recursive full_path
+                | false ->
+                    if Filename.check_suffix f ".lit" then [ full_path ]
+                    else []
+          )
+          )
   in
     read_dir_recursive dir
 
@@ -232,10 +257,24 @@ let get_test_source_handler request =
         Dream.json ~status:`Internal_Server_Error
           (Yojson.Basic.to_string (`Assoc [ ("error", `String error) ]))
 
+(* GET /api/program/list - List all available programs (excluding programs/episodicity/) *)
+let list_programs_handler _request =
+  try
+    let programs = read_program_files programs_dir in
+    let json =
+      `Assoc [ ("programs", `List (List.map (fun p -> `String p) programs)) ]
+    in
+      Dream.json (Yojson.Basic.to_string json)
+  with exn ->
+    let error = Printexc.to_string exn in
+      Dream.json ~status:`Internal_Server_Error
+        (Yojson.Basic.to_string (`Assoc [ ("error", `String error) ]))
+
 (* Routes to add to main server *)
 let routes =
   [
     Dream.get "/api/tests/list" list_tests_handler;
     Dream.post "/api/tests/run" run_test_handler;
     Dream.get "/api/tests/source" get_test_source_handler;
+    Dream.get "/api/program/list" list_programs_handler;
   ]

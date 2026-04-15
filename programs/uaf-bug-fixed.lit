@@ -1,0 +1,15 @@
+rC := malloc(1);
+rcu := malloc(1);
+rcu := 0;
+{
+  rtemp := *rcu;
+  if (rtemp = 0) {
+    free(rC);
+  }
+}
+|||
+{
+  *rcu :acq= 1;
+  rv := *rC;
+  *rcu :rel= 0;
+}
