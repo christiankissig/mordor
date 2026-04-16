@@ -51,7 +51,9 @@ let send_complete ~send_data total_executions =
     - Checks assertions
     - Sends execution graphs *)
 let visualize_to_stream program options step_counter stream =
-  let context = make_context options ~output_mode:Json ~step_counter () in
+  let context =
+    make_context_with_model options ~output_mode:Json ~step_counter ()
+  in
     context.litmus <- Some program;
 
     (* Create a function to send graph data through SSE *)
@@ -91,7 +93,9 @@ let visualize_to_stream program options step_counter stream =
       Lwt.return ctx
 
 let visualize_parse_to_stream program options step_counter stream =
-  let context = make_context options ~output_mode:Json ~step_counter () in
+  let context =
+    make_context_with_model options ~output_mode:Json ~step_counter ()
+  in
     context.litmus <- Some program;
 
     (* Create a function to send graph data through SSE *)
@@ -111,7 +115,9 @@ let visualize_parse_to_stream program options step_counter stream =
     Lwt.return ctx
 
 let visualize_interpret_to_stream program options step_counter stream =
-  let context = make_context options ~output_mode:Json ~step_counter () in
+  let context =
+    make_context_with_model options ~output_mode:Json ~step_counter ()
+  in
     context.litmus <- Some program;
 
     (* Create a function to send graph data through SSE *)
@@ -133,7 +139,9 @@ let visualize_interpret_to_stream program options step_counter stream =
     Lwt.return ctx
 
 let visualize_test_episodicity_to_stream program options step_counter stream =
-  let context = make_context options ~output_mode:Json ~step_counter () in
+  let context =
+    make_context_with_model options ~output_mode:Json ~step_counter ()
+  in
     context.litmus <- Some program;
 
     (* Create a function to send graph data through SSE *)
@@ -157,7 +165,9 @@ let visualize_test_episodicity_to_stream program options step_counter stream =
     Lwt.return ctx
 
 let visualize_test_assertions_to_stream program options step_counter stream =
-  let context = make_context options ~output_mode:Json ~step_counter () in
+  let context =
+    make_context_with_model options ~output_mode:Json ~step_counter ()
+  in
     context.litmus <- Some program;
 
     (* Create a function to send graph data through SSE *)
@@ -241,8 +251,15 @@ let make_sse_handler pipeline_fn request =
       )
   in
 
-  Printf.printf "📥 SSE request: %d chars, %d steps\n%!" (String.length program)
-    step_counter;
+  let memory_model =
+    let m = String.lowercase_ascii (get_field "memory_model") in
+      match m with
+      | "rc11" | "rc11c" | "rc11ub" | "smrd" | "ub11" | "undefined" -> m
+      | _ -> "smrd"
+  in
+
+  Printf.printf "📥 SSE request: %d chars, %d steps, model: %s\n%!"
+    (String.length program) step_counter memory_model;
 
   Dream.stream
     ~headers:
@@ -262,7 +279,12 @@ let make_sse_handler pipeline_fn request =
             let* () = Dream.flush stream in
 
             let options =
-              { default_options with loop_semantics; step_counter }
+              {
+                default_options with
+                loop_semantics;
+                step_counter;
+                model = memory_model;
+              }
             in
 
             Logs.info (fun m ->

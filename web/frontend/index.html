@@ -214,6 +214,23 @@
                 </div>
                 
                 <div class="setting-group" style="margin-top: 1.5rem;">
+                    <h3 style="color: #cccccc; font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #3e3e42; padding-bottom: 0.5rem;">Memory Model</h3>
+                    <div class="setting-item">
+                        <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span>Weak memory model:</span>
+                            <select id="memory-model" style="padding: 0.4rem; background: #3c3c3c; border: 1px solid #555; color: #d4d4d4; border-radius: 4px; font-size: 0.9rem;">
+                                <option value="rc11">rc11</option>
+                                <option value="rc11c">rc11c</option>
+                                <option value="rc11ub">rc11ub</option>
+                                <option value="smrd" selected>smrd</option>
+                                <option value="ub11">ub11</option>
+                                <option value="undefined">undefined</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="setting-group" style="margin-top: 1.5rem;">
                     <h3 style="color: #cccccc; font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #3e3e42; padding-bottom: 0.5rem;">Execution Filtering</h3>
                     <div class="setting-item">
                         <label>

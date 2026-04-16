@@ -430,6 +430,8 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
 
 (** {1 Memory Model Options} *)
 
+(** {1 Memory Model Options} *)
+
 (** Configuration specific to a memory model.
 
     Different models may require different coherence models and have different
@@ -518,3 +520,24 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
       Logs_safe.debug (fun m -> m "setting coherent %s" coherent);
       ctx.options.coherent <- coherent
   )
+
+(** Create a new pipeline context and immediately apply model-specific options.
+
+    Convenience wrapper around {!make_context} that calls {!apply_model_options}
+    after construction so the coherence and UB settings derived from the chosen
+    memory model are in effect from the start of the pipeline.
+
+    @param options Analysis configuration options (should have [model] set)
+    @param output_mode Output format (default: Json)
+    @param output_file Output file path (default: "stdout")
+    @param step_counter Loop iteration bound (default: 2)
+    @param num_threads Parallelism degree (default: 1)
+    @return A fresh context with model options applied *)
+let make_context_with_model options ?(output_mode = Json)
+    ?(output_file = "stdout") ?(step_counter = 2) ?(num_threads = 1) () =
+  let ctx =
+    make_context options ~output_mode ~output_file ~step_counter ~num_threads ()
+  in
+    if options.model <> "undefined" && options.model <> "" then
+      apply_model_options ctx options.model;
+    ctx

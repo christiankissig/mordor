@@ -42,8 +42,7 @@ let read_program_files dir =
                     if full_path = excluded then []
                     else read_dir_recursive full_path
                 | false ->
-                    if Filename.check_suffix f ".lit" then [ full_path ]
-                    else []
+                    if Filename.check_suffix f ".lit" then [ full_path ] else []
           )
           )
   in

@@ -45,7 +45,8 @@ class GraphVisualizer {
             showUAF: false,
             showUnboundedDeref: false,
             loopSemantics: 'step-counter',  // 'step-counter' or 'symbolic'
-            stepCounter: 2
+            stepCounter: 2,
+            memoryModel: 'smrd'
         };
 
         this.cy = cytoscape({
@@ -628,6 +629,9 @@ class GraphVisualizer {
         }
         document.getElementById('step-counter').value = this.settings.stepCounter;
         
+        // Populate memory model setting
+        document.getElementById('memory-model').value = this.settings.memoryModel;
+        
         // Enable/disable step counter input based on selection
         this.updateStepCounterState();
         
@@ -651,9 +655,13 @@ class GraphVisualizer {
             this.settings.loopSemantics = 'symbolic';
         }
         
+        // Read memory model setting
+        this.settings.memoryModel = document.getElementById('memory-model').value;
+        
         this.closeSettingsModal();
         this.log('Settings updated: ' + this.settings.loopSemantics + 
-                 (this.settings.loopSemantics === 'step-counter' ? ' (' + this.settings.stepCounter + ' steps)' : ''), 
+                 (this.settings.loopSemantics === 'step-counter' ? ' (' + this.settings.stepCounter + ' steps)' : '') +
+                 ', model: ' + this.settings.memoryModel, 
                  'success');
         
         // Regenerate if we have a program
@@ -1283,6 +1291,7 @@ class GraphVisualizer {
             steps: this.settings.stepCounter.toString(),
             allow_uaf: this.settings.showUAF.toString(),
             allow_unbounded_deref: this.settings.showUnboundedDeref.toString(),
+            memory_model: this.settings.memoryModel,
         };
 
         // Use fetch POST to avoid URL length limits, then read SSE stream manually
