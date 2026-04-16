@@ -80,7 +80,13 @@
             <div class="panel" id="right-panel">
                 <div class="panel-header">
                     <h2>Event Structure & Executions</h2>
-                    <div class="status" id="status">Ready</div>
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <div class="file-input-wrapper">
+                            <input type="file" id="json-file-input" accept=".json" />
+                            <label for="json-file-input" class="file-input-label" title="Open execution JSON">📂 Load JSON</label>
+                        </div>
+                        <div class="status" id="status">Ready</div>
+                    </div>
                 </div>
                 
                 <div class="carousel-container" id="carousel-container">
@@ -130,10 +136,6 @@
                     <button id="fit-btn">Fit</button>
                     <button id="export-png-btn">Export PNG</button>
                     <button id="save-json-btn">💾 Save JSON</button>
-                    <div class="file-input-wrapper">
-                        <input type="file" id="json-file-input" accept=".json" />
-                        <label for="json-file-input" class="file-input-label" title="Open execution JSON">📂 Load JSON</label>
-                    </div>
                 </div>
                 
                 <div class="graph-stats" id="graph-stats">

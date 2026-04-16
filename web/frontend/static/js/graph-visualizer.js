@@ -817,7 +817,11 @@ class GraphVisualizer {
             const payload = {
                 program: textarea.value,
                 executionIndex: this.currentIndex,
-                data: this.data
+                data: this.data,
+                loops: this.loops,
+                episodicityResults: this.episodicityResults,
+                assertionResults: this.assertionResults,
+                uafResults: this.uafResults
             };
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             const link = document.createElement('a');
@@ -861,6 +865,9 @@ class GraphVisualizer {
                     this.visibleRelations = null;
                     this.availableRelations = new Set();
                     document.getElementById('relations-checkboxes').innerHTML = '';
+                    document.getElementById('loops-content').innerHTML = '<p>Episodicity results will appear here.</p>';
+                    document.getElementById('assertions-content').innerHTML = '<p>Assertion results will appear here.</p>';
+                    document.getElementById('uaf-content').innerHTML = '<p>Use-after-free analysis will appear here.</p>';
                     this.cy.elements().remove();
 
                     // Restore both data and graphs (graphs is derived from data)
@@ -868,6 +875,25 @@ class GraphVisualizer {
                     this.graphs = payload.data.map(d => d.graph);
                     this.executionCount = this.data.length > 1 ? this.data.length - 1 : 0;
                     document.getElementById('execution-count').textContent = this.executionCount;
+
+                    // Restore saved analysis results
+                    if (payload.loops) {
+                        this.loops = payload.loops;
+                    }
+                    if (payload.episodicityResults) {
+                        this.episodicityResults = payload.episodicityResults;
+                    }
+                    if (payload.assertionResults) {
+                        this.assertionResults = payload.assertionResults;
+                    }
+                    if (payload.uafResults) {
+                        this.uafResults = payload.uafResults;
+                    }
+
+                    // Re-render analysis panels with restored results
+                    this.renderLoops();
+                    this.renderAssertions();
+                    this.renderUAF();
 
                     // Show carousel
                     document.getElementById('carousel-container').style.display = 'flex';
