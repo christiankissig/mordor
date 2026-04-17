@@ -374,70 +374,50 @@ module EventStructureViz = struct
       @return A graph containing only events in this execution *)
   let build_execution_graph (structure : symbolic_event_structure)
       (exec : symbolic_execution) (source_spans : (int, source_span) Hashtbl.t)
-      (po_relation : (int * int) USet.t) : G.t =
+      : G.t =
     let g = G.create () in
 
-    (* Collect event IDs that are in this execution *)
-    let exec_events = Hashtbl.create 100 in
-
-    let mark_events_in_relation relation =
-      USet.iter
-        (fun (src, dst) ->
-          Hashtbl.replace exec_events src ();
-          Hashtbl.replace exec_events dst ()
-        )
-        relation
-    in
-
-    mark_events_in_relation exec.dp;
-    mark_events_in_relation exec.ppo;
-    mark_events_in_relation exec.rf;
-
-    (* Create vertices only for events in this execution *)
+    (* Create vertices for all events in this execution *)
     let vertex_map = Hashtbl.create 100 in
-      Hashtbl.iter
-        (fun event_id () ->
+      USet.iter
+        (fun event_id ->
           let v = create_vertex event_id structure source_spans in
             G.add_vertex g v;
             Hashtbl.add vertex_map event_id v
         )
-        exec_events;
+        exec.e;
 
-      (* Add PO edges (only for events in execution) *)
-      USet.iter
-        (fun (src, dst) ->
-          if Hashtbl.mem exec_events src && Hashtbl.mem exec_events dst then
-            let v_src = Hashtbl.find vertex_map src in
-            let v_dst = Hashtbl.find vertex_map dst in
-              G.add_edge_e g (G.E.create v_src PO v_dst)
-        )
-        po_relation;
-
-      (* Add relaxed dependency edges *)
-      let add_dep_edges relation label_fn =
+      (* Helper to add edges from a relation as a given label *)
+      let add_edges relation label =
         USet.iter
           (fun (src, dst) ->
-            if Hashtbl.mem exec_events src && Hashtbl.mem exec_events dst then
+            if Hashtbl.mem vertex_map src && Hashtbl.mem vertex_map dst then
               let v_src = Hashtbl.find vertex_map src in
               let v_dst = Hashtbl.find vertex_map dst in
-                G.add_edge_e g (G.E.create v_src (label_fn ()) v_dst)
+                G.add_edge_e g (G.E.create v_src label v_dst)
           )
-          (URelation.transitive_reduction relation)
+          relation
       in
 
-      (* filter ppo: remove edges from initial and to terminal events *)
-      let ppo =
-        USet.filter
-          (fun (src, dst) ->
-            src > 0 && not (USet.mem structure.terminal_events dst)
+      (* Add structural PO edges (already reduced when passed in) *)
+
+      (* Add ppo edges as PPO, filtered and reduced *)
+      let ppo_filtered =
+        URelation.transitive_reduction
+          (USet.filter
+             (fun (src, dst) ->
+               src > 0 && not (USet.mem structure.terminal_events dst)
+             )
+             exec.ppo
           )
-          exec.ppo
       in
 
-      add_dep_edges exec.dp (fun () -> DP);
-      add_dep_edges ppo (fun () -> PPO);
-      add_dep_edges exec.rf (fun () -> RF);
-      add_dep_edges exec.rmw (fun () -> RMW);
+      (* Add relaxed dependency edges *)
+      add_edges (URelation.transitive_reduction structure.po) PO;
+      add_edges (URelation.transitive_reduction ppo_filtered) PPO;
+      add_edges (URelation.transitive_reduction exec.dp) DP;
+      add_edges (URelation.transitive_reduction exec.rf) RF;
+      add_edges (URelation.transitive_reduction exec.rmw) RMW;
 
       g
 
@@ -973,11 +953,8 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
   | Some structure ->
       (* Process executions *)
       let* () =
-        (* Get PO relation for execution graphs *)
-        let po_reduced = URelation.transitive_reduction structure.po in
         let build_exec_graph exec =
           EventStructureViz.build_execution_graph structure exec source_spans
-            po_reduced
         in
 
         match ctx.executions with
