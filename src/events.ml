@@ -237,10 +237,9 @@ end = struct
 end
 
 let get_loc structure event_id =
-  let events = structure.events in
-    Hashtbl.find_opt events event_id
-    |> Option.map (fun event -> event.loc)
-    |> Option.join
+  Hashtbl.find_opt structure.events event_id
+  |> Option.map (fun event -> event.loc)
+  |> Option.join
 
 let get_val structure e =
   let events = structure.events in

@@ -693,8 +693,11 @@ module Freeze = struct
   let compute_path_rf structure path ~elided ~constraints statex ppo dp
       p_combined =
     let write_events =
-      USet.intersection structure.write_events path.path |> fun e ->
-      USet.set_minus e elided |> fun e -> USet.add e 0 (* include init write *)
+      USet.union structure.write_events structure.free_events
+      |> USet.intersection path.path
+      |> fun writes ->
+      USet.set_minus writes elided |> fun writes ->
+      USet.add writes 0 (* include init write *)
     in
     let read_events =
       USet.set_minus (USet.intersection structure.read_events path.path) elided
@@ -1778,14 +1781,7 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
   let* ctx = lwt_ctx in
 
   (* Create restrictions for coherence checking *)
-  let coherence_restrictions =
-    {
-      Coherence.coherent =
-        ( try ctx.options.coherent with _ -> "imm"
-        )
-        (* default to IMM if not specified *);
-    }
-  in
+  let coherence_restrictions = { Coherence.coherent = ctx.options.coherent } in
     match (ctx.structure, ctx.justifications, ctx.num_threads) with
     | Some structure, Some final_justs, num_threads ->
         let* fwd_es_ctx =

@@ -902,8 +902,5 @@ let check_for_coherence structure execution restrictions =
         if not (M.check_thin_air cache execution) then false
         else
           (* Try all coherence orders *)
-          let result =
-            try_all_coherence_orders cache structure execution M.check_coherence
-              eqlocs
-          in
-            result
+          try_all_coherence_orders cache structure execution M.check_coherence
+            eqlocs

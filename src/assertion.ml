@@ -319,9 +319,11 @@ module UBValidation = struct
     (** [check structure execution ub_reasons pointer_map rhb
          all_alloc_read_writes] detects use-after-free violations.
 
-        For each free event, finds all accesses to the same location that don't
-        happen-before the free. These represent potential use-after-free. UAF is
-        admitted when: (use, free) NOT in happens-before.
+        For reads, this finds all rf-pairs where the read is reading from a
+        free. This precisely pins down the read-after-free and helps discern the
+        memory model, e.g. rc11 which does not admit as many uaf as smrd. For
+        writes, this uses a pessimistic approximation where free-write pairs are
+        identified which are not in rhb relation.
 
         @param structure The event structure.
         @param execution The execution.
@@ -332,6 +334,12 @@ module UBValidation = struct
     let check structure execution ub_reasons pointer_map rhb
         all_alloc_read_writes =
       let all_frees = USet.intersection structure.free_events execution.e in
+      let all_pointer_writes =
+        all_alloc_read_writes |> USet.intersection structure.write_events
+      in
+      let all_pointer_reads =
+        all_alloc_read_writes |> USet.intersection structure.read_events
+      in
       let uaf =
         USet.fold
           (fun acc free ->
@@ -344,7 +352,7 @@ module UBValidation = struct
             (* Find all events using the same location *)
             let related_events =
               find_related_events free_loc_symbol structure execution
-                all_alloc_read_writes
+                all_pointer_writes
             in
             (* Find events that DON'T happen before free (admits use-after-free) *)
             (* UAF is admitted when use is not ordered before free: (use, free) NOT in rhb *)
@@ -355,6 +363,11 @@ module UBValidation = struct
                 uaf_events acc
           )
           all_frees (USet.create ())
+        |> USet.union
+             (USet.filter
+                (fun (w, r) -> USet.mem structure.free_events w)
+                execution.rf
+             )
       in
         if USet.size uaf > 0 then ub_reasons := UAF uaf :: !ub_reasons
   end

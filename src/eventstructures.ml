@@ -341,7 +341,11 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
    prevents r reading from shadowed writes w.*)
 (* TODO optimize; pregenerate *)
 let dslwb structure w r =
-  let write_events = structure.write_events in
+  let write_events =
+    structure.write_events
+    |> USet.union structure.malloc_events
+    |> USet.union structure.free_events
+  in
   let r_restrict =
     Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
   in
