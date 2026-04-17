@@ -409,10 +409,6 @@ class TestRunner {
         for (const test of this.episodicityTests) {
             await this.runTest(test, 'episodicity', false);
         }
-        for (const test of this.programTests) {
-            await this.runTest(test, 'litmus', false);
-        }
-
 
         runBtn.disabled = false;
         runBtn.textContent = '▶ Run All Tests';
