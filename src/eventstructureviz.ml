@@ -412,8 +412,14 @@ module EventStructureViz = struct
           )
       in
 
+      let exec_po =
+        USet.filter
+          (fun (f, t) -> USet.mem exec.e f && USet.mem exec.e t)
+          structure.po
+      in
+
       (* Add relaxed dependency edges *)
-      add_edges (URelation.transitive_reduction structure.po) PO;
+      add_edges (URelation.transitive_reduction exec_po) PO;
       add_edges (URelation.transitive_reduction ppo_filtered) PPO;
       add_edges (URelation.transitive_reduction exec.dp) DP;
       add_edges (URelation.transitive_reduction exec.rf) RF;
