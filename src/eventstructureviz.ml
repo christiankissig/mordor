@@ -377,6 +377,8 @@ module EventStructureViz = struct
       : G.t =
     let g = G.create () in
 
+    let e = USet.set_minus exec.e structure.fence_events in
+
     (* Create vertices for all events in this execution *)
     let vertex_map = Hashtbl.create 100 in
       USet.iter
@@ -385,10 +387,10 @@ module EventStructureViz = struct
             G.add_vertex g v;
             Hashtbl.add vertex_map event_id v
         )
-        exec.e;
+        e;
 
       (* Helper to add edges from a relation as a given label *)
-      let add_edges relation label =
+      let add_edges label relation =
         USet.iter
           (fun (src, dst) ->
             if Hashtbl.mem vertex_map src && Hashtbl.mem vertex_map dst then
@@ -399,31 +401,30 @@ module EventStructureViz = struct
           relation
       in
 
-      (* Add structural PO edges (already reduced when passed in) *)
+      let exec_filter = fun (f, t) -> USet.mem e f && USet.mem e t in
 
-      (* Add ppo edges as PPO, filtered and reduced *)
-      let ppo_filtered =
-        URelation.transitive_reduction
-          (USet.filter
-             (fun (src, dst) ->
-               src > 0 && not (USet.mem structure.terminal_events dst)
-             )
-             exec.ppo
-          )
+      let init_filter =
+       fun (src, dst) -> src > 0 && not (USet.mem structure.terminal_events dst)
       in
 
-      let exec_po =
-        USet.filter
-          (fun (f, t) -> USet.mem exec.e f && USet.mem exec.e t)
-          structure.po
-      in
+      USet.filter exec_filter structure.po
+      |> URelation.transitive_reduction
+      |> add_edges PO;
 
-      (* Add relaxed dependency edges *)
-      add_edges (URelation.transitive_reduction exec_po) PO;
-      add_edges (URelation.transitive_reduction ppo_filtered) PPO;
-      add_edges (URelation.transitive_reduction exec.dp) DP;
-      add_edges (URelation.transitive_reduction exec.rf) RF;
-      add_edges (URelation.transitive_reduction exec.rmw) RMW;
+      USet.filter exec_filter exec.ppo
+      |> USet.filter init_filter
+      |> URelation.transitive_reduction
+      |> add_edges PPO;
+
+      USet.filter exec_filter exec.dp
+      |> URelation.transitive_reduction
+      |> add_edges DP;
+
+      add_edges RF exec.rf;
+
+      USet.filter exec_filter exec.rmw
+      |> URelation.transitive_reduction
+      |> add_edges RMW;
 
       g
 
