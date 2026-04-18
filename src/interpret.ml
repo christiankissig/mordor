@@ -387,6 +387,13 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Expr.evaluate ~env:(Hashtbl.find_opt env) expected
               in
               let cond_expr = Expr.binop loaded_expr "=" expected_expr in
+              let branch_event =
+                { (Event.create Branch 0 ()) with cond = Some cond_expr }
+              in
+              let branch_event' =
+                add_event events branch_event env annotation
+              in
+
               let base_evt_store : event = Event.create Write 0 () in
               let wval =
                 Expr.evaluate ~env:(Hashtbl.find_opt env) desired
@@ -419,14 +426,17 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let cont_succ = recurse rest env_succ phi_succ events in
                 let cont_fail = recurse rest env_fail phi_fail events in
                   SymbolicEventStructure.dot event_load'
-                    (SymbolicEventStructure.plus
-                       (add_rmw_edge
-                          (SymbolicEventStructure.dot event_store' cont_succ
-                             phi_succ defacto
+                    (SymbolicEventStructure.dot branch_event'
+                       (SymbolicEventStructure.plus
+                          (add_rmw_edge
+                             (SymbolicEventStructure.dot event_store' cont_succ
+                                phi_succ defacto
+                             )
+                             event_load'.label cond_expr event_store'.label
                           )
-                          event_load'.label cond_expr event_store'.label
+                          cont_fail
                        )
-                       cont_fail
+                       phi defacto
                     )
                     phi defacto
         | If { condition; then_body; else_body } -> (
