@@ -1186,7 +1186,28 @@ module AssertionChecker = struct
                   in
                     assertion_instances := instance :: !assertion_instances
                   (* Otherwise: execution doesn't witness/contradict, don't track it *)
-            | None -> ()
+            | None ->
+                (* For UB assertions (detail_opt is None), create instances based
+                   on UB presence so the UI can navigate to the execution graph. *)
+                if local_ub_reasons <> [] then
+                  let detail =
+                    AssertionInstanceTracking.create_instance_detail None
+                      structure execution true
+                  in
+                    if outcome = Allow then
+                      (* allow (ub) witnessed by this UB execution *)
+                      let instance =
+                        AssertionInstanceTracking.create_witnessed execution.id
+                          detail
+                      in
+                        assertion_instances := instance :: !assertion_instances
+                    else
+                      (* forbid (ub) contradicted by this UB execution *)
+                      let instance =
+                        AssertionInstanceTracking.create_contradicted
+                          execution.id detail
+                      in
+                        assertion_instances := instance :: !assertion_instances
             );
 
             Lwt.return ()
@@ -1241,8 +1262,15 @@ module AssertionChecker = struct
       | Ir.CondExpr _ -> false
     in
 
-    (* Handle empty execution list *)
-    let%lwt early_result = handle_no_executions exhaustive outcome in
+    (* Handle empty execution list — only short-circuit when there are truly no
+       executions to process.  Previously this called handle_no_executions
+       unconditionally, which for any non-exhaustive forbid run returned
+       early with empty_result (assertion_instances = None), bypassing
+       process_executions entirely even when UB executions were present. *)
+    let%lwt early_result =
+      if executions = [] then handle_no_executions exhaustive outcome
+      else Lwt.return None
+    in
 
     match early_result with
     | Some result -> Lwt.return result

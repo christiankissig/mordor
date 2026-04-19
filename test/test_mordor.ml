@@ -4,6 +4,7 @@ let () =
   Alcotest.run "Mordor Test Suite"
     [
       Test_algorithms.suite;
+      Test_assertion.suite;
       Test_types.suite;
       Test_expr.suite;
       Test_solver.suite;

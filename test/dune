@@ -11,6 +11,7 @@
   ; other test modules
   test_advanced_mrd
   test_algorithms
+  test_assertion
   test_coherence
   test_elaborations
   test_events
