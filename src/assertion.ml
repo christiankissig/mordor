@@ -1262,13 +1262,15 @@ module AssertionChecker = struct
       | Ir.CondExpr _ -> false
     in
 
-    (* Handle empty execution list — only short-circuit when there are truly no
-       executions to process.  Previously this called handle_no_executions
-       unconditionally, which for any non-exhaustive forbid run returned
-       early with empty_result (assertion_instances = None), bypassing
-       process_executions entirely even when UB executions were present. *)
+    (* Handle empty execution list, or non-UB assertions with any execution
+       list.  For UB assertions with a non-empty execution list we skip the
+       early return so that process_executions can synthesise Witnessed /
+       Contradicted instances from local_ub_reasons — which is impossible
+       without visiting the executions.
+    *)
     let%lwt early_result =
-      if executions = [] then handle_no_executions exhaustive outcome
+      if executions = [] || not is_ub_assertion then
+        handle_no_executions exhaustive outcome
       else Lwt.return None
     in
 
