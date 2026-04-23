@@ -1,3 +1,10 @@
+(rule
+ (target version.ml)
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "let version = \"%{version:mordor}\""))))
+
 (ocamllex lexer)
 
 (menhir
@@ -37,7 +44,8 @@
   solver
   source_info
   types
-  uset)
+  uset
+  version)
  (flags
   (:standard -g -w -26-27))
  (libraries

@@ -1,5 +1,6 @@
 (lang dune 3.7)
 (name mordor)
+(version 0.1.0)
 (generate_opam_files true)
 (source (github christiankissig/mordor))
 (authors "Christian Kissig <dev@kissig.fastmail.fm>")
