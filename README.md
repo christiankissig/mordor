@@ -9,11 +9,9 @@ MoRDor is a static code analysis tool implementing weak memory semantics of
 C-like programs based on a symbolic variant of Modular Relaxed Dependencies
 (MRD).
 
-MoRDor is a reimplementation and extension of the Symbolic Mrder tool described
-in the paper ["Symbolic MRD: Dynamic Memory, Undefined Behaviour, and Extrinsic Choice" by Jay Richards, Daniel Wright, Simon Cooksey, Mark Batty](https://2025.splashcon.org/details/OOPSLA/104/Symbolic-MRD-Dynamic-Memory-Undefined-Behaviour-and-Extrinsic-Choice).
-
-MoRDor aims to be correct and efficient enough to calculate the semantics of
-real-world concurrent algorithms, in addition to litmus tests.
+MoRDor is a reference implementation of Symbolic Modular Relaxed Dependencies
+(SMRD)
+["Symbolic MRD: Dynamic Memory, Undefined Behaviour, and Extrinsic Choice" by Jay Richards, Daniel Wright, Simon Cooksey, Mark Batty](https://2025.splashcon.org/details/OOPSLA/104/Symbolic-MRD-Dynamic-Memory-Undefined-Behaviour-and-Extrinsic-Choice).
 
 **Caveat** Do not use until version 1.
 
@@ -24,10 +22,9 @@ memory operations.
 
 The tool provides a comprehensive command-line interface and web UI for:
 - Parsing and validating programs and litmus tests
+- Deciding episodicity of unbounded loops
+- Computing and visualising event structures and executions
 - Running symbolic verification
-- Determine episodicity of unbounded loops
-- Computing executions and future sets
-- Visualizing event structures
 
 ## Project Structure
 
@@ -38,46 +35,36 @@ mordor/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── Makefile
-├── src
-│   ├── README.md # [See detailed module documentation](src/README.md)
-│   ├── ...
-├── cli
-│   ├── ...
-├── web
-│   ├── ...
-├── test
-│   ├── ...
-├── litmus-tests
-│   ├── ...
-├── programs
-│   ├── ...
+├── src/          # Core library (mordor_lib) — see src/README.md
+├── cli/          # CLI entry point (mordor) — see cli/README.md
+├── web/          # Web server (mordor-web) — see web/README.md
+├── test/         # Unit and integration tests
+├── litmus-tests/ # Litmus test suite
+└── programs/     # Sample concurrent programs
 ```
 
-with
+- `src/`: Core analysis library shared by CLI and web server. See [src/README.md](src/README.md).
+- `cli/`: `mordor` executable — argument parsing, pipeline orchestration. See [cli/README.md](cli/README.md).
+- `web/`: `mordor-web` Dream server — SSE streaming, REST API, browser UI. See [web/README.md](web/README.md).
+- `test/`: Alcotest unit tests (`dune test`) and integration tests (`dune exec test/test_integration.exe`).
+- `litmus-tests/`: Litmus test suite run by CI.
+- `programs/`: Hand-written sample programs including episodicity examples.
 
-* `src/`: Core library modules
-* `cli/`: Command-line interface
-* `web/`: Web interface
-* `test/`: Unit and integration tests
-* `litmus-tests/`: Sample litmus tests
-* `programs/`: Sample concurrent programs
-
-For more details about the core library modules, see the
-[src/README.md](src/README.md).
-
-## Building
+## Building the MoRDor Web UI
 
 It is recommended to build and run MoRDor in Docker using the Makefiles. See the
 [Docker Guide](DOCKER_GUIDE.md) for details.
 
 ```bash
-make build
-make run
-make stop
-make clean
+make build # build the Docker container image
+make run   # run the Docker container
+make stop  # stop the Docker container
+make clean # clean up
 ```
 
-Build executables with
+## Building the Executables
+
+Build with Dune
 
 ```bash
 dune build
@@ -118,7 +105,7 @@ It is recommended to run the Web interface in Docker as described in the
 make run
 ```
 
-Run the Web interface with
+Run the Web UI locally with
 
 ```bash
 dune exec mordor-web
@@ -132,19 +119,11 @@ Run unit tests with
 dune test
 ```
 
-Run integration tests with
+Run integration tests (core pipelines and litmus test suite) with
 
 ```bash
 dune exec test/test_integration.exe
 ```
-
-Run the litmus tests with
-
-```bash
-dune exec test/test_integration.exe
-```
-
-or through the Web interface, pressing the "🧪 Litmus Tests" button.
 
 ## Command Line Interface
 
@@ -152,27 +131,39 @@ MoRDor supports several commands for analyzing litmus tests and generating outpu
 
 ### Commands
 
-- **`run`**: Execute verification on test programs
-- **`parse`**: Parse litmus test files (supports Isabelle output)
-- **`interpret`**: Interpret and verify programs
-- **`visual-es`**: Visualize event structures (single file only)
-- **`futures`**: Compute future sets for executions (single file only)
+- **`run`**: Full verification pipeline — parse → interpret → dependencies → assertions
+- **`parse`**: Parse a litmus test to IR only
+- **`interpret`**: Parse and interpret to generate the event structure
+- **`episodicity`**: Check loop episodicity (requires `--single`)
+- **`visual-es`**: Visualize event structures (requires `--single`)
+- **`dependencies`**: Compute dependency relations (not yet implemented)
 
 ### Options
 
 #### Input Selection
 - `--samples`: Use built-in sample programs (default)
 - `--all-litmus-tests <dir>`: Process all `.lit` files in specified directory
-- `--single <file>`: Process a single `.lit` file
 - `-r`: Scan directories recursively (use with `--all-litmus-tests`)
+- `--single <file>`: Process a single `.lit` file
 
 #### Output Configuration
 - `--output-mode <mode>`: Set output format
-  - `json`: JSON format (for visual-es, futures)
-  - `html`: HTML format (for visual-es, not yet implemented)
-  - `dot`: Graphviz DOT format (for visual-es)
-  - `isa` or `isabelle`: Isabelle theory files (for parse, futures)
-- `--output-file <file>`: Specify output file (default: stdout or auto-generated)
+  - `json`: JSON format (visual-es, futures)
+  - `dot`: Graphviz DOT format (visual-es)
+  - `html`: HTML format (visual-es)
+  - `isa`: Isabelle theory output (parse, futures)
+- `--output-file <file>`: Output file path (default: stdout)
+
+#### Loop Semantics
+- `--step-counter <n>`: Global loop unrolling bound (default: 2)
+- `--step-counter-per-loop <n>`: Per-loop unrolling bound
+- `--symbolic-loop-semantics`: Symbolic loop representation (required for `episodicity`)
+
+#### Execution
+- `--threads <n>`: Number of parallel threads (default: 1)
+
+#### Logging
+- `--debug` / `--info` / `--warning` / `--error`: Log verbosity level
 
 ### Usage Examples
 
@@ -186,33 +177,10 @@ dune exec mordor -- parse --single test.lit
 dune exec mordor -- parse --single test.lit --output-mode isa
 
 # Parse all tests in a directory
-dune exec mordor -- parse --all-litmus-tests ./litmus_tests
+dune exec mordor -- parse --all-litmus-tests ./litmus-tests
 
-# Parse recursively with Isabelle output
-dune exec mordor -- parse --all-litmus-tests ./litmus_tests -r --output-mode isa
-```
-
-#### Computing Futures
-
-```bash
-# Compute futures with JSON output
-dune exec mordor -- futures --single test.lit --output-mode json
-
-# Compute futures with Isabelle output
-dune exec mordor -- futures --single test.lit --output-mode isa --output-file MyFutures.thy
-
-# Compute futures (stdout summary)
-dune exec mordor -- futures --single test.lit
-```
-
-#### Visualizing Event Structures
-
-```bash
-# Generate DOT visualization
-dune exec mordor -- visual-es --single test.lit --output-mode dot --output-file output.dot
-
-# Generate JSON visualization
-dune exec mordor -- visual-es --single test.lit --output-mode json
+# Parse recursively
+dune exec mordor -- parse --all-litmus-tests ./litmus-tests -r
 ```
 
 #### Running Verification
@@ -221,12 +189,29 @@ dune exec mordor -- visual-es --single test.lit --output-mode json
 # Run verification on built-in samples
 dune exec mordor -- run --samples
 
-# Run verification on all tests in directory
-dune exec mordor -- run --all-litmus-tests ./litmus_tests
-
-# Run verification recursively
-dune exec mordor -- run --all-litmus-tests ./litmus_tests -r
-
-# Run verification on single file
+# Run verification on a single file
 dune exec mordor -- run --single test.lit
+
+# Run verification on all tests in directory
+dune exec mordor -- run --all-litmus-tests ./litmus-tests
+
+# Run verification recursively with parallel threads
+dune exec mordor -- run --all-litmus-tests ./litmus-tests -r --threads 4
+```
+
+#### Visualizing Event Structures
+
+```bash
+# Generate DOT visualization
+dune exec mordor -- visual-es --single test.lit --output-mode dot
+
+# Generate JSON visualization
+dune exec mordor -- visual-es --single test.lit --output-mode json
+```
+
+#### Checking Episodicity
+
+```bash
+# Check loop episodicity (uses symbolic semantics automatically)
+dune exec mordor -- episodicity --single programs/episodicity/example.lit
 ```
