@@ -1358,9 +1358,10 @@ class GraphVisualizer {
                 }
                 abortController.abort();
                 document.getElementById('action-btn').disabled = false;
-            } else if (data.error) {
-                this.log('Error: ' + data.error, 'error');
-                this.showError(data.error);
+            } else if (data.error || data.status === 'error') {
+                const msg = data.error || data.message || 'Unknown error';
+                this.log('Error: ' + msg, 'error');
+                this.showError(msg);
                 abortController.abort();
                 document.getElementById('action-btn').disabled = false;
             }
@@ -1402,6 +1403,13 @@ class GraphVisualizer {
                         }
                     }
                 }
+            }
+
+            // Re-enable button if the stream ended without a 'complete' event
+            // (e.g. the server closed the connection after a pipeline/parse error)
+            document.getElementById('action-btn').disabled = false;
+            if (document.getElementById('status').textContent === 'Processing...') {
+                document.getElementById('status').textContent = 'Error';
             }
         }).catch((err) => {
             if (err.name === 'AbortError') return; // clean close, not an error
