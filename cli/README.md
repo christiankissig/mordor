@@ -22,9 +22,15 @@ The CLI (`main.ml`) is the entry point for the `mordor` executable. It is organi
 | `episodicity` | parse → interpret → test episodicity |
 | `visual-es` | parse → interpret → generate justifications → calculate dependencies → visualize event structure |
 | `futures` | parse → interpret → generate justifications → calculate dependencies → compute futures |
+| `executions` | parse → interpret → generate justifications → calculate dependencies → export executions as JSON |
 | `dependencies` | not yet implemented |
 
-`episodicity`, `visual-es`, and `futures` require `--single`.
+`episodicity`, `visual-es`, `futures`, and `executions` require `--single`.
+
+The `executions` command writes a single JSON document containing every
+execution with per-event details (type, location, value, modes, constraints,
+thread) and the `po`, `dp`, `ppo`, `rf`, and `rmw` relations as `[src, dst]`
+pairs. JSON is the only supported `--output-mode` for this command.
 
 ## Options
 

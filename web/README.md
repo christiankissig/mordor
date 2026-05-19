@@ -76,6 +76,40 @@ messages followed by graph/assertion data, ending with a completion message:
 | `POST` | `/api/episodicity/stream` | parse → interpret → event structure graph → episodicity |
 | `POST` | `/api/assertions/stream` | parse → interpret → event structure graph → episodicity → justifications → dependencies → assertions → execution graphs |
 
+### Executions Export (non-streaming)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/executions` | Run parse → interpret → justifications → dependencies and return all executions as a single JSON document |
+
+Request body matches the SSE endpoints (`program`, `loop_semantics`, `steps`,
+`memory_model`). The response is `application/json` with the following shape:
+
+```json
+{
+  "program": "<name>",
+  "executions": [
+    {
+      "id": 0,
+      "predicates": ["..."],
+      "events": [
+        { "id": 1, "type": "W", "label": 1, "thread": 0,
+          "location": "x", "wval": "1",
+          "rmod": "Relaxed", "wmod": "Relaxed", "fmod": "Relaxed",
+          "volatile": false, "is_rmw": false, "constraints": [] }
+      ],
+      "po":  [[0, 1]],
+      "dp":  [],
+      "ppo": [[0, 1]],
+      "rf":  [[1, 2]],
+      "rmw": []
+    }
+  ]
+}
+```
+
+The same payload is produced by the CLI's `executions` command.
+
 ### Test Runner
 
 | Method | Path | Description |

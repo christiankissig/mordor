@@ -59,8 +59,14 @@ module Justification : sig
   (** [covers j_y ppo_y j_x ppo_x] tests if [j_y] covers [j_x].
 
       Justification [j_y] covers [j_x] if they justify the same write with the
-      same forwarding context, but [j_y] has strictly fewer (more general)
-      predicates. Covered justifications are redundant and can be filtered out.
+      same forwarding context, and the predicate set of [j_y] is a subset of
+      that of [j_x] (i.e. [j_y] is at least as general). Covered justifications
+      are redundant and can be filtered out.
+
+      The relation is reflexive on cover-equivalence classes (same write/fwd/we
+      and same predicate set), so callers must avoid dropping every member of
+      such a class — see {!filter_justs} in [elaborations.ml] for an example
+      pattern that keeps the first encountered representative.
 
       @param j_y Potentially covering justification.
       @param ppo_y PPO relation for [j_y].
@@ -162,7 +168,7 @@ end = struct
     && Option.equal Expr.equal just_x.w.wval just_y.w.wval
     && USet.equal just_x.fwd just_y.fwd
     && USet.equal just_x.we just_y.we
-    && List.length just_y.p < List.length just_x.p
+    && List.length just_y.p <= List.length just_x.p
     (* TODO use that just.p are ordered *)
     && List.for_all
          (fun e -> List.exists (fun e' -> Expr.equal e e') just_x.p)

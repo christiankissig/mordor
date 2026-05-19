@@ -346,6 +346,102 @@ let episodicity_sse_handler =
 let assertions_sse_handler =
   make_sse_handler visualize_test_assertions_to_stream
 
+(** [executions_export_handler request] returns all executions of the supplied
+    program — with event details and the po, dp, ppo, rf, rmw relations — as a
+    single JSON document.
+
+    Expects a JSON body with [program], [loop_semantics], [steps], and
+    [memory_model] fields (same shape as the SSE endpoints). The response is
+    [application/json]. *)
+let executions_export_handler request =
+  let* body = Dream.body request in
+
+  let json = try Yojson.Basic.from_string body with _ -> `Assoc [] in
+
+  let get_field key =
+    match json with
+    | `Assoc fields -> (
+        match List.assoc_opt key fields with
+        | Some (`String s) -> s
+        | _ -> ""
+      )
+    | _ -> ""
+  in
+
+  let program = get_field "program" in
+
+  let loop_semantics =
+    match String.lowercase_ascii (get_field "loop_semantics") with
+    | "symbolic" -> Symbolic
+    | "step-counter" -> StepCounterPerLoop
+    | _ -> StepCounterPerLoop
+  in
+
+  let step_counter =
+    match loop_semantics with
+    | Generic | Symbolic -> 0
+    | StepCounterPerLoop | FiniteStepCounter -> (
+        let s = get_field "steps" in
+          try int_of_string s with Failure _ -> 2
+      )
+  in
+
+  let memory_model =
+    let m = String.lowercase_ascii (get_field "memory_model") in
+      match m with
+      | "rc11" | "rc11c" | "rc11ub" | "smrd" | "ub11" | "undefined" -> m
+      | _ -> "smrd"
+  in
+
+  let options =
+    {
+      default_options with
+      loop_semantics;
+      step_counter;
+      model = memory_model;
+    }
+  in
+
+  let context =
+    make_context_with_model options ~output_mode:Json ~step_counter ()
+  in
+    context.litmus <- Some program;
+
+    Lwt.catch
+      (fun () ->
+        let* ctx =
+          Lwt.return context
+          |> Parse.step_parse_litmus
+          |> Interpret.step_interpret
+          |> Elaborations.step_generate_justifications
+          |> Executions.step_calculate_dependencies
+        in
+          match Executions_export.to_json_string ctx with
+          | Some content ->
+              Dream.respond
+                ~headers:[ ("Content-Type", "application/json") ]
+                content
+          | None ->
+              Dream.respond ~status:`Internal_Server_Error
+                ~headers:[ ("Content-Type", "application/json") ]
+                {|{"error": "executions or event structure not available"}|}
+      )
+      (fun exn ->
+        let error_msg = Printexc.to_string exn in
+          Printf.printf "❌ Executions export error: %s\n%!" error_msg;
+          let body =
+            Yojson.Basic.to_string
+              (`Assoc
+                 [
+                   ("type", `String "error"); ("message", `String error_msg);
+                 ]
+              )
+          in
+            Dream.respond ~status:`Internal_Server_Error
+              ~headers:[ ("Content-Type", "application/json") ]
+              body
+      )
+
 (** [health_handler request] provides a simple health check endpoint.
 
     @param request The HTTP request (unused)
@@ -419,6 +515,8 @@ let () =
           Dream.post "/api/interpret/stream" interpret_sse_handler;
           Dream.post "/api/episodicity/stream" episodicity_sse_handler;
           Dream.post "/api/assertions/stream" assertions_sse_handler;
+          (* Executions export (non-streaming JSON) *)
+          Dream.post "/api/executions" executions_export_handler;
         ]
        @ Test_runner_api.routes
        @ Episodicity_runner_api.routes

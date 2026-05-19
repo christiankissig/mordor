@@ -1182,31 +1182,41 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
 
       let old_justs = justs @ new_justs in
 
+      (* Process candidates in ascending order of predicate count so the more
+         general justifications are considered first; any later candidate that
+         is cover-equivalent to one already kept is then discarded. This avoids
+         the double-drop that the reflexive [Justification.covers] would
+         otherwise produce when two same-length cover-equivalents are both in
+         the input list. *)
       let filter_justs new_justs justs =
-        List.filter
-          (fun just ->
-            if
-              (not (JustificationCache.mem just_cache just))
-              && (not
-                    (List.exists
-                       (fun just' -> Justification.covers just' just)
-                       (old_justs @ new_justs)
-                    )
-                 )
-              && not
-                   (List.exists
-                      (fun just' ->
-                        (not (just == just')) && Justification.covers just' just
+        let sorted_justs =
+          List.stable_sort
+            (fun j1 j2 -> compare (List.length j1.p) (List.length j2.p))
+            justs
+        in
+        let kept = ref [] in
+          List.iter
+            (fun just ->
+              if
+                (not (JustificationCache.mem just_cache just))
+                && (not
+                      (List.exists
+                         (fun just' -> Justification.covers just' just)
+                         (old_justs @ new_justs)
                       )
-                      justs
                    )
-            then (
-              JustificationCache.add just_cache just ();
-              true
+                && not
+                     (List.exists
+                        (fun just' -> Justification.covers just' just)
+                        !kept
+                     )
+              then (
+                JustificationCache.add just_cache just ();
+                kept := just :: !kept
+              )
             )
-            else false
-          )
-          justs
+            sorted_justs;
+          List.rev !kept
       in
 
       let add_elab_results_to_optrace optrace_fn =
@@ -1219,9 +1229,14 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
         )
       in
 
+      (* Fuse map-then-flatten into a single tail-recursive pass; [List.flatten]
+         in OCaml stdlib is not tail recursive and overflows on the large
+         lifting-result lists produced when the elaboration fixed point has not
+         yet converged. *)
       let filter_elab_results new_justs results =
-        List.map (fun (_, elaborated) -> elaborated) results
-        |> List.flatten
+        List.fold_left
+          (fun acc (_, elaborated) -> List.rev_append elaborated acc)
+          [] results
         |> filter_justs new_justs
       in
 

@@ -136,6 +136,8 @@ MoRDor supports several commands for analyzing litmus tests and generating outpu
 - **`interpret`**: Parse and interpret to generate the event structure
 - **`episodicity`**: Check loop episodicity (requires `--single`)
 - **`visual-es`**: Visualize event structures (requires `--single`)
+- **`futures`**: Compute future states (requires `--single`)
+- **`executions`**: Export all executions with events and `po`/`dp`/`ppo`/`rf`/`rmw` relations as JSON (requires `--single`)
 - **`dependencies`**: Compute dependency relations (not yet implemented)
 
 ### Options
@@ -215,3 +217,41 @@ dune exec mordor -- visual-es --single test.lit --output-mode json
 # Check loop episodicity (uses symbolic semantics automatically)
 dune exec mordor -- episodicity --single programs/episodicity/example.lit
 ```
+
+#### Exporting Executions
+
+```bash
+# Print all executions (events + po/dp/ppo/rf/rmw relations) as JSON to stdout
+dune exec mordor -- executions --single test.lit
+
+# Write to a file
+dune exec mordor -- executions --single test.lit --output-file out.json
+```
+
+The JSON document has the shape:
+
+```json
+{
+  "program": "test.lit",
+  "executions": [
+    {
+      "id": 0,
+      "predicates": ["..."],
+      "events": [
+        { "id": 1, "type": "W", "label": 1, "thread": 0,
+          "location": "x", "wval": "1",
+          "rmod": "Relaxed", "wmod": "Relaxed", "fmod": "Relaxed",
+          "volatile": false, "is_rmw": false, "constraints": [] }
+      ],
+      "po":  [[0, 1]],
+      "dp":  [],
+      "ppo": [[0, 1]],
+      "rf":  [[1, 2]],
+      "rmw": []
+    }
+  ]
+}
+```
+
+The same document is available from the web server at `POST /api/executions`
+(see [web/README.md](web/README.md)).

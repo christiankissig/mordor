@@ -47,6 +47,9 @@ module Config = struct
     | Futures
         (** Compute futures: calculate possible future states (requires single
             file) *)
+    | Executions
+        (** Export all executions with events and relations (po, dp, ppo, rf,
+            rmw) in the configured output format (default JSON). *)
   [@@deriving show]
 
   (** Complete configuration for a Mordor run.
@@ -467,6 +470,29 @@ module Pipeline = struct
       |> Futures.print_futures
       |> Display.print_results
 
+  (** {2 Executions Command} *)
+
+  (** Export all executions for a single program as JSON.
+
+      Runs the full analysis pipeline up to dependency calculation and then
+      serialises every execution — events with their details, plus the po, dp,
+      ppo, rf, and rmw relations — to the configured output (file or stdout).
+
+      @param name Program name
+      @param program Program source
+      @param config Configuration (output_mode defaults to Json)
+      @return Unit wrapped in Lwt *)
+  let export_executions name program config =
+    Logs.info (fun m -> m "Exporting executions for program %s." name);
+    let context = make_program_context name program config in
+      Lwt.return context
+      |> Parse.step_parse_litmus
+      |> Interpret.step_interpret
+      |> Elaborations.step_generate_justifications
+      |> Executions.step_calculate_dependencies
+      |> Executions_export.step_export_executions
+      |> Display.print_results
+
   (** Execute a command on the loaded tests.
 
       Dispatches to the appropriate pipeline function based on the command.
@@ -504,6 +530,13 @@ module Pipeline = struct
     | Config.Dependencies ->
         Printf.printf "TODO: Dependencies command not implemented yet\n";
         Lwt.return_unit
+    | Config.Executions ->
+        if List.length tests <> 1 then
+          failwith
+            "Executions command requires exactly one input program (use \
+             --single)";
+        let name, program = List.hd tests in
+          export_executions name program config
 end
 
 (** {1 Command Line Interface} *)
@@ -587,6 +620,8 @@ module CLI = struct
     \  episodicity   Check loop episodicity (requires --single)\n\
     \  visual-es     Visualize event structure (requires --single)\n\
     \  futures       Compute futures (requires --single)\n\
+    \  executions    Export all executions with events and relations (po, dp, \
+     ppo, rf, rmw) as JSON (requires --single)\n\
     \  dependencies  Compute dependencies (not yet implemented)\n\n\
      Options:"
 
@@ -693,12 +728,13 @@ module CLI = struct
         | "episodicity" -> state.command <- Some Config.Episodicity
         | "visual-es" -> state.command <- Some Config.VisualEs
         | "futures" -> state.command <- Some Config.Futures
+        | "executions" -> state.command <- Some Config.Executions
         | "dependencies" -> state.command <- Some Config.Dependencies
         | cmd ->
             Printf.eprintf "Error: Unknown command '%s'\n" cmd;
             Printf.eprintf
               "Valid commands: run, parse, interpret, episodicity, visual-es, \
-               futures, dependencies\n";
+               futures, executions, dependencies\n";
             exit 1
       )
 

@@ -12,6 +12,7 @@ let () =
       Test_coherence.suite;
       Test_elaborations.suite;
       Test_executions.suite;
+      Test_executions_export.suite;
       Test_forwarding.suite;
       Test_interpret.suite;
       Test_parse.suite;
