@@ -25,19 +25,19 @@ module TestData = struct
       is_rdmw;
     }
 
-  (** Build a tiny event structure with one init event, one write to [x],
-      and one read of [x]. Two threads: init in thread 0, write in thread 1,
-      read in thread 2. *)
+  (** Build a tiny event structure with one init event, one write to [x], and
+      one read of [x]. Two threads: init in thread 0, write in thread 1, read in
+      thread 2. *)
   let make_structure () =
     let s = SymbolicEventStructure.create () in
     let e0 = make_event ~label:0 ~typ:Init () in
     let e1 =
       make_event ~label:1 ~typ:Write ~loc:(EVar "x")
-        ~wval:(ENum (Z.of_int 1)) ()
+        ~wval:(ENum (Z.of_int 1))
+        ()
     in
     let e2 =
-      make_event ~label:2 ~typ:Read ~loc:(EVar "x")
-        ~rval:(VSymbol "α") ()
+      make_event ~label:2 ~typ:Read ~loc:(EVar "x") ~rval:(VSymbol "α") ()
     in
       Hashtbl.add s.events 0 e0;
       Hashtbl.add s.events 1 e1;
@@ -98,8 +98,8 @@ let test_event_to_json_read () =
     check (option string) "rval" (Some "α") j.rval;
     check (option string) "wval" None j.wval
 
-(** execution_to_json filters PO to events in the execution and copies the
-    other relations verbatim from the symbolic_execution record. *)
+(** execution_to_json filters PO to events in the execution and copies the other
+    relations verbatim from the symbolic_execution record. *)
 let test_execution_to_json_filters_po () =
   let s = TestData.make_structure () in
   let exec = TestData.make_execution ~events:(USet.of_list [ 1; 2 ]) () in
@@ -107,8 +107,7 @@ let test_execution_to_json_filters_po () =
     check int "exec id" 0 j.id;
     check int "event count" 2 (List.length j.events);
     (* PO must only contain pairs whose endpoints are in exec.e. *)
-    check pair_list "po restricted to {1,2}" [ (1, 2) ]
-      (List.sort compare j.po);
+    check pair_list "po restricted to {1,2}" [ (1, 2) ] (List.sort compare j.po);
     check pair_list "rf" [ (1, 2) ] j.rf
 
 let test_execution_to_json_relations () =
@@ -117,17 +116,15 @@ let test_execution_to_json_relations () =
     TestData.make_execution
       ~ppo:(USet.of_list [ (1, 2); (0, 2) ])
       ~dp:(USet.of_list [ (1, 2) ])
-      ~rmw:(USet.create ())
-      ~ex_p:[ EBoolean true ]
-      ()
+      ~rmw:(USet.create ()) ~ex_p:[ EBoolean true ] ()
   in
   let j = execution_to_json s exec in
     check pair_list "dp" [ (1, 2) ] j.dp;
     check pair_list "ppo" [ (0, 2); (1, 2) ] (List.sort compare j.ppo);
     check (list string) "predicates" [ "true" ] j.predicates
 
-(** build_executions_document returns None until the pipeline has produced
-    both a structure and an executions set. *)
+(** build_executions_document returns None until the pipeline has produced both
+    a structure and an executions set. *)
 let test_build_document_requires_structure_and_executions () =
   let s = TestData.make_structure () in
   let exec = TestData.make_execution () in

@@ -394,12 +394,7 @@ let executions_export_handler request =
   in
 
   let options =
-    {
-      default_options with
-      loop_semantics;
-      step_counter;
-      model = memory_model;
-    }
+    { default_options with loop_semantics; step_counter; model = memory_model }
   in
 
   let context =
@@ -432,9 +427,7 @@ let executions_export_handler request =
           let body =
             Yojson.Basic.to_string
               (`Assoc
-                 [
-                   ("type", `String "error"); ("message", `String error_msg);
-                 ]
+                 [ ("type", `String "error"); ("message", `String error_msg) ]
               )
           in
             Dream.respond ~status:`Internal_Server_Error

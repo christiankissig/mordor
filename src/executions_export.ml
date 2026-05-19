@@ -50,10 +50,7 @@ type json_execution = {
 [@@deriving yojson]
 
 (** Top-level document: program name and an array of executions. *)
-type json_executions = {
-  program : string;
-  executions : json_execution list;
-}
+type json_executions = { program : string; executions : json_execution list }
 [@@deriving yojson]
 
 let mode_to_string (m : mode) : string =
@@ -95,9 +92,7 @@ let event_to_json (structure : symbolic_event_structure) (event_id : int) :
 let execution_to_json (structure : symbolic_event_structure)
     (exec : symbolic_execution) : json_execution =
   let events =
-    USet.values exec.e
-    |> List.sort compare
-    |> List.map (event_to_json structure)
+    USet.values exec.e |> List.sort compare |> List.map (event_to_json structure)
   in
   let po =
     USet.filter
@@ -172,7 +167,8 @@ let step_export_executions (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
       )
     | _ ->
         Logs_safe.err (fun m ->
-            m "Unsupported output mode for executions export (use --output-mode \
-               json)."
+            m
+              "Unsupported output mode for executions export (use \
+               --output-mode json)."
         );
         Lwt.return ctx
