@@ -1229,6 +1229,34 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
         )
       in
 
+      (* Per-input fan-out log: emits the input justification and each
+         elaborated output. Only emits for inputs that produced at least one
+         output, so passes with empty fan-out are not noisy. The
+         [just_to_string] argument lets pair-valued inputs (e.g. lifting)
+         render both components without the caller having to flatten. *)
+      let log_elab_fanout :
+            'a. just_to_string:('a -> string) -> name:string ->
+              ('a * justification list) list -> unit =
+       fun ~just_to_string ~name results ->
+        List.iter
+          (fun (input, elaborated) ->
+            if List.length elaborated > 0 then (
+              Logs_safe.debug (fun m ->
+                  m "%s on %s produced %d:" name (just_to_string input)
+                    (List.length elaborated)
+              );
+              List.iter
+                (fun out ->
+                  Logs_safe.debug (fun m ->
+                      m "  -> %s" (Justification.to_string out)
+                  )
+                )
+                elaborated
+            )
+          )
+          results
+      in
+
       (* Fuse map-then-flatten into a single tail-recursive pass; [List.flatten]
          in OCaml stdlib is not tail recursive and overflows on the large
          lifting-result lists produced when the elaboration fixed point has not
@@ -1240,15 +1268,17 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
         |> filter_justs new_justs
       in
 
-      let run_elab elab_fn optrace_fn new_justs justs =
+      let run_elab ~just_to_string ~name elab_fn optrace_fn new_justs justs =
         let results =
           List.map (fun just -> (just, elab_fn elab_ctx just)) justs
         in
           add_elab_results_to_optrace optrace_fn results;
+          log_elab_fanout ~just_to_string ~name results;
           filter_elab_results new_justs results |> Lwt.return
       in
 
-      let run_elab_parallel p elab_fn optrace_fn new_justs justs =
+      let run_elab_parallel ~just_to_string ~name p elab_fn optrace_fn new_justs
+          justs =
         (* memory barrier - settle context objects *)
         let _ = Atomic.make 0 |> Atomic.get in
         let promises =
@@ -1271,19 +1301,24 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
         in
           let* results = Lwt.all promises in
             add_elab_results_to_optrace optrace_fn results;
+            log_elab_fanout ~just_to_string ~name results;
             filter_elab_results new_justs results |> Lwt.return
       in
 
       (* Dispatch: use parallel when a pool is available, sequential otherwise. *)
-      let run elab_fn optrace_fn new_justs justs =
+      let run ~just_to_string ~name elab_fn optrace_fn new_justs justs =
         match pool with
-        | Some p -> run_elab_parallel p elab_fn optrace_fn new_justs justs
-        | None -> run_elab elab_fn optrace_fn new_justs justs
+        | Some p ->
+            run_elab_parallel ~just_to_string ~name p elab_fn optrace_fn
+              new_justs justs
+        | None ->
+            run_elab ~just_to_string ~name elab_fn optrace_fn new_justs justs
       in
 
       let acc_justs = [] in
         let* new_va_justs =
-          run ValueAssignElab.elab
+          run ~just_to_string:Justification.to_string ~name:"ValueAssignElab"
+            ValueAssignElab.elab
             (fun just -> ValueAssignElab just)
             acc_justs new_justs
         in
@@ -1294,7 +1329,8 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
           );
 
           let* new_fwd_justs =
-            run ForwardElab.elab
+            run ~just_to_string:Justification.to_string ~name:"ForwardElab"
+              ForwardElab.elab
               (fun just -> Forwarding just)
               acc_justs new_justs
           in
@@ -1316,19 +1352,27 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
                   justs
             in
 
+            let lift_pair_to_string (j1, j2) =
+              Printf.sprintf "(%s, %s)"
+                (Justification.to_string j1)
+                (Justification.to_string j2)
+            in
+
             let* new_lift_justs =
-              run
+              run ~just_to_string:lift_pair_to_string ~name:"LiftElab"
                 (fun elab_ctx (j1, j2) -> LiftElab.elab elab_ctx j1 j2)
                 (fun (j1, j2) -> LiftElab (j1, j2))
                 acc_justs justs_to_lift
             in
+            let acc_justs = acc_justs @ new_lift_justs in
               Logs_safe.debug (fun m ->
                   m "Lifting produced %d new justifications."
                     (List.length new_lift_justs)
               );
 
               let* new_weaken_justs =
-                run WeakElab.elab
+                run ~just_to_string:Justification.to_string ~name:"WeakElab"
+                  WeakElab.elab
                   (fun just -> WeakElab just)
                   acc_justs new_justs
               in
