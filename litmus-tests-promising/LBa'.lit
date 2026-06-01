@@ -11,4 +11,4 @@ y := 0;
   x := r3
 }
 %%
-allow (r2 = 2) [IMM]
+allow (r2 = 2) [Promising]

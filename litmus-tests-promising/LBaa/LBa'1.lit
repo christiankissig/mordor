@@ -9,4 +9,4 @@
   x := r1
 }
 %%
-allow (r1 = 2) [IMM]
+allow (r1 = 2) [Promising]

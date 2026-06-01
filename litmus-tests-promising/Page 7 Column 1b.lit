@@ -12,4 +12,4 @@ y := 0;
   r3 := x // <> 0
 }
 %%
-forbid (r2 = 3 && r3 = 0) [IMM] "Release sequence"
+forbid (r2 = 3 && r3 = 0) [Promising=allow] "Release sequence"
