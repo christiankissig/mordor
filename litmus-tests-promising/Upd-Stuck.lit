@@ -13,4 +13,4 @@ z := 0;
   r4 := FADD(rlx, rlx, z, 1)
 }
 %%
-allow (r1 = 1 && r2 = 0) [IMM]
+allow (r1 = 1 && r2 = 0) [Promising]

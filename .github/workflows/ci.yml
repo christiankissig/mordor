@@ -49,6 +49,10 @@ jobs:
           sudo apt-get install -y libev-dev
           opam update
           opam depext -y mordor
+          # Pin z3: 4.16.0+ requires a C++20 <format> implementation (GCC 13+),
+          # which ubuntu-22.04 (GCC 11) lacks. 4.15.2 is the last version that
+          # builds on this runner and is what the project uses.
+          opam install z3.4.15.2
           opam install . --deps-only --with-test
           opam install ocamlformat.0.29.0
           opam install logs fmt

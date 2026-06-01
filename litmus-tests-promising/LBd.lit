@@ -9,4 +9,4 @@ y := 0;
   x := r2
 }
 %%
-forbid (r1 = 1) [IMM]
+forbid (r1 = 1) [Promising]
