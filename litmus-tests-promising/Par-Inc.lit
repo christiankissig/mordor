@@ -6,4 +6,4 @@ x := 0;
   r2 := FADD(rlx, rlx, x, 1)
 }
 %%
-allow (r1 = 1 || r2 = 1) [IMM]
+allow (r1 = 1 || r2 = 1) [Promising]

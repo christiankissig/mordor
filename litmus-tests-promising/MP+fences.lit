@@ -11,4 +11,4 @@ y := 0;
   r2 := x // <> 0
 }
 %%
-forbid (r1 = 1 && r2 = 0) [IMM]
+forbid (r1 = 1 && r2 = 0) [Promising]

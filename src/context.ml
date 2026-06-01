@@ -360,7 +360,7 @@ type mordor_ctx = {
       (** Source code locations for events *)
   (* Justifications *)
   mutable justifications : justification list option;
-      (** Justification relations (for RC11/promising semantics) *)
+      (** Justification relations (for RC11/MRD dependency tracking) *)
   (* Executions *)
   mutable executions : symbolic_execution USet.t option;
       (** Set of possible executions *)
@@ -447,7 +447,6 @@ type model_options = {
     - {b Power}: IBM POWER architecture with IMM coherence
     - {b RC11}: Repaired C11 memory model
     - {b IMM}: Intermediate Memory Model
-    - {b Promising}: Promising semantics with IMM coherence
     - etc.
 
     Models with "UB" suffix enable undefined behavior optimizations. *)
@@ -462,7 +461,6 @@ let model_options_table : (string, model_options) Hashtbl.t =
     Hashtbl.add tbl "bridging" { coherent = Some "imm"; ubopt = false };
     Hashtbl.add tbl "bubbly" { coherent = None; ubopt = false };
     Hashtbl.add tbl "grounding" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "promising" { coherent = Some "imm"; ubopt = false };
     Hashtbl.add tbl "soham" { coherent = None; ubopt = false };
     Hashtbl.add tbl "imm" { coherent = Some "imm"; ubopt = false };
     Hashtbl.add tbl "rc11ub" { coherent = Some "rc11"; ubopt = true };
@@ -493,7 +491,6 @@ let model_names =
     "Bridging";
     "Bubbly";
     "Grounding";
-    "Promising";
     "Soham";
     "IMM";
     "RC11UB";
@@ -513,13 +510,32 @@ let model_names =
 let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
   ctx.options.model <- model;
   Logs_safe.info (fun m -> m "applying model options for model %s" model);
-  Hashtbl.find_opt model_options_table model
-  |> Option.map (fun options -> options.coherent)
-  |> Option.value ~default:None
-  |> Option.iter (fun coherent ->
-      Logs_safe.debug (fun m -> m "setting coherent %s" coherent);
-      ctx.options.coherent <- coherent
-  )
+  match Hashtbl.find_opt model_options_table (String.lowercase_ascii model) with
+  | None when String.lowercase_ascii model = "promising" ->
+      (* Promising semantics is not implemented by MoRDor (it is an operational
+         model requiring promise/certification machinery that the axiomatic
+         coherence checker cannot express). Surface this at error level so it is
+         not mistaken for a supported model. The coherence model is left
+         untouched. *)
+      Logs_safe.err (fun m ->
+          m
+            "Promising semantics is not implemented by MoRDor; model %S is \
+             unsupported and no coherence model was applied"
+            model
+      )
+  | None ->
+      (* Unknown model name. Leave the coherence model untouched and warn rather
+         than silently degrading to whatever was set before. *)
+      Logs_safe.warn (fun m ->
+          m "Unknown memory model %S; no coherence model applied" model
+      )
+  | Some options ->
+      Option.iter
+        (fun coherent ->
+          Logs_safe.debug (fun m -> m "setting coherent %s" coherent);
+          ctx.options.coherent <- coherent
+        )
+        options.coherent
 
 (** Create a new pipeline context and immediately apply model-specific options.
 
