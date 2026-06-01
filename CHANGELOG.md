@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Fixed three correctness bugs in the IMM/RC11 coherence models that made them over-permissive ([#9](https://github.com/christiankissig/mordor/pull/9)): honour the mode lattice so `SC`/`ReleaseAcquire` accesses count toward release/acquire synchronization, always run the coherence/thin-air axioms for programs with fewer than two writes, and keep the init write co-minimal instead of permuting it.
+
+### Removed
+- Removed the `promising` memory model, which was a misleading alias to IMM — promising semantics is operational and cannot be expressed by the axiomatic coherence checker. Selecting it now emits an error-level log. The promising-paper litmus tests are preserved as reference under `litmus-tests-promising/`, with runnable `[IMM]` copies in `litmus-tests/popl_promising/` ([#9](https://github.com/christiankissig/mordor/pull/9)).
+
 ## [0.1.0] — 2026-04-23
 
 Initial pre-release of MoRDor, a reference implementation of Symbolic MRD from
