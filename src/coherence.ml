@@ -37,6 +37,45 @@ end
 
 (** Shared utilities module *)
 module ModelUtils = struct
+  (** C11/RC11/IMM access-mode lattice ordering.
+
+      [mode_at_least m threshold] holds when access mode [m] is at least as
+      strong as [threshold] in the partial order
+
+      {[ na, normal  <  rlx  <  con  <  acq, rel  <  acq_rel  <  sc ]}
+
+      where [acq] and [rel] are mutually incomparable. This is what the [">"]
+      operator passed to {!match_events} is meant to express (e.g. "release or
+      stronger"); previously that operator was ignored and matching fell back to
+      exact equality, so [sc]/[acq_rel] accesses were silently excluded from the
+      release/acquire sets, under-approximating synchronization. *)
+  let mode_at_least (m : mode) (threshold : mode) : bool =
+    match threshold with
+    | Nonatomic | Normal -> true
+    | Relaxed -> (
+        match m with
+        | Relaxed | Consume | Acquire | Release | ReleaseAcquire | SC -> true
+        | Nonatomic | Normal | Strong -> false
+      )
+    | Consume -> (
+        match m with
+        | Consume | Acquire | ReleaseAcquire | SC -> true
+        | _ -> false
+      )
+    | Acquire -> (
+        match m with
+        | Acquire | ReleaseAcquire | SC -> true
+        | _ -> false
+      )
+    | Release -> (
+        match m with
+        | Release | ReleaseAcquire | SC -> true
+        | _ -> false
+      )
+    | ReleaseAcquire -> ( match m with ReleaseAcquire | SC -> true | _ -> false)
+    | SC -> m = SC
+    | Strong -> m = Strong
+
   (** Event matching - shared across all models *)
   let match_events (events : (int, event) Hashtbl.t) (e : int uset)
       (typ : event_type) (mode_opt : mode option) (op_opt : string option)
@@ -50,7 +89,19 @@ module ModelUtils = struct
             let mode_match =
               match mode_opt with
               | None -> true
-              | Some m -> event.rmod = m || event.wmod = m || event.fmod = m
+              | Some m ->
+                  (* [op_opt = Some ">"] means "[m] or stronger" per the access
+                     mode lattice; anything else means exact mode equality.
+                     [type_match] already restricts to the relevant event type,
+                     and the irrelevant mode fields default to [Relaxed] (the
+                     weakest atomic mode), so OR-ing the test across the three
+                     fields cannot over-match for thresholds above [Relaxed]. *)
+                  let cmp ev_mode =
+                    match op_opt with
+                    | Some ">" -> mode_at_least ev_mode m
+                    | _ -> ev_mode = m
+                  in
+                    cmp event.rmod || cmp event.wmod || cmp event.fmod
             in
             let second_mode_match =
               match second_mode_opt with
@@ -765,7 +816,13 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
         execution.e
     in
 
-    if USet.size writes < 2 then true
+    if USet.size writes < 2 then
+      (* 0 or 1 writes: the only possible coherence order is empty (co only
+         orders two writes to the same location), but we must still run the
+         model's coherence / thin-air axioms. Returning [true] unconditionally
+         was unsound — e.g. a read reading from a write that happens-after it is
+         a coherence violation even with co = ∅. *)
+      check_coherence cache (USet.create ())
     else
       (* Check if reads from init *)
       let reads_from_init = USet.exists (fun (_, w) -> w = 0) execution.rf in
@@ -792,7 +849,14 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
           List.filter (fun g -> List.length !g > 1) !groups
           (* After grouping writes by location *)
           |> List.map (fun g ->
-              let writes_list = !g in
+              (* The init write (event 0) is always the co-minimal write to its
+                 location. Never permute it into a non-minimal position — that
+                 would yield bogus coherence orders in which a real write is
+                 co-before init. Permute only the real writes, then prepend
+                 init. *)
+              let group = !g in
+              let has_init = List.mem 0 group in
+              let writes_list = List.filter (fun w -> w <> 0) group in
 
               (* Extract po edges among these writes *)
               let po_edges_in_group =
@@ -834,8 +898,13 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
                 )
               in
 
-              (* Convert each valid permutation to pairs *)
-              List.map (fun perm -> to_pairs [] perm) valid_perms
+              (* Convert each valid permutation to pairs, keeping init
+                 co-minimal by prepending it before the real writes. *)
+              List.map
+                (fun perm ->
+                  to_pairs [] (if has_init then 0 :: perm else perm)
+                )
+                valid_perms
           )
       in
 

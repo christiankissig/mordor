@@ -12,4 +12,4 @@ y := 0;
   }
 }
 %%
-forbid (r1 = 1 && r2 = 1) [IMM]
+forbid (r1 = 1 && r2 = 1) [Promising]

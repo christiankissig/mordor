@@ -9,4 +9,4 @@ y := 0;
   r2 := x // 0
 }
 %%
-allow (r1 = 0 && r2 = 0) [IMM]
+allow (r1 = 0 && r2 = 0) [Promising]

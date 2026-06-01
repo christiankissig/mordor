@@ -122,6 +122,13 @@ Generated: 2025-10-17T09:41:48.288Z
 - popl_grounding/LBfd.lit
 - popl_grounding/RNG.lit
 - popl_grounding/RNGb.lit
+
+> **Note:** The `popl_promising/` tests below are reannotated to `[IMM]`. MoRDor
+> does not implement promising semantics, so the canonical `[Promising]`-annotated
+> originals — recording the intended promising-semantics outcomes — are preserved
+> in [`../litmus-tests-promising/`](../litmus-tests-promising/README.md) and are
+> not run by the integration suite.
+
 - popl_promising/2+2W.lit
 - popl_promising/LBaa/LBa'0.lit
 - popl_promising/LBaa/LBa'1.lit
