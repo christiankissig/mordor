@@ -32,6 +32,23 @@ execution with per-event details (type, location, value, modes, constraints,
 thread) and the `po`, `dp`, `ppo`, `rf`, and `rmw` relations as `[src, dst]`
 pairs. JSON is the only supported `--output-mode` for this command.
 
+### Isabelle interchange (`--output-mode isa`)
+
+`futures` and `parse` support `--output-mode isa`, which emits the versioned
+structured JSON interchange format consumed by `rcu-c11-opsem`
+(`docs/MORDOR_ISA_FORMAT.md`, v0.1). The document carries the rolled program
+(control flow preserved) split into `init` setup and per-thread `threads` with
+the full command grammar, plus the `futures` `(ppo ∪ dp)` edges rendered over
+stable event-labels (`t<tid>.<seq>[@<loop>:<iter>]#<k>`). The `futures` command
+produces the full document; `parse` emits the structural part with an empty
+`futures` array. Use `--output-file` to get a clean document without the
+trailing verification summary.
+
+```bash
+dune exec mordor -- futures --single programs/uaf-bug.lit \
+  --output-mode isa --output-file uaf-bug.isa.json
+```
+
 ## Options
 
 | Flag | Description |

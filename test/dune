@@ -18,6 +18,7 @@
   test_episodicity
   test_executions
   test_executions_export
+  test_isa_export
   test_expr
   test_forwarding
   test_histories_futures
