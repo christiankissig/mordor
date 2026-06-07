@@ -131,6 +131,9 @@ let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
   Logs_safe.info (fun m -> m "Computing futures for program %s." name);
   (* Generate output based on output mode *)
   match ctx.output_mode with
+  | Isa ->
+      Isa_export.emit ctx;
+      Lwt.return ctx
   | Json -> (
       let futures_json =
         (* Create JSON representation of futures *)
