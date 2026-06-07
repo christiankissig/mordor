@@ -349,7 +349,13 @@ module Pipeline = struct
       @return Unit wrapped in Lwt *)
   let parse_single name program config =
     let context = make_program_context name program config in
-      Lwt.return context |> Parse.step_parse_litmus |> Display.print_results
+    let parsed = Lwt.return context |> Parse.step_parse_litmus in
+      match config.Config.output_mode with
+      | Some Isa ->
+          let* ctx = parsed in
+            Isa_export.emit ctx;
+            Lwt.return_unit
+      | _ -> parsed |> Display.print_results
 
   (** Parse multiple programs.
 
