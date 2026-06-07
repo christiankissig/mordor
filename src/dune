@@ -33,6 +33,7 @@
   interpret
   ir
   ir_context_utils
+  isa_export
   justifications
   lexer
   lwt_utils
