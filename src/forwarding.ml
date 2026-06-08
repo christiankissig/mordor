@@ -644,7 +644,7 @@ module EventStructureContext = struct
         USet.clear es_ctx.ppo.ppo_iter_base |> ignore;
         es_ctx.ppo.ppo_iter_sync
         |> USet.union es_ctx.ppo.ppo_iter_loc_eq
-        |> USet.inplace_union es_ctx.ppo.ppo_base
+        |> USet.inplace_union es_ctx.ppo.ppo_iter_base
         |> ignore;
 
         clear_caches es_ctx;

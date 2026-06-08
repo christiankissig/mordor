@@ -1138,14 +1138,40 @@ end = struct
                while-loop continuation. *)
             interpret_statements_open ~recurse ~final_structure ~add_event body
               env phi events
-        | While { condition; body } ->
-            let continue_val =
+        | While { condition; body } -> (
+            (* A while loop with a single symbolic unrolling is modelled as a
+               branch, mirroring the [If { else_body = None }] encoding: either
+               the guard holds and we run the body once before the continuation
+               (iteration order is recovered later via po_iter), or the guard
+               fails and we proceed directly to the continuation.
+
+               Crucially, the two branches must own DISTINCT continuation events.
+               Interpreting [rest] separately in each branch is what keeps the
+               [plus] operands disjoint. The previous implementation shared a
+               single [after_structure] between the body's continuation and the
+               exit branch, so [plus] (which adds an all-pairs conflict between
+               its operands) put the shared continuation events in conflict with
+               themselves and with the po-preceding body, yielding a malformed
+               structure with no valid executions. *)
+            let cond_val =
               Expr.evaluate ~env:(fun v -> Hashtbl.find_opt env v) condition
+              |> Expr.apply_constraints
             in
-            let after_val =
-              Expr.evaluate
-                ~env:(fun v -> Hashtbl.find_opt env v)
-                (Expr.inverse condition)
+            let enter_phi =
+              if cond_val = EBoolean true then phi else cond_val :: phi
+            in
+            let enter_phi_sat = Solver.is_sat_cached enter_phi in
+            let enter_phi =
+              if enter_phi_sat then enter_phi else [ EBoolean false ]
+            in
+            let cond_val = if enter_phi_sat then cond_val else EBoolean false in
+            let exit_cond_val = Expr.evaluate (Expr.inverse cond_val) in
+            let exit_phi =
+              if cond_val = EBoolean false then phi else exit_cond_val :: phi
+            in
+            let exit_phi_sat = Solver.is_sat_cached exit_phi in
+            let exit_phi =
+              if exit_phi_sat then exit_phi else [ EBoolean false ]
             in
             let loop_index =
               node.annotations.loop_ctx
@@ -1153,28 +1179,43 @@ end = struct
             in
               Option.iter
                 (fun lid ->
-                  Hashtbl.replace events.loop_conditions lid continue_val
-                  |> ignore
+                  Hashtbl.replace events.loop_conditions lid cond_val |> ignore
                 )
                 loop_index;
 
-              let after_structure =
+              let defacto =
+                List.map
+                  (Expr.evaluate ~env:(Hashtbl.find_opt env))
+                  events.defacto
+              in
+              (* Continue branch: run the body once, then the continuation. *)
+              let enter_structure events =
                 interpret_statements_symbolic_loop ~final_structure ~add_event
-                  rest env (after_val :: phi) events
+                  (body @ rest) env enter_phi events
               in
-              let final_structure ~add_event:_ _env _phi _events =
-                after_structure
-              in
-              let recurse nodes env phi events =
+              (* Exit branch: skip the body, go straight to the continuation. *)
+              let exit_structure events =
                 interpret_statements_symbolic_loop ~final_structure ~add_event
-                  nodes env phi events
+                  rest env exit_phi events
               in
-              let loop_structure =
-                interpret_statements_open ~recurse ~final_structure ~add_event
-                  body env phi events
-              in
-
-              SymbolicEventStructure.plus loop_structure after_structure
+                match cond_val with
+                | EBoolean true -> enter_structure events
+                | EBoolean false -> exit_structure events
+                | _ ->
+                    let branch_event =
+                      { (Event.create Branch 0 ()) with cond = Some cond_val }
+                    in
+                    let branch_event' =
+                      add_event events branch_event env node.annotations
+                    in
+                    let enter_structure = enter_structure events in
+                    let exit_structure = exit_structure events in
+                      SymbolicEventStructure.dot branch_event'
+                        (SymbolicEventStructure.plus enter_structure
+                           exit_structure
+                        )
+                        phi defacto
+          )
         | _ ->
             let recurse nodes env phi events =
               interpret_statements_symbolic_loop ~final_structure ~add_event
