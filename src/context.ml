@@ -301,6 +301,16 @@ type condition_result = {
 }
 [@@deriving show, yojson]
 
+(** A single loop-body event in the chosen bisection.
+
+    Carries the event label and its source span (when known) so the chosen loop
+    boundary can be related back to the program text. *)
+type bisection_event = {
+  label : int;  (** Event label *)
+  span : source_span option;  (** Source span, if known *)
+}
+[@@deriving show, yojson]
+
 (** Complete episodicity analysis result for a single loop.
 
     Contains results for all four conditions and overall episodicity
@@ -311,7 +321,14 @@ type loop_episodicity_result = {
   condition2 : condition_result;  (** Memory read sources *)
   condition3 : condition_result;  (** Branch conditions *)
   condition4 : condition_result;  (** Inter-iteration ordering *)
-  is_episodic : bool;  (** Whether loop is episodic (all conditions satisfied) *)
+  is_episodic : bool;
+      (** Whether loop is episodic (all conditions satisfied) *)
+  bisection_left : bisection_event list;
+      (** Loop-body events placed before the chosen iteration boundary (the
+          previous iteration's tail). Empty for the trivial bisection. *)
+  bisection_right : bisection_event list;
+      (** Loop-body events placed after the chosen iteration boundary (the
+          current iteration's head). *)
 }
 [@@deriving show, yojson]
 
