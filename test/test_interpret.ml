@@ -315,10 +315,97 @@ let test_interpret_main_with_po =
         Lwt.return_unit
   )
 
+(** {1 Symbolic loop semantics regression tests}
+
+    Regression tests for the symbolic [while]-loop semantics. A while loop is
+    modelled as a branch between "run the body once then continue" and "skip the
+    body and continue". An earlier implementation shared a single continuation
+    structure between both branches, so [plus] (which adds an all-pairs conflict
+    between its operands) marked the shared continuation events as conflicting
+    with themselves and with their po-predecessors. The resulting malformed
+    event structure produced zero executions. *)
+
+(** Run the pipeline up to interpretation with symbolic loop semantics and
+    return the resulting event structure. *)
+let interpret_symbolic program =
+  let ctx =
+    make_context { default_options with loop_semantics = Symbolic } ()
+  in
+    ctx.litmus <- Some program;
+    let ctx =
+      Lwt_main.run
+        (Lwt.return ctx |> Parse.step_parse_litmus |> Interpret.step_interpret)
+    in
+      Option.get ctx.structure
+
+(** Run the full pipeline with symbolic loop semantics and return the number of
+    generated executions. *)
+let count_executions_symbolic program =
+  let ctx =
+    make_context { default_options with loop_semantics = Symbolic } ()
+  in
+    ctx.litmus <- Some program;
+    let ctx =
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Elaborations.step_generate_justifications
+        |> Executions.step_calculate_dependencies
+        )
+    in
+      USet.size (Option.get ctx.executions)
+
+(** A well-formed event structure never has an event in conflict with itself,
+    and conflict and program order are disjoint (conflicting events cannot be
+    po-ordered). *)
+let check_structure_wellformed name structure =
+  let self_conflict =
+    USet.values structure.conflict |> List.exists (fun (a, b) -> a = b)
+  in
+    Alcotest.(check bool) (name ^ ": no self-conflict") false self_conflict;
+    Alcotest.(check int)
+      (name ^ ": po and conflict are disjoint")
+      0
+      (USet.size (USet.intersection structure.po structure.conflict))
+
+(* A while loop whose guard reads a value updated by the body branches on a
+   symbolic guard: both "enter" and "exit" branches are feasible. *)
+let test_while_symbolic_guard_wellformed () =
+  let structure =
+    interpret_symbolic "x := 0; r1 := x; while (r1 = 0) { r1 := x }"
+  in
+    check_structure_wellformed "while symbolic guard" structure;
+    Alcotest.(check bool)
+      "has a branch event" true
+      (USet.size structure.branch_events > 0)
+
+let test_while_symbolic_guard_yields_executions () =
+  Alcotest.(check bool)
+    "while loop yields at least one execution" true
+    (count_executions_symbolic "x := 0; r1 := x; while (r1 = 0) { r1 := x }" > 0)
+
+(* A while loop whose guard is statically true on entry must enter the body; the
+   exit branch is pruned, so no branch event is created, and it still yields an
+   execution. *)
+let test_while_constant_guard_yields_executions () =
+  let program = "x := 0; r1 := 0; while (r1 = 0) { r1 := x }" in
+  let structure = interpret_symbolic program in
+    check_structure_wellformed "while constant guard" structure;
+    Alcotest.(check bool)
+      "constant-guard while loop yields at least one execution" true
+      (count_executions_symbolic program > 0)
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
     [
+      Alcotest.test_case "While symbolic guard well-formed" `Quick
+        test_while_symbolic_guard_wellformed;
+      Alcotest.test_case "While symbolic guard yields executions" `Quick
+        test_while_symbolic_guard_yields_executions;
+      Alcotest.test_case "While constant guard yields executions" `Quick
+        test_while_constant_guard_yields_executions;
       Alcotest.test_case "Event ID generation" `Quick test_next_event_id;
       Alcotest.test_case "Greek symbol generation" `Quick test_next_greek;
       Alcotest.test_case "Greek symbol overflow" `Quick test_next_greek_overflow;

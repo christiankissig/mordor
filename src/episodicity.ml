@@ -690,6 +690,17 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
             && condition4.satisfied
           in
 
+          (* Record the chosen bisection (the loop boundary) so the result can
+             be related back to the program text. Events are sorted by label for
+             a stable order, and annotated with their source span when known. *)
+          let to_bisection_events evts =
+            USet.to_list evts
+            |> List.sort compare
+            |> List.map (fun label ->
+                { label; span = Hashtbl.find_opt cache.source_spans label }
+            )
+          in
+
           Lwt.return
             {
               loop_id;
@@ -698,6 +709,8 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
               condition3;
               condition4;
               is_episodic;
+              bisection_left = to_bisection_events left;
+              bisection_right = to_bisection_events right;
             }
 
 (** Check if a specific loop is episodic by verifying all four conditions.
