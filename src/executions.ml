@@ -1396,6 +1396,17 @@ let compute_justification_combinations compute fwd_es_ctx structure paths statex
     @param statex Static constraints.
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
+(** S4: identity on an Lwt stream, logging its length under [name] when
+    [s4_counters] (shared with {!Coherence}) is enabled. Explicitly polymorphic
+    so it can sit between pipeline stages of differing element types. *)
+let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
+ fun name stream ->
+  if not !s4_counters then stream
+  else
+    Lwt.bind stream (fun s ->
+        Logs_safe.info (fun m -> m "[S4] %s: %d" name (List.length s));
+        Lwt.return s)
+
 let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     (structure : symbolic_event_structure)
     (fwd_es_ctx : Forwarding.event_structure_context)
@@ -1423,6 +1434,13 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
   Logs_safe.debug (fun m ->
       m "Generated %d paths through the structure" (List.length paths)
   );
+
+  (* S4 (measure the waste ratio): count the stream size at each pipeline seam
+     so the built-then-discarded ratio per test is visible. Enabled via
+     [MORDOR_S4_COUNTERS]. Pure instrumentation — [count_stage] is the identity
+     on the stream. *)
+  if !s4_counters then
+    Logs_safe.info (fun m -> m "[S4] paths: %d" (List.length paths));
 
   (* Build justification map: write event label -> list of justifications *)
   (* TODO remove justifications with elided origins *)
@@ -1663,13 +1681,18 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     let* executions =
       compute_justification_combinations compute fwd_es_ctx structure paths
         statex justmap
+      |> count_stage "justification-combos"
       |> stream_freeze
+      |> count_stage "freeze-results (rf-combos)"
       |> dedup_freeze_results
       |> keep_minimal_freeze_results
+      |> count_stage "freeze-results after dedup+minimality"
       |> stream_freeze_to_execution
       |> dedup_executions
       |> keep_minimal_executions
+      |> count_stage "executions before coherence"
       |> stream_filter_coherent_executions
+      |> count_stage "executions after coherence"
     in
       Logs_safe.debug (fun m ->
           m "Minimized to %d executions" (List.length executions)
