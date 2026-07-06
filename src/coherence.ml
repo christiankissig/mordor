@@ -6,6 +6,12 @@ open Solver
 open Types
 open Uset
 
+(** S4 (measure the waste ratio): when enabled, emit pipeline-stage and
+    per-location coherence-permutation counts at info level. Harmless
+    instrumentation, off by default; enabled via the [MORDOR_S4_COUNTERS]
+    environment variable or by setting this ref. Shared by {!Executions}. *)
+let s4_counters = ref (Option.is_some (Sys.getenv_opt "MORDOR_S4_COUNTERS"))
+
 (** {1 Core Abstractions} *)
 
 module type MEMORY_MODEL = sig
@@ -897,6 +903,14 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
                       po_edges_in_group
                 )
               in
+
+              (* S4: per-location write-set size and the number of po-respecting
+                 permutations it expands into (the coherence permutation-blowup
+                 that S6/R9b target). *)
+              if !s4_counters then
+                Logs_safe.info (fun m ->
+                    m "[S4] coherence-location: writes=%d perms=%d"
+                      (List.length group) (List.length valid_perms));
 
               (* Convert each valid permutation to pairs, keeping init
                  co-minimal by prepending it before the real writes. *)

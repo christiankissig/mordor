@@ -18,6 +18,7 @@
   algorithms
   assertion
   ast
+  canonicalize
   coherence
   context
   elaborations
