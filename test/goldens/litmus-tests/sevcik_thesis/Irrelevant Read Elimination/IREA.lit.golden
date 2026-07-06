@@ -1,0 +1,10 @@
+verdict: valid
+executions: 1
+--- execution 0 ---
+E: 0=t-:I@ 1=t-:T@ 2=t0:W@x 3=t0:R@x
+po: (0,1) (0,2) (0,3) (2,1) (2,3) (3,1)
+rf: (2,3)
+dp: 
+ppo: (0,1) (0,2) (0,3) (2,1) (2,3) (3,1)
+rmw: 
+phi: (α = 0)

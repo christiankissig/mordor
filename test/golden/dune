@@ -1,0 +1,12 @@
+; R1 golden-diff check target. Run from the repo root:
+;   dune exec test/golden/golden_diff.exe -- check     (CI gate)
+;   dune exec test/golden/golden_diff.exe -- update    (re-bless goldens)
+;   dune exec test/golden/golden_diff.exe -- verify    (determinism gate)
+(executable
+ (name golden_diff)
+ (modules golden_diff)
+ (flags
+  (:standard -g -w -33-26))
+ (libraries mordor_lib lwt lwt.unix z3 zarith core str unix)
+ (preprocess
+  (pps lwt_ppx)))
