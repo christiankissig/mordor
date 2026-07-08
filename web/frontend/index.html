@@ -4,6 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MoRDor - Weak Memory Semantics</title>
+    <!-- Apply the saved theme before first paint to avoid a flash -->
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('mordor-theme');
+                if (!t) {
+                    t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+                        ? 'light' : 'dark';
+                }
+                document.documentElement.setAttribute('data-theme', t);
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+    </script>
     <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
     <script src="https://unpkg.com/layout-base@2.0.1/layout-base.js"></script>
     <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
@@ -28,6 +43,7 @@
         <header>
             <h1>MoRDor - Weak Memory Semantics</h1>
             <div class="header-controls">
+                <button id="theme-toggle-btn" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">🌙</button>
                 <button id="test-runner-btn" class="btn-secondary" title="Test Runner">🧪 Tests</button>
                 <button id="settings-btn" class="settings-icon" title="Settings">⚙️</button>
                 <div class="split-button">
@@ -57,10 +73,10 @@
                                 📁 Open
                             </label>
                         </div>
-                        <button id="share-btn" class="btn-secondary" title="Generate shareable URL" style="padding:0.3rem 0.6rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px; cursor:pointer; margin-right:0.5rem;">
+                        <button id="share-btn" class="btn-secondary" title="Generate shareable URL" style="padding:0.3rem 0.6rem; background:var(--control-bg); border:1px solid var(--border-strong); color:var(--text); border-radius:4px; cursor:pointer; margin-right:0.5rem;">
                             🔗 Share
                         </button>
-                        <select id="examples" style="padding:0.3rem; background:#3c3c3c; border:1px solid #555; color:#d4d4d4; border-radius:4px;">
+                        <select id="examples" style="padding:0.3rem; background:var(--control-bg); border:1px solid var(--border-strong); color:var(--text); border-radius:4px;">
                             <option value="">-- Select Example --</option>
                             <option value="sb">Store Buffering (SB)</option>
                             <option value="mp">Message Passing (MP)</option>
@@ -192,7 +208,7 @@
             </div>
             <div class="modal-body">
                 <div class="setting-group">
-                    <h3 style="color: #cccccc; font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #3e3e42; padding-bottom: 0.5rem;">Loop Semantics</h3>
+                    <h3 style="color: var(--text-strong); font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Loop Semantics</h3>
                     <div class="setting-item">
                         <label>
                             <input type="radio" name="loop-semantics" id="step-counter-semantics" value="step-counter" checked />
@@ -202,7 +218,7 @@
                     <div class="setting-item" style="margin-left: 1.5rem; margin-top: 0.5rem;">
                         <label style="display: flex; align-items: center; gap: 0.5rem;">
                             <span>Loop unravellings:</span>
-                            <input type="number" id="step-counter" value="2" min="1" max="100" style="width: 70px; padding: 0.4rem; background: #3c3c3c; border: 1px solid #555; color: #d4d4d4; border-radius: 4px; font-size: 0.9rem;" />
+                            <input type="number" id="step-counter" value="2" min="1" max="100" style="width: 70px; padding: 0.4rem; background: var(--control-bg); border: 1px solid var(--border-strong); color: var(--text); border-radius: 4px; font-size: 0.9rem;" />
                         </label>
                     </div>
                     <div class="setting-item" style="margin-top: 0.75rem;">
@@ -214,11 +230,11 @@
                 </div>
                 
                 <div class="setting-group" style="margin-top: 1.5rem;">
-                    <h3 style="color: #cccccc; font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #3e3e42; padding-bottom: 0.5rem;">Memory Model</h3>
+                    <h3 style="color: var(--text-strong); font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Memory Model</h3>
                     <div class="setting-item">
                         <label style="display: flex; align-items: center; gap: 0.5rem;">
                             <span>Weak memory model:</span>
-                            <select id="memory-model" style="padding: 0.4rem; background: #3c3c3c; border: 1px solid #555; color: #d4d4d4; border-radius: 4px; font-size: 0.9rem;">
+                            <select id="memory-model" style="padding: 0.4rem; background: var(--control-bg); border: 1px solid var(--border-strong); color: var(--text); border-radius: 4px; font-size: 0.9rem;">
                                 <option value="rc11">RC11</option>
                                 <option value="smrd" selected>SMRD</option>
                             </select>
@@ -227,7 +243,7 @@
                 </div>
 
                 <div class="setting-group" style="margin-top: 1.5rem;">
-                    <h3 style="color: #cccccc; font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #3e3e42; padding-bottom: 0.5rem;">Execution Filtering</h3>
+                    <h3 style="color: var(--text-strong); font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Execution Filtering</h3>
                     <div class="setting-item">
                         <label>
                             <input type="checkbox" id="show-uaf" />
@@ -261,9 +277,28 @@
     <!-- Initialize the application -->
     <script>
         window._graphVisualizer = new GraphVisualizer();
-        
+
         // Initialize Test Runner
         const testRunner = new TestRunner();
+
+        // Light/dark theme toggle
+        (function () {
+            const btn = document.getElementById('theme-toggle-btn');
+            const root = document.documentElement;
+            const syncIcon = () => {
+                const isLight = root.getAttribute('data-theme') === 'light';
+                // show the icon for the theme you'd switch *to*
+                btn.textContent = isLight ? '🌙' : '☀️';
+                btn.title = isLight ? 'Switch to dark theme' : 'Switch to light theme';
+            };
+            syncIcon();
+            btn.addEventListener('click', () => {
+                const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+                root.setAttribute('data-theme', next);
+                try { localStorage.setItem('mordor-theme', next); } catch (e) {}
+                syncIcon();
+            });
+        })();
         
         // Load program from URL hash if present (e.g. #program=...)
         const hashParams = new URLSearchParams(window.location.hash.slice(1));
