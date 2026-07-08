@@ -2,6 +2,7 @@ rC := malloc(1);
 *rC := 0;
 rcu := malloc(1);
 *rcu := 1;
+fence(relacq);
 {
   rtemp := *rcu;
   if (rtemp = 0) {

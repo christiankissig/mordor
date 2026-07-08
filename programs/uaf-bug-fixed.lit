@@ -1,6 +1,8 @@
 rC := malloc(1);
+*rC := 0;
 rcu := malloc(1);
-rcu := 0;
+*rcu := 1;
+fence(relacq);
 {
   rtemp := *rcu;
   if (rtemp = 0) {
@@ -9,7 +11,6 @@ rcu := 0;
 }
 |||
 {
-  *rcu :acq= 1;
   rv := *rC;
   *rcu :rel= 0;
 }
