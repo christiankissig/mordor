@@ -18,8 +18,8 @@
 }
 
 .test-modal {
-    background: #252526;
-    border: 1px solid #3e3e42;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
     border-radius: 8px;
     width: 90%;
     max-width: 1200px;
@@ -46,20 +46,20 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid #3e3e42;
-    background: #2d2d30;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elev2);
 }
 
 .test-header h2 {
     font-size: 1.3rem;
-    color: #cccccc;
+    color: var(--text-strong);
     margin: 0;
 }
 
 .test-close {
     background: none;
     border: none;
-    color: #cccccc;
+    color: var(--text-strong);
     font-size: 2rem;
     cursor: pointer;
     line-height: 1;
@@ -74,7 +74,7 @@
 }
 
 .test-close:hover {
-    background: #3e3e42;
+    background: var(--border);
 }
 
 .test-toolbar {
@@ -82,8 +82,8 @@
     gap: 0.75rem;
     align-items: center;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid #3e3e42;
-    background: #1e1e1e;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
 }
 
 .test-stats {
@@ -94,19 +94,19 @@
 }
 
 .test-stats span {
-    color: #d4d4d4;
+    color: var(--text);
 }
 
 .stat-passed {
-    color: #4ec9b0 !important;
+    color: var(--teal) !important;
 }
 
 .stat-failed {
-    color: #f48771 !important;
+    color: var(--red) !important;
 }
 
 .stat-running {
-    color: #dcdcaa !important;
+    color: var(--yellow) !important;
 }
 
 .test-content {
@@ -117,30 +117,30 @@
 
 .test-sidebar {
     width: 300px;
-    border-right: 1px solid #3e3e42;
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    background: #1e1e1e;
+    background: var(--bg);
 }
 
 .test-search {
     padding: 1rem;
-    border-bottom: 1px solid #3e3e42;
+    border-bottom: 1px solid var(--border);
 }
 
 .test-search input {
     width: 100%;
     padding: 0.5rem;
-    background: #3c3c3c;
-    border: 1px solid #555;
-    color: #d4d4d4;
+    background: var(--control-bg);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
     border-radius: 4px;
     font-size: 0.9rem;
 }
 
 .test-search input:focus {
     outline: none;
-    border-color: #0e639c;
+    border-color: var(--accent);
 }
 
 .test-list {
@@ -162,19 +162,19 @@
     cursor: pointer;
     border-radius: 4px;
     transition: background 0.15s;
-    color: #d4d4d4;
+    color: var(--text);
     font-size: 0.9rem;
 }
 
 .test-dir-header:hover {
-    background: #2a2d2e;
+    background: var(--bg-hover);
 }
 
 .test-dir-toggle {
     font-size: 0.7rem;
     width: 12px;
     text-align: center;
-    color: #858585;
+    color: var(--text-faint);
     flex-shrink: 0;
     transition: transform 0.15s;
 }
@@ -186,20 +186,20 @@
     flex-shrink: 0;
 }
 
-.test-dir-header.test-passed .test-dir-icon { color: #4ec9b0; }
-.test-dir-header.test-failed .test-dir-icon { color: #f48771; }
-.test-dir-header.test-running .test-dir-icon { color: #dcdcaa; }
+.test-dir-header.test-passed .test-dir-icon { color: var(--teal); }
+.test-dir-header.test-failed .test-dir-icon { color: var(--red); }
+.test-dir-header.test-running .test-dir-icon { color: var(--yellow); }
 
 .test-dir-name {
     flex: 1;
     font-weight: 500;
-    color: #cccccc;
+    color: var(--text-strong);
 }
 
 .test-dir-count {
     font-size: 0.75rem;
-    color: #6a6a6a;
-    background: #333;
+    color: var(--text-muted);
+    background: var(--badge-bg);
     padding: 0.1rem 0.4rem;
     border-radius: 8px;
     min-width: 20px;
@@ -219,20 +219,20 @@
 }
 
 .test-item:hover {
-    background: #2a2d2e;
-    border-left-color: #0e639c;
+    background: var(--bg-hover);
+    border-left-color: var(--accent);
 }
 
 .test-item.test-passed {
-    border-left-color: #4ec9b0;
+    border-left-color: var(--teal);
 }
 
 .test-item.test-failed {
-    border-left-color: #f48771;
+    border-left-color: var(--red);
 }
 
 .test-item.test-running {
-    border-left-color: #dcdcaa;
+    border-left-color: var(--yellow);
 }
 
 .test-item-header {
@@ -250,15 +250,15 @@
 }
 
 .test-item.test-passed .test-status-icon {
-    color: #4ec9b0;
+    color: var(--teal);
 }
 
 .test-item.test-failed .test-status-icon {
-    color: #f48771;
+    color: var(--red);
 }
 
 .test-item.test-running .test-status-icon {
-    color: #dcdcaa;
+    color: var(--yellow);
     animation: spin 1s linear infinite;
 }
 
@@ -269,7 +269,7 @@
 
 .test-name {
     flex: 1;
-    color: #d4d4d4;
+    color: var(--text);
     font-size: 0.85rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -279,7 +279,7 @@
 .test-run-btn {
     background: none;
     border: none;
-    color: #6a6a6a;
+    color: var(--text-muted);
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
     cursor: pointer;
@@ -293,7 +293,7 @@
 }
 
 .test-run-btn:hover {
-    background: #0e639c;
+    background: var(--accent);
     color: white;
 }
 
@@ -301,14 +301,14 @@
     margin-top: 0.2rem;
     padding-left: 18px;
     font-size: 0.75rem;
-    color: #6a6a6a;
+    color: var(--text-muted);
 }
 
 .test-main {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: #1e1e1e;
+    background: var(--bg);
     overflow: hidden;
 }
 
@@ -330,13 +330,13 @@
 }
 
 .test-welcome h3 {
-    color: #cccccc;
+    color: var(--text-strong);
     font-size: 1.5rem;
     margin-bottom: 1rem;
 }
 
 .test-welcome p {
-    color: #d4d4d4;
+    color: var(--text);
     font-size: 1rem;
     line-height: 1.6;
 }
@@ -346,14 +346,14 @@
     align-items: center;
     gap: 1rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid #3e3e42;
+    border-bottom: 1px solid var(--border);
     margin-bottom: 1.5rem;
 }
 
 .btn-back {
-    background: #3c3c3c;
-    color: #cccccc;
-    border: 1px solid #555;
+    background: var(--control-bg);
+    color: var(--text-strong);
+    border: 1px solid var(--border-strong);
     padding: 0.5rem 1rem;
     border-radius: 4px;
     cursor: pointer;
@@ -361,12 +361,12 @@
 }
 
 .btn-back:hover {
-    background: #505050;
+    background: var(--control-hover);
 }
 
 .test-detail-header h3 {
     flex: 1;
-    color: #cccccc;
+    color: var(--text-strong);
     font-size: 1.2rem;
     margin: 0;
 }
@@ -392,7 +392,7 @@
 
 .test-output-section h4,
 .test-source-section h4 {
-    color: #cccccc;
+    color: var(--text-strong);
     font-size: 1rem;
     margin-bottom: 0.75rem;
     display: flex;
@@ -401,9 +401,9 @@
 }
 
 .btn-copy {
-    background: #3c3c3c;
-    border: 1px solid #555;
-    color: #cccccc;
+    background: var(--control-bg);
+    border: 1px solid var(--border-strong);
+    color: var(--text-strong);
     padding: 0.4rem 0.75rem;
     border-radius: 4px;
     cursor: pointer;
@@ -415,14 +415,14 @@
 }
 
 .btn-copy:hover {
-    background: #505050;
-    border-color: #0e639c;
+    background: var(--control-hover);
+    border-color: var(--accent);
 }
 
 .btn-copy.copied {
-    background: #4ec9b0;
-    border-color: #4ec9b0;
-    color: #1e1e1e;
+    background: var(--teal);
+    border-color: var(--teal);
+    color: var(--bg);
 }
 
 .btn-copy.copied::before {
@@ -432,11 +432,11 @@
 .test-output,
 .test-source {
     flex: 1;
-    background: #1e1e1e;
-    border: 1px solid #3e3e42;
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 1rem;
-    color: #d4d4d4;
+    color: var(--text);
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 0.9rem;
     line-height: 1.5;
@@ -446,11 +446,11 @@
 }
 
 .test-output.success {
-    border-left: 3px solid #4ec9b0;
+    border-left: 3px solid var(--teal);
 }
 
 .test-output.error {
-    border-left: 3px solid #f48771;
+    border-left: 3px solid var(--red);
 }
 
 .test-loading,
@@ -458,11 +458,11 @@
 .test-error {
     text-align: center;
     padding: 2rem;
-    color: #6a6a6a;
+    color: var(--text-muted);
 }
 
 .test-error {
-    color: #f48771;
+    color: var(--red);
 }
 
 .test-summary {
@@ -471,7 +471,7 @@
 }
 
 .test-summary h3 {
-    color: #cccccc;
+    color: var(--text-strong);
     font-size: 1.3rem;
     margin-bottom: 1.5rem;
 }
@@ -484,39 +484,39 @@
 }
 
 .summary-stat {
-    background: #252526;
-    border: 1px solid #3e3e42;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 1.5rem;
     text-align: center;
 }
 
 .summary-stat.success {
-    border-color: #4ec9b0;
+    border-color: var(--teal);
 }
 
 .summary-stat.failed {
-    border-color: #f48771;
+    border-color: var(--red);
 }
 
 .stat-value {
     font-size: 2.5rem;
     font-weight: bold;
-    color: #d4d4d4;
+    color: var(--text);
     margin-bottom: 0.5rem;
 }
 
 .summary-stat.success .stat-value {
-    color: #4ec9b0;
+    color: var(--teal);
 }
 
 .summary-stat.failed .stat-value {
-    color: #f48771;
+    color: var(--red);
 }
 
 .stat-label {
     font-size: 0.9rem;
-    color: #6a6a6a;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
 }
@@ -528,8 +528,8 @@
 }
 
 .result-item {
-    background: #252526;
-    border: 1px solid #3e3e42;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.75rem 1rem;
     display: flex;
@@ -540,16 +540,16 @@
 }
 
 .result-item:hover {
-    background: #2d2d30;
-    border-color: #0e639c;
+    background: var(--bg-elev2);
+    border-color: var(--accent);
 }
 
 .result-item.success {
-    border-left: 3px solid #4ec9b0;
+    border-left: 3px solid var(--teal);
 }
 
 .result-item.failed {
-    border-left: 3px solid #f48771;
+    border-left: 3px solid var(--red);
 }
 
 .result-icon {
@@ -559,21 +559,21 @@
 }
 
 .result-item.success .result-icon {
-    color: #4ec9b0;
+    color: var(--teal);
 }
 
 .result-item.failed .result-icon {
-    color: #f48771;
+    color: var(--red);
 }
 
 .result-name {
     flex: 1;
-    color: #d4d4d4;
+    color: var(--text);
     font-size: 0.95rem;
 }
 
 .result-summary {
-    color: #6a6a6a;
+    color: var(--text-muted);
     font-size: 0.85rem;
 }
 
@@ -589,14 +589,14 @@
 .test-main::-webkit-scrollbar-track,
 .test-output::-webkit-scrollbar-track,
 .test-source::-webkit-scrollbar-track {
-    background: #1e1e1e;
+    background: var(--bg);
 }
 
 .test-list::-webkit-scrollbar-thumb,
 .test-main::-webkit-scrollbar-thumb,
 .test-output::-webkit-scrollbar-thumb,
 .test-source::-webkit-scrollbar-thumb {
-    background: #3e3e42;
+    background: var(--border);
     border-radius: 4px;
 }
 
@@ -604,5 +604,5 @@
 .test-main::-webkit-scrollbar-thumb:hover,
 .test-output::-webkit-scrollbar-thumb:hover,
 .test-source::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    background: var(--border-strong);
 }

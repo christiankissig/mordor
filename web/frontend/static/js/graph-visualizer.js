@@ -274,7 +274,7 @@ class GraphVisualizer {
         const loopsContent = document.getElementById('loops-content');
         
         if (!this.loops || this.loops.length === 0) {
-            loopsContent.innerHTML = '<p style="padding: 1rem; color: #6a6a6a;">No loops detected</p>';
+            loopsContent.innerHTML = '<p style="padding: 1rem; color: var(--text-muted);">No loops detected</p>';
             return;
         }
         
@@ -289,38 +289,38 @@ class GraphVisualizer {
                      data-start-col="${loop.start_col}"
                      data-end-line="${loop.end_line}" 
                      data-end-col="${loop.end_col}"
-                     style="padding: 0.75rem; margin: 0.5rem 0; background: #252526; border: 1px solid #3e3e42; border-radius: 4px; cursor: pointer; transition: background 0.2s;">
+                     style="padding: 0.75rem; margin: 0.5rem 0; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; transition: background 0.2s;">
                     <div class="loop-header" style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <strong style="color: #4ec9b0;">Loop ${loop.id}</strong>
-                            ${episodicityData ? `<span style="font-size: 0.85rem; color: ${episodicityData.is_episodic ? '#89d185' : '#f48771'}; font-weight: bold;">${episodicityData.is_episodic ? '✓ Episodic' : '✗ Non-episodic'}</span>` : ''}
+                            <strong style="color: var(--teal);">Loop ${loop.id}</strong>
+                            ${episodicityData ? `<span style="font-size: 0.85rem; color: ${episodicityData.is_episodic ? 'var(--green)' : 'var(--red)'}; font-weight: bold;">${episodicityData.is_episodic ? '✓ Episodic' : '✗ Non-episodic'}</span>` : ''}
                         </div>
                         ${episodicityData ? '<span class="loop-toggle">▼</span>' : ''}
                     </div>
-                    <div style="font-size: 0.85rem; color: #6a6a6a; margin-top: 0.25rem;">
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem;">
                         Lines ${loop.start_line}:${loop.start_col} - ${loop.end_line}:${loop.end_col}
                     </div>
             `;
             
             // Add episodicity conditions if available
             if (episodicityData) {
-                html += '<div class="loop-conditions" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #3e3e42;">';
-                html += '<div style="font-size: 0.85rem; color: #cccccc; margin-bottom: 0.5rem; font-weight: bold;">Episodicity Conditions:</div>';
+                html += '<div class="loop-conditions" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">';
+                html += '<div style="font-size: 0.85rem; color: var(--text-strong); margin-bottom: 0.5rem; font-weight: bold;">Episodicity Conditions:</div>';
                 
                 ['condition1', 'condition2', 'condition3', 'condition4'].forEach((condName, index) => {
                     const cond = episodicityData[condName];
                     if (cond) {
                         const satisfied = cond.satisfied;
                         const icon = satisfied ? '✓' : '✗';
-                        const color = satisfied ? '#89d185' : '#f48771';
+                        const color = satisfied ? 'var(--green)' : 'var(--red)';
                         const hasViolations = !satisfied && cond.violations && cond.violations.length > 0;
                         
                         html += `
-                            <div class="episodicity-condition" data-condition="${condName}" style="margin: 0.4rem 0; padding: 0.4rem; background: #1e1e1e; border-radius: 3px;">
+                            <div class="episodicity-condition" data-condition="${condName}" style="margin: 0.4rem 0; padding: 0.4rem; background: var(--bg); border-radius: 3px;">
                                 <div class="condition-header" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                                         <span style="color: ${color}; font-weight: bold; min-width: 20px;">${icon}</span>
-                                        <span style="color: #d4d4d4; font-size: 0.85rem;">Condition ${index + 1}</span>
+                                        <span style="color: var(--text); font-size: 0.85rem;">Condition ${index + 1}</span>
                                     </div>
                                     ${hasViolations ? '<span class="condition-toggle">▼</span>' : ''}
                                 </div>
@@ -333,7 +333,7 @@ class GraphVisualizer {
                                 const violationType = violation[0];
                                 const violationDetails = violation[1];
                                 
-                                html += `<div style="font-size: 0.8rem; color: #f48771; margin: 0.2rem 0;">`;
+                                html += `<div style="font-size: 0.8rem; color: var(--red); margin: 0.2rem 0;">`;
                                 
                                 if (Array.isArray(violationDetails)) {
                                     const [reason, register, span] = violationDetails;
@@ -406,12 +406,12 @@ class GraphVisualizer {
                 );
                 
                 // Visual feedback on the loop item
-                item.style.background = '#2d2d30';
+                item.style.background = 'var(--bg-elev2)';
             });
             
             item.addEventListener('mouseleave', () => {
                 this.clearSourceHighlight();
-                item.style.background = '#252526';
+                item.style.background = 'var(--bg-elev)';
             });
         });
     }
@@ -425,7 +425,7 @@ class GraphVisualizer {
         const assertionsContent = document.getElementById('assertions-content');
         
         if (!this.assertionResults) {
-            assertionsContent.innerHTML = '<p style="padding: 1rem; color: #6a6a6a;">No assertion results available.</p>';
+            assertionsContent.innerHTML = '<p style="padding: 1rem; color: var(--text-muted);">No assertion results available.</p>';
             return;
         }
         
@@ -522,7 +522,7 @@ class GraphVisualizer {
                 html += '</div>';
             });
         } else {
-            html += '<p style="padding: 1rem; color: #6a6a6a;">No assertion instances to display.</p>';
+            html += '<p style="padding: 1rem; color: var(--text-muted);">No assertion instances to display.</p>';
         }
         
         html += '</div>';
@@ -543,7 +543,7 @@ class GraphVisualizer {
             
             // Visual feedback on hover
             item.addEventListener('mouseenter', () => {
-                item.style.background = '#2d2d30';
+                item.style.background = 'var(--bg-elev2)';
             });
             
             item.addEventListener('mouseleave', () => {
@@ -562,7 +562,7 @@ class GraphVisualizer {
         const uafContent = document.getElementById('uaf-content');
 
         if (!this.uafResults || this.uafResults.length === 0) {
-            uafContent.innerHTML = '<p style="padding: 1rem; color: #6a6a6a;">No use-after-free violations found.</p>';
+            uafContent.innerHTML = '<p style="padding: 1rem; color: var(--text-muted);">No use-after-free violations found.</p>';
             return;
         }
 
@@ -588,12 +588,12 @@ class GraphVisualizer {
 
             html += `
                 <div class="uaf-item" data-data-index="${dataIndex}"
-                     style="padding: 0.75rem; margin: 0.5rem 0; background: #2a1a1a; border: 1px solid #6b2020; border-radius: 4px; cursor: pointer; transition: background 0.2s;">
+                     style="padding: 0.75rem; margin: 0.5rem 0; background: var(--red-bg); border: 1px solid var(--red-border); border-radius: 4px; cursor: pointer; transition: background 0.2s;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-                        <strong style="color: #ff6b6b;">&#9888; Execution ${execId}</strong>
-                        <span style="font-size: 0.75rem; color: #6a6a6a;">${uaf.length} pair${uaf.length !== 1 ? 's' : ''}</span>
+                        <strong style="color: var(--red-bright);">&#9888; Execution ${execId}</strong>
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">${uaf.length} pair${uaf.length !== 1 ? 's' : ''}</span>
                     </div>
-                    <div style="font-size: 0.82rem; color: #d4a0a0; line-height: 1.6;">
+                    <div style="font-size: 0.82rem; color: var(--red-text); line-height: 1.6;">
                         ${pairLabels.map(l => `<div style="font-family: monospace;">${this.escapeHtml(l)}</div>`).join('')}
                     </div>
                 </div>
@@ -611,8 +611,8 @@ class GraphVisualizer {
                     this.navigateTo(dataIndex);
                 }
             });
-            item.addEventListener('mouseenter', () => { item.style.background = '#3a1f1f'; });
-            item.addEventListener('mouseleave', () => { item.style.background = '#2a1a1a'; });
+            item.addEventListener('mouseenter', () => { item.style.background = 'var(--red-bg-hover)'; });
+            item.addEventListener('mouseleave', () => { item.style.background = 'var(--red-bg)'; });
         });
     }
 
@@ -1062,7 +1062,7 @@ class GraphVisualizer {
 
             const lbl = document.createElement('span');
             lbl.textContent = rel;
-            lbl.style.color = '#d4d4d4';
+            lbl.style.color = 'var(--text)';
             lbl.style.fontSize = '13px';
             lbl.style.cursor = 'pointer';
 
@@ -1124,9 +1124,9 @@ class GraphVisualizer {
         if (!data) {
             document.getElementById('predicates').textContent = '⊤';
             document.getElementById('has-uaf').textContent = 'N/A';
-            document.getElementById('has-uaf').style.color = '#d4d4d4';
+            document.getElementById('has-uaf').style.color = 'var(--text)';
             document.getElementById('has-unbounded-deref').textContent = 'N/A';
-            document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
+            document.getElementById('has-unbounded-deref').style.color = 'var(--text)';
             return;
         }
 
@@ -1172,31 +1172,31 @@ class GraphVisualizer {
 
               console.log('UAF pairs formatted:', uafPairs);
               uafSpan.textContent = uafPairs;
-              uafSpan.style.color = '#ff6b6b';
+              uafSpan.style.color = 'var(--red-bright)';
           } else {
               // No UAF in this execution
               uafSpan.textContent = 'No';
-              uafSpan.style.color = '#89d185';
+              uafSpan.style.color = 'var(--green)';
           }
 
           // Handle unbounded deref
           const unboundedSpan = document.getElementById('has-unbounded-deref');
           if (ub_reasons.unbounded_deref) {
               unboundedSpan.textContent = 'Yes';
-              unboundedSpan.style.color = '#ff6b6b';
+              unboundedSpan.style.color = 'var(--red-bright)';
           } else {
               unboundedSpan.textContent = 'No';
-              unboundedSpan.style.color = '#89d185';
+              unboundedSpan.style.color = 'var(--green)';
           }
         } else {
             // No undefined behaviour data - reset to "No" for executions
             const uafSpan = document.getElementById('has-uaf');
             uafSpan.textContent = 'No';
-            uafSpan.style.color = '#89d185';
+            uafSpan.style.color = 'var(--green)';
 
             const unboundedSpan = document.getElementById('has-unbounded-deref');
             unboundedSpan.textContent = 'No';
-            unboundedSpan.style.color = '#89d185';
+            unboundedSpan.style.color = 'var(--green)';
         }
     }
 
@@ -1271,9 +1271,9 @@ class GraphVisualizer {
         // Clear execution info fields
         document.getElementById('predicates').textContent = '⊤';
         document.getElementById('has-uaf').textContent = 'N/A';
-        document.getElementById('has-uaf').style.color = '#d4d4d4';
+        document.getElementById('has-uaf').style.color = 'var(--text)';
         document.getElementById('has-unbounded-deref').textContent = 'N/A';
-        document.getElementById('has-unbounded-deref').style.color = '#d4d4d4';
+        document.getElementById('has-unbounded-deref').style.color = 'var(--text)';
 
         // Clear graph stats
         document.getElementById('node-count').textContent = '0';
@@ -1354,7 +1354,7 @@ class GraphVisualizer {
                 document.getElementById('status').textContent = 'Complete';
                 // If no UAF found by the end, show a clean "none found" message
                 if (this.uafResults.length === 0) {
-                    document.getElementById('uaf-content').innerHTML = '<p style="padding: 1rem; color: #89d185;">&#10003; No use-after-free found.</p>';
+                    document.getElementById('uaf-content').innerHTML = '<p style="padding: 1rem; color: var(--green);">&#10003; No use-after-free found.</p>';
                 }
                 abortController.abort();
                 document.getElementById('action-btn').disabled = false;
@@ -1534,7 +1534,7 @@ class GraphVisualizer {
 
     showError(message) {
         document.getElementById('empty-state').innerHTML = 
-            `<div style="color: #f48771; padding: 2rem; text-align: center;">
+            `<div style="color: var(--red); padding: 2rem; text-align: center;">
                 <p>${message}</p>
                 <p style="margin-top: 1rem; font-size: 0.9rem;">Check the log below for details</p>
             </div>`;
