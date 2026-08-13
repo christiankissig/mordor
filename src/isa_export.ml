@@ -2,10 +2,10 @@
 
     Serialises a litmus test and its computed futures into the versioned
     structured JSON described in [docs/MORDOR_ISA_FORMAT.md] (the
-    [rcu-c11-opsem] interchange contract, v0.1). The document carries the
-    rolled program (control flow preserved) split into [init] setup and
-    per-thread [threads], plus the [futures] [(ppo ∪ dp)] edges rendered over
-    stable event-labels.
+    [rcu-c11-opsem] interchange contract, v0.1). The document carries the rolled
+    program (control flow preserved) split into [init] setup and per-thread
+    [threads], plus the [futures] [(ppo ∪ dp)] edges rendered over stable
+    event-labels.
 
     The repo-side renderer ([scripts/generate_phi.py]) turns this JSON into
     Isabelle source; mordor stays Isabelle-agnostic and only emits the schema.
@@ -90,21 +90,21 @@ type instr_info = {
   loops : int list;
 }
 
-(** Build the [command] object and static event signature for a leaf
-    statement. Returns [None] for statements that produce no digest
-    instruction (e.g. [Skip], or control flow handled by the caller). *)
+(** Build the [command] object and static event signature for a leaf statement.
+    Returns [None] for statements that produce no digest instruction (e.g.
+    [Skip], or control flow handled by the caller). *)
 let command_and_events (stmt : ir_node_ann ir_stmt) :
     (Yojson.Safe.t * (int * string) list) option =
   let op name fields = `Assoc (("op", `String name) :: fields) in
     match stmt with
     | RegisterStore { register; expr } ->
         Some
-          ( op "Set" [ ("dst", `String register); ("expr", expr_json expr) ],
-            [] )
+          (op "Set" [ ("dst", `String register); ("expr", expr_json expr) ], [])
     | RegisterRefAssign { register; global } ->
         Some
           ( op "ReadRef" [ ("dst", `String register); ("var", `String global) ],
-            [] )
+            []
+          )
     | GlobalLoad { register; global; load } ->
         Some
           ( op "ReadVar"
@@ -113,7 +113,8 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("dst", `String register);
                 ("var", `String global);
               ],
-            [ (0, "R") ] )
+            [ (0, "R") ]
+          )
     | GlobalStore { global; expr; assign } ->
         Some
           ( op "WriteVar"
@@ -122,7 +123,8 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("var", `String global);
                 ("val", expr_json expr);
               ],
-            [ (0, "W") ] )
+            [ (0, "W") ]
+          )
     | DerefLoad { register; address; load } ->
         Some
           ( op "ReadPtr"
@@ -131,7 +133,8 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("dst", `String register);
                 ("ptr", expr_json address);
               ],
-            [ (0, "R") ] )
+            [ (0, "R") ]
+          )
     | DerefStore { address; expr; assign } ->
         Some
           ( op "WritePtr"
@@ -140,7 +143,8 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("ptr", expr_json address);
                 ("val", expr_json expr);
               ],
-            [ (0, "W") ] )
+            [ (0, "W") ]
+          )
     | Fadd { register; address; operand; rmw_mode; load_mode; assign_mode } ->
         Some
           ( op "Faa"
@@ -152,7 +156,8 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("addend", expr_json operand);
                 ("rmw_op", `String rmw_mode);
               ],
-            [ (0, "R"); (1, "W") ] )
+            [ (0, "R"); (1, "W") ]
+          )
     | Cas { register; address; expected; desired; load_mode; assign_mode } ->
         Some
           ( op "Cas"
@@ -165,15 +170,18 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("new", expr_json desired);
                 ("rmw_op", `String "cas");
               ],
-            [ (0, "R"); (1, "Branch"); (2, "W") ] )
+            [ (0, "R"); (1, "Branch"); (2, "W") ]
+          )
     | RegMalloc { register; size } ->
         Some
           ( op "Alloc" [ ("dst", `String register); ("size", expr_json size) ],
-            [ (0, "Alloc") ] )
+            [ (0, "Alloc") ]
+          )
     | GlobalMalloc { global; size } ->
         Some
           ( op "Alloc" [ ("dst", `String global); ("size", expr_json size) ],
-            [ (0, "Alloc") ] )
+            [ (0, "Alloc") ]
+          )
     | Free { register } ->
         Some (op "Free" [ ("ptr", `String register) ], [ (0, "Dealloc") ])
     | Fence { mode } ->
@@ -185,9 +193,11 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ( "var",
                   match global with
                   | Some g -> `String g
-                  | None -> `Null );
+                  | None -> `Null
+                );
               ],
-            [ (0, "Lock") ] )
+            [ (0, "Lock") ]
+          )
     | Unlock { global } ->
         Some
           ( op "Unlock"
@@ -195,9 +205,11 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ( "var",
                   match global with
                   | Some g -> `String g
-                  | None -> `Null );
+                  | None -> `Null
+                );
               ],
-            [ (0, "Unlock") ] )
+            [ (0, "Unlock") ]
+          )
     | Skip -> None
     (* Control flow and thread spawns are handled by the structural emitter. *)
     | If _ | While _ | Do _ | Labeled _ | Threads _ -> None
@@ -243,8 +255,9 @@ let record (tbl : (int * int, instr_info) Hashtbl.t) (ann : ir_node_ann)
 (** Emit a single IR node (and any nested control flow), bumping the per-thread
     [seq] counter in pre-order and recording instructions in [tbl].
 
-    @return the list of instruction objects produced (usually a singleton, but
-            empty for [Skip] and pass-through nodes). *)
+    @return
+      the list of instruction objects produced (usually a singleton, but empty
+      for [Skip] and pass-through nodes). *)
 let rec emit_node ~prefix ~(seq : int ref) ~tbl (node : ir_node_ann ir_node) :
     Yojson.Safe.t list =
   let ann = node.annotations in
@@ -352,18 +365,16 @@ let emit_program ~tbl (program : ir_node_ann ir_node list) :
         (fun tid body ->
           let seq = ref 0 in
           let prefix = Printf.sprintf "t%d" tid in
-          let body_json =
-            List.concat_map (emit_node ~prefix ~seq ~tbl) body
-          in
+          let body_json = List.concat_map (emit_node ~prefix ~seq ~tbl) body in
             `Assoc [ ("tid", `Int tid); ("body", `List body_json) ]
         )
         !thread_blocks
     in
       (`List !init_acc, `List threads_json)
 
-(** Iteration suffix ["@<loop-id>:<iter>..."] for an event inside loops.
-    Zips the instruction's loop ids with the event's per-loop iteration
-    counts (best-effort; not exercised by the loop-free UAF fixture). *)
+(** Iteration suffix ["@<loop-id>:<iter>..."] for an event inside loops. Zips
+    the instruction's loop ids with the event's per-loop iteration counts
+    (best-effort; not exercised by the loop-free UAF fixture). *)
 let iter_suffix (loops : int list) (iters : int list) : string =
   let n = min (List.length loops) (List.length iters) in
   let rec take k = function
@@ -377,8 +388,8 @@ let iter_suffix (loops : int list) (iters : int list) : string =
 (** Build a map from runtime event id to its event-label, using the per-event
     source spans and loop iterations recorded during interpretation.
 
-    Events are grouped by [(span, iteration)] — i.e. one instruction in one
-    loop iteration — sorted by id, and assigned [k] by position (so an RMW's
+    Events are grouped by [(span, iteration)] — i.e. one instruction in one loop
+    iteration — sorted by id, and assigned [k] by position (so an RMW's
     [R;Branch;W] sub-events, created in that order, get [#0;#1;#2]). Events
     without a recorded span (init/terminal markers, §4) are left unmapped and
     their edges are dropped. *)
@@ -425,9 +436,9 @@ let build_event_labels (ctx : mordor_ctx)
           evlabels
     | _ -> evlabels
 
-(** Render the [futures] array: one entry per execution, its [(ppo ∪ dp)]
-    edges (restricted to the execution's events, identity omitted) rendered
-    over event-labels. Edges touching an unmapped event are dropped. *)
+(** Render the [futures] array: one entry per execution, its [(ppo ∪ dp)] edges
+    (restricted to the execution's events, identity omitted) rendered over
+    event-labels. Edges touching an unmapped event are dropped. *)
 let futures_json (ctx : mordor_ctx) (evlabels : (int, string) Hashtbl.t) :
     Yojson.Safe.t =
   match ctx.executions with
@@ -461,10 +472,7 @@ let futures_json (ctx : mordor_ctx) (evlabels : (int, string) Hashtbl.t) :
               ("execution", `Int exec.id);
               ( "edges",
                 `List
-                  (List.map
-                     (fun (a, b) -> `List [ `String a; `String b ])
-                     edges
-                  )
+                  (List.map (fun (a, b) -> `List [ `String a; `String b ]) edges)
               );
             ]
       in
@@ -509,4 +517,6 @@ let emit (ctx : mordor_ctx) : unit =
         let oc = open_out path in
           output_string oc content;
           close_out oc;
-          Logs_safe.info (fun m -> m "Isabelle interchange JSON written to %s" path)
+          Logs_safe.info (fun m ->
+              m "Isabelle interchange JSON written to %s" path
+          )

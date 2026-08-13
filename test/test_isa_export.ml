@@ -34,8 +34,7 @@ let ctx_of_src ?(name = "fixture") src =
     ctx.program_stmts <- Some ir.program;
     ctx
 
-let doc_of_src ?name src =
-  Isa_export.build_document (ctx_of_src ?name src)
+let doc_of_src ?name src = Isa_export.build_document (ctx_of_src ?name src)
 
 (* JSON navigation helpers. *)
 let field k = function
@@ -53,11 +52,11 @@ let as_string = function
 let op_of instr = field "command" instr |> field "op" |> as_string
 let label_of instr = field "label" instr |> as_string
 
-(** The header carries the schema version, program name, and order vocabulary. *)
+(** The header carries the schema version, program name, and order vocabulary.
+*)
 let test_header () =
   let d = doc_of_src ~name:"uaf-bug.lit" uaf_bug_src in
-    check string "format_version" "0.1"
-      (field "format_version" d |> as_string);
+    check string "format_version" "0.1" (field "format_version" d |> as_string);
     check string "program" "uaf-bug.lit" (field "program" d |> as_string);
     check (list string) "orders"
       [ "rlx"; "acq"; "rel"; "acq_rel"; "sc" ]
@@ -97,7 +96,8 @@ let test_threads_and_control_flow () =
 let test_event_signatures () =
   let d = doc_of_src uaf_bug_src in
   let events instr =
-    field "events" instr |> as_list
+    field "events" instr
+    |> as_list
     |> List.map (fun e -> field "type" e |> as_string)
   in
   let init = field "init" d |> as_list in
@@ -116,34 +116,40 @@ let test_order_string () =
   check string "rlx" "rlx" (Isa_export.order_string Types.Relaxed);
   check string "acq" "acq" (Isa_export.order_string Types.Acquire);
   check string "rel" "rel" (Isa_export.order_string Types.Release);
-  check string "acq_rel" "acq_rel"
-    (Isa_export.order_string Types.ReleaseAcquire);
+  check string "acq_rel" "acq_rel" (Isa_export.order_string Types.ReleaseAcquire);
   check string "sc" "sc" (Isa_export.order_string Types.SC)
 
 (** expr_json renders the documented expression grammar. *)
 let test_expr_json () =
   let open Types in
   check bool "int" true
-    (Isa_export.expr_json (ENum (Z.of_int 7))
-    = `Assoc [ ("int", `Intlit "7") ]);
+    (Isa_export.expr_json (ENum (Z.of_int 7)) = `Assoc [ ("int", `Intlit "7") ]);
   check bool "reg" true
     (Isa_export.expr_json (EVar "r1") = `Assoc [ ("reg", `String "r1") ]);
   check bool "eq" true
     (Isa_export.expr_json (EBinOp (EVar "r", "=", ENum Z.zero))
     = `Assoc
-        [ ("eq", `List [ `Assoc [ ("reg", `String "r") ];
-                         `Assoc [ ("int", `Intlit "0") ] ]) ])
+        [
+          ( "eq",
+            `List
+              [
+                `Assoc [ ("reg", `String "r") ]; `Assoc [ ("int", `Intlit "0") ];
+              ]
+          );
+        ]
+    )
 
 (** The whole document round-trips as valid JSON. *)
 let test_valid_json () =
   let content = Isa_export.to_string (ctx_of_src uaf_bug_src) in
-  match Yojson.Safe.from_string content with
-  | `Assoc fields ->
-      List.iter
-        (fun k ->
-          check bool ("has " ^ k) true (List.mem_assoc k fields))
-        [ "format_version"; "program"; "orders"; "init"; "threads"; "futures" ]
-  | _ -> fail "expected JSON object at top level"
+    match Yojson.Safe.from_string content with
+    | `Assoc fields ->
+        List.iter
+          (fun k -> check bool ("has " ^ k) true (List.mem_assoc k fields))
+          [
+            "format_version"; "program"; "orders"; "init"; "threads"; "futures";
+          ]
+    | _ -> fail "expected JSON object at top level"
 
 let suite =
   ( "IsaExport",
@@ -152,7 +158,10 @@ let suite =
       ("init instructions", `Quick, test_init);
       ("threads and control flow", `Quick, test_threads_and_control_flow);
       ("event signatures", `Quick, test_event_signatures);
-      ("futures empty without pipeline", `Quick, test_futures_empty_without_pipeline);
+      ( "futures empty without pipeline",
+        `Quick,
+        test_futures_empty_without_pipeline
+      );
       ("order_string", `Quick, test_order_string);
       ("expr_json", `Quick, test_expr_json);
       ("valid json", `Quick, test_valid_json);
