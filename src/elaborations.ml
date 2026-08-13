@@ -196,27 +196,32 @@ module ValueAssignElab = struct
                   Solver.concrete_value bindings s |> Option.map Expr.of_value
               )
             in
-            let p =
-              Expr.evaluate_conjunction
-                ~env:(fun s ->
-                  Solver.concrete_value bindings s |> Option.map Expr.of_value
-                )
-                just.p
-            in
-              if
-                Expr.equal (Option.get just.w.wval) wval
-                && List.length p = List.length just.p
-                && List.equal Expr.equal p just.p
-              then []
+              if Expr.equal (Option.get just.w.wval) wval then []
               else
-                (* Reconstruct dependencies from predicate and write value *)
-                let new_p_d =
-                  List.map Expr.get_symbols p |> List.flatten |> USet.of_list
+                let p =
+                  Expr.evaluate_conjunction
+                    ~env:(fun s ->
+                      Solver.concrete_value bindings s
+                      |> Option.map Expr.of_value
+                    )
+                    just.p
                 in
-                let new_w_d = Expr.get_symbols wval |> USet.of_list in
-                let d = USet.union new_p_d new_w_d in
-                let w = { just.w with wval = Some wval } in
-                  [ { just with w; d; p } ]
+                  if
+                    Expr.equal (Option.get just.w.wval) wval
+                    && List.length p = List.length just.p
+                    && List.equal Expr.equal p just.p
+                  then []
+                  else
+                    (* Reconstruct dependencies from predicate and write value *)
+                    let new_p_d =
+                      List.map Expr.get_symbols p
+                      |> List.flatten
+                      |> USet.of_list
+                    in
+                    let new_w_d = Expr.get_symbols wval |> USet.of_list in
+                    let d = USet.union new_p_d new_w_d in
+                    let w = { just.w with wval = Some wval } in
+                      [ { just with w; d; p } ]
       | None -> []
 end
 
@@ -1235,8 +1240,11 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
          [just_to_string] argument lets pair-valued inputs (e.g. lifting)
          render both components without the caller having to flatten. *)
       let log_elab_fanout :
-            'a. just_to_string:('a -> string) -> name:string ->
-              ('a * justification list) list -> unit =
+          'a.
+          just_to_string:('a -> string) ->
+          name:string ->
+          ('a * justification list) list ->
+          unit =
        fun ~just_to_string ~name results ->
         List.iter
           (fun (input, elaborated) ->

@@ -166,6 +166,58 @@ let test_value_assign_operations () =
        Lwt.return_unit
     )
 
+(** Value assignment may only fire when it actually assigns something into the
+    write.
+
+    A justification whose predicate constrains a symbol that occurs in neither
+    the write value nor the write location -- the shape a branch produces, e.g.
+    [{(α = 1)}, {} ⊢ W y 1] for [if (r = 1) { y := 1 }] -- must NOT elaborate.
+    Discharging it evaluates the predicate away, so the elaborated justification
+    carries an empty [p] and [d]; [freeze_dp] then derives no edge and the
+    control dependency from the deciding read to the guarded write is lost. *)
+let test_value_assign_requires_write_change () =
+  let ctx = TestData.make_context () in
+  let alpha_is_one = EBinOp (EVar "α", "=", ENum Z.one) in
+
+  Lwt_main.run
+    ((* {(α = 1)}, {} ⊢ W _ 1 -- α is in the predicate only *)
+     let constraint_only =
+       {
+         w = TestData.make_event 1 ~wval:(Some (ENum Z.one));
+         p = [ alpha_is_one ];
+         fwd = USet.create ();
+         we = USet.create ();
+         d = USet.create ();
+       }
+     in
+     let unchanged = ValueAssignElab.elab ctx constraint_only in
+       check bool "constraint-only assignment does not elaborate" true
+         (List.length unchanged = 0);
+
+       (* {(α = 1)}, {} ⊢ W _ α -- α IS the write value, so assigning it does
+          change the write and the elaboration is legitimate *)
+       let value_carrying =
+         {
+           w = TestData.make_event 2 ~wval:(Some (EVar "α"));
+           p = [ alpha_is_one ];
+           fwd = USet.create ();
+           we = USet.create ();
+           d = USet.create ();
+         }
+       in
+       let changed = ValueAssignElab.elab ctx value_carrying in
+         check bool "assignment into the write value does elaborate" true
+           (List.length changed > 0);
+         List.iter
+           (fun j ->
+             check bool "elaborated write value is concrete" true
+               (not (Expr.equal (Option.get j.w.wval) (EVar "α")))
+           )
+           changed;
+
+         Lwt.return_unit
+    )
+
 (** Forward-related tests *)
 
 let test_fprime_operations () =
@@ -781,6 +833,8 @@ let suite =
     [
       (* Filter and value_assign *)
       test_case "value_assign operations" `Quick test_value_assign_operations;
+      test_case "value_assign requires write change" `Quick
+        test_value_assign_requires_write_change;
       (* Forward-related *)
       test_case "fprime operations" `Quick test_fprime_operations;
       test_case "fwd operations" `Quick test_fwd_operations;
