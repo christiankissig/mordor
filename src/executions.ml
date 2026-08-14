@@ -1380,6 +1380,18 @@ let compute_justification_combinations compute fwd_es_ctx structure paths statex
 
 (** {1 Generate executions} *)
 
+(** S4: identity on an Lwt stream, logging its length under [name] when
+    [s4_counters] (shared with {!Coherence}) is enabled. Explicitly polymorphic
+    so it can sit between pipeline stages of differing element types. *)
+let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
+ fun name stream ->
+  if not !s4_counters then stream
+  else
+    Lwt.bind stream (fun s ->
+        Logs_safe.info (fun m -> m "[S4] %s: %d" name (List.length s));
+        Lwt.return s
+    )
+
 (** [generate_executions ?include_rf structure justs statex ~restrictions]
     generates all valid executions.
 
@@ -1396,17 +1408,6 @@ let compute_justification_combinations compute fwd_es_ctx structure paths statex
     @param statex Static constraints.
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
-(** S4: identity on an Lwt stream, logging its length under [name] when
-    [s4_counters] (shared with {!Coherence}) is enabled. Explicitly polymorphic
-    so it can sit between pipeline stages of differing element types. *)
-let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
- fun name stream ->
-  if not !s4_counters then stream
-  else
-    Lwt.bind stream (fun s ->
-        Logs_safe.info (fun m -> m "[S4] %s: %d" name (List.length s));
-        Lwt.return s)
-
 let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     (structure : symbolic_event_structure)
     (fwd_es_ctx : Forwarding.event_structure_context)
