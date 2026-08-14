@@ -1323,12 +1323,25 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
             run_elab ~just_to_string ~name elab_fn optrace_fn new_justs justs
       in
 
+      (* A deallocation carries no value to justify, so its pre-justification is
+         its only justification: none of the elaborations below apply to it.
+         Excluding frees here keeps the choice of justification for a free
+         UNIQUE when executions are frozen, rather than branching over the
+         forwarding variants elaboration would otherwise produce. *)
+      let elaborable =
+        List.filter (fun just ->
+            not (USet.mem elab_ctx.structure.free_events just.w.label)
+        )
+      in
+      let new_justs_e = elaborable new_justs in
+      let justs_e = elaborable justs in
+
       let acc_justs = [] in
         let* new_va_justs =
           run ~just_to_string:Justification.to_string ~name:"ValueAssignElab"
             ValueAssignElab.elab
             (fun just -> ValueAssignElab just)
-            acc_justs new_justs
+            acc_justs new_justs_e
         in
         let acc_justs = acc_justs @ new_va_justs in
           Logs_safe.debug (fun m ->
@@ -1340,7 +1353,7 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
             run ~just_to_string:Justification.to_string ~name:"ForwardElab"
               ForwardElab.elab
               (fun just -> Forwarding just)
-              acc_justs new_justs
+              acc_justs new_justs_e
           in
           let acc_justs = acc_justs @ new_fwd_justs in
             Logs_safe.debug (fun m ->
@@ -1350,14 +1363,14 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
 
             let justs_to_lift =
               List.concat_map
-                (fun just -> List.map (fun just' -> (just, just')) new_justs)
-                new_justs
+                (fun just -> List.map (fun just' -> (just, just')) new_justs_e)
+                new_justs_e
               @ List.concat_map
-                  (fun just -> List.map (fun just' -> (just, just')) justs)
-                  new_justs
+                  (fun just -> List.map (fun just' -> (just, just')) justs_e)
+                  new_justs_e
               @ List.concat_map
-                  (fun just -> List.map (fun just' -> (just, just')) new_justs)
-                  justs
+                  (fun just -> List.map (fun just' -> (just, just')) new_justs_e)
+                  justs_e
             in
 
             let lift_pair_to_string (j1, j2) =
@@ -1382,7 +1395,7 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
                 run ~just_to_string:Justification.to_string ~name:"WeakElab"
                   WeakElab.elab
                   (fun just -> WeakElab just)
-                  acc_justs new_justs
+                  acc_justs new_justs_e
               in
               let acc_justs = acc_justs @ new_weaken_justs in
                 Logs_safe.debug (fun m ->
