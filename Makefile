@@ -1,6 +1,6 @@
 # Makefile for Mordor Docker Operations
 
-.PHONY: help build run stop logs clean restart shell health test
+.PHONY: help build run stop logs clean restart shell health test demo
 
 # Default target
 help:
@@ -14,6 +14,7 @@ help:
 	@echo "  make health    - Check health endpoint"
 	@echo "  make test      - Run a quick test"
 	@echo "  make clean     - Remove container and image"
+	@echo "  make demo      - Record the web-UI demo (GIF + MP4)"
 	@echo ""
 	@echo "Docker Compose Commands:"
 	@echo "  make up        - Start with docker-compose"
@@ -93,3 +94,8 @@ dev:
 dev-build:
 	@echo "🔨 Building locally..."
 	dune build
+
+# Record the web-UI demo (GIF + MP4 in demo/out/); see demo/README.md
+demo:
+	@test -d demo/node_modules || (cd demo && npm install)
+	node demo/demo.mjs

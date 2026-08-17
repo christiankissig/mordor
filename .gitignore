@@ -62,6 +62,10 @@ Thumbs.db
 # Dependencies
 node_modules/
 
+# Demo recording intermediates (the .gif/.mp4 are meant to be committed)
+demo/out/*.webm
+demo/out/frames/
+
 # Coverage reports
 coverage/
 bisect*.coverage

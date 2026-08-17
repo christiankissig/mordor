@@ -1,0 +1,15 @@
+{
+  "name": "mordor-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Playwright-driven demo recording of the MoRDor web UI (GIF + MP4)",
+  "scripts": {
+    "demo": "node demo.mjs",
+    "demo:headed": "node demo.mjs --headed",
+    "postinstall": "playwright install chromium"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

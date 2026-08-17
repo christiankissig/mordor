@@ -15,6 +15,12 @@ MoRDor is a reference implementation of Symbolic Modular Relaxed Dependencies
 
 **Caveat** Do not use until version 1.
 
+![MoRDor finding a use-after-free and verifying the fix](demo/out/mordor-demo.gif)
+
+The web UI above finds a use-after-free reachable when the flag is written with
+a relaxed store, then confirms it is gone once the store is made releasing. See
+[demo/README.md](demo/README.md) for how the recording is produced (`make demo`).
+
 ## Overview
 
 MoRDor analyzes weak memory models by calculating symbolic dependencies between
