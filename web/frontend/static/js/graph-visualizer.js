@@ -1093,6 +1093,16 @@ class GraphVisualizer {
         const leftPanel = document.getElementById('left-panel');
         let isResizing = false;
 
+        // Dragging the splitter (or resizing the window) changes the canvas
+        // size without Cytoscape noticing, leaving the graph clipped. Keep the
+        // viewport in step -- resize only, never fit, so the user's pan and
+        // zoom survive the drag.
+        if (typeof ResizeObserver !== 'undefined') {
+            new ResizeObserver(() => this.cy.resize()).observe(
+                document.getElementById('cy')
+            );
+        }
+
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
             document.body.style.cursor = 'col-resize';
@@ -1517,13 +1527,14 @@ class GraphVisualizer {
             document.getElementById('graph-stats').style.display = 'block';
             document.getElementById('execution-info').style.display = 'block';
 
+            // The carousel is display:none until the lines above, so Cytoscape
+            // was initialised against a zero-sized viewport and would draw the
+            // graph half off the left edge. Hand it the real size before laying
+            // out; applyLayout then fits once the layout has settled.
+            this.cy.resize();
+
             this.applyLayout('breadthfirst');
-            
-            // Fit the first graph automatically
-            if (this.currentIndex === 0) {
-                this.cy.fit(null, 50);
-            }
-            
+
             this.log('Graph rendered successfully');
 
         } catch (error) {
@@ -1551,7 +1562,8 @@ class GraphVisualizer {
                 padding: 50,
                 spacingFactor: 1.2,
                 animate: true,
-                animationDuration: 500
+                animationDuration: 500,
+                fit: true
             },
             fcose: {
                 name: 'fcose',
@@ -1583,7 +1595,15 @@ class GraphVisualizer {
 
         const config = layouts[layoutName] || layouts.breadthfirst;
         const layout = this.cy.layout(config);
+        // Fit only once the layout has settled: fitting while the nodes are
+        // still animating into place frames the wrong bounding box, which is
+        // what left the graph off-centre until the user clicked Fit.
+        layout.one('layoutstop', () => {
+            this.cy.resize();
+            this.cy.fit(null, 50);
+        });
         layout.run();
+        return layout;
     }
 
     log(message, type = 'info') {
