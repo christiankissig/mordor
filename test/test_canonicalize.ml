@@ -34,7 +34,9 @@ module TestData = struct
     let s = SymbolicEventStructure.create () in
     let e0 = make_event ~label:0 ~typ:Init () in
     let e1 =
-      make_event ~label:1 ~typ:Write ~loc:(EVar "x") ~wval:(ENum (Z.of_int 1)) ()
+      make_event ~label:1 ~typ:Write ~loc:(EVar "x")
+        ~wval:(ENum (Z.of_int 1))
+        ()
     in
     let e2 =
       make_event ~label:2 ~typ:Read ~loc:(EVar "x") ~rval:(VSymbol "a") ()
@@ -108,4 +110,5 @@ let suite =
       test_case "pair-order independence" `Quick test_order_independent;
       test_case "distinguishes different rf" `Quick test_distinguishes;
       test_case "set order independence" `Quick test_set_order_independent;
-    ] )
+    ]
+  )

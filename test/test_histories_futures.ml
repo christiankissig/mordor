@@ -243,6 +243,36 @@ let test_future_set_with_dp () =
     check bool "contains identity + dp" true
       (USet.exists (fun f -> USet.equal f expected) futures)
 
+(* rf is NOT an edge source of a future: it is the model's only inter-thread
+   dependency, and a future is the per-thread order. A lone rf edge therefore
+   leaves the future at the identity. *)
+let test_future_set_ignores_rf () =
+  let events = USet.of_list [ 1; 2 ] in
+  let rf = USet.of_list [ (1, 2) ] in
+  let exec = make_simple_exec events rf (USet.create ()) (USet.create ()) in
+  let execs = USet.singleton exec in
+  let futures = calculate_future_set execs in
+  (* Future should be the identity alone: {(1,1), (2,2)} *)
+  let expected = USet.of_list [ (1, 1); (2, 2) ] in
+    check bool "rf contributes no edge" true
+      (USet.exists (fun f -> USet.equal f expected) futures)
+
+(* ppo and dp contribute; the rf edge between them does not, so the future does
+   not chain the two threads together. *)
+let test_future_set_rf_does_not_join_ppo_and_dp () =
+  let events = USet.of_list [ 1; 2; 3; 4 ] in
+  let ppo = USet.of_list [ (1, 2) ] in
+  let dp = USet.of_list [ (3, 4) ] in
+  let rf = USet.of_list [ (2, 3) ] in
+  let exec = make_simple_exec events rf dp ppo in
+  let execs = USet.singleton exec in
+  let futures = calculate_future_set execs in
+  let expected =
+    USet.of_list [ (1, 1); (2, 2); (3, 3); (4, 4); (1, 2); (3, 4) ]
+  in
+    check bool "only ppo and dp contribute" true
+      (USet.exists (fun f -> USet.equal f expected) futures)
+
 let test_future_set_multiple_execs () =
   let events1 = USet.of_list [ 1; 2 ] in
   let ppo1 = USet.of_list [ (1, 2) ] in
@@ -359,6 +389,9 @@ let future_set_tests =
       test_future_set_single_exec_no_relations;
     test_case "with ppo" `Quick test_future_set_with_ppo;
     test_case "with dp" `Quick test_future_set_with_dp;
+    test_case "ignores rf" `Quick test_future_set_ignores_rf;
+    test_case "rf does not join ppo and dp" `Quick
+      test_future_set_rf_does_not_join_ppo_and_dp;
     test_case "multiple executions" `Quick test_future_set_multiple_execs;
   ]
 

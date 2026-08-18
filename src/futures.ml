@@ -5,7 +5,15 @@ open Uset
 
 (* Compute the future set for a given set of executions, where a future is the
    projection of the execution to ppo and dp relation plus identity on events.
-   *)
+
+   rf is deliberately NOT one of the edge sources. A future is the INTRA-THREAD
+   order a thread must execute its own statements in; the only inter-thread
+   dependency of the model is reads-from, and it does not contribute to the
+   future set (Wright et al. 2023, sec 6). Keeping rf out is what makes the
+   futures split per thread, and hence what makes the Owicki-Gries
+   decomposition of the future predicate sound. Cross-thread ordering -- a
+   release/acquire handshake among it -- is carried by the memory semantics
+   (timestamps and views), not by Phi. *)
 let calculate_future_set (execs : symbolic_execution uset) : future_set =
   USet.map
     (fun exec ->

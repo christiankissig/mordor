@@ -2,6 +2,7 @@
 ;   dune exec test/golden/golden_diff.exe -- check     (CI gate)
 ;   dune exec test/golden/golden_diff.exe -- update    (re-bless goldens)
 ;   dune exec test/golden/golden_diff.exe -- verify    (determinism gate)
+
 (executable
  (name golden_diff)
  (modules golden_diff)

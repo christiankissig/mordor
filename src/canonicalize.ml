@@ -43,8 +43,8 @@ type t = {
   predicates : string list;  (** sorted rendered path conditions *)
 }
 
-(** A short, stable description of an event: thread, kind (with [*] for RMW)
-    and location. Used both as canonical content and as a tie-break key. *)
+(** A short, stable description of an event: thread, kind (with [*] for RMW) and
+    location. Used both as canonical content and as a tie-break key. *)
 let event_descriptor (structure : symbolic_event_structure) (id : int) : string
     =
   match Hashtbl.find_opt structure.events id with
@@ -55,12 +55,8 @@ let event_descriptor (structure : symbolic_event_structure) (id : int) : string
         |> Option.map string_of_int
         |> Option.value ~default:"-"
       in
-      let loc =
-        Option.map Expr.to_string evt.loc |> Option.value ~default:""
-      in
-      let kind =
-        show_event_type evt.typ ^ if evt.is_rdmw then "*" else ""
-      in
+      let loc = Option.map Expr.to_string evt.loc |> Option.value ~default:"" in
+      let kind = show_event_type evt.typ ^ if evt.is_rdmw then "*" else "" in
         Printf.sprintf "t%s:%s@%s" thread kind loc
 
 (* Canonical event order: by thread, then by label. Event labels are allocated
@@ -84,7 +80,9 @@ let canonicalize (structure : symbolic_event_structure)
      renumbered. *)
   let nodes =
     USet.values exec.e
-    @ endpoints exec.rf @ endpoints exec.rmw @ endpoints exec.dp
+    @ endpoints exec.rf
+    @ endpoints exec.rmw
+    @ endpoints exec.dp
     @ endpoints exec.ppo
     |> List.sort_uniq compare
   in
@@ -113,8 +111,7 @@ let canonicalize (structure : symbolic_event_structure)
         dp = rel exec.dp;
         ppo = rel exec.ppo;
         rmw = rel exec.rmw;
-        predicates =
-          List.map Expr.to_string exec.ex_p |> List.sort_uniq compare;
+        predicates = List.map Expr.to_string exec.ex_p |> List.sort_uniq compare;
       }
 
 let string_of_pairs (ps : (int * int) list) : string =
@@ -122,12 +119,13 @@ let string_of_pairs (ps : (int * int) list) : string =
   |> List.map (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
   |> String.concat " "
 
-(** A single canonical string for one execution. When [with_predicates] is
-    false (the default), path conditions are excluded so that the structural
-    core can be compared independently of syntactic-predicate divergence. *)
+(** A single canonical string for one execution. When [with_predicates] is false
+    (the default), path conditions are excluded so that the structural core can
+    be compared independently of syntactic-predicate divergence. *)
 let signature ?(with_predicates = false) (t : t) : string =
   let events =
-    t.events |> List.mapi (fun i d -> Printf.sprintf "%d=%s" i d)
+    t.events
+    |> List.mapi (fun i d -> Printf.sprintf "%d=%s" i d)
     |> String.concat " "
   in
   let base =
@@ -147,16 +145,17 @@ let signature ?(with_predicates = false) (t : t) : string =
   in
     String.concat "\n" lines
 
-(** [canonicalize_set structure execs] canonicalizes every execution and
-    returns them sorted, so the result is a canonical rendering of the
-    execution *set* (independent of the order [execs] were produced in). *)
+(** [canonicalize_set structure execs] canonicalizes every execution and returns
+    them sorted, so the result is a canonical rendering of the execution *set*
+    (independent of the order [execs] were produced in). *)
 let canonicalize_set (structure : symbolic_event_structure)
     (execs : symbolic_execution list) : t list =
   List.map (canonicalize structure) execs
   |> List.sort (fun a b ->
-         compare
-           (signature ~with_predicates:true a)
-           (signature ~with_predicates:true b))
+      compare
+        (signature ~with_predicates:true a)
+        (signature ~with_predicates:true b)
+  )
 
 (** Canonical string for a whole execution set. Executions are sorted by their
     individual signatures, so this is invariant under execution reordering. *)

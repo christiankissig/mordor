@@ -9,14 +9,13 @@
     This is the CI gate the bottom-up migration is built on (plan Phase 0): no
     construction refactor lands without the golden diff staying green.
 
-    Usage:
-      golden_diff check  [DIR ...]   compare against committed goldens (default)
-      golden_diff update [DIR ...]   (re)generate goldens
-      golden_diff verify [DIR ...]   run each test twice, assert determinism
+    Usage: golden_diff check [DIR ...] compare against committed goldens
+    (default) golden_diff update [DIR ...] (re)generate goldens golden_diff
+    verify [DIR ...] run each test twice, assert determinism
 
     DIR defaults to the four litmus corpora. Goldens live under
-    [test/goldens/<litmus-path>.golden]. `check` exits non-zero on any
-    mismatch or missing golden. *)
+    [test/goldens/<litmus-path>.golden]. `check` exits non-zero on any mismatch
+    or missing golden. *)
 
 (* mordor_lib is (wrapped false): Context, Parse, Interpret, Elaborations,
    Executions, Assertion, Canonicalize, Types, Uset are all top-level. *)
@@ -36,7 +35,9 @@ let rec lit_files dir =
   else if not (Sys.is_directory dir) then
     if Filename.check_suffix dir ".lit" then [ dir ] else []
   else
-    Sys.readdir dir |> Array.to_list |> List.sort compare
+    Sys.readdir dir
+    |> Array.to_list
+    |> List.sort compare
     |> List.concat_map (fun name -> lit_files (Filename.concat dir name))
 
 let read_file path =
@@ -51,7 +52,7 @@ let write_file path contents =
   let rec mkdirs d =
     if not (Sys.file_exists d) then begin
       mkdirs (Filename.dirname d);
-      (try Unix.mkdir d 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ())
+      try Unix.mkdir d 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ()
     end
   in
     mkdirs dir;
@@ -76,7 +77,8 @@ let render (program : string) : string =
         |> Interpret.step_interpret
         |> Elaborations.step_generate_justifications
         |> Executions.step_calculate_dependencies
-        |> Assertion.step_check_assertions)
+        |> Assertion.step_check_assertions
+        )
     in
     let verdict =
       match ctx.valid with
@@ -95,18 +97,23 @@ let render (program : string) : string =
         (Canonicalize.set_signature ~with_predicates:true canon)
 
 let run_check files =
-  let pass = ref 0 and mismatch = ref [] and missing = ref [] and errs = ref [] in
+  let pass = ref 0
+  and mismatch = ref []
+  and missing = ref []
+  and errs = ref [] in
     List.iter
       (fun lit ->
         let gp = golden_path lit in
           match
-            try `Ok (render (read_file lit)) with e -> `Err (Printexc.to_string e)
+            try `Ok (render (read_file lit))
+            with e -> `Err (Printexc.to_string e)
           with
           | `Err m -> errs := (lit, m) :: !errs
           | `Ok actual ->
               if not (Sys.file_exists gp) then missing := lit :: !missing
               else if String.equal (read_file gp) actual then incr pass
-              else mismatch := lit :: !mismatch)
+              else mismatch := lit :: !mismatch
+      )
       files;
     Printf.printf "\n===== golden check =====\n";
     Printf.printf "pass      : %d\n" !pass;
@@ -121,7 +128,8 @@ let run_check files =
     in
       dump "mismatches" !mismatch;
       dump "missing goldens" !missing;
-      List.iter (fun (f, m) -> Printf.printf "  error %s: %s\n" f m)
+      List.iter
+        (fun (f, m) -> Printf.printf "  error %s: %s\n" f m)
         (List.rev !errs);
       if !mismatch <> [] || !missing <> [] || !errs <> [] then exit 1
 
@@ -129,15 +137,21 @@ let run_update files =
   let written = ref 0 and errs = ref [] in
     List.iter
       (fun lit ->
-        match try `Ok (render (read_file lit)) with e -> `Err (Printexc.to_string e) with
+        match
+          try `Ok (render (read_file lit))
+          with e -> `Err (Printexc.to_string e)
+        with
         | `Ok actual ->
             write_file (golden_path lit) actual;
             incr written
-        | `Err m -> errs := (lit, m) :: !errs)
+        | `Err m -> errs := (lit, m) :: !errs
+      )
       files;
     Printf.printf "\n===== golden update =====\nwrote %d goldens, %d errors\n"
       !written (List.length !errs);
-    List.iter (fun (f, m) -> Printf.printf "  error %s: %s\n" f m) (List.rev !errs)
+    List.iter
+      (fun (f, m) -> Printf.printf "  error %s: %s\n" f m)
+      (List.rev !errs)
 
 (* Determinism gate: render each test twice and require byte-identical output.
    A committed golden is only trustworthy if the pipeline is deterministic. *)
@@ -154,7 +168,8 @@ let run_verify files =
         with
         | `Ok true -> incr ok
         | `Ok false -> flaky := lit :: !flaky
-        | `Err m -> errs := (lit, m) :: !errs)
+        | `Err m -> errs := (lit, m) :: !errs
+      )
       files;
     Printf.printf "\n===== determinism verify =====\n";
     Printf.printf "deterministic : %d\n" !ok;

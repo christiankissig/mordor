@@ -48,7 +48,9 @@ module ModelUtils = struct
       [mode_at_least m threshold] holds when access mode [m] is at least as
       strong as [threshold] in the partial order
 
-      {[ na, normal  <  rlx  <  con  <  acq, rel  <  acq_rel  <  sc ]}
+      {[
+      na, normal < rlx < con < acq, rel < acq_rel < sc
+      ]}
 
       where [acq] and [rel] are mutually incomparable. This is what the [">"]
       operator passed to {!match_events} is meant to express (e.g. "release or
@@ -78,7 +80,11 @@ module ModelUtils = struct
         | Release | ReleaseAcquire | SC -> true
         | _ -> false
       )
-    | ReleaseAcquire -> ( match m with ReleaseAcquire | SC -> true | _ -> false)
+    | ReleaseAcquire -> (
+        match m with
+        | ReleaseAcquire | SC -> true
+        | _ -> false
+      )
     | SC -> m = SC
     | Strong -> m = Strong
 
@@ -910,14 +916,13 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
               if !s4_counters then
                 Logs_safe.info (fun m ->
                     m "[S4] coherence-location: writes=%d perms=%d"
-                      (List.length group) (List.length valid_perms));
+                      (List.length group) (List.length valid_perms)
+                );
 
               (* Convert each valid permutation to pairs, keeping init
                  co-minimal by prepending it before the real writes. *)
               List.map
-                (fun perm ->
-                  to_pairs [] (if has_init then 0 :: perm else perm)
-                )
+                (fun perm -> to_pairs [] (if has_init then 0 :: perm else perm))
                 valid_perms
           )
       in

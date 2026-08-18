@@ -438,7 +438,12 @@ let build_event_labels (ctx : mordor_ctx)
 
 (** Render the [futures] array: one entry per execution, its [(ppo ∪ dp)] edges
     (restricted to the execution's events, identity omitted) rendered over
-    event-labels. Edges touching an unmapped event are dropped. *)
+    event-labels. Edges touching an unmapped event are dropped.
+
+    [rf] is not an edge source: a future is a per-thread order, and reads-from is
+    the model's only inter-thread dependency. Cross-thread ordering — a
+    release/acquire handshake among it — is the memory semantics' business, not
+    the future set's. *)
 let futures_json (ctx : mordor_ctx) (evlabels : (int, string) Hashtbl.t) :
     Yojson.Safe.t =
   match ctx.executions with

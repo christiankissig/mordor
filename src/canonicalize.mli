@@ -1,7 +1,7 @@
 (** Canonicalization of symbolic executions (from S9; productized by R1).
 
-    Order- and id-independent rendering of executions and execution sets, so
-    two pipeline runs can be compared for equivalence regardless of internal
+    Order- and id-independent rendering of executions and execution sets, so two
+    pipeline runs can be compared for equivalence regardless of internal
     enumeration order. See the module implementation for the full contract and
     known limitations (syntactic predicate comparison; [co] excluded). *)
 
@@ -22,8 +22,8 @@ type t = {
 (** [canonicalize structure exec] renders one execution into canonical form. *)
 val canonicalize : symbolic_event_structure -> symbolic_execution -> t
 
-(** [canonicalize_set structure execs] canonicalizes and sorts an execution
-    set into a canonical, order-independent list. *)
+(** [canonicalize_set structure execs] canonicalizes and sorts an execution set
+    into a canonical, order-independent list. *)
 val canonicalize_set :
   symbolic_event_structure -> symbolic_execution list -> t list
 
