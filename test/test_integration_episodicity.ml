@@ -371,6 +371,13 @@ let test_specifications =
     single_failing "programs/episodicity/branch_condition/nested_fail.lit"
       [ 3; 4 ]
       "Branch condition failure - nested loop constrains pre-loop symbol";
+    (* write condition *)
+    single_failing "programs/episodicity/write_condition/fail.lit" [ 2 ]
+      "Write condition failure - a read takes its value from a write of an \
+       earlier iteration under every loop boundary";
+    single_episodic "programs/episodicity/valid/rotated.lit"
+      "Episodic once the loop boundary moves - a single satisfying bisection \
+       suffices";
     (* events condition *)
     single_failing "programs/episodicity/events_condition/two_reads_fail.lit"
       [ 4 ] "Event ordering failure - iterations don't separate two reads";

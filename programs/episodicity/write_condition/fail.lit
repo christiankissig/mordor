@@ -1,9 +1,21 @@
-rtemp := 0;
+// A read whose source lies outside the loop's permitted writes.
+//
+// The counterexample has to violate the condition under *every* compatible
+// loop boundary: one read and one write rotate into the same iteration, and
+// the loop is then reported episodic. Two of each cannot. Whichever boundary
+// is chosen, some read is left before a write of the same location that it
+// can therefore only take its value from in an earlier iteration.
+//
+// The values written are pre-loop constants and the values read go nowhere but
+// the guard, so no register carries anything across the boundary and the
+// register condition stays satisfied: the violation is Condition 2 alone.
 rC := malloc 1;
 *rC := 0;
 do
 {
-  rtest := *rC;
-  *rC := rtemp + 1;
+  ra := *rC;
+  *rC := 1;
+  rb := *rC;
+  *rC := 2;
 }
-while (rtest < 5)
+while (rb < 5)

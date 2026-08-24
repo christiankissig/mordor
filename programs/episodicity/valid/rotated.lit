@@ -1,0 +1,19 @@
+// Episodic, but only once the loop boundary moves.
+//
+// As written, the read takes its value from the write of the previous
+// iteration. Cutting the loop between the write and the read puts the two in
+// one iteration and nothing crosses the boundary, which is enough: a single
+// satisfying bisection establishes episodicity. The value written is a
+// pre-loop constant, so the rotation costs nothing in the register condition.
+//
+// This was the write condition's counterexample until it turned out to be
+// episodic for exactly this reason.
+rtemp := 0;
+rC := malloc 1;
+*rC := 0;
+do
+{
+  rtest := *rC;
+  *rC := rtemp + 1;
+}
+while (rtest < 5)
