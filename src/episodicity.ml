@@ -413,22 +413,105 @@ module RegisterCondition = struct
       traverse_nodes loop_body written_before_read must_not_write;
       { satisfied = !satisfied; violations = !violations }
 
+  (** Every source span occurring in a node or in the nodes nested inside it.
+
+      @param node The IR node.
+      @return The spans of the node and of everything nested in it. *)
+  let rec spans_of_node (node : ir_node) : source_span list =
+    let nested =
+      match node.stmt with
+      | While { body; _ } | Do { body; _ } -> List.concat_map spans_of_node body
+      | If { then_body; else_body; _ } ->
+          List.concat_map spans_of_node then_body
+          @ (else_body
+            |> Option.value ~default:[]
+            |> List.concat_map spans_of_node
+            )
+      | Labeled { stmt; _ } -> spans_of_node stmt
+      | Threads { threads } ->
+          List.concat_map (List.concat_map spans_of_node) threads
+      | _ -> []
+    in
+      ( match node.annotations.source_span with
+        | Some span -> [ span ]
+        | None -> []
+        )
+      @ nested
+
+  (** The loop body in the order a bisection rotates it into.
+
+      A bisection puts the episode boundary inside the loop body: the events in
+      [left] are the tail of the previous episode, so the iteration the
+      bisection describes runs the statements after the boundary first and those
+      before it after. Condition 1 is a property of statement order, so it has
+      to be read against that order — checking it against source order while
+      Conditions 2, 3 and 4 see the bisected [po] lets a rotation buy Condition
+      2 without ever paying for it here.
+
+      The boundary is located by source span: a statement lies before it if it
+      owns an event of [left] belonging to this loop. A statement whose events
+      straddle the boundary — only a read-modify-write can, its read on one side
+      and its write on the other — is taken to lie before it, so such a
+      bisection still rotates nothing here.
+
+      @param source_spans The event-to-span table.
+      @param events_in_loop The events of the loop being bisected.
+      @param left The left partition of the bisection.
+      @param body The loop body in source order.
+      @return The body rotated to the bisection's iteration order. *)
+  let rotate_body ~source_spans ~events_in_loop ~left (body : ir_node list) =
+    let owns_left node =
+      let spans = spans_of_node node in
+        Hashtbl.fold
+          (fun event span found ->
+            found
+            || List.mem span spans
+               && USet.mem events_in_loop event
+               && USet.mem left event
+          )
+          source_spans false
+    in
+    let _, boundary =
+      List.fold_left
+        (fun (index, boundary) node ->
+          (index + 1, if owns_left node then index + 1 else boundary)
+        )
+        (0, 0) body
+    in
+    let rec split n before after =
+      match after with
+      | rest when n = 0 -> (List.rev before, rest)
+      | [] -> (List.rev before, [])
+      | node :: rest -> split (n - 1) (node :: before) rest
+    in
+    let before, after = split boundary [] body in
+      after @ before
+
   (** Check Condition 1: Registers only accessed if written to ⊑-before.
 
       @param program The complete program as a list of IR nodes
       @param cache The episodicity cache (unused in this check)
       @param loop_id The identifier of the loop to check
       @return A condition result indicating satisfaction and any violations *)
-  let check cache (loop_id : int) : condition_result Lwt.t =
+  let check ?bisection cache (loop_id : int) : condition_result Lwt.t =
     let violations = ref [] in
     let satisfied = ref true in
-    let { program; _ } = cache in
+    let { program; structure; source_spans; _ } = cache in
     let loop_nodes = find_loop_nodes program loop_id in
+    let rotate body =
+      match bisection with
+      | None -> body
+      | Some left ->
+          let events_in_loop =
+            SymbolicEventStructure.events_in_loop structure loop_id
+          in
+            rotate_body ~source_spans ~events_in_loop ~left body
+    in
       List.iter
         (fun (node : ir_node) ->
           match node.stmt with
           | While { body; _ } | Do { body; _ } ->
-              let result = check_register_accesses_in_loop body in
+              let result = check_register_accesses_in_loop (rotate body) in
                 satisfied := !satisfied && result.satisfied;
                 violations := result.violations @ !violations
           | _ -> ()
@@ -863,7 +946,8 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
         Lwt.return result
     in
       let* condition1 =
-        check_condition RegisterConditionKind RegisterCondition.check
+        check_condition RegisterConditionKind
+          (RegisterCondition.check ~bisection:left)
       in
         let* condition2 =
           check_condition WriteConditionKind WriteCondition.check
