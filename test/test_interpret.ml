@@ -396,6 +396,81 @@ let test_while_constant_guard_yields_executions () =
       "constant-guard while loop yields at least one execution" true
       (count_executions_symbolic program > 0)
 
+(** {1 Do-while loop semantics}
+
+    [do { body } while (cond)] is [body] followed by [while (cond) { body }]:
+    one unravelling of the loop body, then the residual while loop. An earlier
+    implementation dropped the residual loop entirely (the continuation of the
+    first unravelling was the program's terminal structure), so a do-while loop
+    produced neither a branch event nor a loop condition. *)
+
+let do_while_program = "x := 0; do { r1 := x } while (r1 = 0)"
+
+(* [body; while (cond) { body }], the hand-unravelled equivalent of
+   [do_while_program]. *)
+let unravelled_while_program = "x := 0; r1 := x; while (r1 = 0) { r1 := x }"
+
+let test_do_while_symbolic_guard_wellformed () =
+  let structure = interpret_symbolic do_while_program in
+    check_structure_wellformed "do-while symbolic guard" structure;
+    Alcotest.(check int)
+      "has one branch event" 1
+      (USet.size structure.branch_events);
+    Alcotest.(check bool)
+      "tracks the loop condition" true
+      (Hashtbl.length structure.loop_conditions > 0)
+
+let test_do_while_yields_executions () =
+  Alcotest.(check bool)
+    "do-while loop yields at least one execution" true
+    (count_executions_symbolic do_while_program > 0)
+
+let sorted_bindings tbl =
+  Hashtbl.fold (fun k v acc -> (k, v) :: acc) tbl [] |> List.sort compare
+
+(* The whole point: the do-while structure is the structure of the
+   hand-unravelled while loop. Event labels are allocated in the same order in
+   both, so the relations compare literally. *)
+let test_do_while_matches_unravelled_while () =
+  let do_while = interpret_symbolic do_while_program in
+  let unravelled = interpret_symbolic unravelled_while_program in
+  let sorted set = USet.values set |> List.sort compare in
+  let check_ints name f =
+    Alcotest.(check int) name (USet.size (f unravelled)) (USet.size (f do_while))
+  in
+  let check_pairs name f =
+    Alcotest.(check (list (pair int int)))
+      name
+      (sorted (f unravelled))
+      (sorted (f do_while))
+  in
+    check_ints "same number of events" (fun s -> s.e);
+    check_ints "same number of branch events" (fun s -> s.branch_events);
+    check_ints "same number of terminal events" (fun s -> s.terminal_events);
+    check_ints "same number of read events" (fun s -> s.read_events);
+    check_ints "same number of write events" (fun s -> s.write_events);
+    check_pairs "same program order" (fun s -> s.po);
+    check_pairs "same conflict relation" (fun s -> s.conflict);
+    Alcotest.(check (list (pair int (list int))))
+      "same loop membership"
+      (sorted_bindings unravelled.loop_indices)
+      (sorted_bindings do_while.loop_indices)
+
+(* The peeled first unravelling precedes the loop rather than belonging to it,
+   exactly as in the hand-written [body; while (cond) { body }]. Only the
+   residual loop's copy of the body is the loop's symbolic iteration, which is
+   what [po_iter] and the episodicity checks assume. *)
+let test_do_while_peeled_unravelling_is_outside_the_loop () =
+  let in_a_loop structure =
+    Hashtbl.fold
+      (fun _ loops acc -> if loops = [] then acc else acc + 1)
+      structure.loop_indices 0
+  in
+    Alcotest.(check int)
+      "only the residual body belongs to the loop"
+      (in_a_loop (interpret_symbolic unravelled_while_program))
+      (in_a_loop (interpret_symbolic do_while_program))
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
@@ -406,6 +481,14 @@ let suite =
         test_while_symbolic_guard_yields_executions;
       Alcotest.test_case "While constant guard yields executions" `Quick
         test_while_constant_guard_yields_executions;
+      Alcotest.test_case "Do-while symbolic guard well-formed" `Quick
+        test_do_while_symbolic_guard_wellformed;
+      Alcotest.test_case "Do-while yields executions" `Quick
+        test_do_while_yields_executions;
+      Alcotest.test_case "Do-while matches unravelled while" `Quick
+        test_do_while_matches_unravelled_while;
+      Alcotest.test_case "Do-while peeled unravelling is outside the loop"
+        `Quick test_do_while_peeled_unravelling_is_outside_the_loop;
       Alcotest.test_case "Event ID generation" `Quick test_next_event_id;
       Alcotest.test_case "Greek symbol generation" `Quick test_next_greek;
       Alcotest.test_case "Greek symbol overflow" `Quick test_next_greek_overflow;

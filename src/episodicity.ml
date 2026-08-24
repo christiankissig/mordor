@@ -1,15 +1,18 @@
 (** {1 Episodicity Analysis Module}
 
     This module implements episodicity checks for loops based on Definition 4.1.
-    A loop is episodic if it satisfies four conditions:
+    A loop is episodic if it satisfies four conditions, named here as they are
+    in the paper:
 
-    + Registers only accessed if written to ⊑-before within same iteration or
-      before loop
-    + Reads must read from: (a) same-iteration writes, (b) cross-thread writes,
-      or (c) read-don't-modify RMWs derived from such writes
-    + Branching conditions don't constrain symbols read before the loop
-    + Events from prior iterations are ordered before later iterations by (ppo ∪
-      dp)*
+    + {b Register condition}: registers only accessed if written to ⊑-before
+      within same iteration or before loop
+    + {b Write condition}: reads must read from: (a) same-iteration writes, (b)
+      cross-thread writes, or (c) read-don't-modify RMWs derived from such
+      writes
+    + {b Branching condition}: branching conditions don't constrain symbols read
+      before the loop
+    + {b Events condition}: events from prior iterations are ordered before
+      later iterations by (ppo ∪ dp)*
 
     Where:
     - ⊑ is sequenced-before (program order)
@@ -50,6 +53,91 @@ type episodicity_cache = {
   mutable justifications : justification list;
       (** Justifications for symbolic event structure *)
 }
+
+(** {1 Episodicity Conditions} *)
+
+(** The four conditions of the {i Episodic Loops} definition, named as in the
+    paper. The index of a condition is its position in the definition, and
+    matches the [condition1] .. [condition4] fields of
+    {!Context.loop_episodicity_result}. *)
+type condition_kind =
+  | RegisterConditionKind  (** Condition 1: register accesses *)
+  | WriteConditionKind  (** Condition 2: sources a loop read may read from *)
+  | BranchingConditionKind  (** Condition 3: what branching conditions pin *)
+  | EventsConditionKind  (** Condition 4: ordering across iterations *)
+
+(** The position of a condition in the definition.
+
+    @param kind The condition.
+    @return The condition's index, 1 to 4. *)
+let condition_index = function
+  | RegisterConditionKind -> 1
+  | WriteConditionKind -> 2
+  | BranchingConditionKind -> 3
+  | EventsConditionKind -> 4
+
+(** The condition at a given position in the definition.
+
+    @param index The condition's index, 1 to 4.
+    @return The condition, or [None] if the index names no condition. *)
+let condition_of_index = function
+  | 1 -> Some RegisterConditionKind
+  | 2 -> Some WriteConditionKind
+  | 3 -> Some BranchingConditionKind
+  | 4 -> Some EventsConditionKind
+  | _ -> None
+
+(** The name of a condition as used in the paper.
+
+    @param kind The condition.
+    @return The condition's name. *)
+let condition_name = function
+  | RegisterConditionKind -> "register condition"
+  | WriteConditionKind -> "write condition"
+  | BranchingConditionKind -> "branching condition"
+  | EventsConditionKind -> "events condition"
+
+(** What a condition requires, phrased as in the paper.
+
+    @param kind The condition.
+    @return A one-sentence statement of the requirement. *)
+let condition_statement = function
+  | RegisterConditionKind ->
+      "registers are only accessed if written ⊑-before within the same \
+       iteration, or before the loop"
+  | WriteConditionKind ->
+      "reads within the loop read from a ⊑-earlier write of the same \
+       iteration, a write before the loop, an independent write on another \
+       thread, or a read-don't-modify-write derived from those"
+  | BranchingConditionKind ->
+      "the branching conditions of an iteration do not constrain values read \
+       before the loop"
+  | EventsConditionKind ->
+      "events of prior iterations are ordered before events of later \
+       iterations by (ppo ∪ dp)*"
+
+(** A condition's name qualified by its index, e.g. ["branching condition (3)"].
+
+    @param kind The condition.
+    @return The name and index of the condition. *)
+let describe_condition kind =
+  Printf.sprintf "%s (%d)" (condition_name kind) (condition_index kind)
+
+(** The conditions a result violates, in definition order.
+
+    @param result A loop episodicity result.
+    @return The kinds of the conditions that are not satisfied. *)
+let violated_conditions (result : loop_episodicity_result) =
+  List.filter_map
+    (fun (kind, (condition : condition_result)) ->
+      if condition.satisfied then None else Some kind
+    )
+    [
+      (RegisterConditionKind, result.condition1);
+      (WriteConditionKind, result.condition2);
+      (BranchingConditionKind, result.condition3);
+      (EventsConditionKind, result.condition4);
+    ]
 
 (** {1 Event Structure Utilities} *)
 
@@ -201,7 +289,8 @@ module Bisection = struct
       )
 end
 
-(** {1 Condition 1: Register Access Restriction (Syntactic)} *)
+(** {1 Condition 1: Register Condition — Register Access Restriction
+    (Syntactic)} *)
 
 module RegisterCondition = struct
   (** Check if a register is written before it's read within a loop body.
@@ -348,7 +437,7 @@ module RegisterCondition = struct
       Lwt.return { satisfied = !satisfied; violations = !violations }
 end
 
-(** {1 Condition 2: Memory Read Sources (Semantic)} *)
+(** {1 Condition 2: Write Condition — Memory Read Sources (Semantic)} *)
 
 module WriteCondition = struct
   (** Get the origin event for a symbol.
@@ -367,6 +456,9 @@ module WriteCondition = struct
       - Cross-thread writes
       - Read-don't-modify RMWs derived from such writes
 
+      A write in the loop is a source for a read only if the two are at
+      necessarily the same location; see the aliasing query below.
+
       @param cache The episodicity cache containing event structures
       @param loop_id The identifier of the loop to check
       @return
@@ -383,6 +475,24 @@ module WriteCondition = struct
     let writes_in_loop =
       USet.intersection events_in_loop structure.write_events
     in
+      Logs_safe.debug (fun m ->
+          let describe evt =
+            Printf.sprintf "%d%s at %s" evt
+              (if Events.is_rdmw structure evt then " (rdmw)" else "")
+              (Events.get_loc structure evt
+              |> Option.map show_expr
+              |> Option.value ~default:"?"
+              )
+          in
+          let list evts =
+            USet.to_list evts
+            |> List.sort compare
+            |> List.map describe
+            |> String.concat "; "
+          in
+            m "Loop %d: reads in loop [%s]; writes in loop [%s]." loop_id
+              (list reads_in_loop) (list writes_in_loop)
+      );
       (* filter writes on whether they're in the last iteration of every loop *)
       let* writes_in_loop =
         USet.async_filter
@@ -427,10 +537,29 @@ module WriteCondition = struct
                         )
                       with
                       | Some wloc, Some rloc ->
+                          (* Two locations count as one when they are
+                             necessarily equal — [exeq], whose disequality is
+                             unsatisfiable — rather than merely possibly equal.
+                             A location loaded out of memory is a free symbol
+                             that a possibly-equal test lets alias anything, so
+                             that test flags every write in the loop against
+                             every read through a pointer, whatever the program
+                             does with it. The price is that the condition no
+                             longer rejects a loop on the mere possibility of an
+                             aliased read.
+
+                             The query is asked under the structure's
+                             constraints as well as the read's path condition:
+                             those record what the program fixes about
+                             locations — globals are pairwise distinct, and so
+                             are distinct allocations. *)
                           let state =
-                            Hashtbl.find_opt structure.restrict read_event
+                            (Hashtbl.find_opt structure.restrict read_event
+                            |> Option.value ~default:[]
+                            )
+                            @ structure.constraints
                           in
-                          let same_loc = Solver.expoteq ?state wloc rloc in
+                          let same_loc = Solver.exeq ~state wloc rloc in
                             if same_loc then
                               (* Only invalid if not a read-don't-modify RMW *)
                               Lwt.return
@@ -466,7 +595,8 @@ module WriteCondition = struct
           { satisfied = List.length !violations == 0; violations = !violations }
 end
 
-(** {1 Condition 3: Branch Condition Symbols (Syntactic + Origin Tracking)} *)
+(** {1 Condition 3: Branching Condition — Branch Condition Symbols (Syntactic
+    and Origin Tracking)} *)
 
 module BranchCondition = struct
   (** Check Condition 3: Branch conditions don't constrain pre-loop symbols.
@@ -480,7 +610,6 @@ module BranchCondition = struct
       @param loop_id The identifier of the loop to check
       @return A condition result indicating satisfaction and any violations *)
   let check cache (loop_id : int) : condition_result Lwt.t =
-    Logs_safe.debug (fun m -> m "Checking Condition 3 for Loop %d..." loop_id);
     let { program; structure; source_spans; _ } = cache in
     let structure = structure in
       Logs_safe.debug (fun m ->
@@ -548,7 +677,7 @@ module BranchCondition = struct
           { satisfied = List.length !violations == 0; violations = !violations }
 end
 
-(** {1 Condition 4: Inter-iteration Ordering (Semantic)} *)
+(** {1 Condition 4: Events Condition — Inter-iteration Ordering (Semantic)} *)
 
 module EventsCondition = struct
   (** Check Condition 4: Events from prior iterations ordered before later
@@ -678,40 +807,68 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
 
     (* TODO generate new justifications and forwarding context for the
              bisection structure, or adapt the existing ones *)
-    let* condition1 = RegisterCondition.check cache loop_id in
-      let* condition2 = WriteCondition.check cache loop_id in
-        let* condition3 = BranchCondition.check cache loop_id in
-          let* condition4 = EventsCondition.check cache loop_id in
-
-          let is_episodic =
-            condition1.satisfied
-            && condition2.satisfied
-            && condition3.satisfied
-            && condition4.satisfied
+    (* Log each condition by the name it carries in the paper, so a debug run
+       reads as the definition does rather than as four opaque numbers. *)
+    let check_condition kind check =
+      Logs_safe.debug (fun m ->
+          m "Loop %d: checking the %s — %s." loop_id (describe_condition kind)
+            (condition_statement kind)
+      );
+      let* (result : condition_result) = check cache loop_id in
+        Logs_safe.debug (fun m ->
+            let violations = List.length result.violations in
+            let verdict =
+              if result.satisfied then "is satisfied"
+              else
+                Printf.sprintf "is violated (%d %s)" violations
+                  (if violations = 1 then "violation" else "violations")
+            in
+              m "Loop %d: %s %s." loop_id (describe_condition kind) verdict
+        );
+        Lwt.return result
+    in
+      let* condition1 =
+        check_condition RegisterConditionKind RegisterCondition.check
+      in
+        let* condition2 =
+          check_condition WriteConditionKind WriteCondition.check
+        in
+          let* condition3 =
+            check_condition BranchingConditionKind BranchCondition.check
           in
+            let* condition4 =
+              check_condition EventsConditionKind EventsCondition.check
+            in
 
-          (* Record the chosen bisection (the loop boundary) so the result can
+            let is_episodic =
+              condition1.satisfied
+              && condition2.satisfied
+              && condition3.satisfied
+              && condition4.satisfied
+            in
+
+            (* Record the chosen bisection (the loop boundary) so the result can
              be related back to the program text. Events are sorted by label for
              a stable order, and annotated with their source span when known. *)
-          let to_bisection_events evts =
-            USet.to_list evts
-            |> List.sort compare
-            |> List.map (fun label ->
-                { label; span = Hashtbl.find_opt cache.source_spans label }
-            )
-          in
+            let to_bisection_events evts =
+              USet.to_list evts
+              |> List.sort compare
+              |> List.map (fun label ->
+                  { label; span = Hashtbl.find_opt cache.source_spans label }
+              )
+            in
 
-          Lwt.return
-            {
-              loop_id;
-              condition1;
-              condition2;
-              condition3;
-              condition4;
-              is_episodic;
-              bisection_left = to_bisection_events left;
-              bisection_right = to_bisection_events right;
-            }
+            Lwt.return
+              {
+                loop_id;
+                condition1;
+                condition2;
+                condition3;
+                condition4;
+                is_episodic;
+                bisection_left = to_bisection_events left;
+                bisection_right = to_bisection_events right;
+              }
 
 (** Check if a specific loop is episodic by verifying all four conditions.
 
@@ -805,13 +962,37 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                 in
                   match episodic_result with
                   | Some result ->
+                      Logs_safe.info (fun m ->
+                          let verdict =
+                            match violated_conditions result with
+                            | [] ->
+                                "is episodic: register, write, branching and \
+                                 events conditions all satisfied"
+                            | violated ->
+                                Printf.sprintf "is not episodic: %s violated"
+                                  (violated
+                                  |> List.map describe_condition
+                                  |> String.concat ", "
+                                  )
+                          in
+                            m "Loop %d %s." loop_id verdict
+                      );
                       Hashtbl.add is_episodic_table loop_id result.is_episodic;
                       loop_episodicity_results :=
                         result :: !loop_episodicity_results;
                       Lwt.return_unit
                   | None ->
+                      (* No compatible bisection of the loop's events exists —
+                         typically because the loop contributes no events to the
+                         symbolic event structure — so none of the four
+                         conditions can be evaluated. *)
                       Logs_safe.info (fun m ->
-                          m "Loop %d: Could not analyze" loop_id
+                          m
+                            "Loop %d: could not analyze — no compatible \
+                             bisection of the loop's events, so the register, \
+                             write, branching and events conditions were not \
+                             evaluated."
+                            loop_id
                       );
                       Hashtbl.add is_episodic_table loop_id false;
                       Lwt.return_unit
