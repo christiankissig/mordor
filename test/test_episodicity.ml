@@ -1903,6 +1903,86 @@ module TestBisection = struct
     ]
 end
 
+(** {1 Pipeline-level episodicity}
+
+    The tests above build event structures by hand, so a [loop_conditions] table
+    filled in by the test always looks right and a gap in the interpreter is
+    invisible to them. These run the real pipeline instead: parse, interpret
+    with symbolic loop semantics, then check episodicity. *)
+module TestPipeline = struct
+  (** Run the whole pipeline and return the per-loop episodicity verdicts.
+
+      @param program The litmus program source.
+      @return The loop-id to episodic table. *)
+  let episodicity_of program =
+    let ctx =
+      make_context { default_options with loop_semantics = Symbolic } ()
+    in
+      ctx.litmus <- Some program;
+      let ctx =
+        Lwt_main.run
+          (Lwt.return ctx
+          |> Parse.step_parse_litmus
+          |> Interpret.step_interpret
+          |> Episodicity.step_test_episodicity
+          )
+      in
+        Option.get ctx.is_episodic
+
+  (* The self-incrementing loop: each iteration reads the counter and writes it
+     back incremented, so a value crosses the loop boundary. None of the three
+     spellings is episodic, and they have to agree — they did not before, the do
+     form because loop_conditions was never populated for a do-while, the while
+     form because a rotating bisection satisfied Condition 2 while Condition 1
+     still read the unrotated body. *)
+  let do_form =
+    "rtemp := 0; rC := malloc 1; *rC := 0; do { rtest :acq= *rC; *rC :rel= \
+     rtest + 1; } while (rtest < 5)"
+
+  let while_form =
+    "rtemp := 0; rC := malloc 1; *rC := 0; rtest := 0; while (rtest < 5) { \
+     rtest :acq= *rC; *rC :rel= rtest + 1 }"
+
+  let rotated_form =
+    "rtemp := 0; rC := malloc 1; *rC := 0; rtest :acq= *rC; do { *rC :rel= \
+     rtest + 1; rtest :acq= *rC; } while (rtest < 5)"
+
+  let test_self_incrementing_loop_is_not_episodic () =
+    List.iter
+      (fun (spelling, program) ->
+        Alcotest.(check (option bool))
+          (spelling ^ " form is not episodic")
+          (Some false)
+          (Hashtbl.find_opt (episodicity_of program) 1)
+      )
+      [ ("do", do_form); ("while", while_form); ("rotated", rotated_form) ]
+
+  (* A loop that reads a location it never writes is episodic in every
+     spelling, so the test above is not passing for want of any verdict. *)
+  let test_read_only_loop_is_episodic () =
+    List.iter
+      (fun (spelling, program) ->
+        Alcotest.(check (option bool))
+          (spelling ^ " form is episodic")
+          (Some true)
+          (Hashtbl.find_opt (episodicity_of program) 1)
+      )
+      [
+        ("do", "rC := malloc 1; *rC := 0; do { ri := *rC } while (ri < 5)");
+        ( "while",
+          "rC := malloc 1; *rC := 0; ri := 0; while (ri < 5) { ri := *rC }"
+        );
+      ]
+
+  let suite =
+    [
+      test_case "self-incrementing loop is not episodic in any spelling" `Quick
+        test_self_incrementing_loop_is_not_episodic;
+      test_case "read-only loop is episodic in every spelling" `Quick
+        test_read_only_loop_is_episodic;
+    ]
+end
+
 let suite =
   ( "Episodicity",
     TestRegisterCondition.suite
@@ -1910,4 +1990,5 @@ let suite =
     @ TestBranchCondition.suite
     @ TestEventOrdering.suite
     @ TestBisection.suite
+    @ TestPipeline.suite
   )

@@ -389,6 +389,25 @@ failure at 4 is intended *)
     single_episodic "programs/episodicity/valid/write_only.lit"
       "Valid episodic loop with only writes - should be episodic with no \
        failing conditions";
+    (* The self-incrementing loop, in three spellings of the same program: each
+       iteration reads the counter and writes it back incremented, so a value
+       crosses the loop boundary and none of them is episodic.
+
+       They used to disagree. The do form was episodic because loop_conditions
+       was never populated for a do-while, leaving Condition 2 vacuous; the
+       while form was episodic because a rotating bisection satisfied Condition
+       2 while Condition 1 still read the unrotated body; the hand-written
+       rotation was correctly rejected. The verdict is pinned rather than the
+       failing condition, because when no bisection is episodic the reported
+       conditions are those of the last one tried: the rotated spelling fails
+       Condition 1 on the trivial bisection and Condition 2 on the rotated one,
+       and reports the latter. *)
+    single_failing "programs/episodicity/self_increment/do.lit" []
+      "Self-incrementing loop, do-while form - not episodic";
+    single_failing "programs/episodicity/self_increment/while.lit" []
+      "Self-incrementing loop, while form - must agree with the do form";
+    single_failing "programs/episodicity/self_increment/rotated.lit" []
+      "Self-incrementing loop, hand-rotated form - must agree with the do form";
     (* real-world locking protocols *)
     single_episodic "programs/episodicity/seqlock-1.lit"
       "Seqlock - Loop 1 is episodic";

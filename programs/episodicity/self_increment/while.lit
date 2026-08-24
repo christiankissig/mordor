@@ -1,0 +1,11 @@
+// The same loop spelled as a while loop, with the guard register initialised
+// before it. Must agree with do.lit.
+rtemp := 0;
+rC := malloc 1;
+*rC := 0;
+rtest := 0;
+while (rtest < 5)
+{
+  rtest :acq= *rC;
+  *rC :rel= rtest + 1;
+}

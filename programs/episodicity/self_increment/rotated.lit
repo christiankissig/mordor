@@ -1,0 +1,12 @@
+// The same loop with one read peeled off, so the body is the rotation a
+// bisection of do.lit would apply. Must agree with do.lit.
+rtemp := 0;
+rC := malloc 1;
+*rC := 0;
+rtest :acq= *rC;
+do
+{
+  *rC :rel= rtest + 1;
+  rtest :acq= *rC;
+}
+while (rtest < 5)

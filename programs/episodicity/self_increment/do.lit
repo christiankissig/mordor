@@ -1,0 +1,11 @@
+// The self-incrementing loop: each iteration reads the counter and writes it
+// back incremented, so the value crosses the loop boundary.
+rtemp := 0;
+rC := malloc 1;
+*rC := 0;
+do
+{
+  rtest :acq= *rC;
+  *rC :rel= rtest + 1;
+}
+while (rtest < 5)
