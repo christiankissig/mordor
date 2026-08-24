@@ -573,6 +573,79 @@ module WriteCondition = struct
       : int option =
     Hashtbl.find_opt structure.origin symbol
 
+  (** Whether a write's location can be the location a read reads from.
+
+      [Solver.expoteq] asks only whether the two expressions {e can} be equal,
+      and a location loaded out of memory is a free symbol that can be equal to
+      anything — so on a program that reaches memory through pointers it says
+      yes to almost every pair, and every write in the loop looks like a source
+      for every read. Testing necessary equality instead would answer far fewer
+      pairs, but in the unsound direction: a read that {e might} take its value
+      from a previous iteration would stop being reported.
+
+      So keep the possible-equality answer and sharpen it where the imprecision
+      comes from. When the read's location is a symbol introduced by an earlier
+      read, that symbol only holds an address because some write put the address
+      there. Ask for such a write: one that can occur alongside this read, at
+      the location the symbol was read from, carrying a value that can be the
+      write's location.
+
+      Every step falls back to the plain aliasing answer — an unresolvable
+      symbol, a missing location, a write whose value is unknown — so ignorance
+      never turns a possible alias into an impossible one.
+
+      @param structure The symbolic event structure.
+      @param sources The writes that can still be a source for a loop read.
+      @param state Constraints the query is asked under.
+      @param read_event The read whose location is [rloc].
+      @param wloc The write's location.
+      @param rloc The read's location.
+      @return [true] if the write's location can be the read's. *)
+  let may_read_from (structure : symbolic_event_structure) ~sources ~state
+      read_event wloc rloc =
+    (* A write can only be part of the execution that holds the read if the two
+       do not conflict. *)
+    let reachable write_event =
+      not (USet.mem structure.conflict (write_event, read_event))
+    in
+    let rec symbol_can_be visited symbol =
+      (* Revisiting a symbol adds no value it could not already take: this is
+         the least fixpoint of "what can reach here", and a read-modify-write
+         that stores back what it read is exactly such a cycle. *)
+      (not (List.mem symbol visited))
+      &&
+      match Hashtbl.find_opt structure.origin symbol with
+      | Some origin when USet.mem structure.read_events origin -> (
+          match Events.get_loc structure origin with
+          | Some origin_loc ->
+              USet.exists
+                (fun write_event ->
+                  reachable write_event
+                  &&
+                  match
+                    ( Events.get_loc structure write_event,
+                      Events.get_val structure write_event
+                    )
+                  with
+                  | Some write_loc, Some write_val ->
+                      Solver.expoteq ~state write_loc origin_loc
+                      && value_can_be (symbol :: visited) write_val
+                  | _ -> true
+                )
+                sources
+          | None -> true
+        )
+      | _ -> true
+    and value_can_be visited value =
+      match value with
+      | ESymbol symbol when Hashtbl.mem structure.origin symbol ->
+          symbol_can_be visited symbol
+      | _ -> Solver.expoteq ~state value wloc
+    in
+      if Expr.equal wloc rloc then true
+      else if not (Solver.expoteq ~state wloc rloc) then false
+      else value_can_be [] rloc
+
   (** Check Condition 2: Reads must read from valid sources.
 
       Valid sources are:
@@ -636,7 +709,7 @@ module WriteCondition = struct
          the candidate set and makes the whole condition pass vacuously, which
          is how a missing guard turned into a soundness gap rather than a
          missing diagnosis. *)
-      let* writes_in_loop =
+      let* candidate_writes =
         USet.async_filter
           (fun write_event ->
             let enclosing_loops =
@@ -678,6 +751,24 @@ module WriteCondition = struct
           )
           writes_in_loop
       in
+      (* Everything a loop read could still take its value from: every write in
+         the structure, less the loop writes just ruled out as last-iteration
+         ones. [may_read_from] asks this set whether an address could have
+         reached a symbolic location. *)
+      let sources =
+        USet.set_minus structure.write_events
+          (USet.set_minus writes_in_loop candidate_writes)
+      in
+      (* Asked of the aliasing query alone, not recorded on the structure: a
+         program that stores 0 to mean "no allocation yet", as the CAS loops do,
+         needs an allocation's address told apart from that 0, but asserting it
+         over the whole verification changes which executions exist. *)
+      let allocations_are_not_null =
+        USet.to_list structure.malloc_events
+        |> List.filter_map (Events.get_loc structure)
+        |> List.map (fun loc -> Expr.binop loc "!=" (ENum Z.zero))
+      in
+      let writes_in_loop = candidate_writes in
       let violations = ref [] in
         let* () =
           USet.iter_async
@@ -698,15 +789,10 @@ module WriteCondition = struct
                       with
                       | Some wloc, Some rloc ->
                           (* Two locations count as one when they are
-                             necessarily equal — [exeq], whose disequality is
-                             unsatisfiable — rather than merely possibly equal.
-                             A location loaded out of memory is a free symbol
-                             that a possibly-equal test lets alias anything, so
-                             that test flags every write in the loop against
-                             every read through a pointer, whatever the program
-                             does with it. The price is that the condition no
-                             longer rejects a loop on the mere possibility of an
-                             aliased read.
+                             the read's location — see [may_read_from], which
+                             keeps the possible-equality answer and sharpens it
+                             by asking how an address could have reached a
+                             symbolic location.
 
                              The query is asked under the structure's
                              constraints as well as the read's path condition:
@@ -718,8 +804,12 @@ module WriteCondition = struct
                             |> Option.value ~default:[]
                             )
                             @ structure.constraints
+                            @ allocations_are_not_null
                           in
-                          let same_loc = Solver.exeq ~state wloc rloc in
+                          let same_loc =
+                            may_read_from structure ~sources ~state read_event
+                              wloc rloc
+                          in
                             if same_loc then
                               (* Only invalid if not a read-don't-modify RMW *)
                               Lwt.return

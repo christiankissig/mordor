@@ -1992,12 +1992,78 @@ module TestPipeline = struct
         );
       ]
 
+  (** Run the pipeline and check the write condition against the structure it
+      builds, with no bisection applied.
+
+      [episodicity_results] reports the bisection the search settled on, so it
+      cannot be used to observe the condition on the loop as written.
+
+      @param program The litmus program source.
+      @param loop_id The loop to check.
+      @return The write condition's result. *)
+  let write_condition_of program loop_id =
+    let ctx =
+      make_context { default_options with loop_semantics = Symbolic } ()
+    in
+      ctx.litmus <- Some program;
+      let ctx =
+        Lwt_main.run
+          (Lwt.return ctx
+          |> Parse.step_parse_litmus
+          |> Interpret.step_interpret
+          |> Elaborations.step_generate_justifications
+          )
+      in
+      let cache =
+        {
+          program = Option.get ctx.program_stmts;
+          structure = Option.get ctx.structure;
+          source_spans = Option.get ctx.source_spans;
+          fwd_es_ctx = Option.get ctx.fwd_es_ctx;
+          justifications = Option.get ctx.justifications;
+        }
+      in
+        Lwt_main.run (WriteCondition.check cache loop_id)
+
+  (* The write condition asks whether a write in the loop can be the source of a
+     read in it, and the answer has to stay on the side of possible aliasing: a
+     read that might take its value from a previous iteration must be reported.
+     Here rz points at rp's cell, so the loop reads back the value it wrote, but
+     the address arrives as a symbol loaded out of memory and is only possibly
+     equal to rp — asking whether the two must be equal misses it. *)
+  let aliased_through_memory =
+    "rp := malloc 1; *rp := 0; rq := malloc 1; *rq := 0; rz := malloc 1; *rz \
+     := rp; rv := 0; do { rt := *rz; rv := *rt; *rp := rv + 1; } while (rv < \
+     5)"
+
+  let test_write_condition_sees_aliasing_through_memory () =
+    Alcotest.(check bool)
+      "a read that can alias a loop write is reported" false
+      (write_condition_of aliased_through_memory 1).satisfied
+
+  (* And the sharpening must not cost the cases it was built for: the CAS
+     increment loop's fetch-and-add cannot take its value from the CAS write,
+     which only happens when the CAS succeeds and the loop ends. *)
+  let cas_increment_loop =
+    "rC := malloc 1; *rC := 0; rsucc := 0; rn := malloc 1; do { rs := \
+     fadd(acquire,release,rC,0); rv := *rs; *rn := rv + 1; rsucc := \
+     cas(acquire,release,rC,rs,rn); } while (rsucc = 0)"
+
+  let test_write_condition_resolves_the_cas_increment_loop () =
+    Alcotest.(check bool)
+      "no read of the CAS loop has a source in the loop" true
+      (write_condition_of cas_increment_loop 1).satisfied
+
   let suite =
     [
       test_case "self-incrementing loop is not episodic in any spelling" `Quick
         test_self_incrementing_loop_is_not_episodic;
       test_case "read-only loop is episodic in every spelling" `Quick
         test_read_only_loop_is_episodic;
+      test_case "write condition sees aliasing through memory" `Quick
+        test_write_condition_sees_aliasing_through_memory;
+      test_case "write condition resolves the CAS increment loop" `Quick
+        test_write_condition_resolves_the_cas_increment_loop;
     ]
 end
 
