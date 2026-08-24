@@ -564,6 +564,58 @@ end
 (** {1 Condition 2: Write Condition — Memory Read Sources (Semantic)} *)
 
 module WriteCondition = struct
+  (** {2 Which way the aliasing question is asked}
+
+      This condition reports a read that could take its value from a write of a
+      previous iteration, which turns on whether the two are at the same
+      location. Locations here are expressions over symbols, so "the same
+      location" is a solver question, and there are two of them to ask.
+
+      Possible equality — [Solver.expoteq], is [wloc = rloc] satisfiable —
+      reports a pair whenever the program does not rule the aliasing out.
+      Necessary equality — [Solver.exeq], is [wloc <> rloc] unsatisfiable —
+      reports only where the aliasing is forced.
+
+      The two are not interchangeable. The episodicity conditions are
+      {e sufficient}: a loop that passes them is episodic, and the checker is
+      read as a certificate. A pair not reported is a violation not found, so
+      possible equality is the direction that keeps the certificate honest, and
+      necessary equality is the direction that can call a loop episodic when it
+      is not. That the loop {e might} carry a value across the boundary is
+      already enough to disqualify it.
+
+      Possible equality on its own is close to useless here, though. A location
+      loaded out of memory is a free symbol, equal to anything as far as the
+      solver is concerned, so every write in the loop is reported against every
+      read through a pointer — on the CAS increment loop, a write to a freshly
+      allocated node against a read of an entirely different cell.
+
+      So the question stays the sound one and the imprecision is attacked
+      directly, by {!may_read_from}: a symbol only holds an address because some
+      write put it there, so ask which writes could have. That recovers the
+      precision without giving up the direction. It costs a fixpoint over the
+      structure rather than a single solver call, and it gives up nothing when
+      it cannot resolve a symbol — it returns the plain aliasing answer.
+
+      Two facts about allocations make it work, both asked of this query rather
+      than recorded on the structure: distinct allocations are distinct
+      addresses, and an allocation is not the 0 a program stores to mean "no
+      allocation yet". Asserting the second over the whole verification is not
+      harmless — it empties [cas_aba] and [rcu-inc-reclaim] of executions — so
+      it is confined to the aliasing question, where it is what lets a write of
+      a literal 0 be told apart from a write of a node.
+
+      Both directions are pinned by tests in [test_episodicity.ml]: one loop
+      whose aliasing is real but not forced, which necessary equality misses,
+      and the CAS increment loop, which plain possible equality over-reports.
+      Each fails under the other choice.
+
+      There is a residual limit worth knowing. The condition asks about
+      locations, not about read-from edges: it reports a write at a location a
+      read could read, not a write that could actually justify that read under
+      coherence. {!may_read_from} narrows the gap for addresses that arrive
+      through memory; it does not close it. *)
+
   (** Get the origin event for a symbol.
 
       @param structure The symbolic event structure
