@@ -755,6 +755,7 @@ let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
       events = events.events;
       origin = events.origin;
       loop_indices = events.loop_indices;
+      loop_conditions = events.loop_conditions;
       thread_index = events.thread_index;
       p = events.env_by_evt;
     }

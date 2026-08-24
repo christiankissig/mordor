@@ -471,6 +471,25 @@ let test_do_while_peeled_unravelling_is_outside_the_loop () =
       (in_a_loop (interpret_symbolic unravelled_while_program))
       (in_a_loop (interpret_symbolic do_while_program))
 
+(* [cross] hands the combined structure the thread fold's seed tables, and
+   [interpret_generic] re-attaches the global ones afterwards. Leaving
+   loop_conditions out of that re-attachment dropped every loop's guard as soon
+   as a program had more than one thread, which silently emptied the write
+   condition's last-iteration filter. *)
+let test_loop_conditions_survive_threads () =
+  let loop = "rtest := x; while (rtest = 0) { rtest := x }" in
+  let single = interpret_symbolic ("x := 0; " ^ loop) in
+  let threaded =
+    interpret_symbolic ("x := 0; { " ^ loop ^ " } ||| { x := 1 }")
+  in
+    Alcotest.(check bool)
+      "a single-threaded loop records its guard" true
+      (Hashtbl.length single.loop_conditions > 0);
+    Alcotest.(check int)
+      "a second thread does not drop loop conditions"
+      (Hashtbl.length single.loop_conditions)
+      (Hashtbl.length threaded.loop_conditions)
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
@@ -489,6 +508,8 @@ let suite =
         test_do_while_matches_unravelled_while;
       Alcotest.test_case "Do-while peeled unravelling is outside the loop"
         `Quick test_do_while_peeled_unravelling_is_outside_the_loop;
+      Alcotest.test_case "Loop conditions survive thread composition" `Quick
+        test_loop_conditions_survive_threads;
       Alcotest.test_case "Event ID generation" `Quick test_next_event_id;
       Alcotest.test_case "Greek symbol generation" `Quick test_next_greek;
       Alcotest.test_case "Greek symbol overflow" `Quick test_next_greek_overflow;
