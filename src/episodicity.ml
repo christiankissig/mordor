@@ -615,6 +615,32 @@ module BranchCondition = struct
       symbols that were read before the loop started, maintaining iteration
       independence.
 
+      {2 Jointly versus per branch}
+
+      The definition asks this of the {e conjunction} of an iteration's
+      branching conditions — [restrict(φ_ℓ, ∅) = ⊤] — not of each condition
+      separately, because the property is not closed under conjunction: with a
+      pre-loop [α] in [r0] and an in-loop [β] in [r1], [if (r1 = r0)] and a
+      nested [if (r1 = 5)] each leave [α] free while together they force
+      [α = 5].
+
+      This checks each branching condition on its own, and is nonetheless at
+      least as strong, because the test is syntactic rather than semantic. A
+      symbol that the conjunction constrains must occur in some conjunct: if no
+      condition mentions a pre-loop symbol then the conjunction mentions none,
+      and a satisfiable formula entails nothing over symbols it does not
+      mention. So flagging every condition that mentions a pre-loop symbol
+      rejects everything the joint test rejects. The one assumption is that the
+      conjunction is satisfiable — an unsatisfiable one entails everything — and
+      the interpreter prunes unsatisfiable branches as it builds the structure.
+
+      It rejects strictly more, though. A condition may mention a pre-loop
+      symbol without constraining it: [if (r1 = r0)] on its own leaves [α] free,
+      since [β] is, so the definition accepts a loop that this rejects. Deciding
+      the definition exactly means asking [restrict(φ_ℓ, ∅) = ⊤] as a ∀∃ query
+      over the conjunction — for every valuation of the pre-loop symbols, the
+      conjunction is still satisfiable — rather than testing symbol occurrence.
+
       @param program The complete program as a list of IR nodes
       @param cache The episodicity cache containing event structures
       @param loop_id The identifier of the loop to check
@@ -644,9 +670,8 @@ module BranchCondition = struct
               event.cond |> Option.value ~default:(EBoolean true)
             in
             let symbols = Expr.get_symbols cond |> USet.of_list in
-            (* TODO this is too restrictive, we only need to check if the
-             branching condition constraints the symbol, not whether it contains
-             the symbol. *)
+            (* Occurrence, not constraint: sound but over-restrictive, and what
+               makes the per-condition test cover the joint one. See above. *)
             let symbols_read_before_loop =
               USet.filter
                 (fun sym ->
@@ -681,7 +706,7 @@ module BranchCondition = struct
                 )
                 symbols_read_before_loop
           )
-          events_in_loop;
+          branch_events_in_loop;
 
         Lwt.return
           { satisfied = List.length !violations == 0; violations = !violations }
