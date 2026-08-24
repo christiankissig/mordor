@@ -1,16 +1,15 @@
 name=spinlock 1
 %%
-// Allocate the lock: 0 = unlocked, 1 = locked
-rlock := malloc 1;
-*rlock := 0;
+// The lock, a global: 0 = unlocked, 1 = locked
+mutex := 0;
 
 // --- acquire ---
 do {
-  rold := cas(acquire, relaxed, rlock, 0, 1);
+  rold := cas(acquire, relaxed, mutex, 0, 1);
 } while (rold = 0);
 
 // --- critical section ---
 // (protected work goes here)
 
 // --- release ---
-*rlock := 0;
+mutex := 0;
