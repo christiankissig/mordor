@@ -259,6 +259,26 @@ module Bisection = struct
         (fun _key (has_left, has_right) ok -> ok && not (has_left && has_right))
         group_sides true
 
+  (** Check that no atomic read-modify-write is cut in half by the bisection.
+
+      A bisection places an episode boundary inside the loop body, so the
+      boundary has to fall between steps of the program. An RMW is one step: its
+      read and its write cannot land in different episodes. Without this a
+      rotation can carry the write of a CAS or a fetch-and-add into the next
+      episode — not a boundary the source admits, and not one Condition 1 can be
+      read against, since no rotation of the body expresses it.
+
+      @param structure The symbolic event structure
+      @param left The proposed left partition
+      @param right The proposed right partition
+      @return [true] if no RMW has its read in [left] and its write in [right]
+  *)
+  let rmw_unsplit (structure : symbolic_event_structure) left right =
+    USet.values structure.rmw
+    |> List.for_all (fun (read_event, _, write_event) ->
+        not (USet.mem left read_event && USet.mem right write_event)
+    )
+
   (** Generate all compatible bisections of the events in a loop. *)
   let all_bisections structure loop_id =
     let events_in_loop = get_events_in_loop structure loop_id in
@@ -280,6 +300,7 @@ module Bisection = struct
       |> List.filter (fun (left, right) ->
           USet.subset (URelation.cross left right) structure.po
           && nested_loops_unsplit structure loop_id left right
+          && rmw_unsplit structure left right
           && USet.size right > 0
       )
       |> List.sort (fun (l1, r1) (l2, r2) ->
