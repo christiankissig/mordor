@@ -156,6 +156,62 @@ let get_events_in_loop (structure : symbolic_event_structure) (loop_id : int) :
     )
     structure.e
 
+(** The part of the structure a loop's dependencies can come from.
+
+    Only Condition 4 consumes elaboration, and only through the ppo and dp edges
+    between events of the loop: it subtracts them from [po_iter], which relates
+    nothing else. Dependencies flow forward along program order, so an event
+    po-after the whole loop cannot contribute one — and po-after the loop is
+    where the duplication lives, each loop's continuation being copied into the
+    enter and exit arms of the loops that precede it.
+
+    Elaborating this instead of the whole structure is what makes the larger
+    programs approachable. Anything wrongly dropped costs precision, not
+    soundness: fewer ppo and dp edges leave more pairs of [po_iter] unordered,
+    and Condition 4 reports exactly those.
+
+    @param structure The symbolic event structure.
+    @param loop_id The loop being checked.
+    @return The structure restricted to the loop and what precedes it. *)
+let restrict_to_loop (structure : symbolic_event_structure) loop_id =
+  let events_in_loop = get_events_in_loop structure loop_id in
+  let keep =
+    USet.filter
+      (fun event ->
+        USet.mem events_in_loop event
+        || USet.exists
+             (fun in_loop -> USet.mem structure.po (event, in_loop))
+             events_in_loop
+      )
+      structure.e
+  in
+  let within = USet.filter (fun (a, b) -> USet.mem keep a && USet.mem keep b) in
+  let kept = USet.intersection keep in
+    Logs_safe.debug (fun m ->
+        m "Loop %d: elaborating %d of %d events (%d in the loop)." loop_id
+          (USet.size keep) (USet.size structure.e) (USet.size events_in_loop)
+    );
+    {
+      structure with
+      e = keep;
+      po = within structure.po;
+      po_iter = within structure.po_iter;
+      conflict = within structure.conflict;
+      rmw =
+        USet.filter
+          (fun (read, _, write) -> USet.mem keep read && USet.mem keep write)
+          structure.rmw;
+      write_events = kept structure.write_events;
+      read_events = kept structure.read_events;
+      rlx_write_events = kept structure.rlx_write_events;
+      rlx_read_events = kept structure.rlx_read_events;
+      fence_events = kept structure.fence_events;
+      branch_events = kept structure.branch_events;
+      malloc_events = kept structure.malloc_events;
+      free_events = kept structure.free_events;
+      terminal_events = kept structure.terminal_events;
+    }
+
 (** {1 Bisect Loops} *)
 
 (** Loop bisection modifies the po and po_iter relations in event structures
@@ -1140,7 +1196,11 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
     {
       ctx with
       options = { ctx.options with loop_semantics = Symbolic };
-      structure = Some structure;
+      (* Elaborate the part the loop's dependencies can come from, not the
+         whole structure: the conditions below still see the full bisected
+         structure, but the justifications and forwarding context they consult
+         are only ever read for edges inside the loop. *)
+      structure = Some (restrict_to_loop structure loop_id);
       source_spans = None;
       fwd_es_ctx = None;
       justifications = None;
@@ -1283,17 +1343,30 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
           }
         in
           let* symbolic_ctx =
-            Lwt.return symbolic_ctx
-            |> Interpret.step_interpret
-            |> Elaborations.step_generate_justifications
+            Lwt.return symbolic_ctx |> Interpret.step_interpret
           in
           let structure = Option.get symbolic_ctx.structure in
           let source_spans = Option.get symbolic_ctx.source_spans in
-          let fwd_es_ctx = Option.get symbolic_ctx.fwd_es_ctx in
-          let justifications = Option.get symbolic_ctx.justifications in
+          (* No elaboration here. Every condition that consumes justifications
+             or a forwarding context is reached through
+             {!check_loop_bisection_episodicity}, which elaborates the bisected
+             structure and replaces both fields before any of them runs — so
+             elaborating the whole structure up front was work no check ever
+             read. It is also the work that does not finish on the larger
+             programs: hazard pointers spends over half an hour there without
+             completing a single round.
 
+             These two are placeholders for the record, and are overwritten
+             per bisection. *)
+          let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
           let cache =
-            { program; structure; source_spans; fwd_es_ctx; justifications }
+            {
+              program;
+              structure;
+              source_spans;
+              fwd_es_ctx;
+              justifications = [];
+            }
           in
 
           let loop_episodicity_results = ref [] in
