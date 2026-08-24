@@ -825,6 +825,15 @@ module TestWriteCondition = struct
       let fwd_es_ctx = EventStructureContext.create structure in
         { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
+  (* Test 1b: the same shape, but with no recorded loop condition. Absence must
+     not be read as "last iteration": dropping the write empties the candidate
+     set and the whole condition passes vacuously, which is exactly how a
+     missing guard became a soundness gap rather than a missing diagnosis. *)
+  let test_mod_write_after_read_no_loop_condition_setup () =
+    let cache = test_mod_write_after_read_setup () in
+      Hashtbl.reset cache.structure.loop_conditions;
+      cache
+
   let write_test_cases =
     [
       {
@@ -834,6 +843,15 @@ module TestWriteCondition = struct
         expected_violation_count = Some 1;
         description =
           "Modifying write not sequenced before read in same iteration";
+      };
+      {
+        name = "modifying write after read, no loop condition recorded";
+        setup = test_mod_write_after_read_no_loop_condition_setup;
+        expected_satisfied = false;
+        expected_violation_count = Some 1;
+        description =
+          "A loop with no recorded guard keeps its writes as candidate \
+           sources, rather than passing vacuously";
       };
       {
         name = "same iteration write before read";

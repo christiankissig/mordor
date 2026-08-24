@@ -607,13 +607,30 @@ module WriteCondition = struct
          guards are those recorded at the end of the loop body, so they and the
          write's own restriction speak about the same iteration; a guard
          belonging to another occurrence of the loop simply fails to be
-         satisfiable alongside that restriction. *)
+         satisfiable alongside that restriction.
+
+         A loop with no recorded guard is kept, not dropped. Absence is not
+         evidence of a last iteration: it says nothing about whether another
+         iteration follows, and for a sufficient condition the safe reading is
+         to leave the write in the candidate set. Dropping it instead empties
+         the candidate set and makes the whole condition pass vacuously, which
+         is how a missing guard turned into a soundness gap rather than a
+         missing diagnosis. *)
       let* writes_in_loop =
         USet.async_filter
           (fun write_event ->
-            let loop_conditions =
+            let enclosing_loops =
               Hashtbl.find_opt structure.loop_indices write_event
               |> Option.value ~default:[]
+            in
+            let unrecorded =
+              enclosing_loops = []
+              || List.exists
+                   (fun lid -> not (Hashtbl.mem structure.loop_conditions lid))
+                   enclosing_loops
+            in
+            let loop_conditions =
+              enclosing_loops
               |> List.concat_map (fun lid ->
                   Hashtbl.find_opt structure.loop_conditions lid
                   |> Option.value ~default:[]
@@ -628,7 +645,16 @@ module WriteCondition = struct
                 (fun expr -> Solver.is_sat (expr :: write_valres))
                 loop_conditions
             in
-              Lwt.return (List.length can_continue > 0)
+              if unrecorded then
+                Logs_safe.warn (fun m ->
+                    m
+                      "Loop %d: no continuation guard recorded for an \
+                       enclosing loop of write %d; keeping it as a candidate \
+                       source rather than treating it as a last-iteration \
+                       write."
+                      loop_id write_event
+                );
+              Lwt.return (unrecorded || List.length can_continue > 0)
           )
           writes_in_loop
       in
