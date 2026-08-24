@@ -1,11 +1,14 @@
 x := 0;
-rtest := x;
-do
 {
+  rtest := x;
   rtemp := 0;
-  if (rtest = 1) {
-    rtemp := 1;
-  }
+  while (rtemp = 0)
+  {
+    if (rtest = 1) {
+      rtemp := 1;
+    }
+  };
+  x := 1
+} ||| {
+  x := 1
 }
-while (rtemp = 0);
-x := 1;

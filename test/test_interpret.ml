@@ -396,6 +396,138 @@ let test_while_constant_guard_yields_executions () =
       "constant-guard while loop yields at least one execution" true
       (count_executions_symbolic program > 0)
 
+(** {1 Do-while loop semantics}
+
+    [do { body } while (cond)] is [body] followed by [while (cond) { body }]:
+    one unravelling of the loop body, then the residual while loop. An earlier
+    implementation dropped the residual loop entirely (the continuation of the
+    first unravelling was the program's terminal structure), so a do-while loop
+    produced neither a branch event nor a loop condition. *)
+
+let do_while_program = "x := 0; do { r1 := x } while (r1 = 0)"
+
+(* [body; while (cond) { body }], the hand-unravelled equivalent of
+   [do_while_program]. *)
+let unravelled_while_program = "x := 0; r1 := x; while (r1 = 0) { r1 := x }"
+
+let test_do_while_symbolic_guard_wellformed () =
+  let structure = interpret_symbolic do_while_program in
+    check_structure_wellformed "do-while symbolic guard" structure;
+    Alcotest.(check int)
+      "has one branch event" 1
+      (USet.size structure.branch_events);
+    Alcotest.(check bool)
+      "tracks the loop condition" true
+      (Hashtbl.length structure.loop_conditions > 0)
+
+let test_do_while_yields_executions () =
+  Alcotest.(check bool)
+    "do-while loop yields at least one execution" true
+    (count_executions_symbolic do_while_program > 0)
+
+let sorted_bindings tbl =
+  Hashtbl.fold (fun k v acc -> (k, v) :: acc) tbl [] |> List.sort compare
+
+(* The whole point: the do-while structure is the structure of the
+   hand-unravelled while loop. Event labels are allocated in the same order in
+   both, so the relations compare literally. *)
+let test_do_while_matches_unravelled_while () =
+  let do_while = interpret_symbolic do_while_program in
+  let unravelled = interpret_symbolic unravelled_while_program in
+  let sorted set = USet.values set |> List.sort compare in
+  let check_ints name f =
+    Alcotest.(check int) name (USet.size (f unravelled)) (USet.size (f do_while))
+  in
+  let check_pairs name f =
+    Alcotest.(check (list (pair int int)))
+      name
+      (sorted (f unravelled))
+      (sorted (f do_while))
+  in
+    check_ints "same number of events" (fun s -> s.e);
+    check_ints "same number of branch events" (fun s -> s.branch_events);
+    check_ints "same number of terminal events" (fun s -> s.terminal_events);
+    check_ints "same number of read events" (fun s -> s.read_events);
+    check_ints "same number of write events" (fun s -> s.write_events);
+    check_pairs "same program order" (fun s -> s.po);
+    check_pairs "same conflict relation" (fun s -> s.conflict);
+    Alcotest.(check (list (pair int (list int))))
+      "same loop membership"
+      (sorted_bindings unravelled.loop_indices)
+      (sorted_bindings do_while.loop_indices)
+
+(* The peeled first unravelling precedes the loop rather than belonging to it,
+   exactly as in the hand-written [body; while (cond) { body }]. Only the
+   residual loop's copy of the body is the loop's symbolic iteration, which is
+   what [po_iter] and the episodicity checks assume. *)
+let test_do_while_peeled_unravelling_is_outside_the_loop () =
+  let in_a_loop structure =
+    Hashtbl.fold
+      (fun _ loops acc -> if loops = [] then acc else acc + 1)
+      structure.loop_indices 0
+  in
+    Alcotest.(check int)
+      "only the residual body belongs to the loop"
+      (in_a_loop (interpret_symbolic unravelled_while_program))
+      (in_a_loop (interpret_symbolic do_while_program))
+
+(* [cross] hands the combined structure the thread fold's seed tables, and
+   [interpret_generic] re-attaches the global ones afterwards. Leaving
+   loop_conditions out of that re-attachment dropped every loop's guard as soon
+   as a program had more than one thread, which silently emptied the write
+   condition's last-iteration filter. *)
+let test_loop_conditions_survive_threads () =
+  let loop = "rtest := x; while (rtest = 0) { rtest := x }" in
+  let single = interpret_symbolic ("x := 0; " ^ loop) in
+  let threaded =
+    interpret_symbolic ("x := 0; { " ^ loop ^ " } ||| { x := 1 }")
+  in
+    Alcotest.(check bool)
+      "a single-threaded loop records its guard" true
+      (Hashtbl.length single.loop_conditions > 0);
+    Alcotest.(check int)
+      "a second thread does not drop loop conditions"
+      (Hashtbl.length single.loop_conditions)
+      (Hashtbl.length threaded.loop_conditions)
+
+(* The recorded guard is the one that decides whether the iteration just
+   modelled is followed by another, so it is evaluated at the end of the body.
+   Here the body assigns [r1 := 1], so no second iteration is possible and the
+   guard is [false]. Taking it before the body instead would record [(α = 0)]
+   over the pre-loop read, which says nothing about this iteration. *)
+let test_loop_condition_is_taken_at_the_end_of_the_body () =
+  let structure =
+    interpret_symbolic
+      "x := 0; y := 0; r1 := x; while (r1 = 0) { r2 := y; y := 1; r1 := 1 }"
+  in
+  let recorded =
+    Hashtbl.find_opt structure.loop_conditions 1 |> Option.value ~default:[]
+  in
+    Alcotest.(check int) "one guard is recorded" 1 (List.length recorded);
+    Alcotest.(check bool)
+      "the loop cannot continue after its iteration" false
+      (List.exists (fun guard -> Solver.is_sat [ guard ]) recorded)
+
+(* A loop node is interpreted once per enclosing branch, and each occurrence
+   reaches the end of the body in its own environment. Recording by
+   [Hashtbl.replace] kept only whichever was interpreted last. Here the two
+   branches leave [r2] at 0 and 1, so one occurrence can iterate again and the
+   other cannot, and both have to survive. *)
+let test_loop_conditions_are_recorded_per_occurrence () =
+  let structure =
+    interpret_symbolic
+      "x := 0; r0 := x; if (r0 = 1) { r2 := 0 } else { r2 := 1 }; r1 := 0; \
+       while (r1 = 0) { r1 := r2 }"
+  in
+  let recorded =
+    Hashtbl.find_opt structure.loop_conditions 1 |> Option.value ~default:[]
+  in
+    Alcotest.(check int)
+      "both occurrences of the loop are recorded" 2 (List.length recorded);
+    Alcotest.(check int)
+      "only the occurrence that iterates again can continue" 1
+      (List.length (List.filter (fun guard -> Solver.is_sat [ guard ]) recorded))
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
@@ -406,6 +538,20 @@ let suite =
         test_while_symbolic_guard_yields_executions;
       Alcotest.test_case "While constant guard yields executions" `Quick
         test_while_constant_guard_yields_executions;
+      Alcotest.test_case "Do-while symbolic guard well-formed" `Quick
+        test_do_while_symbolic_guard_wellformed;
+      Alcotest.test_case "Do-while yields executions" `Quick
+        test_do_while_yields_executions;
+      Alcotest.test_case "Do-while matches unravelled while" `Quick
+        test_do_while_matches_unravelled_while;
+      Alcotest.test_case "Do-while peeled unravelling is outside the loop"
+        `Quick test_do_while_peeled_unravelling_is_outside_the_loop;
+      Alcotest.test_case "Loop conditions survive thread composition" `Quick
+        test_loop_conditions_survive_threads;
+      Alcotest.test_case "Loop condition is taken at the end of the body" `Quick
+        test_loop_condition_is_taken_at_the_end_of_the_body;
+      Alcotest.test_case "Loop conditions are recorded per occurrence" `Quick
+        test_loop_conditions_are_recorded_per_occurrence;
       Alcotest.test_case "Event ID generation" `Quick test_next_event_id;
       Alcotest.test_case "Greek symbol generation" `Quick test_next_greek;
       Alcotest.test_case "Greek symbol overflow" `Quick test_next_greek_overflow;

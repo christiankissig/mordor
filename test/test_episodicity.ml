@@ -607,7 +607,7 @@ module TestWriteCondition = struct
         Hashtbl.add loop_indices read.label [ 0 ];
         Hashtbl.add loop_indices mod_write.label [ 0 ];
         let loop_conditions = Hashtbl.create 0 in
-          Hashtbl.add loop_conditions 0 (EBoolean true);
+          Hashtbl.add loop_conditions 0 [ EBoolean true ];
           (* while true *)
           let structure =
             {
@@ -721,7 +721,7 @@ module TestWriteCondition = struct
         Hashtbl.add loop_indices write2.label [ 0 ];
         Hashtbl.add loop_indices read.label [ 0 ];
         let loop_conditions = Hashtbl.create 0 in
-          Hashtbl.add loop_conditions 0 (EBoolean true);
+          Hashtbl.add loop_conditions 0 [ EBoolean true ];
           (* while true *)
           let structure =
             {
@@ -825,6 +825,15 @@ module TestWriteCondition = struct
       let fwd_es_ctx = EventStructureContext.create structure in
         { program = []; structure; source_spans; justifications; fwd_es_ctx }
 
+  (* Test 1b: the same shape, but with no recorded loop condition. Absence must
+     not be read as "last iteration": dropping the write empties the candidate
+     set and the whole condition passes vacuously, which is exactly how a
+     missing guard became a soundness gap rather than a missing diagnosis. *)
+  let test_mod_write_after_read_no_loop_condition_setup () =
+    let cache = test_mod_write_after_read_setup () in
+      Hashtbl.reset cache.structure.loop_conditions;
+      cache
+
   let write_test_cases =
     [
       {
@@ -834,6 +843,15 @@ module TestWriteCondition = struct
         expected_violation_count = Some 1;
         description =
           "Modifying write not sequenced before read in same iteration";
+      };
+      {
+        name = "modifying write after read, no loop condition recorded";
+        setup = test_mod_write_after_read_no_loop_condition_setup;
+        expected_satisfied = false;
+        expected_violation_count = Some 1;
+        description =
+          "A loop with no recorded guard keeps its writes as candidate \
+           sources, rather than passing vacuously";
       };
       {
         name = "same iteration write before read";
@@ -1903,6 +1921,152 @@ module TestBisection = struct
     ]
 end
 
+(** {1 Pipeline-level episodicity}
+
+    The tests above build event structures by hand, so a [loop_conditions] table
+    filled in by the test always looks right and a gap in the interpreter is
+    invisible to them. These run the real pipeline instead: parse, interpret
+    with symbolic loop semantics, then check episodicity. *)
+module TestPipeline = struct
+  (** Run the whole pipeline and return the per-loop episodicity verdicts.
+
+      @param program The litmus program source.
+      @return The loop-id to episodic table. *)
+  let episodicity_of program =
+    let ctx =
+      make_context { default_options with loop_semantics = Symbolic } ()
+    in
+      ctx.litmus <- Some program;
+      let ctx =
+        Lwt_main.run
+          (Lwt.return ctx
+          |> Parse.step_parse_litmus
+          |> Interpret.step_interpret
+          |> Episodicity.step_test_episodicity
+          )
+      in
+        Option.get ctx.is_episodic
+
+  (* The self-incrementing loop: each iteration reads the counter and writes it
+     back incremented, so a value crosses the loop boundary. None of the three
+     spellings is episodic, and they have to agree — they did not before, the do
+     form because loop_conditions was never populated for a do-while, the while
+     form because a rotating bisection satisfied Condition 2 while Condition 1
+     still read the unrotated body. *)
+  let do_form =
+    "rtemp := 0; rC := malloc 1; *rC := 0; do { rtest :acq= *rC; *rC :rel= \
+     rtest + 1; } while (rtest < 5)"
+
+  let while_form =
+    "rtemp := 0; rC := malloc 1; *rC := 0; rtest := 0; while (rtest < 5) { \
+     rtest :acq= *rC; *rC :rel= rtest + 1 }"
+
+  let rotated_form =
+    "rtemp := 0; rC := malloc 1; *rC := 0; rtest :acq= *rC; do { *rC :rel= \
+     rtest + 1; rtest :acq= *rC; } while (rtest < 5)"
+
+  let test_self_incrementing_loop_is_not_episodic () =
+    List.iter
+      (fun (spelling, program) ->
+        Alcotest.(check (option bool))
+          (spelling ^ " form is not episodic")
+          (Some false)
+          (Hashtbl.find_opt (episodicity_of program) 1)
+      )
+      [ ("do", do_form); ("while", while_form); ("rotated", rotated_form) ]
+
+  (* A loop that reads a location it never writes is episodic in every
+     spelling, so the test above is not passing for want of any verdict. *)
+  let test_read_only_loop_is_episodic () =
+    List.iter
+      (fun (spelling, program) ->
+        Alcotest.(check (option bool))
+          (spelling ^ " form is episodic")
+          (Some true)
+          (Hashtbl.find_opt (episodicity_of program) 1)
+      )
+      [
+        ("do", "rC := malloc 1; *rC := 0; do { ri := *rC } while (ri < 5)");
+        ( "while",
+          "rC := malloc 1; *rC := 0; ri := 0; while (ri < 5) { ri := *rC }"
+        );
+      ]
+
+  (** Run the pipeline and check the write condition against the structure it
+      builds, with no bisection applied.
+
+      [episodicity_results] reports the bisection the search settled on, so it
+      cannot be used to observe the condition on the loop as written.
+
+      @param program The litmus program source.
+      @param loop_id The loop to check.
+      @return The write condition's result. *)
+  let write_condition_of program loop_id =
+    let ctx =
+      make_context { default_options with loop_semantics = Symbolic } ()
+    in
+      ctx.litmus <- Some program;
+      let ctx =
+        Lwt_main.run
+          (Lwt.return ctx
+          |> Parse.step_parse_litmus
+          |> Interpret.step_interpret
+          |> Elaborations.step_generate_justifications
+          )
+      in
+      let cache =
+        {
+          program = Option.get ctx.program_stmts;
+          structure = Option.get ctx.structure;
+          source_spans = Option.get ctx.source_spans;
+          fwd_es_ctx = Option.get ctx.fwd_es_ctx;
+          justifications = Option.get ctx.justifications;
+        }
+      in
+        Lwt_main.run (WriteCondition.check cache loop_id)
+
+  (* The write condition asks whether a write in the loop can be the source of a
+     read in it, and the answer has to stay on the side of possible aliasing: a
+     read that might take its value from a previous iteration must be reported.
+     Here rz points at rp's cell, so the loop reads back the value it wrote, but
+     the address arrives as a symbol loaded out of memory and is only possibly
+     equal to rp — asking whether the two must be equal misses it. *)
+  let aliased_through_memory =
+    "rp := malloc 1; *rp := 0; rq := malloc 1; *rq := 0; rz := malloc 1; *rz \
+     := rp; rv := 0; do { rt := *rz; rv := *rt; *rp := rv + 1; } while (rv < \
+     5)"
+
+  let test_write_condition_sees_aliasing_through_memory () =
+    Alcotest.(check bool)
+      "a read that can alias a loop write is reported" false
+      (write_condition_of aliased_through_memory 1).satisfied
+
+  (* And the sharpening must not cost the cases it was built for: the CAS
+     increment loop's fetch-and-add cannot take its value from the CAS write,
+     which only happens when the CAS succeeds and the loop ends. *)
+  let cas_increment_loop =
+    "rC := malloc 1; *rC := 0; rsucc := 0; rn := malloc 1; do { rs := \
+     fadd(acquire,release,rC,0); rv := *rs; *rn := rv + 1; rsucc := \
+     cas(acquire,release,rC,rs,rn); } while (rsucc = 0)"
+
+  let test_write_condition_resolves_the_cas_increment_loop () =
+    Alcotest.(check bool)
+      "no read of the CAS loop has a source in the loop" true
+      (write_condition_of cas_increment_loop 1).satisfied
+
+  let suite =
+    [
+      test_case "self-incrementing loop is not episodic in any spelling" `Quick
+        test_self_incrementing_loop_is_not_episodic;
+      test_case "read-only loop is episodic in every spelling" `Quick
+        test_read_only_loop_is_episodic;
+      test_case "write condition sees aliasing through memory" `Quick
+        test_write_condition_sees_aliasing_through_memory;
+      test_case "write condition resolves the CAS increment loop" `Quick
+        test_write_condition_resolves_the_cas_increment_loop;
+    ]
+end
+
 let suite =
   ( "Episodicity",
     TestRegisterCondition.suite
@@ -1910,4 +2074,5 @@ let suite =
     @ TestBranchCondition.suite
     @ TestEventOrdering.suite
     @ TestBisection.suite
+    @ TestPipeline.suite
   )

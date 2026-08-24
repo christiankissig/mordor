@@ -77,9 +77,15 @@ type events_t = {
       (** Mapping from event labels to thread indices. *)
   loop_indices : (int, int list) Hashtbl.t;
       (** Mapping from event labels to loop indices. *)
-  loop_conditions : (int, expr) Hashtbl.t;
-      (** Mapping from loop indices to their loop conditions. Used with symbolic
-          loop semantics. *)
+  loop_conditions : (int, expr list) Hashtbl.t;
+      (** Mapping from a loop index to the continuation guards recorded for it,
+          one per interpreted occurrence of the loop. Used with symbolic loop
+          semantics.
+
+          A loop node is interpreted once per enclosing branch, per copy of an
+          unravelled do-loop body, and per thread, and each occurrence reaches
+          the end of the body in a different register environment, so each
+          contributes its own guard. *)
   source_spans : (int, source_span) Hashtbl.t;
       (** Mapping from event labels to source code spans. *)
   globals : string USet.t;  (** Set of global variable names. *)
@@ -130,6 +136,29 @@ let add_event (events : events_t) event env (annotation : ir_node_ann) =
       | None -> ()
       );
       event'
+
+(** Record a loop's continuation guard for one occurrence of the loop.
+
+    The guard is what decides whether the iteration just interpreted is followed
+    by another, so it must be evaluated at the {e end} of the loop body: it is a
+    predicate over the symbols that iteration produced. Guards accumulate rather
+    than overwrite, because the same loop is interpreted once per enclosing
+    branch, per copy of an unravelled do-loop body, and per thread.
+
+    @param events The global events structure.
+    @param loop_index The loop's identifier, if the node carries one.
+    @param condition The guard as evaluated at the end of the body.
+    @return Unit. *)
+let record_loop_condition (events : events_t) loop_index condition =
+  Option.iter
+    (fun lid ->
+      let recorded =
+        Hashtbl.find_opt events.loop_conditions lid |> Option.value ~default:[]
+      in
+        if not (List.exists (Expr.equal condition) recorded) then
+          Hashtbl.replace events.loop_conditions lid (recorded @ [ condition ])
+    )
+    loop_index
 
 (** Update the register environment with a new binding.
 
@@ -334,7 +363,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               (* if the operand evaluates to zero, this is a read-don't
                    modify-write *)
               let is_rdmw =
-                Expr.evaluate ~env:(Hashtbl.find_opt env) operand == ENum Z.zero
+                Expr.evaluate ~env:(Hashtbl.find_opt env) operand = ENum Z.zero
               in
               let evt_store =
                 {
@@ -643,7 +672,7 @@ let make_generic_terminal_structure ~add_event env phi events =
     add_event events terminal_evt env
       { source_span = None; thread_ctx = None; loop_ctx = None }
   in
-  let constraints =
+  let global_constraints =
     URelation.cross events.globals events.globals
     |> (fun rel -> USet.set_minus rel (URelation.identity events.globals))
     |> USet.values
@@ -654,6 +683,30 @@ let make_generic_terminal_structure ~add_event env phi events =
     )
     |> List.map (fun (v1, v2) -> Expr.binop (EVar v1) "!=" (EVar v2))
   in
+  (* Distinct allocations denote distinct locations: a [malloc] never hands back
+     the address of another allocation. Without this the solver may equate two
+     allocation symbols, and then a write to one allocation reads as a possible
+     source for a read of the other. *)
+  let allocation_constraints =
+    let locations =
+      Hashtbl.fold
+        (fun _ (event : event) acc ->
+          match (event.typ, event.loc) with
+          | Malloc, Some loc -> loc :: acc
+          | _ -> acc
+        )
+        events.events []
+      |> List.sort_uniq Expr.compare
+    in
+    let rec distinct_pairs = function
+      | [] -> []
+      | loc :: rest ->
+          List.map (fun other -> Expr.binop loc "!=" other) rest
+          @ distinct_pairs rest
+    in
+      distinct_pairs locations
+  in
+  let constraints = global_constraints @ allocation_constraints in
   let cont =
     {
       structure with
@@ -731,6 +784,7 @@ let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
       events = events.events;
       origin = events.origin;
       loop_indices = events.loop_indices;
+      loop_conditions = events.loop_conditions;
       thread_index = events.thread_index;
       p = events.env_by_evt;
     }
@@ -1068,6 +1122,49 @@ end = struct
         events_by_loop;
       po_iter
 
+  (** Strip loop membership from the peeled first unravelling of a do-while
+      body.
+
+      In [do { body } while (cond)] the first unravelling precedes the residual
+      [while (cond) { body }], so — exactly as in the hand-written
+      [body; while (cond) { body }] — its events are not iterations of the loop.
+      Only the residual loop's copy of [body] is the loop's symbolic iteration,
+      which is what [generate_po_iter] and the episodicity checks expect: one
+      symbolic iteration per loop.
+
+      The same applies to any loop nested in [body]: its peeled copy would
+      otherwise duplicate the nested loop's events. [outer_loops] is therefore
+      the enclosing loop path of the do-while itself, applied throughout. The
+      [lid] of a nested loop node is preserved so that it still records its
+      guard under its own identifier.
+
+      @param outer_loops The enclosing loop path of the do-while node.
+      @param node The IR node to strip.
+      @return The node with loop membership replaced by [outer_loops]. *)
+  let rec peel_loop_membership outer_loops (node : ir_node) : ir_node =
+    let peel = peel_loop_membership outer_loops in
+    let loop_ctx =
+      node.annotations.loop_ctx
+      |> Option.map (fun (ctx : loop_ctx) -> { ctx with loops = outer_loops })
+    in
+    let annotations = { node.annotations with loop_ctx } in
+    let stmt : ir_stmt =
+      match node.stmt with
+      | While { condition; body } ->
+          While { condition; body = List.map peel body }
+      | Do { body; condition } -> Do { body = List.map peel body; condition }
+      | If { condition; then_body; else_body } ->
+          If
+            {
+              condition;
+              then_body = List.map peel then_body;
+              else_body = Option.map (List.map peel) else_body;
+            }
+      | Labeled { label; stmt } -> Labeled { label; stmt = peel stmt }
+      | stmt -> stmt
+    in
+      { stmt; annotations }
+
   (** Interpret statements with symbolic loop semantics.
 
       Evaluates all branches of loops symbolically without unrolling.
@@ -1085,137 +1182,35 @@ end = struct
     | node :: rest -> (
         match node.stmt with
         | Do { body; condition } ->
-            (* Recursive interpretation in the first unravelling of the loop
-               body before the while-loop continuation. final_structure here
-               must not be the final_structure below as a the while
-               continuation. *)
-            let recurse nodes env phi events =
-              interpret_statements_symbolic_loop ~final_structure ~add_event
-                nodes env phi events
-            in
+            (* [do { body } while (cond)] is one unravelling of the loop body
+               followed by [while (cond) { body }], and is interpreted as
+               exactly that: the body, with the residual while loop as its
+               continuation.
 
-            let final_structure ~add_event env phi events =
-              (* this block calculates the semantics of the do-while loop with a
-                 single body unravelling as if it was a while loop. Doing the
-                 unravelling syntactically doesn't work because the branching
-                 events in the while statement of the do-while loop must
-                 evaluate in this loop iteration for the purpose of tracking
-                 loop conditions. *)
-              let continue_val =
-                Expr.evaluate ~env:(fun v -> Hashtbl.find_opt env v) condition
-              in
-              let after_val =
-                Expr.evaluate
-                  ~env:(fun v -> Hashtbl.find_opt env v)
-                  (Expr.inverse condition)
-              in
-              let after_structure =
-                interpret_statements_symbolic_loop ~final_structure ~add_event
-                  rest env (after_val :: phi) events
-              in
-              let final_structure ~add_event:_ _env _phi _events =
-                after_structure
-              in
-              let recurse nodes env phi events =
-                interpret_statements_symbolic_loop ~final_structure ~add_event
-                  nodes env phi events
-              in
-              let loop_index =
-                node.annotations.loop_ctx
-                |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
-              in
-                Option.iter
-                  (fun lid ->
-                    Hashtbl.replace events.loop_conditions lid continue_val
-                    |> ignore
-                  )
-                  loop_index;
-                interpret_statements_open ~recurse ~final_structure ~add_event
-                  body env phi events
+               The unravelling cannot be done syntactically on the IR, because
+               the branch event of the residual while loop has to be evaluated
+               in the environment reached at the *end* of the first
+               unravelling — that is what makes the loop condition track this
+               iteration. Threading the residual loop through the
+               [final_structure] of the first unravelling puts it in exactly
+               that position. *)
+            let residual_while ~add_event env phi events =
+              interpret_while_symbolic_loop ~final_structure ~add_event
+                ~annotations:node.annotations ~condition ~body ~rest env phi
+                events
             in
-
-            (* Interpret the first unravelling of the loop body before the
-               while-loop continuation. *)
-            interpret_statements_open ~recurse ~final_structure ~add_event body
-              env phi events
-        | While { condition; body } -> (
-            (* A while loop with a single symbolic unrolling is modelled as a
-               branch, mirroring the [If { else_body = None }] encoding: either
-               the guard holds and we run the body once before the continuation
-               (iteration order is recovered later via po_iter), or the guard
-               fails and we proceed directly to the continuation.
-
-               Crucially, the two branches must own DISTINCT continuation events.
-               Interpreting [rest] separately in each branch is what keeps the
-               [plus] operands disjoint. The previous implementation shared a
-               single [after_structure] between the body's continuation and the
-               exit branch, so [plus] (which adds an all-pairs conflict between
-               its operands) put the shared continuation events in conflict with
-               themselves and with the po-preceding body, yielding a malformed
-               structure with no valid executions. *)
-            let cond_val =
-              Expr.evaluate ~env:(fun v -> Hashtbl.find_opt env v) condition
-              |> Expr.apply_constraints
-            in
-            let enter_phi =
-              if cond_val = EBoolean true then phi else cond_val :: phi
-            in
-            let enter_phi_sat = Solver.is_sat_cached enter_phi in
-            let enter_phi =
-              if enter_phi_sat then enter_phi else [ EBoolean false ]
-            in
-            let cond_val = if enter_phi_sat then cond_val else EBoolean false in
-            let exit_cond_val = Expr.evaluate (Expr.inverse cond_val) in
-            let exit_phi =
-              if cond_val = EBoolean false then phi else exit_cond_val :: phi
-            in
-            let exit_phi_sat = Solver.is_sat_cached exit_phi in
-            let exit_phi =
-              if exit_phi_sat then exit_phi else [ EBoolean false ]
-            in
-            let loop_index =
+            let outer_loops =
               node.annotations.loop_ctx
-              |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
+              |> Option.map (fun (ctx : loop_ctx) -> ctx.loops)
+              |> Option.value ~default:[]
             in
-              Option.iter
-                (fun lid ->
-                  Hashtbl.replace events.loop_conditions lid cond_val |> ignore
-                )
-                loop_index;
-
-              let defacto =
-                List.map
-                  (Expr.evaluate ~env:(Hashtbl.find_opt env))
-                  events.defacto
-              in
-              (* Continue branch: run the body once, then the continuation. *)
-              let enter_structure events =
-                interpret_statements_symbolic_loop ~final_structure ~add_event
-                  (body @ rest) env enter_phi events
-              in
-              (* Exit branch: skip the body, go straight to the continuation. *)
-              let exit_structure events =
-                interpret_statements_symbolic_loop ~final_structure ~add_event
-                  rest env exit_phi events
-              in
-                match cond_val with
-                | EBoolean true -> enter_structure events
-                | EBoolean false -> exit_structure events
-                | _ ->
-                    let branch_event =
-                      { (Event.create Branch 0 ()) with cond = Some cond_val }
-                    in
-                    let branch_event' =
-                      add_event events branch_event env node.annotations
-                    in
-                    let enter_structure = enter_structure events in
-                    let exit_structure = exit_structure events in
-                      SymbolicEventStructure.dot branch_event'
-                        (SymbolicEventStructure.plus enter_structure
-                           exit_structure
-                        )
-                        phi defacto
-          )
+            let peeled = List.map (peel_loop_membership outer_loops) body in
+              interpret_statements_symbolic_loop ~final_structure:residual_while
+                ~add_event peeled env phi events
+        | While { condition; body } ->
+            interpret_while_symbolic_loop ~final_structure ~add_event
+              ~annotations:node.annotations ~condition ~body ~rest env phi
+              events
         | _ ->
             let recurse nodes env phi events =
               interpret_statements_symbolic_loop ~final_structure ~add_event
@@ -1225,6 +1220,110 @@ end = struct
                 nodes env phi events
       )
     | [] -> final_structure ~add_event env phi events
+
+  (** Interpret a while loop with symbolic loop semantics.
+
+      Shared by [While] and by the residual loop of a [Do], which is a while
+      loop preceded by one unravelling of its body.
+
+      @param final_structure Function to create the final structure.
+      @param add_event Function to add events.
+      @param annotations The IR annotations of the loop node.
+      @param condition The loop guard.
+      @param body The loop body.
+      @param rest The continuation after the loop.
+      @param env The register environment.
+      @param phi The path condition.
+      @param events The global events structure.
+      @return A symbolic event structure. *)
+  and interpret_while_symbolic_loop ~final_structure ~add_event ~annotations
+      ~condition ~body ~rest env phi events =
+    (* A while loop with a single symbolic unrolling is modelled as a branch,
+       mirroring the [If { else_body = None }] encoding: either the guard holds
+       and we run the body once before the continuation (iteration order is
+       recovered later via po_iter), or the guard fails and we proceed directly
+       to the continuation.
+
+       Crucially, the two branches must own DISTINCT continuation events.
+       Interpreting [rest] separately in each branch is what keeps the [plus]
+       operands disjoint. The previous implementation shared a single
+       [after_structure] between the body's continuation and the exit branch,
+       so [plus] (which adds an all-pairs conflict between its operands) put
+       the shared continuation events in conflict with themselves and with the
+       po-preceding body, yielding a malformed structure with no valid
+       executions. *)
+    let cond_val =
+      Expr.evaluate ~env:(fun v -> Hashtbl.find_opt env v) condition
+      |> Expr.apply_constraints
+    in
+    let enter_phi = if cond_val = EBoolean true then phi else cond_val :: phi in
+    let enter_phi_sat = Solver.is_sat_cached enter_phi in
+    let enter_phi = if enter_phi_sat then enter_phi else [ EBoolean false ] in
+    let cond_val = if enter_phi_sat then cond_val else EBoolean false in
+    let exit_cond_val = Expr.evaluate (Expr.inverse cond_val) in
+    let exit_phi =
+      if cond_val = EBoolean false then phi else exit_cond_val :: phi
+    in
+    let exit_phi_sat = Solver.is_sat_cached exit_phi in
+    let exit_phi = if exit_phi_sat then exit_phi else [ EBoolean false ] in
+    let loop_index =
+      annotations.loop_ctx |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
+    in
+    let defacto =
+      List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
+    in
+    (* Continue branch: run the body once, then the continuation.
+
+         The body is interpreted with the continuation as its own
+         [final_structure] so that the loop's guard can be recorded there, in
+         the environment reached at the end of the body. That is the guard that
+         decides whether the iteration just modelled is followed by another —
+         [cond_val] above is the guard of the iteration {e before} it, and says
+         nothing about this one. Every path through the body records its own,
+         which is also what keeps occurrences of the same loop from overwriting
+         one another. *)
+    let enter_structure events =
+      let continue_after_body ~add_event env phi events =
+        let guard =
+          Expr.evaluate ~env:(Hashtbl.find_opt env) condition
+          |> Expr.apply_constraints
+        in
+          (* Conjoined with the path condition reached at the end of the body,
+             so the guard says "the loop continues after this iteration, along
+             this path" rather than "along some path". A write reachable only on
+             another path through the body is then inconsistent with it, instead
+             of being kept alive by a sibling path's guard. *)
+          record_loop_condition events loop_index
+            (List.fold_left
+               (fun conjunction p -> Expr.binop conjunction "&&" p)
+               guard phi
+            |> Expr.evaluate
+            |> Expr.apply_constraints
+            );
+          interpret_statements_symbolic_loop ~final_structure ~add_event rest
+            env phi events
+      in
+        interpret_statements_symbolic_loop ~final_structure:continue_after_body
+          ~add_event body env enter_phi events
+    in
+    (* Exit branch: skip the body, go straight to the continuation. *)
+    let exit_structure events =
+      interpret_statements_symbolic_loop ~final_structure ~add_event rest env
+        exit_phi events
+    in
+      match cond_val with
+      | EBoolean true -> enter_structure events
+      | EBoolean false -> exit_structure events
+      | _ ->
+          let branch_event =
+            { (Event.create Branch 0 ()) with cond = Some cond_val }
+          in
+          let branch_event' = add_event events branch_event env annotations in
+          let enter_structure = enter_structure events in
+          let exit_structure = exit_structure events in
+            SymbolicEventStructure.dot branch_event'
+              (SymbolicEventStructure.plus enter_structure exit_structure)
+              phi defacto
 
   let step_interpret lwt_ctx =
     let* ctx = lwt_ctx in

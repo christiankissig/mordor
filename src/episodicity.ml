@@ -1,15 +1,18 @@
 (** {1 Episodicity Analysis Module}
 
     This module implements episodicity checks for loops based on Definition 4.1.
-    A loop is episodic if it satisfies four conditions:
+    A loop is episodic if it satisfies four conditions, named here as they are
+    in the paper:
 
-    + Registers only accessed if written to ⊑-before within same iteration or
-      before loop
-    + Reads must read from: (a) same-iteration writes, (b) cross-thread writes,
-      or (c) read-don't-modify RMWs derived from such writes
-    + Branching conditions don't constrain symbols read before the loop
-    + Events from prior iterations are ordered before later iterations by (ppo ∪
-      dp)*
+    + {b Register condition}: registers only accessed if written to ⊑-before
+      within same iteration or before loop
+    + {b Write condition}: reads must read from: (a) same-iteration writes, (b)
+      cross-thread writes, or (c) read-don't-modify RMWs derived from such
+      writes
+    + {b Branching condition}: branching conditions don't constrain symbols read
+      before the loop
+    + {b Events condition}: events from prior iterations are ordered before
+      later iterations by (ppo ∪ dp)*
 
     Where:
     - ⊑ is sequenced-before (program order)
@@ -51,6 +54,91 @@ type episodicity_cache = {
       (** Justifications for symbolic event structure *)
 }
 
+(** {1 Episodicity Conditions} *)
+
+(** The four conditions of the {i Episodic Loops} definition, named as in the
+    paper. The index of a condition is its position in the definition, and
+    matches the [condition1] .. [condition4] fields of
+    {!Context.loop_episodicity_result}. *)
+type condition_kind =
+  | RegisterConditionKind  (** Condition 1: register accesses *)
+  | WriteConditionKind  (** Condition 2: sources a loop read may read from *)
+  | BranchingConditionKind  (** Condition 3: what branching conditions pin *)
+  | EventsConditionKind  (** Condition 4: ordering across iterations *)
+
+(** The position of a condition in the definition.
+
+    @param kind The condition.
+    @return The condition's index, 1 to 4. *)
+let condition_index = function
+  | RegisterConditionKind -> 1
+  | WriteConditionKind -> 2
+  | BranchingConditionKind -> 3
+  | EventsConditionKind -> 4
+
+(** The condition at a given position in the definition.
+
+    @param index The condition's index, 1 to 4.
+    @return The condition, or [None] if the index names no condition. *)
+let condition_of_index = function
+  | 1 -> Some RegisterConditionKind
+  | 2 -> Some WriteConditionKind
+  | 3 -> Some BranchingConditionKind
+  | 4 -> Some EventsConditionKind
+  | _ -> None
+
+(** The name of a condition as used in the paper.
+
+    @param kind The condition.
+    @return The condition's name. *)
+let condition_name = function
+  | RegisterConditionKind -> "register condition"
+  | WriteConditionKind -> "write condition"
+  | BranchingConditionKind -> "branching condition"
+  | EventsConditionKind -> "events condition"
+
+(** What a condition requires, phrased as in the paper.
+
+    @param kind The condition.
+    @return A one-sentence statement of the requirement. *)
+let condition_statement = function
+  | RegisterConditionKind ->
+      "registers are only accessed if written ⊑-before within the same \
+       iteration, or before the loop"
+  | WriteConditionKind ->
+      "reads within the loop read from a ⊑-earlier write of the same \
+       iteration, a write before the loop, an independent write on another \
+       thread, or a read-don't-modify-write derived from those"
+  | BranchingConditionKind ->
+      "the branching conditions of an iteration do not constrain values read \
+       before the loop"
+  | EventsConditionKind ->
+      "events of prior iterations are ordered before events of later \
+       iterations by (ppo ∪ dp)*"
+
+(** A condition's name qualified by its index, e.g. ["branching condition (3)"].
+
+    @param kind The condition.
+    @return The name and index of the condition. *)
+let describe_condition kind =
+  Printf.sprintf "%s (%d)" (condition_name kind) (condition_index kind)
+
+(** The conditions a result violates, in definition order.
+
+    @param result A loop episodicity result.
+    @return The kinds of the conditions that are not satisfied. *)
+let violated_conditions (result : loop_episodicity_result) =
+  List.filter_map
+    (fun (kind, (condition : condition_result)) ->
+      if condition.satisfied then None else Some kind
+    )
+    [
+      (RegisterConditionKind, result.condition1);
+      (WriteConditionKind, result.condition2);
+      (BranchingConditionKind, result.condition3);
+      (EventsConditionKind, result.condition4);
+    ]
+
 (** {1 Event Structure Utilities} *)
 
 (** Get all events in a specific loop from the symbolic event structure.
@@ -67,6 +155,62 @@ let get_events_in_loop (structure : symbolic_event_structure) (loop_id : int) :
       | None -> false
     )
     structure.e
+
+(** The part of the structure a loop's dependencies can come from.
+
+    Only Condition 4 consumes elaboration, and only through the ppo and dp edges
+    between events of the loop: it subtracts them from [po_iter], which relates
+    nothing else. Dependencies flow forward along program order, so an event
+    po-after the whole loop cannot contribute one — and po-after the loop is
+    where the duplication lives, each loop's continuation being copied into the
+    enter and exit arms of the loops that precede it.
+
+    Elaborating this instead of the whole structure is what makes the larger
+    programs approachable. Anything wrongly dropped costs precision, not
+    soundness: fewer ppo and dp edges leave more pairs of [po_iter] unordered,
+    and Condition 4 reports exactly those.
+
+    @param structure The symbolic event structure.
+    @param loop_id The loop being checked.
+    @return The structure restricted to the loop and what precedes it. *)
+let restrict_to_loop (structure : symbolic_event_structure) loop_id =
+  let events_in_loop = get_events_in_loop structure loop_id in
+  let keep =
+    USet.filter
+      (fun event ->
+        USet.mem events_in_loop event
+        || USet.exists
+             (fun in_loop -> USet.mem structure.po (event, in_loop))
+             events_in_loop
+      )
+      structure.e
+  in
+  let within = USet.filter (fun (a, b) -> USet.mem keep a && USet.mem keep b) in
+  let kept = USet.intersection keep in
+    Logs_safe.debug (fun m ->
+        m "Loop %d: elaborating %d of %d events (%d in the loop)." loop_id
+          (USet.size keep) (USet.size structure.e) (USet.size events_in_loop)
+    );
+    {
+      structure with
+      e = keep;
+      po = within structure.po;
+      po_iter = within structure.po_iter;
+      conflict = within structure.conflict;
+      rmw =
+        USet.filter
+          (fun (read, _, write) -> USet.mem keep read && USet.mem keep write)
+          structure.rmw;
+      write_events = kept structure.write_events;
+      read_events = kept structure.read_events;
+      rlx_write_events = kept structure.rlx_write_events;
+      rlx_read_events = kept structure.rlx_read_events;
+      fence_events = kept structure.fence_events;
+      branch_events = kept structure.branch_events;
+      malloc_events = kept structure.malloc_events;
+      free_events = kept structure.free_events;
+      terminal_events = kept structure.terminal_events;
+    }
 
 (** {1 Bisect Loops} *)
 
@@ -171,37 +315,79 @@ module Bisection = struct
         (fun _key (has_left, has_right) ok -> ok && not (has_left && has_right))
         group_sides true
 
-  (** Generate all compatible bisections of the events in a loop. *)
+  (** Check that no atomic read-modify-write is cut in half by the bisection.
+
+      A bisection places an episode boundary inside the loop body, so the
+      boundary has to fall between steps of the program. An RMW is one step: its
+      read and its write cannot land in different episodes. Without this a
+      rotation can carry the write of a CAS or a fetch-and-add into the next
+      episode — not a boundary the source admits, and not one Condition 1 can be
+      read against, since no rotation of the body expresses it.
+
+      @param structure The symbolic event structure
+      @param left The proposed left partition
+      @param right The proposed right partition
+      @return [true] if no RMW has its read in [left] and its write in [right]
+  *)
+  let rmw_unsplit (structure : symbolic_event_structure) left right =
+    USet.values structure.rmw
+    |> List.for_all (fun (read_event, _, write_event) ->
+        not (USet.mem left read_event && USet.mem right write_event)
+    )
+
+  (** Generate all compatible bisections of the events in a loop.
+
+      A bisection splits the loop's events so that every event of [left] is
+      program-order before every event of [right]. That completeness is a severe
+      constraint, and two facts follow from it.
+
+      No two distinct splits of the same size can both be valid: if [x] were
+      left in one and right in the other, and [y] the other way round, [x] and
+      [y] would each have to be po-before the other. And a valid [left] of size
+      [k] is exactly the events with fewer than [k] of the loop's events
+      po-before them — an event of [left] has all its predecessors in [left], an
+      event of [right] has all of [left] before it.
+
+      So the candidates are the [|E|+1] prefixes of the events ranked by how
+      many of the loop's events precede them, not the [2^|E|] subsets. That
+      matters: the larger loop of hp-1 carries 48 events, because the loop body
+      is duplicated across the branches of the loops around it, and
+      materialising its power set is what made the analysis intractable. Nearly
+      all of those subsets fail the first filter anyway — copies of a loop body
+      under different branches conflict, so nothing can be split across them. *)
   let all_bisections structure loop_id =
     let events_in_loop = get_events_in_loop structure loop_id in
     let event_list = USet.to_list events_in_loop in
-    let rec power_set lst =
-      match lst with
-      | [] -> [ [] ]
-      | x :: xs ->
-          let ps = power_set xs in
-            ps @ List.map (fun subset -> x :: subset) ps
-    in
-    let subsets = power_set event_list in
-      List.map
-        (fun left ->
-          let left = USet.of_list left in
-            (left, USet.set_minus events_in_loop left)
+    let preceding event =
+      List.length
+        (List.filter
+           (fun other -> USet.mem structure.po (other, event))
+           event_list
         )
-        subsets
+    in
+    let ranked = List.map (fun event -> (preceding event, event)) event_list in
+      List.init
+        (List.length event_list + 1)
+        (fun size ->
+          ( size,
+            ranked
+            |> List.filter (fun (before, _) -> before < size)
+            |> List.map snd
+            |> USet.of_list
+          )
+        )
+      |> List.filter (fun (size, left) -> USet.size left = size)
+      |> List.map (fun (_, left) -> (left, USet.set_minus events_in_loop left))
       |> List.filter (fun (left, right) ->
           USet.subset (URelation.cross left right) structure.po
           && nested_loops_unsplit structure loop_id left right
+          && rmw_unsplit structure left right
           && USet.size right > 0
-      )
-      |> List.sort (fun (l1, r1) (l2, r2) ->
-          let size1 = USet.size l1 in
-          let size2 = USet.size l2 in
-            compare size1 size2
       )
 end
 
-(** {1 Condition 1: Register Access Restriction (Syntactic)} *)
+(** {1 Condition 1: Register Condition — Register Access Restriction
+    (Syntactic)} *)
 
 module RegisterCondition = struct
   (** Check if a register is written before it's read within a loop body.
@@ -324,22 +510,105 @@ module RegisterCondition = struct
       traverse_nodes loop_body written_before_read must_not_write;
       { satisfied = !satisfied; violations = !violations }
 
+  (** Every source span occurring in a node or in the nodes nested inside it.
+
+      @param node The IR node.
+      @return The spans of the node and of everything nested in it. *)
+  let rec spans_of_node (node : ir_node) : source_span list =
+    let nested =
+      match node.stmt with
+      | While { body; _ } | Do { body; _ } -> List.concat_map spans_of_node body
+      | If { then_body; else_body; _ } ->
+          List.concat_map spans_of_node then_body
+          @ (else_body
+            |> Option.value ~default:[]
+            |> List.concat_map spans_of_node
+            )
+      | Labeled { stmt; _ } -> spans_of_node stmt
+      | Threads { threads } ->
+          List.concat_map (List.concat_map spans_of_node) threads
+      | _ -> []
+    in
+      ( match node.annotations.source_span with
+        | Some span -> [ span ]
+        | None -> []
+        )
+      @ nested
+
+  (** The loop body in the order a bisection rotates it into.
+
+      A bisection puts the episode boundary inside the loop body: the events in
+      [left] are the tail of the previous episode, so the iteration the
+      bisection describes runs the statements after the boundary first and those
+      before it after. Condition 1 is a property of statement order, so it has
+      to be read against that order — checking it against source order while
+      Conditions 2, 3 and 4 see the bisected [po] lets a rotation buy Condition
+      2 without ever paying for it here.
+
+      The boundary is located by source span: a statement lies before it if it
+      owns an event of [left] belonging to this loop. A statement whose events
+      straddle the boundary — only a read-modify-write can, its read on one side
+      and its write on the other — is taken to lie before it, so such a
+      bisection still rotates nothing here.
+
+      @param source_spans The event-to-span table.
+      @param events_in_loop The events of the loop being bisected.
+      @param left The left partition of the bisection.
+      @param body The loop body in source order.
+      @return The body rotated to the bisection's iteration order. *)
+  let rotate_body ~source_spans ~events_in_loop ~left (body : ir_node list) =
+    let owns_left node =
+      let spans = spans_of_node node in
+        Hashtbl.fold
+          (fun event span found ->
+            found
+            || List.mem span spans
+               && USet.mem events_in_loop event
+               && USet.mem left event
+          )
+          source_spans false
+    in
+    let _, boundary =
+      List.fold_left
+        (fun (index, boundary) node ->
+          (index + 1, if owns_left node then index + 1 else boundary)
+        )
+        (0, 0) body
+    in
+    let rec split n before after =
+      match after with
+      | rest when n = 0 -> (List.rev before, rest)
+      | [] -> (List.rev before, [])
+      | node :: rest -> split (n - 1) (node :: before) rest
+    in
+    let before, after = split boundary [] body in
+      after @ before
+
   (** Check Condition 1: Registers only accessed if written to ⊑-before.
 
       @param program The complete program as a list of IR nodes
       @param cache The episodicity cache (unused in this check)
       @param loop_id The identifier of the loop to check
       @return A condition result indicating satisfaction and any violations *)
-  let check cache (loop_id : int) : condition_result Lwt.t =
+  let check ?bisection cache (loop_id : int) : condition_result Lwt.t =
     let violations = ref [] in
     let satisfied = ref true in
-    let { program; _ } = cache in
+    let { program; structure; source_spans; _ } = cache in
     let loop_nodes = find_loop_nodes program loop_id in
+    let rotate body =
+      match bisection with
+      | None -> body
+      | Some left ->
+          let events_in_loop =
+            SymbolicEventStructure.events_in_loop structure loop_id
+          in
+            rotate_body ~source_spans ~events_in_loop ~left body
+    in
       List.iter
         (fun (node : ir_node) ->
           match node.stmt with
           | While { body; _ } | Do { body; _ } ->
-              let result = check_register_accesses_in_loop body in
+              let result = check_register_accesses_in_loop (rotate body) in
                 satisfied := !satisfied && result.satisfied;
                 violations := result.violations @ !violations
           | _ -> ()
@@ -348,9 +617,61 @@ module RegisterCondition = struct
       Lwt.return { satisfied = !satisfied; violations = !violations }
 end
 
-(** {1 Condition 2: Memory Read Sources (Semantic)} *)
+(** {1 Condition 2: Write Condition — Memory Read Sources (Semantic)} *)
 
 module WriteCondition = struct
+  (** {2 Which way the aliasing question is asked}
+
+      This condition reports a read that could take its value from a write of a
+      previous iteration, which turns on whether the two are at the same
+      location. Locations here are expressions over symbols, so "the same
+      location" is a solver question, and there are two of them to ask.
+
+      Possible equality — [Solver.expoteq], is [wloc = rloc] satisfiable —
+      reports a pair whenever the program does not rule the aliasing out.
+      Necessary equality — [Solver.exeq], is [wloc <> rloc] unsatisfiable —
+      reports only where the aliasing is forced.
+
+      The two are not interchangeable. The episodicity conditions are
+      {e sufficient}: a loop that passes them is episodic, and the checker is
+      read as a certificate. A pair not reported is a violation not found, so
+      possible equality is the direction that keeps the certificate honest, and
+      necessary equality is the direction that can call a loop episodic when it
+      is not. That the loop {e might} carry a value across the boundary is
+      already enough to disqualify it.
+
+      Possible equality on its own is close to useless here, though. A location
+      loaded out of memory is a free symbol, equal to anything as far as the
+      solver is concerned, so every write in the loop is reported against every
+      read through a pointer — on the CAS increment loop, a write to a freshly
+      allocated node against a read of an entirely different cell.
+
+      So the question stays the sound one and the imprecision is attacked
+      directly, by {!may_read_from}: a symbol only holds an address because some
+      write put it there, so ask which writes could have. That recovers the
+      precision without giving up the direction. It costs a fixpoint over the
+      structure rather than a single solver call, and it gives up nothing when
+      it cannot resolve a symbol — it returns the plain aliasing answer.
+
+      Two facts about allocations make it work, both asked of this query rather
+      than recorded on the structure: distinct allocations are distinct
+      addresses, and an allocation is not the 0 a program stores to mean "no
+      allocation yet". Asserting the second over the whole verification is not
+      harmless — it empties [cas_aba] and [rcu-inc-reclaim] of executions — so
+      it is confined to the aliasing question, where it is what lets a write of
+      a literal 0 be told apart from a write of a node.
+
+      Both directions are pinned by tests in [test_episodicity.ml]: one loop
+      whose aliasing is real but not forced, which necessary equality misses,
+      and the CAS increment loop, which plain possible equality over-reports.
+      Each fails under the other choice.
+
+      There is a residual limit worth knowing. The condition asks about
+      locations, not about read-from edges: it reports a write at a location a
+      read could read, not a write that could actually justify that read under
+      coherence. {!may_read_from} narrows the gap for addresses that arrive
+      through memory; it does not close it. *)
+
   (** Get the origin event for a symbol.
 
       @param structure The symbolic event structure
@@ -360,12 +681,88 @@ module WriteCondition = struct
       : int option =
     Hashtbl.find_opt structure.origin symbol
 
+  (** Whether a write's location can be the location a read reads from.
+
+      [Solver.expoteq] asks only whether the two expressions {e can} be equal,
+      and a location loaded out of memory is a free symbol that can be equal to
+      anything — so on a program that reaches memory through pointers it says
+      yes to almost every pair, and every write in the loop looks like a source
+      for every read. Testing necessary equality instead would answer far fewer
+      pairs, but in the unsound direction: a read that {e might} take its value
+      from a previous iteration would stop being reported.
+
+      So keep the possible-equality answer and sharpen it where the imprecision
+      comes from. When the read's location is a symbol introduced by an earlier
+      read, that symbol only holds an address because some write put the address
+      there. Ask for such a write: one that can occur alongside this read, at
+      the location the symbol was read from, carrying a value that can be the
+      write's location.
+
+      Every step falls back to the plain aliasing answer — an unresolvable
+      symbol, a missing location, a write whose value is unknown — so ignorance
+      never turns a possible alias into an impossible one.
+
+      @param structure The symbolic event structure.
+      @param sources The writes that can still be a source for a loop read.
+      @param state Constraints the query is asked under.
+      @param read_event The read whose location is [rloc].
+      @param wloc The write's location.
+      @param rloc The read's location.
+      @return [true] if the write's location can be the read's. *)
+  let may_read_from (structure : symbolic_event_structure) ~sources ~state
+      read_event wloc rloc =
+    (* A write can only be part of the execution that holds the read if the two
+       do not conflict. *)
+    let reachable write_event =
+      not (USet.mem structure.conflict (write_event, read_event))
+    in
+    let rec symbol_can_be visited symbol =
+      (* Revisiting a symbol adds no value it could not already take: this is
+         the least fixpoint of "what can reach here", and a read-modify-write
+         that stores back what it read is exactly such a cycle. *)
+      (not (List.mem symbol visited))
+      &&
+      match Hashtbl.find_opt structure.origin symbol with
+      | Some origin when USet.mem structure.read_events origin -> (
+          match Events.get_loc structure origin with
+          | Some origin_loc ->
+              USet.exists
+                (fun write_event ->
+                  reachable write_event
+                  &&
+                  match
+                    ( Events.get_loc structure write_event,
+                      Events.get_val structure write_event
+                    )
+                  with
+                  | Some write_loc, Some write_val ->
+                      Solver.expoteq ~state write_loc origin_loc
+                      && value_can_be (symbol :: visited) write_val
+                  | _ -> true
+                )
+                sources
+          | None -> true
+        )
+      | _ -> true
+    and value_can_be visited value =
+      match value with
+      | ESymbol symbol when Hashtbl.mem structure.origin symbol ->
+          symbol_can_be visited symbol
+      | _ -> Solver.expoteq ~state value wloc
+    in
+      if Expr.equal wloc rloc then true
+      else if not (Solver.expoteq ~state wloc rloc) then false
+      else value_can_be [] rloc
+
   (** Check Condition 2: Reads must read from valid sources.
 
       Valid sources are:
       - Same-iteration writes (⊑-before the read)
       - Cross-thread writes
       - Read-don't-modify RMWs derived from such writes
+
+      A write in the loop is a source for a read only if the two are at
+      necessarily the same location; see the aliasing query below.
 
       @param cache The episodicity cache containing event structures
       @param loop_id The identifier of the loop to check
@@ -383,16 +780,61 @@ module WriteCondition = struct
     let writes_in_loop =
       USet.intersection events_in_loop structure.write_events
     in
-      (* filter writes on whether they're in the last iteration of every loop *)
-      let* writes_in_loop =
+      Logs_safe.debug (fun m ->
+          let describe evt =
+            Printf.sprintf "%d%s at %s" evt
+              (if Events.is_rdmw structure evt then " (rdmw)" else "")
+              (Events.get_loc structure evt
+              |> Option.map show_expr
+              |> Option.value ~default:"?"
+              )
+          in
+          let list evts =
+            USet.to_list evts
+            |> List.sort compare
+            |> List.map describe
+            |> String.concat "; "
+          in
+            m "Loop %d: reads in loop [%s]; writes in loop [%s]." loop_id
+              (list reads_in_loop) (list writes_in_loop)
+      );
+      (* Drop the writes that can only happen in a last iteration: with no
+         iteration after them, no read of a later iteration can take its value
+         from them, so they are not candidate sources.
+
+         A write is kept when some enclosing loop can go round again after the
+         iteration holding the write — an existential, because one further
+         iteration of any enclosing loop is enough to produce a later read. The
+         guards are those recorded at the end of the loop body, so they and the
+         write's own restriction speak about the same iteration; a guard
+         belonging to another occurrence of the loop simply fails to be
+         satisfiable alongside that restriction.
+
+         A loop with no recorded guard is kept, not dropped. Absence is not
+         evidence of a last iteration: it says nothing about whether another
+         iteration follows, and for a sufficient condition the safe reading is
+         to leave the write in the candidate set. Dropping it instead empties
+         the candidate set and makes the whole condition pass vacuously, which
+         is how a missing guard turned into a soundness gap rather than a
+         missing diagnosis. *)
+      let* candidate_writes =
         USet.async_filter
           (fun write_event ->
-            (* exclude writes in the last iteration of the loop *)
-            let loop_conditions =
+            let enclosing_loops =
               Hashtbl.find_opt structure.loop_indices write_event
               |> Option.value ~default:[]
-              |> List.filter_map (fun lid ->
+            in
+            let unrecorded =
+              enclosing_loops = []
+              || List.exists
+                   (fun lid -> not (Hashtbl.mem structure.loop_conditions lid))
+                   enclosing_loops
+            in
+            let loop_conditions =
+              enclosing_loops
+              |> List.concat_map (fun lid ->
                   Hashtbl.find_opt structure.loop_conditions lid
+                  |> Option.value ~default:[]
               )
             in
             let write_valres =
@@ -404,10 +846,37 @@ module WriteCondition = struct
                 (fun expr -> Solver.is_sat (expr :: write_valres))
                 loop_conditions
             in
-              Lwt.return (List.length can_continue > 0)
+              if unrecorded then
+                Logs_safe.warn (fun m ->
+                    m
+                      "Loop %d: no continuation guard recorded for an \
+                       enclosing loop of write %d; keeping it as a candidate \
+                       source rather than treating it as a last-iteration \
+                       write."
+                      loop_id write_event
+                );
+              Lwt.return (unrecorded || List.length can_continue > 0)
           )
           writes_in_loop
       in
+      (* Everything a loop read could still take its value from: every write in
+         the structure, less the loop writes just ruled out as last-iteration
+         ones. [may_read_from] asks this set whether an address could have
+         reached a symbolic location. *)
+      let sources =
+        USet.set_minus structure.write_events
+          (USet.set_minus writes_in_loop candidate_writes)
+      in
+      (* Asked of the aliasing query alone, not recorded on the structure: a
+         program that stores 0 to mean "no allocation yet", as the CAS loops do,
+         needs an allocation's address told apart from that 0, but asserting it
+         over the whole verification changes which executions exist. *)
+      let allocations_are_not_null =
+        USet.to_list structure.malloc_events
+        |> List.filter_map (Events.get_loc structure)
+        |> List.map (fun loc -> Expr.binop loc "!=" (ENum Z.zero))
+      in
+      let writes_in_loop = candidate_writes in
       let violations = ref [] in
         let* () =
           USet.iter_async
@@ -427,10 +896,28 @@ module WriteCondition = struct
                         )
                       with
                       | Some wloc, Some rloc ->
+                          (* Two locations count as one when they are
+                             the read's location — see [may_read_from], which
+                             keeps the possible-equality answer and sharpens it
+                             by asking how an address could have reached a
+                             symbolic location.
+
+                             The query is asked under the structure's
+                             constraints as well as the read's path condition:
+                             those record what the program fixes about
+                             locations — globals are pairwise distinct, and so
+                             are distinct allocations. *)
                           let state =
-                            Hashtbl.find_opt structure.restrict read_event
+                            (Hashtbl.find_opt structure.restrict read_event
+                            |> Option.value ~default:[]
+                            )
+                            @ structure.constraints
+                            @ allocations_are_not_null
                           in
-                          let same_loc = Solver.expoteq ?state wloc rloc in
+                          let same_loc =
+                            may_read_from structure ~sources ~state read_event
+                              wloc rloc
+                          in
                             if same_loc then
                               (* Only invalid if not a read-don't-modify RMW *)
                               Lwt.return
@@ -440,6 +927,27 @@ module WriteCondition = struct
                   )
                   writes_in_loop
               in
+                Logs_safe.debug (fun m ->
+                    let sources =
+                      USet.to_list writes_in_loop_not_before_read
+                      |> List.sort compare
+                      |> List.map (fun w ->
+                          Printf.sprintf "%d at %s" w
+                            (Events.get_loc structure w
+                            |> Option.map show_expr
+                            |> Option.value ~default:"?"
+                            )
+                      )
+                      |> String.concat "; "
+                    in
+                      m "Loop %d: read %d at %s may take its value from [%s]."
+                        loop_id read_event
+                        (Events.get_loc structure read_event
+                        |> Option.map show_expr
+                        |> Option.value ~default:"?"
+                        )
+                        sources
+                );
                 (* Record violations for invalid write sources *)
                 USet.iter
                   (fun write_event ->
@@ -466,7 +974,8 @@ module WriteCondition = struct
           { satisfied = List.length !violations == 0; violations = !violations }
 end
 
-(** {1 Condition 3: Branch Condition Symbols (Syntactic + Origin Tracking)} *)
+(** {1 Condition 3: Branching Condition — Branch Condition Symbols (Syntactic
+    and Origin Tracking)} *)
 
 module BranchCondition = struct
   (** Check Condition 3: Branch conditions don't constrain pre-loop symbols.
@@ -475,12 +984,37 @@ module BranchCondition = struct
       symbols that were read before the loop started, maintaining iteration
       independence.
 
+      {2 Jointly versus per branch}
+
+      The definition asks this of the {e conjunction} of an iteration's
+      branching conditions — [restrict(φ_ℓ, ∅) = ⊤] — not of each condition
+      separately, because the property is not closed under conjunction: with a
+      pre-loop [α] in [r0] and an in-loop [β] in [r1], [if (r1 = r0)] and a
+      nested [if (r1 = 5)] each leave [α] free while together they force
+      [α = 5].
+
+      This checks each branching condition on its own, and is nonetheless at
+      least as strong, because the test is syntactic rather than semantic. A
+      symbol that the conjunction constrains must occur in some conjunct: if no
+      condition mentions a pre-loop symbol then the conjunction mentions none,
+      and a satisfiable formula entails nothing over symbols it does not
+      mention. So flagging every condition that mentions a pre-loop symbol
+      rejects everything the joint test rejects. The one assumption is that the
+      conjunction is satisfiable — an unsatisfiable one entails everything — and
+      the interpreter prunes unsatisfiable branches as it builds the structure.
+
+      It rejects strictly more, though. A condition may mention a pre-loop
+      symbol without constraining it: [if (r1 = r0)] on its own leaves [α] free,
+      since [β] is, so the definition accepts a loop that this rejects. Deciding
+      the definition exactly means asking [restrict(φ_ℓ, ∅) = ⊤] as a ∀∃ query
+      over the conjunction — for every valuation of the pre-loop symbols, the
+      conjunction is still satisfiable — rather than testing symbol occurrence.
+
       @param program The complete program as a list of IR nodes
       @param cache The episodicity cache containing event structures
       @param loop_id The identifier of the loop to check
       @return A condition result indicating satisfaction and any violations *)
   let check cache (loop_id : int) : condition_result Lwt.t =
-    Logs_safe.debug (fun m -> m "Checking Condition 3 for Loop %d..." loop_id);
     let { program; structure; source_spans; _ } = cache in
     let structure = structure in
       Logs_safe.debug (fun m ->
@@ -505,9 +1039,8 @@ module BranchCondition = struct
               event.cond |> Option.value ~default:(EBoolean true)
             in
             let symbols = Expr.get_symbols cond |> USet.of_list in
-            (* TODO this is too restrictive, we only need to check if the
-             branching condition constraints the symbol, not whether it contains
-             the symbol. *)
+            (* Occurrence, not constraint: sound but over-restrictive, and what
+               makes the per-condition test cover the joint one. See above. *)
             let symbols_read_before_loop =
               USet.filter
                 (fun sym ->
@@ -542,13 +1075,13 @@ module BranchCondition = struct
                 )
                 symbols_read_before_loop
           )
-          events_in_loop;
+          branch_events_in_loop;
 
         Lwt.return
           { satisfied = List.length !violations == 0; violations = !violations }
 end
 
-(** {1 Condition 4: Inter-iteration Ordering (Semantic)} *)
+(** {1 Condition 4: Events Condition — Inter-iteration Ordering (Semantic)} *)
 
 module EventsCondition = struct
   (** Check Condition 4: Events from prior iterations ordered before later
@@ -663,7 +1196,11 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
     {
       ctx with
       options = { ctx.options with loop_semantics = Symbolic };
-      structure = Some structure;
+      (* Elaborate the part the loop's dependencies can come from, not the
+         whole structure: the conditions below still see the full bisected
+         structure, but the justifications and forwarding context they consult
+         are only ever read for edges inside the loop. *)
+      structure = Some (restrict_to_loop structure loop_id);
       source_spans = None;
       fwd_es_ctx = None;
       justifications = None;
@@ -678,40 +1215,69 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
 
     (* TODO generate new justifications and forwarding context for the
              bisection structure, or adapt the existing ones *)
-    let* condition1 = RegisterCondition.check cache loop_id in
-      let* condition2 = WriteCondition.check cache loop_id in
-        let* condition3 = BranchCondition.check cache loop_id in
-          let* condition4 = EventsCondition.check cache loop_id in
-
-          let is_episodic =
-            condition1.satisfied
-            && condition2.satisfied
-            && condition3.satisfied
-            && condition4.satisfied
+    (* Log each condition by the name it carries in the paper, so a debug run
+       reads as the definition does rather than as four opaque numbers. *)
+    let check_condition kind check =
+      Logs_safe.debug (fun m ->
+          m "Loop %d: checking the %s — %s." loop_id (describe_condition kind)
+            (condition_statement kind)
+      );
+      let* (result : condition_result) = check cache loop_id in
+        Logs_safe.debug (fun m ->
+            let violations = List.length result.violations in
+            let verdict =
+              if result.satisfied then "is satisfied"
+              else
+                Printf.sprintf "is violated (%d %s)" violations
+                  (if violations = 1 then "violation" else "violations")
+            in
+              m "Loop %d: %s %s." loop_id (describe_condition kind) verdict
+        );
+        Lwt.return result
+    in
+      let* condition1 =
+        check_condition RegisterConditionKind
+          (RegisterCondition.check ~bisection:left)
+      in
+        let* condition2 =
+          check_condition WriteConditionKind WriteCondition.check
+        in
+          let* condition3 =
+            check_condition BranchingConditionKind BranchCondition.check
           in
+            let* condition4 =
+              check_condition EventsConditionKind EventsCondition.check
+            in
 
-          (* Record the chosen bisection (the loop boundary) so the result can
+            let is_episodic =
+              condition1.satisfied
+              && condition2.satisfied
+              && condition3.satisfied
+              && condition4.satisfied
+            in
+
+            (* Record the chosen bisection (the loop boundary) so the result can
              be related back to the program text. Events are sorted by label for
              a stable order, and annotated with their source span when known. *)
-          let to_bisection_events evts =
-            USet.to_list evts
-            |> List.sort compare
-            |> List.map (fun label ->
-                { label; span = Hashtbl.find_opt cache.source_spans label }
-            )
-          in
+            let to_bisection_events evts =
+              USet.to_list evts
+              |> List.sort compare
+              |> List.map (fun label ->
+                  { label; span = Hashtbl.find_opt cache.source_spans label }
+              )
+            in
 
-          Lwt.return
-            {
-              loop_id;
-              condition1;
-              condition2;
-              condition3;
-              condition4;
-              is_episodic;
-              bisection_left = to_bisection_events left;
-              bisection_right = to_bisection_events right;
-            }
+            Lwt.return
+              {
+                loop_id;
+                condition1;
+                condition2;
+                condition3;
+                condition4;
+                is_episodic;
+                bisection_left = to_bisection_events left;
+                bisection_right = to_bisection_events right;
+              }
 
 (** Check if a specific loop is episodic by verifying all four conditions.
 
@@ -777,17 +1343,30 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
           }
         in
           let* symbolic_ctx =
-            Lwt.return symbolic_ctx
-            |> Interpret.step_interpret
-            |> Elaborations.step_generate_justifications
+            Lwt.return symbolic_ctx |> Interpret.step_interpret
           in
           let structure = Option.get symbolic_ctx.structure in
           let source_spans = Option.get symbolic_ctx.source_spans in
-          let fwd_es_ctx = Option.get symbolic_ctx.fwd_es_ctx in
-          let justifications = Option.get symbolic_ctx.justifications in
+          (* No elaboration here. Every condition that consumes justifications
+             or a forwarding context is reached through
+             {!check_loop_bisection_episodicity}, which elaborates the bisected
+             structure and replaces both fields before any of them runs — so
+             elaborating the whole structure up front was work no check ever
+             read. It is also the work that does not finish on the larger
+             programs: hazard pointers spends over half an hour there without
+             completing a single round.
 
+             These two are placeholders for the record, and are overwritten
+             per bisection. *)
+          let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
           let cache =
-            { program; structure; source_spans; fwd_es_ctx; justifications }
+            {
+              program;
+              structure;
+              source_spans;
+              fwd_es_ctx;
+              justifications = [];
+            }
           in
 
           let loop_episodicity_results = ref [] in
@@ -805,13 +1384,37 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                 in
                   match episodic_result with
                   | Some result ->
+                      Logs_safe.info (fun m ->
+                          let verdict =
+                            match violated_conditions result with
+                            | [] ->
+                                "is episodic: register, write, branching and \
+                                 events conditions all satisfied"
+                            | violated ->
+                                Printf.sprintf "is not episodic: %s violated"
+                                  (violated
+                                  |> List.map describe_condition
+                                  |> String.concat ", "
+                                  )
+                          in
+                            m "Loop %d %s." loop_id verdict
+                      );
                       Hashtbl.add is_episodic_table loop_id result.is_episodic;
                       loop_episodicity_results :=
                         result :: !loop_episodicity_results;
                       Lwt.return_unit
                   | None ->
+                      (* No compatible bisection of the loop's events exists —
+                         typically because the loop contributes no events to the
+                         symbolic event structure — so none of the four
+                         conditions can be evaluated. *)
                       Logs_safe.info (fun m ->
-                          m "Loop %d: Could not analyze" loop_id
+                          m
+                            "Loop %d: could not analyze — no compatible \
+                             bisection of the loop's events, so the register, \
+                             write, branching and events conditions were not \
+                             evaluated."
+                            loop_id
                       );
                       Hashtbl.add is_episodic_table loop_id false;
                       Lwt.return_unit

@@ -106,7 +106,7 @@ type symbolic_event_structure = {
   conflict : (int * int) uset;
   origin : (string, int) Hashtbl.t; (* Origin mapping for symbols *)
   loop_indices : (int, int list) Hashtbl.t; (* Loop indices per event *)
-  loop_conditions : (int, expr) Hashtbl.t;
+  loop_conditions : (int, expr list) Hashtbl.t;
       (* Loop conditions for loop
   contexts *)
   thread_index : (int, int) Hashtbl.t; (* Thread index per event *)
