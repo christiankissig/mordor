@@ -500,19 +500,19 @@ let test_loop_condition_is_taken_at_the_end_of_the_body () =
     interpret_symbolic
       "x := 0; y := 0; r1 := x; while (r1 = 0) { r2 := y; y := 1; r1 := 1 }"
   in
-    Alcotest.(check (list string))
-      "the guard is the one that follows the iteration"
-      [ show_expr (EBoolean false) ]
-      (Hashtbl.find_opt structure.loop_conditions 1
-      |> Option.value ~default:[]
-      |> List.map show_expr
-      )
+  let recorded =
+    Hashtbl.find_opt structure.loop_conditions 1 |> Option.value ~default:[]
+  in
+    Alcotest.(check int) "one guard is recorded" 1 (List.length recorded);
+    Alcotest.(check bool)
+      "the loop cannot continue after its iteration" false
+      (List.exists (fun guard -> Solver.is_sat [ guard ]) recorded)
 
 (* A loop node is interpreted once per enclosing branch, and each occurrence
    reaches the end of the body in its own environment. Recording by
    [Hashtbl.replace] kept only whichever was interpreted last. Here the two
-   branches leave [r2] at 0 and 1, so the two occurrences end with guards [true]
-   and [false], and both have to survive. *)
+   branches leave [r2] at 0 and 1, so one occurrence can iterate again and the
+   other cannot, and both have to survive. *)
 let test_loop_conditions_are_recorded_per_occurrence () =
   let structure =
     interpret_symbolic
@@ -520,15 +520,13 @@ let test_loop_conditions_are_recorded_per_occurrence () =
        while (r1 = 0) { r1 := r2 }"
   in
   let recorded =
-    Hashtbl.find_opt structure.loop_conditions 1
-    |> Option.value ~default:[]
-    |> List.map show_expr
-    |> List.sort compare
+    Hashtbl.find_opt structure.loop_conditions 1 |> Option.value ~default:[]
   in
-    Alcotest.(check (list string))
-      "both occurrences of the loop are recorded"
-      [ show_expr (EBoolean false); show_expr (EBoolean true) ]
-      recorded
+    Alcotest.(check int)
+      "both occurrences of the loop are recorded" 2 (List.length recorded);
+    Alcotest.(check int)
+      "only the occurrence that iterates again can continue" 1
+      (List.length (List.filter (fun guard -> Solver.is_sat [ guard ]) recorded))
 
 (** Test suite *)
 let suite =

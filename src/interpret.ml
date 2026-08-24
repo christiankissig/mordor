@@ -1284,12 +1284,24 @@ end = struct
          one another. *)
     let enter_structure events =
       let continue_after_body ~add_event env phi events =
-        record_loop_condition events loop_index
-          (Expr.evaluate ~env:(Hashtbl.find_opt env) condition
+        let guard =
+          Expr.evaluate ~env:(Hashtbl.find_opt env) condition
           |> Expr.apply_constraints
-          );
-        interpret_statements_symbolic_loop ~final_structure ~add_event rest env
-          phi events
+        in
+          (* Conjoined with the path condition reached at the end of the body,
+             so the guard says "the loop continues after this iteration, along
+             this path" rather than "along some path". A write reachable only on
+             another path through the body is then inconsistent with it, instead
+             of being kept alive by a sibling path's guard. *)
+          record_loop_condition events loop_index
+            (List.fold_left
+               (fun conjunction p -> Expr.binop conjunction "&&" p)
+               guard phi
+            |> Expr.evaluate
+            |> Expr.apply_constraints
+            );
+          interpret_statements_symbolic_loop ~final_structure ~add_event rest
+            env phi events
       in
         interpret_statements_symbolic_loop ~final_structure:continue_after_body
           ~add_event body env enter_phi events

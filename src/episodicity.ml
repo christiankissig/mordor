@@ -662,6 +662,27 @@ module WriteCondition = struct
                   )
                   writes_in_loop
               in
+                Logs_safe.debug (fun m ->
+                    let sources =
+                      USet.to_list writes_in_loop_not_before_read
+                      |> List.sort compare
+                      |> List.map (fun w ->
+                          Printf.sprintf "%d at %s" w
+                            (Events.get_loc structure w
+                            |> Option.map show_expr
+                            |> Option.value ~default:"?"
+                            )
+                      )
+                      |> String.concat "; "
+                    in
+                      m "Loop %d: read %d at %s may take its value from [%s]."
+                        loop_id read_event
+                        (Events.get_loc structure read_event
+                        |> Option.map show_expr
+                        |> Option.value ~default:"?"
+                        )
+                        sources
+                );
                 (* Record violations for invalid write sources *)
                 USet.iter
                   (fun write_event ->
