@@ -279,34 +279,54 @@ module Bisection = struct
         not (USet.mem left read_event && USet.mem right write_event)
     )
 
-  (** Generate all compatible bisections of the events in a loop. *)
+  (** Generate all compatible bisections of the events in a loop.
+
+      A bisection splits the loop's events so that every event of [left] is
+      program-order before every event of [right]. That completeness is a severe
+      constraint, and two facts follow from it.
+
+      No two distinct splits of the same size can both be valid: if [x] were
+      left in one and right in the other, and [y] the other way round, [x] and
+      [y] would each have to be po-before the other. And a valid [left] of size
+      [k] is exactly the events with fewer than [k] of the loop's events
+      po-before them — an event of [left] has all its predecessors in [left], an
+      event of [right] has all of [left] before it.
+
+      So the candidates are the [|E|+1] prefixes of the events ranked by how
+      many of the loop's events precede them, not the [2^|E|] subsets. That
+      matters: the larger loop of hp-1 carries 48 events, because the loop body
+      is duplicated across the branches of the loops around it, and
+      materialising its power set is what made the analysis intractable. Nearly
+      all of those subsets fail the first filter anyway — copies of a loop body
+      under different branches conflict, so nothing can be split across them. *)
   let all_bisections structure loop_id =
     let events_in_loop = get_events_in_loop structure loop_id in
     let event_list = USet.to_list events_in_loop in
-    let rec power_set lst =
-      match lst with
-      | [] -> [ [] ]
-      | x :: xs ->
-          let ps = power_set xs in
-            ps @ List.map (fun subset -> x :: subset) ps
-    in
-    let subsets = power_set event_list in
-      List.map
-        (fun left ->
-          let left = USet.of_list left in
-            (left, USet.set_minus events_in_loop left)
+    let preceding event =
+      List.length
+        (List.filter
+           (fun other -> USet.mem structure.po (other, event))
+           event_list
         )
-        subsets
+    in
+    let ranked = List.map (fun event -> (preceding event, event)) event_list in
+      List.init
+        (List.length event_list + 1)
+        (fun size ->
+          ( size,
+            ranked
+            |> List.filter (fun (before, _) -> before < size)
+            |> List.map snd
+            |> USet.of_list
+          )
+        )
+      |> List.filter (fun (size, left) -> USet.size left = size)
+      |> List.map (fun (_, left) -> (left, USet.set_minus events_in_loop left))
       |> List.filter (fun (left, right) ->
           USet.subset (URelation.cross left right) structure.po
           && nested_loops_unsplit structure loop_id left right
           && rmw_unsplit structure left right
           && USet.size right > 0
-      )
-      |> List.sort (fun (l1, r1) (l2, r2) ->
-          let size1 = USet.size l1 in
-          let size2 = USet.size l2 in
-            compare size1 size2
       )
 end
 
