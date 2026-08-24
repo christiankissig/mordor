@@ -490,6 +490,46 @@ let test_loop_conditions_survive_threads () =
       (Hashtbl.length single.loop_conditions)
       (Hashtbl.length threaded.loop_conditions)
 
+(* The recorded guard is the one that decides whether the iteration just
+   modelled is followed by another, so it is evaluated at the end of the body.
+   Here the body assigns [r1 := 1], so no second iteration is possible and the
+   guard is [false]. Taking it before the body instead would record [(α = 0)]
+   over the pre-loop read, which says nothing about this iteration. *)
+let test_loop_condition_is_taken_at_the_end_of_the_body () =
+  let structure =
+    interpret_symbolic
+      "x := 0; y := 0; r1 := x; while (r1 = 0) { r2 := y; y := 1; r1 := 1 }"
+  in
+    Alcotest.(check (list string))
+      "the guard is the one that follows the iteration"
+      [ show_expr (EBoolean false) ]
+      (Hashtbl.find_opt structure.loop_conditions 1
+      |> Option.value ~default:[]
+      |> List.map show_expr
+      )
+
+(* A loop node is interpreted once per enclosing branch, and each occurrence
+   reaches the end of the body in its own environment. Recording by
+   [Hashtbl.replace] kept only whichever was interpreted last. Here the two
+   branches leave [r2] at 0 and 1, so the two occurrences end with guards [true]
+   and [false], and both have to survive. *)
+let test_loop_conditions_are_recorded_per_occurrence () =
+  let structure =
+    interpret_symbolic
+      "x := 0; r0 := x; if (r0 = 1) { r2 := 0 } else { r2 := 1 }; r1 := 0; \
+       while (r1 = 0) { r1 := r2 }"
+  in
+  let recorded =
+    Hashtbl.find_opt structure.loop_conditions 1
+    |> Option.value ~default:[]
+    |> List.map show_expr
+    |> List.sort compare
+  in
+    Alcotest.(check (list string))
+      "both occurrences of the loop are recorded"
+      [ show_expr (EBoolean false); show_expr (EBoolean true) ]
+      recorded
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
@@ -510,6 +550,10 @@ let suite =
         `Quick test_do_while_peeled_unravelling_is_outside_the_loop;
       Alcotest.test_case "Loop conditions survive thread composition" `Quick
         test_loop_conditions_survive_threads;
+      Alcotest.test_case "Loop condition is taken at the end of the body" `Quick
+        test_loop_condition_is_taken_at_the_end_of_the_body;
+      Alcotest.test_case "Loop conditions are recorded per occurrence" `Quick
+        test_loop_conditions_are_recorded_per_occurrence;
       Alcotest.test_case "Event ID generation" `Quick test_next_event_id;
       Alcotest.test_case "Greek symbol generation" `Quick test_next_greek;
       Alcotest.test_case "Greek symbol overflow" `Quick test_next_greek_overflow;

@@ -171,7 +171,11 @@ let pp_loop_indices fmt loop_indices =
 
 (** Pretty printer for loop_conditions hashtable *)
 let pp_loop_conditions fmt loop_conditions =
-  pp_hashtbl pp_int pp_expr fmt loop_conditions
+  pp_hashtbl pp_int
+    (fun fmt exprs ->
+      Format.fprintf fmt "[%s]" (String.concat "; " (List.map show_expr exprs))
+    )
+    fmt loop_conditions
 
 (** Pretty printer for thread_index hashtable *)
 let pp_thread_index fmt thread_index =
@@ -200,7 +204,8 @@ type symbolic_event_structure = {
       (* Origin mapping for symbols *)
   loop_indices : (int, int list) Hashtbl.t; [@printer pp_loop_indices]
       (* Mapping from events to their loop indices *)
-  loop_conditions : (int, expr) Hashtbl.t; [@printer pp_loop_conditions]
+  loop_conditions : (int, expr list) Hashtbl.t;
+      [@printer pp_loop_conditions]
       (* Mapping from events to their loop conditions *)
   thread_index : (int, int) Hashtbl.t; [@printer pp_thread_index]
   (* Mapping from events to their thread indices *)

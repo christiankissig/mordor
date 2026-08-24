@@ -77,9 +77,15 @@ type events_t = {
       (** Mapping from event labels to thread indices. *)
   loop_indices : (int, int list) Hashtbl.t;
       (** Mapping from event labels to loop indices. *)
-  loop_conditions : (int, expr) Hashtbl.t;
-      (** Mapping from loop indices to their loop conditions. Used with symbolic
-          loop semantics. *)
+  loop_conditions : (int, expr list) Hashtbl.t;
+      (** Mapping from a loop index to the continuation guards recorded for it,
+          one per interpreted occurrence of the loop. Used with symbolic loop
+          semantics.
+
+          A loop node is interpreted once per enclosing branch, per copy of an
+          unravelled do-loop body, and per thread, and each occurrence reaches
+          the end of the body in a different register environment, so each
+          contributes its own guard. *)
   source_spans : (int, source_span) Hashtbl.t;
       (** Mapping from event labels to source code spans. *)
   globals : string USet.t;  (** Set of global variable names. *)
@@ -130,6 +136,29 @@ let add_event (events : events_t) event env (annotation : ir_node_ann) =
       | None -> ()
       );
       event'
+
+(** Record a loop's continuation guard for one occurrence of the loop.
+
+    The guard is what decides whether the iteration just interpreted is followed
+    by another, so it must be evaluated at the {e end} of the loop body: it is a
+    predicate over the symbols that iteration produced. Guards accumulate rather
+    than overwrite, because the same loop is interpreted once per enclosing
+    branch, per copy of an unravelled do-loop body, and per thread.
+
+    @param events The global events structure.
+    @param loop_index The loop's identifier, if the node carries one.
+    @param condition The guard as evaluated at the end of the body.
+    @return Unit. *)
+let record_loop_condition (events : events_t) loop_index condition =
+  Option.iter
+    (fun lid ->
+      let recorded =
+        Hashtbl.find_opt events.loop_conditions lid |> Option.value ~default:[]
+      in
+        if not (List.exists (Expr.equal condition) recorded) then
+          Hashtbl.replace events.loop_conditions lid (recorded @ [ condition ])
+    )
+    loop_index
 
 (** Update the register environment with a new binding.
 
@@ -1240,38 +1269,49 @@ end = struct
     let loop_index =
       annotations.loop_ctx |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
     in
-      Option.iter
-        (fun lid ->
-          Hashtbl.replace events.loop_conditions lid cond_val |> ignore
-        )
-        loop_index;
+    let defacto =
+      List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
+    in
+    (* Continue branch: run the body once, then the continuation.
 
-      let defacto =
-        List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
-      in
-      (* Continue branch: run the body once, then the continuation. *)
-      let enter_structure events =
-        interpret_statements_symbolic_loop ~final_structure ~add_event
-          (body @ rest) env enter_phi events
-      in
-      (* Exit branch: skip the body, go straight to the continuation. *)
-      let exit_structure events =
+         The body is interpreted with the continuation as its own
+         [final_structure] so that the loop's guard can be recorded there, in
+         the environment reached at the end of the body. That is the guard that
+         decides whether the iteration just modelled is followed by another —
+         [cond_val] above is the guard of the iteration {e before} it, and says
+         nothing about this one. Every path through the body records its own,
+         which is also what keeps occurrences of the same loop from overwriting
+         one another. *)
+    let enter_structure events =
+      let continue_after_body ~add_event env phi events =
+        record_loop_condition events loop_index
+          (Expr.evaluate ~env:(Hashtbl.find_opt env) condition
+          |> Expr.apply_constraints
+          );
         interpret_statements_symbolic_loop ~final_structure ~add_event rest env
-          exit_phi events
+          phi events
       in
-        match cond_val with
-        | EBoolean true -> enter_structure events
-        | EBoolean false -> exit_structure events
-        | _ ->
-            let branch_event =
-              { (Event.create Branch 0 ()) with cond = Some cond_val }
-            in
-            let branch_event' = add_event events branch_event env annotations in
-            let enter_structure = enter_structure events in
-            let exit_structure = exit_structure events in
-              SymbolicEventStructure.dot branch_event'
-                (SymbolicEventStructure.plus enter_structure exit_structure)
-                phi defacto
+        interpret_statements_symbolic_loop ~final_structure:continue_after_body
+          ~add_event body env enter_phi events
+    in
+    (* Exit branch: skip the body, go straight to the continuation. *)
+    let exit_structure events =
+      interpret_statements_symbolic_loop ~final_structure ~add_event rest env
+        exit_phi events
+    in
+      match cond_val with
+      | EBoolean true -> enter_structure events
+      | EBoolean false -> exit_structure events
+      | _ ->
+          let branch_event =
+            { (Event.create Branch 0 ()) with cond = Some cond_val }
+          in
+          let branch_event' = add_event events branch_event env annotations in
+          let enter_structure = enter_structure events in
+          let exit_structure = exit_structure events in
+            SymbolicEventStructure.dot branch_event'
+              (SymbolicEventStructure.plus enter_structure exit_structure)
+              phi defacto
 
   let step_interpret lwt_ctx =
     let* ctx = lwt_ctx in

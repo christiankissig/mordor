@@ -607,7 +607,7 @@ module TestWriteCondition = struct
         Hashtbl.add loop_indices read.label [ 0 ];
         Hashtbl.add loop_indices mod_write.label [ 0 ];
         let loop_conditions = Hashtbl.create 0 in
-          Hashtbl.add loop_conditions 0 (EBoolean true);
+          Hashtbl.add loop_conditions 0 [ EBoolean true ];
           (* while true *)
           let structure =
             {
@@ -721,7 +721,7 @@ module TestWriteCondition = struct
         Hashtbl.add loop_indices write2.label [ 0 ];
         Hashtbl.add loop_indices read.label [ 0 ];
         let loop_conditions = Hashtbl.create 0 in
-          Hashtbl.add loop_conditions 0 (EBoolean true);
+          Hashtbl.add loop_conditions 0 [ EBoolean true ];
           (* while true *)
           let structure =
             {

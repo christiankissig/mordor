@@ -493,16 +493,26 @@ module WriteCondition = struct
             m "Loop %d: reads in loop [%s]; writes in loop [%s]." loop_id
               (list reads_in_loop) (list writes_in_loop)
       );
-      (* filter writes on whether they're in the last iteration of every loop *)
+      (* Drop the writes that can only happen in a last iteration: with no
+         iteration after them, no read of a later iteration can take its value
+         from them, so they are not candidate sources.
+
+         A write is kept when some enclosing loop can go round again after the
+         iteration holding the write — an existential, because one further
+         iteration of any enclosing loop is enough to produce a later read. The
+         guards are those recorded at the end of the loop body, so they and the
+         write's own restriction speak about the same iteration; a guard
+         belonging to another occurrence of the loop simply fails to be
+         satisfiable alongside that restriction. *)
       let* writes_in_loop =
         USet.async_filter
           (fun write_event ->
-            (* exclude writes in the last iteration of the loop *)
             let loop_conditions =
               Hashtbl.find_opt structure.loop_indices write_event
               |> Option.value ~default:[]
-              |> List.filter_map (fun lid ->
+              |> List.concat_map (fun lid ->
                   Hashtbl.find_opt structure.loop_conditions lid
+                  |> Option.value ~default:[]
               )
             in
             let write_valres =
