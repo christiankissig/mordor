@@ -440,8 +440,8 @@ let build_event_labels (ctx : mordor_ctx)
     (restricted to the execution's events, identity omitted) rendered over
     event-labels. Edges touching an unmapped event are dropped.
 
-    [rf] is not an edge source: a future is a per-thread order, and reads-from is
-    the model's only inter-thread dependency. Cross-thread ordering — a
+    [rf] is not an edge source: a future is a per-thread order, and reads-from
+    is the model's only inter-thread dependency. Cross-thread ordering — a
     release/acquire handshake among it — is the memory semantics' business, not
     the future set's. *)
 let futures_json (ctx : mordor_ctx) (evlabels : (int, string) Hashtbl.t) :
