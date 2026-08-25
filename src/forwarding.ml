@@ -853,7 +853,10 @@ module ForwardingContext = struct
                   let loc1 = Events.get_loc es_ctx.structure e1 in
                   let loc2 = Events.get_loc es_ctx.structure e2 in
                     match (loc1, loc2) with
-                    | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                    | Some l1, Some l2 ->
+                        Solver.expoteq
+                          ~state:(p @ es_ctx.structure.constraints)
+                          l1 l2
                     | _ -> false
               )
           in
