@@ -1137,10 +1137,6 @@ module Freeze = struct
     let ppo_loc =
       USet.union ppo_loc_base fwd_es_ctx.ppo.ppo_init
       |> USet.intersection e_squared
-      |> (fun rel ->
-      USet.set_minus rel
-        (URelation.cross structure.read_events structure.read_events)
-      )
       |> URelation.transitive_closure
     in
 

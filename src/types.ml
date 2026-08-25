@@ -204,8 +204,7 @@ type symbolic_event_structure = {
       (* Origin mapping for symbols *)
   loop_indices : (int, int list) Hashtbl.t; [@printer pp_loop_indices]
       (* Mapping from events to their loop indices *)
-  loop_conditions : (int, expr list) Hashtbl.t;
-      [@printer pp_loop_conditions]
+  loop_conditions : (int, expr list) Hashtbl.t; [@printer pp_loop_conditions]
       (* Mapping from events to their loop conditions *)
   thread_index : (int, int) Hashtbl.t; [@printer pp_thread_index]
   (* Mapping from events to their thread indices *)

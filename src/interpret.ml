@@ -704,7 +704,17 @@ let make_generic_terminal_structure ~add_event env phi events =
           List.map (fun other -> Expr.binop loc "!=" other) rest
           @ distinct_pairs rest
     in
-      distinct_pairs locations
+      (* An allocation is also disjoint from every object that already exists:
+         C guarantees a fresh region does not overlap them, and the papers'
+         LB+alias+data turns on exactly that — the allocation of p is what lets
+         *p and x be told apart, and so lets the two accesses be reordered. *)
+      List.concat_map
+        (fun loc ->
+          USet.values events.globals
+          |> List.map (fun g -> Expr.binop loc "!=" (EVar g))
+        )
+        locations
+      @ distinct_pairs locations
   in
   let constraints = global_constraints @ allocation_constraints in
   let cont =
