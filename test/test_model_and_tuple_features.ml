@@ -292,10 +292,14 @@ end
 (** {1 Context Model Options Tests} *)
 
 module TestContextModelOptions = struct
+  (* The coherence model applied when a litmus test names none. It has to be a
+     model that checks something: [undefined] verifies only RMW atomicity, so a
+     test written without a model was getting no coherence and no thin-air
+     check at all. *)
   (** Test default options individually with specific functions *)
   let test_default_options_coherent () =
     let opts = default_options in
-      check string "default coherent is undefined" "undefined" opts.coherent
+      check string "default coherent is smrd" "smrd" opts.coherent
 
   let test_default_options_model_name () =
     let opts = default_options in
