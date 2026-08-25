@@ -928,9 +928,24 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
       in
 
       let rec choose_one i vals =
-        if i < 0 then
+        if i < 0 then (
           let co = URelation.transitive_closure (USet.of_list vals) in
-            check_coherence cache co
+          let accepted = check_coherence cache co in
+            (* The order that admitted the execution is otherwise thrown away
+               with the search, and it is what an extended coherence cycle has
+               to be read against. *)
+            if accepted then
+              Logs_safe.debug (fun m ->
+                  m "Coherence: execution %d admitted under co = {%s}"
+                    execution.id
+                    (USet.values co
+                    |> List.sort compare
+                    |> List.map (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                    |> String.concat "; "
+                    )
+              );
+            accepted
+        )
         else
           let rec try_perms = function
             | [] -> false
