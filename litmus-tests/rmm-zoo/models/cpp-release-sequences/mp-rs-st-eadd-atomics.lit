@@ -1,0 +1,37 @@
+// mp-rs-st-eadd-atomics -- a same-thread relaxed store, then a third-thread RMW.
+//
+// rmm-zoo: litmus/cpp_memory_model/rs/ -- the release-sequence family, vendored
+//   from gonzalobg/cpp_memory_model and checked in the zoo against the
+//   per-version C++ cat models (cpp11.cat / cpp17.cat / cpp2w.cat, herd7 7.58).
+// Source: ISO/IEC 14882:2011, :2017, :2020 (the [atomics.order] release-sequence
+//   definition); Boehm, Giroux & Vafeiadis, P0668R5 "Revising the C++ Memory
+//   Model" (2018); Boehm, P0982R1 "Weaken Release Sequences" (2018).
+//
+// Reference verdicts (herd7 7.58, from the zoo's rs/README.md):
+//   C++11 FORBIDS  |  C++17 ALLOWS  |  C++20 FORBIDS
+//
+// The only test in the family that ONLY C++17 allows, and it is fully atomic.
+// C++11 keeps P0's relaxed store of 3 in the release sequence; C++20 breaks the
+// sequence at that store but then P2's fetch-add cannot rejoin it either, and
+// the reader's a = 2 case disappears; C++17 sits between the two and admits the
+// unsynchronised read.
+//
+// Upstream ran two conditions over this one program: the C++11 file asks about
+// (a = 2 or a = 4), the C++17 file about a = 2 alone (which is Never in all
+// three versions). The a = 2 disjunct is the one asserted here.
+x := 0;
+y := 0;
+{
+  y.store(1, rlx);
+  x.store(1, rel);
+  x.store(3, rlx)
+} ||| {
+  r1 := x.load(acq);
+  if (r1 > 1) {
+    r2 := y.load(rlx)
+  } else {skip}
+} ||| {
+  rt := FADD(rlx, rlx, x, 1)
+}
+%%
+allow ((r1 = 2 || r1 = 4) && r2 = 0) [C17]

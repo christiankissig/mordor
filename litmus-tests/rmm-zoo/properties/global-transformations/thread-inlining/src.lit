@@ -1,0 +1,28 @@
+// Thread inlining -- SOURCE program (two separate threads).
+//
+// rmm-zoo property: ti (Global transformations / Thread inlining).
+// Source: Moiseenko, Podkopaev & Koznov, "A Survey of Programming Language
+//         Memory Models" (2021), Tables 1-2 -- the Global transformations group;
+//         Kang et al., "A Promising Semantics for Relaxed-Memory Concurrency"
+//         (POPL 2017), which is the model the zoo records as ti = false.
+//
+// Thread inlining sequentially composes the bodies of two threads into one. It
+// is sound when the composed program admits no behaviour the parallel one did
+// not. The zoo records ti = false for Promising, Weakestmo and Java, and true
+// for SC, C11 and RC11; MRD and sMRD have no cell, which is why MoRDor had no
+// test for it.
+//
+// Here P0 and P1 write the two locations and P2 observes them; opt.lit inlines
+// P1 into P0.
+x := 0;
+y := 0;
+{
+  x := 1
+} ||| {
+  y := 1
+} ||| {
+  r1 := y;
+  r2 := x
+}
+%%
+allow (r1 = 1 && r2 = 0) [C11]

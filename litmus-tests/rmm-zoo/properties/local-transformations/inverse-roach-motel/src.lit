@@ -1,0 +1,29 @@
+// Inverse roach motel -- SOURCE program (access inside the critical section).
+//
+// rmm-zoo property: irm (Other local transformations / Inverse roach motel).
+// Source: Poetzl & Kroening, "Formalizing and Checking Thread Refinement for
+//         Data-Race-Free Execution Models" (arXiv:1510.07171, 2015), section 4.
+//         The zoo notes this column is NOT from the Moiseenko et al. survey:
+//         see models.json propertyProvenance["irm"].
+//
+// Roach motel reordering moves a shared access INTO a critical section (always
+// sound where it holds). The inverse moves one OUT, weakening the synchronisation
+// the access enjoys. Poetzl & Kroening prove this sound for the SC-for-DRF
+// execution model; the zoo's irm column is 'yes' for exactly the SC-preserving /
+// SC-for-DRF models and blank elsewhere -- including for MRD and sMRD, which is
+// why MoRDor had no test for it.
+//
+// Here the read of x is inside the critical section; in opt.lit it has been
+// hoisted above the lock.
+x := 0;
+y := 0;
+{
+  lock;
+  r1 := x;
+  y := 1;
+  unlock
+} ||| {
+  lock;
+  x := 1;
+  unlock
+}

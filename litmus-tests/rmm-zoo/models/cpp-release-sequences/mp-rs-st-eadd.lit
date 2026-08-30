@@ -1,0 +1,35 @@
+// mp-rs-st-eadd (racy) -- an external RMW cannot repair a broken release sequence.
+//
+// rmm-zoo: litmus/cpp_memory_model/rs/ -- the release-sequence family, vendored
+//   from gonzalobg/cpp_memory_model and checked in the zoo against the
+//   per-version C++ cat models (cpp11.cat / cpp17.cat / cpp2w.cat, herd7 7.58).
+// Source: ISO/IEC 14882:2011, :2017, :2020 (the [atomics.order] release-sequence
+//   definition); Boehm, Giroux & Vafeiadis, P0668R5 "Revising the C++ Memory
+//   Model" (2018); Boehm, P0982R1 "Weaken Release Sequences" (2018).
+//
+// Reference verdicts (herd7 7.58, from the zoo's rs/README.md):
+//   C++11 ALLOWS (racy)  |  C++17 ALLOWS (racy)  |  C++20 ALLOWS (racy)
+//
+// P0's relaxed store of 3 is read by P2's fetch-add, which writes 4; the reader
+// takes 3 directly. In every version the non-atomic data read is a race on the
+// executions that reach a = 3 without synchronisation, so the outcome is
+// allowed throughout -- the upstream file's name records that an external add
+// does not rescue the sequence.
+//
+// Upstream condition: exists([x]=3 /\ 1:a=3 /\ 1:b=0).
+x := 0;
+y := 0;
+{
+  y.store(1, na);
+  x.store(1, rel);
+  x.store(3, rlx)
+} ||| {
+  r1 := x.load(acq);
+  if (r1 = 3) {
+    r2 := y.load(na)
+  } else {skip}
+} ||| {
+  rt := FADD(rlx, rlx, x, 1)
+}
+%%
+allow (r1 = 3 && r2 = 0) [C11]

@@ -1,0 +1,38 @@
+// mp-rs-add-est -- a same-thread RMW, then a third-thread plain store: the P0982 case.
+//
+// rmm-zoo: litmus/cpp_memory_model/rs/ -- the release-sequence family, vendored
+//   from gonzalobg/cpp_memory_model and checked in the zoo against the
+//   per-version C++ cat models (cpp11.cat / cpp17.cat / cpp2w.cat, herd7 7.58).
+// Source: ISO/IEC 14882:2011, :2017, :2020 (the [atomics.order] release-sequence
+//   definition); Boehm, Giroux & Vafeiadis, P0668R5 "Revising the C++ Memory
+//   Model" (2018); Boehm, P0982R1 "Weaken Release Sequences" (2018).
+//
+// Reference verdicts (herd7 7.58, from the zoo's rs/README.md):
+//   C++11 ALLOWS  |  C++17 ALLOWS  |  C++20 FORBIDS
+//
+// This is one of the two tests that pin the P0982 change, and it is fully
+// atomic, so no data race muddies the verdict. Under C++11/17 the release
+// sequence survives P2's relaxed store and P0's fetch-add reading 2 writes 3
+// still carrying the release, so the reader synchronises. C++20's weakened
+// release sequence is broken by the intervening plain store and the stale read
+// becomes observable -- forbidden there for the opposite reason: with no
+// synchronisation the execution that reaches a = 3 no longer exists.
+//
+// Upstream condition: exists([x]=3 /\ 1:a=3 /\ 1:b=0); the coherence conjunct
+// is recorded here rather than asserted (see ../../README.md).
+x := 0;
+y := 0;
+{
+  y.store(1, rlx);
+  x.store(1, rel);
+  rt := FADD(rlx, rlx, x, 1)
+} ||| {
+  r1 := x.load(acq);
+  if (r1 = 3) {
+    r2 := y.load(rlx)
+  } else {skip}
+} ||| {
+  x.store(2, rlx)
+}
+%%
+allow (r1 = 3 && r2 = 0) [C11]

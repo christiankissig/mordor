@@ -1,0 +1,31 @@
+// RS+cpp20 -- the C++20 side of the C++20 <> C11 release-sequence edge.
+//
+// rmm-zoo: litmus/incomparable/C++20-vs-C11/RS+cpp20.litmus (and its companion
+//   RS.litmus, which is mp-rs.lit in this directory).
+// Source: Boehm, P0982R1 "Weaken Release Sequences" (2018); ISO/IEC 14882:2020.
+//
+// Same shape as mp-rs.lit, but the heading store is RELAXED rather than
+// release. Under C++20's weakened release sequences the later same-thread
+// relaxed store of 2 is not part of the sequence headed by the release store,
+// so an acquire that reads 2 receives no release at all -- exactly as if the
+// heading store had never been a release. Making it relaxed is how the zoo
+// models that absence of synchronisation in a checker that has no C++20 model
+// of its own, and it makes the stale read observable.
+//
+// The pair mp-rs.lit (C++11 forbids) and this file (C++20 allows) brackets the
+// P0982 change; together with IRIW+scfences, which runs the other way, it is
+// the evidence for the two-sided C++20 <> C11 edge in the zoo.
+//
+// Reference verdict: ALLOWED (herd7 -model c11_orig.cat => Sometimes).
+data := 0;
+f := 0;
+{
+  data.store(1, na);
+  f.store(1, rlx);
+  f.store(2, rlx)
+} ||| {
+  r0 := f.load(acq);
+  r1 := data.load(na)
+}
+%%
+allow (r0 = 2 && r1 = 0) [C20]

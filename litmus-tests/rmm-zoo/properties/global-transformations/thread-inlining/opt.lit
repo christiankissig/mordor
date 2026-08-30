@@ -1,0 +1,20 @@
+// Thread inlining -- TRANSFORMED program (P1 inlined into P0).
+//
+// rmm-zoo property: ti (Global transformations / Thread inlining).
+// Source: as src.lit in this directory.
+//
+// P1's body now runs after P0's in a single thread. The observing thread's
+// message-passing outcome must not become newly available: if the inlined
+// program admits r1 = 1 && r2 = 0 while the parallel one does not, inlining has
+// introduced a behaviour and is unsound for this model.
+x := 0;
+y := 0;
+{
+  x := 1;
+  y := 1
+} ||| {
+  r1 := y;
+  r2 := x
+}
+%%
+allow (r1 = 1 && r2 = 0) [C11]

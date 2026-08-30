@@ -1,0 +1,31 @@
+// mp-rs-add-st -- an RMW then a same-thread relaxed store: the C++17 narrowing.
+//
+// rmm-zoo: litmus/cpp_memory_model/rs/ -- the release-sequence family, vendored
+//   from gonzalobg/cpp_memory_model and checked in the zoo against the
+//   per-version C++ cat models (cpp11.cat / cpp17.cat / cpp2w.cat, herd7 7.58).
+// Source: ISO/IEC 14882:2011, :2017, :2020 (the [atomics.order] release-sequence
+//   definition); Boehm, Giroux & Vafeiadis, P0668R5 "Revising the C++ Memory
+//   Model" (2018); Boehm, P0982R1 "Weaken Release Sequences" (2018).
+//
+// Reference verdicts (herd7 7.58, from the zoo's rs/README.md):
+//   C++11 FORBIDS  |  C++17 ALLOWS (racy)  |  C++20 ALLOWS (racy)
+//
+// The release sequence reaches the fetch-add in every version; the question is
+// whether P0's own later relaxed store of 3 is still in it. C++11 says yes, so
+// an acquire reading 3 synchronises. C++17 narrowed the definition and it does
+// not, so the non-atomic data read races.
+x := 0;
+y := 0;
+{
+  y.store(1, na);
+  x.store(1, rel);
+  rt := FADD(rlx, rlx, x, 1);
+  x.store(3, rlx)
+} ||| {
+  r1 := x.load(acq);
+  if (r1 > 1) {
+    r2 := y.load(na)
+  } else {skip}
+}
+%%
+allow (r1 = 3 && r2 = 0) [C17]

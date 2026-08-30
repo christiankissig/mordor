@@ -1,0 +1,28 @@
+// Oscillating -- the RA-vs-WRA separating behaviour.
+//
+// rmm-zoo edge: RA strictly weaker than WRA (i.e. WRA is the weaker model).
+// Source: Lahav & Boker, "What's Decidable about Causally Consistent Shared
+//         Memory?" (TOPLAS 2022), Ex. 3.7 (Oscillating); Lahav, Giannarakis &
+//         Vafeiadis, POPL 2016.
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/RA-vs-WRA/Oscillating.
+//
+// One reader sees x go 1, then 2, then 1 again, while two writers each write
+// once. Under RA and SRA the reader's three reads are hb-ordered and mo totally
+// orders the two writes, so returning to 1 after seeing 2 violates
+// read-coherence. WRA has no mo, and the two writes are hb|loc-unrelated, so
+// nothing forbids the oscillation.
+//
+// Reference verdicts: WRA ALLOWS. RA, SRA, C11, RC11 and SC FORBID
+//                     (this is a coherence violation for any model with mo).
+x := 0;
+{
+  x.store(1, rel)
+} ||| {
+  r0 := x.load(acq);
+  r1 := x.load(acq);
+  r2 := x.load(acq)
+} ||| {
+  x.store(2, rel)
+}
+%%
+forbid (r0 = 1 && r1 = 2 && r2 = 1) [RA]

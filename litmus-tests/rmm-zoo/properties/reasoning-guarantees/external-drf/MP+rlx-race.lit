@@ -1,0 +1,22 @@
+// External DRF -- the racy counterpart.
+//
+// rmm-zoo property: edrf (Reasoning guarantees / External DRF).
+// Source: as MP+rel+acq-drf.lit in this directory.
+//
+// The same program with all-relaxed accesses. Under SC the two threads race on
+// the data location, so external DRF says nothing and the model is free to admit
+// the non-SC outcome -- and does. The pair is what makes the guarantee testable:
+// a model that forbade this too would be stronger than external DRF requires,
+// and one that allowed the release-acquire version would not have the guarantee
+// at all.
+data := 0;
+f := 0;
+{
+  data :rlx= 1;
+  f :rlx= 1
+} ||| {
+  r1 :rlx= f;
+  r2 :rlx= data
+}
+%%
+allow (r1 = 1 && r2 = 0) [C11]

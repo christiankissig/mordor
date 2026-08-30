@@ -1,0 +1,25 @@
+// WRC (Write-to-Read Causality), all-relaxed.
+//
+// rmm-zoo property: mca (Atomicity / Multicopy atomic).
+// Source: Sarkar et al., "Understanding POWER Multiprocessors" (PLDI 2011);
+//         Alglave et al., "Herding Cats" (TOPLAS 2014).
+//
+// P0 writes x. P1 reads it and writes y. P2 reads y and then reads x stale.
+// The baseline WRC shape, with no ordering inside P1 or P2; the dependency
+// variant WRC+data+addr.lit is the one that isolates multicopy atomicity.
+//
+// Reference verdicts: SC, x86-TSO, ARMv8 (MCA) FORBID.
+//                     POWER, ARMv7, C11, RC11 ALLOW.
+x := 0;
+y := 0;
+{
+  x := 1
+} ||| {
+  r1 := x;
+  y := 1
+} ||| {
+  r2 := y;
+  r3 := x
+}
+%%
+allow (r1 = 1 && r2 = 1 && r3 = 0) [Power]

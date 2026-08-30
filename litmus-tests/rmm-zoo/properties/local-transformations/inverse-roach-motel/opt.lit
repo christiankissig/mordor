@@ -1,0 +1,21 @@
+// Inverse roach motel -- TRANSFORMED program (access hoisted out of the
+// critical section).
+//
+// rmm-zoo property: irm (Other local transformations / Inverse roach motel).
+// Source: as src.lit in this directory.
+//
+// The read of x has been moved above the lock. If the transformation is sound
+// the two programs have the same behaviours; if the model gives the critical
+// section ordering power the source relied on, opt.lit admits strictly more.
+x := 0;
+y := 0;
+{
+  r1 := x;
+  lock;
+  y := 1;
+  unlock
+} ||| {
+  lock;
+  x := 1;
+  unlock
+}

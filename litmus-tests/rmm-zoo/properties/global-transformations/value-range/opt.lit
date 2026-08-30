@@ -1,0 +1,15 @@
+// Value-range reasoning -- TRANSFORMED program.
+//
+// rmm-zoo property: vr (Global transformations / Value range).
+// Source: as src.lit in this directory.
+//
+// The branch has been decided by the value-range fact and collapsed; the read of
+// x is now irrelevant and could be eliminated in turn (see the ile column, and
+// litmus-tests/sevcik_thesis/Irrelevant Read Elimination/).
+[x >= 0]
+[x <= 1]
+%%
+x := 0;
+y := 0;
+r1 := x;
+y := 1

@@ -1,0 +1,13 @@
+// Elimination (Store/Store) -- TRANSFORMED program.
+//
+// rmm-zoo property: elim_ss (Elimination / sound).
+// Source: as src.lit in this directory.
+//
+// The overwritten write x := 1 has been eliminated.
+x := 0;
+y := 0;
+x := 2;
+r1 := x;
+if (r1 = 2) {
+  y := 1
+} else {skip}
