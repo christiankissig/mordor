@@ -1,0 +1,13 @@
+// Elimination (Load/Store) -- TRANSFORMED program.
+//
+// rmm-zoo property: elim_ls (Elimination / sound).
+// Source: as src.lit in this directory.
+//
+// The redundant write-after-read x := r1 has been eliminated.
+x := 0;
+y := 0;
+r1 := x;
+r2 := x;
+if (r1 = r2) {
+  y := 1
+} else {skip}

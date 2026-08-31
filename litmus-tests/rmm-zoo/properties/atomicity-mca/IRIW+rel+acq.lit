@@ -1,0 +1,30 @@
+// IRIW in the release-acquire fragment.
+//
+// rmm-zoo property: mca (Atomicity); also the SC-vs-SRA ordering witness.
+// Source: Lahav, Giannarakis & Vafeiadis, "Taming Release-Acquire Consistency"
+//         (POPL 2016); Lahav & Boker, "What's Decidable about Causally
+//         Consistent Shared Memory?" (TOPLAS 2022), Ex. 3.5.
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/SC-vs-SRA/IRIW.
+//
+// Release stores and acquire loads do not make writes multicopy atomic: the
+// execution closes no (hb u mo) cycle, so even SRA -- the strongest model of the
+// release-acquire family -- allows the two readers to disagree about the order
+// of the two writes. Only a genuinely multicopy-atomic model (SC, TSO, ARMv8)
+// forbids it.
+//
+// Reference verdicts: WRA, RA, SRA, C11, RC11 ALLOW. SC FORBIDS.
+x := 0;
+y := 0;
+{
+  x.store(1, rel)
+} ||| {
+  y.store(1, rel)
+} ||| {
+  r1 := x.load(acq);
+  r2 := y.load(acq)
+} ||| {
+  r3 := y.load(acq);
+  r4 := x.load(acq)
+}
+%%
+allow (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [SRA]

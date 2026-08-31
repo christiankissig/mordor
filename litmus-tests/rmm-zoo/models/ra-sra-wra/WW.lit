@@ -1,0 +1,26 @@
+// WW -- the RA-vs-WRA separating behaviour, third shape.
+//
+// rmm-zoo edge: RA strictly weaker than WRA.
+// Source: Lahav & Boker, TOPLAS 2022, Ex. 3.7 (WW).
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/RA-vs-WRA/WW.
+//
+// Two threads each write x and then read it, and each reads the OTHER thread's
+// value. Both writes are hb|loc-unrelated, so WRA's weak-read-coherence -- which
+// uses hb|loc rather than mo to decide which of two writes to a location is the
+// later -- has nothing to fire on, and WRA allows the outcome. RA and SRA order
+// the two writes by mo, so whichever is mo-earlier is read by a thread aware of
+// the mo-later one, violating read-coherence. This is WRA failing
+// SC-per-location on a single-location program.
+//
+// Reference verdicts: WRA ALLOWS. RA, SRA, C11, RC11 and SC FORBID
+//                     (it violates coherence, the zoo's coh column).
+x := 0;
+{
+  x.store(1, rel);
+  r0 := x.load(acq)
+} ||| {
+  x.store(2, rel);
+  r1 := x.load(acq)
+}
+%%
+forbid (r0 = 2 && r1 = 1) [RA]

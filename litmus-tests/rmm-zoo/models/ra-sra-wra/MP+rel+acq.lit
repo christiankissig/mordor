@@ -1,0 +1,25 @@
+// Message passing in the release-acquire fragment -- negative control.
+//
+// rmm-zoo edge: the control that makes the RA / SRA / WRA splits meaningful.
+// Source: Lahav, Giannarakis & Vafeiadis, "Taming Release-Acquire Consistency"
+//         (POPL 2016).
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/SRA-vs-RA/MP+relacq.
+//
+// The acquire read of the flag synchronises with the release write, so W(x,1)
+// happens-before the read of x; reading x = 0 then reads an mo-earlier write
+// while aware of an mo-later one, which read-coherence forbids in WRA, RA and
+// SRA alike. A model that allowed this would not be constraining anything and
+// the 2+2W split above would be meaningless.
+//
+// Reference verdicts: WRA, RA, SRA, C11, RC11 and SC all FORBID.
+x := 0;
+f := 0;
+{
+  x.store(1, rel);
+  f.store(1, rel)
+} ||| {
+  r0 := f.load(acq);
+  r1 := x.load(acq)
+}
+%%
+forbid (r0 = 1 && r1 = 0) [RA]

@@ -1,0 +1,36 @@
+// RWC (Read-to-Write Causality), with the reader ordered by an address
+// dependency and the writer-then-reader ordered by an SC fence.
+//
+// rmm-zoo property: mca (Atomicity / Multicopy atomic).
+// Source: Sarkar et al., "Understanding POWER Multiprocessors" (PLDI 2011) --
+//         the RWC family; Alglave et al., "Herding Cats" (TOPLAS 2014).
+//
+// P0 writes x. P1 reads x=1 and then (address dep) reads y=0. P2 writes y and
+// then (fence) reads x=0. Every intra-thread pair that CAN be ordered is
+// ordered, yet P1 and P2 disagree about whether W(x,1) has happened.
+//
+// On POWER the outcome survives because an address dependency is not
+// cumulative -- it orders P1's own accesses but says nothing about when P0's
+// write propagates elsewhere. That non-cumulativity is precisely the storage
+// subsystem's freedom to deliver one write to different threads at different
+// times, i.e. the absence of multicopy atomicity. Restoring it needs a full
+// sync in P1, not a dependency.
+//
+// Reference verdicts: SC and x86-TSO FORBID. POWER and ARMv7 (non-MCA) ALLOW.
+//   The ARMv8 verdict is the MCA claim of Pulte et al. (POPL 2018) and is cited
+//   rather than re-run here; see this directory's entry in ../../README.md.
+x := 0;
+y := 0;
+{
+  x := 1
+} ||| {
+  r1 := x;
+  rp := &y;
+  r2 := *(rp + (r1 - r1))
+} ||| {
+  y := 1;
+  fence(sc);
+  r3 := x
+}
+%%
+allow (r1 = 1 && r2 = 0 && r3 = 0) [Power]

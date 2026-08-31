@@ -1,0 +1,17 @@
+// Reordering (Store->Load) -- TRANSFORMED program.
+//
+// rmm-zoo property: reorder_sl (Reordering / sound).
+// Source: as src.lit in this directory.
+//
+// The else-branch of src.lit has been reordered so that both branches agree.
+x := 0;
+y := 0;
+z := 0;
+r0 := z;
+if (r0 = 1) {
+  x := 1;
+  r1 := y
+} else {
+  x := 1;
+  r1 := y
+}

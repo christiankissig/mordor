@@ -1,0 +1,14 @@
+// Register promotion -- TRANSFORMED program.
+//
+// rmm-zoo property: rp (Global transformations / Register promotion).
+// Source: as src.lit in this directory.
+//
+// Both reads of x have been promoted to the values just stored, and only the
+// last write to x survives as a memory access.
+x := 0;
+y := 0;
+x := 1;
+r1 := 1;
+x := 2;
+r2 := 2;
+y := r1 + r2

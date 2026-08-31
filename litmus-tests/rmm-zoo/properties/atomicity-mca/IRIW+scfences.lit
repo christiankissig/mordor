@@ -1,0 +1,31 @@
+// IRIW with an SC fence between each reader's two relaxed loads.
+//
+// rmm-zoo property: mca (Atomicity), and the C++20-vs-C11 ordering edge.
+// Source: Batty, Donaldson & Wickerson, "Overhauling SC Atomics in C11 and
+//         OpenCL" (POPL 2016); Lahav et al., "Repairing Sequential Consistency
+//         in C/C++11" (PLDI 2017); Boehm, Giroux & Vafeiadis, P0668R5 (2018).
+//         Vendored shape: rmm-zoo litmus/incomparable/C++20-vs-C11/IRIW+scfences.
+//
+// C++11/14/17 seq_cst FENCES are too weak to forbid this -- a known defect.
+// C++20 adopted the repaired seq_cst of P0668 (the RC11 fragment), which forbids
+// it. A multicopy-atomic model forbids it outright.
+//
+// Reference verdicts: C11 / C++17 ALLOW (the defect).
+//                     RC11 / C++20 / SC FORBID.
+x := 0;
+y := 0;
+{
+  x :rlx= 1
+} ||| {
+  y :rlx= 1
+} ||| {
+  r1 :rlx= x;
+  fence(sc);
+  r2 :rlx= y
+} ||| {
+  r3 :rlx= y;
+  fence(sc);
+  r4 :rlx= x
+}
+%%
+allow (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [C11]

@@ -1,0 +1,23 @@
+// Elimination (Store/Store) -- SOURCE program.
+//
+// rmm-zoo property: elim_ss (Elimination / sound).
+// Source: Moiseenko, Podkopaev & Koznov, "A Survey of Programming Language
+//         Memory Models" (2021), Tables 1-2 -- the Elimination group;
+//         Sevcik & Aspinall, "On Validity of Program Transformations in the Java
+//         Memory Model" (ECOOP 2008); Sevcik's thesis, fig. 1.4.
+//
+// Overwritten-write elimination: the write of 1 to x is dead, being overwritten
+// by the write of 2 with no intervening access to x. opt.lit is the result of
+// dropping it. Sound in every model in the zoo that has an elim_ss cell.
+//
+// This completes the Elimination row for MoRDor: Store/Load and Load/Load are
+// already covered by litmus-tests/sevcik_thesis/Redundant Read Elimination
+// (f1.4)/ (RREW*, RRER*), and Load/Store by ../load-store/ here.
+x := 0;
+y := 0;
+x := 1;
+x := 2;
+r1 := x;
+if (r1 = 2) {
+  y := 1
+} else {skip}

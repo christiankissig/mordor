@@ -1,0 +1,33 @@
+// mp-rs-add -- a same-thread RMW continues the release sequence.
+//
+// rmm-zoo: litmus/cpp_memory_model/rs/ -- the release-sequence family, vendored
+//   from gonzalobg/cpp_memory_model and checked in the zoo against the
+//   per-version C++ cat models (cpp11.cat / cpp17.cat / cpp2w.cat, herd7 7.58).
+// Source: ISO/IEC 14882:2011, :2017, :2020 (the [atomics.order] release-sequence
+//   definition); Boehm, Giroux & Vafeiadis, P0668R5 "Revising the C++ Memory
+//   Model" (2018); Boehm, P0982R1 "Weaken Release Sequences" (2018).
+//
+// Shape: a release store publishes data, a later store to the same flag does or
+// does not continue the release sequence, and an acquiring reader does or does
+// not synchronise.
+//
+// Reference verdicts (herd7 7.58, from the zoo's rs/README.md):
+//   C++11 FORBIDS  |  C++17 FORBIDS  |  C++20 FORBIDS
+//
+// P0982 left RMWs in the release sequence; only later plain relaxed stores were
+// removed. So the fetch-add still carries the release across all three
+// versions, and the acquire that reads its result synchronises.
+x := 0;
+y := 0;
+{
+  y.store(1, na);
+  x.store(1, rel);
+  rt := FADD(rlx, rlx, x, 1)
+} ||| {
+  r1 := x.load(acq);
+  if (r1 = 2) {
+    r2 := y.load(na)
+  } else {skip}
+}
+%%
+forbid (r1 = 2 && r2 = 0) [C11]

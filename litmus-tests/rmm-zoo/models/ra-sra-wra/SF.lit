@@ -1,0 +1,24 @@
+// SF (store forwarding) -- the RA-vs-WRA separating behaviour, second shape.
+//
+// rmm-zoo edge: RA strictly weaker than WRA.
+// Source: Lahav & Boker, TOPLAS 2022, Ex. 3.7 (SF).
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/RA-vs-WRA/SF.
+//
+// A thread writes x = 1, reads x = 2 from the other thread, then reads x = 1
+// again -- its own earlier write, now stale. RA and SRA forbid it by
+// read-coherence. WRA allows it, which is why WRA validates the store-forwarding
+// optimisation that rewrites the second read to the constant 1; the paper notes
+// that same rewrite is UNSOUND for RA and SRA, since it would then yield this
+// outcome even under SC.
+//
+// Reference verdicts: WRA ALLOWS. RA, SRA, C11, RC11 and SC FORBID.
+x := 0;
+{
+  x.store(1, rel);
+  r0 := x.load(acq);
+  r1 := x.load(acq)
+} ||| {
+  x.store(2, rel)
+}
+%%
+forbid (r0 = 2 && r1 = 1) [RA]

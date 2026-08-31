@@ -1,0 +1,34 @@
+// ISA2 -- a three-thread cumulativity chain with dependencies throughout.
+//
+// rmm-zoo property: mca (Atomicity / Multicopy atomic).
+// Source: Sarkar et al., "Understanding POWER Multiprocessors" (PLDI 2011);
+//         Alglave et al., "Herding Cats" (TOPLAS 2014).
+//
+// P0 writes x then y. P1 reads y and (data dep) writes z. P2 reads z and
+// (address dep) reads x. Seeing y=1 and z=1 but x=0 requires the chain
+// W(x,1) -> W(y,1) -> R(y) -> W(z) -> R(z) -> R(x) to be broken at the point
+// where P0's write to x must have propagated: a non-multicopy-atomic behaviour
+// once every intra-thread edge in the chain is a preserved dependency.
+//
+// Note the leading po edge W(x,1) -> W(y,1) in P0 is NOT a dependency, so
+// POWER/ARM need an lwsync there; this file records the dependency-only version,
+// which those architectures allow for that reason alone. ISA2+Fsc+Fsc in
+// litmus-tests/test6/ is the fenced counterpart.
+//
+// Reference verdicts: POWER, ARMv7, ARMv8 ALLOW (unfenced P0). SC FORBIDS.
+x := 0;
+y := 0;
+z := 0;
+{
+  x := 1;
+  y := 1
+} ||| {
+  r1 := y;
+  z := r1
+} ||| {
+  r2 := z;
+  rq := &x;
+  r3 := *(rq + (r2 - r2))
+}
+%%
+allow (r1 = 1 && r2 = 1 && r3 = 0) [Power]

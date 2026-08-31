@@ -1,0 +1,41 @@
+// mp-rs-est -- a plain store by a THIRD thread breaks the release sequence.
+//
+// rmm-zoo: litmus/cpp_memory_model/rs/ -- the release-sequence family, vendored
+//   from gonzalobg/cpp_memory_model and checked in the zoo against the
+//   per-version C++ cat models (cpp11.cat / cpp17.cat / cpp2w.cat, herd7 7.58).
+// Source: ISO/IEC 14882:2011, :2017, :2020 (the [atomics.order] release-sequence
+//   definition); Boehm, Giroux & Vafeiadis, P0668R5 "Revising the C++ Memory
+//   Model" (2018); Boehm, P0982R1 "Weaken Release Sequences" (2018).
+//
+// Shape: a release store publishes data, a later store to the same flag does or
+// does not continue the release sequence, and an acquiring reader does or does
+// not synchronise.
+//
+// Reference verdicts (herd7 7.58, from the zoo's rs/README.md):
+//   C++11 ALLOWS (racy)  |  C++17 ALLOWS (racy)  |  C++20 ALLOWS (racy)
+//
+// A relaxed store from a different thread was never part of the release
+// sequence in any version, so reading 2 carries no release and the non-atomic
+// read of the data races. This is the counterpart of mp-rs-eadd.lit: same
+// third thread, a plain store instead of an RMW, opposite verdict.
+//
+// Upstream condition: exists([x]=2 /\ 1:a=2 /\ 1:b=0). The [x]=2 conjunct pins
+// the coherence order (P0's release of 1 before P2's relaxed 2). MoRDor admits
+// x = 2 and admits r1 = 2 && r2 = 0, but not their conjunction, so the
+// assertion below is the projection onto the reader's registers; the coherence
+// clause is recorded here rather than asserted. See ../../README.md.
+x := 0;
+y := 0;
+{
+  y.store(1, na);
+  x.store(1, rel)
+} ||| {
+  r1 := x.load(acq);
+  if (r1 = 2) {
+    r2 := y.load(na)
+  } else {skip}
+} ||| {
+  x.store(2, rlx)
+}
+%%
+allow (r1 = 2 && r2 = 0) [C11]

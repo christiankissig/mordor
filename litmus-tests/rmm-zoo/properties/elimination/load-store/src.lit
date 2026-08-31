@@ -1,0 +1,22 @@
+// Elimination (Load/Store) -- SOURCE program.
+//
+// rmm-zoo property: elim_ls (Elimination / sound).
+// Source: Moiseenko, Podkopaev & Koznov, "A Survey of Programming Language
+//         Memory Models" (2021), Tables 1-2 -- the Elimination group;
+//         Sevcik's thesis, fig. 1.4 (redundant write-after-read elimination).
+//
+// The store x := r1 writes back the value just read from x, so it is redundant
+// in isolation; opt.lit drops it. This is the one Elimination cell the zoo
+// mostly records as UNSOUND (elim_ls is false for 15 of the 23 models that have
+// the cell, RC11 and C11 among them) -- the write is observable to other threads
+// even though it changes nothing locally. The multi-threaded witness for that
+// unsoundness is litmus-tests/sevcik_thesis/Skip/Redundant Write after Read
+// Elimination.lit; this pair is the local transformation it refutes.
+x := 0;
+y := 0;
+r1 := x;
+x := r1;
+r2 := x;
+if (r1 = r2) {
+  y := 1
+} else {skip}

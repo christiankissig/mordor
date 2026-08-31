@@ -1,0 +1,25 @@
+// WRC where the chain is carried by release/acquire synchronisation.
+//
+// rmm-zoo property: mca (Atomicity) -- negative control.
+// Source: Lahav et al., "Taming Release-Acquire Consistency" (POPL 2016).
+//
+// Release-acquire synchronisation is transitive (hb is), so the acquire in P2
+// inherits P0's write through P1: the stale read of x is forbidden by every
+// model in the release-acquire family, multicopy atomic or not. This is the
+// negative control for WRC+data+addr.lit -- it shows that the MCA question is
+// about ordering by dependency, not about ordering as such.
+//
+// Reference verdicts: WRA, RA, SRA, C11, RC11, SC all FORBID.
+x := 0;
+y := 0;
+{
+  x.store(1, rel)
+} ||| {
+  r1 := x.load(acq);
+  y.store(1, rel)
+} ||| {
+  r2 := y.load(acq);
+  r3 := x.load(acq)
+}
+%%
+forbid (r1 = 1 && r2 = 1 && r3 = 0) [RA]

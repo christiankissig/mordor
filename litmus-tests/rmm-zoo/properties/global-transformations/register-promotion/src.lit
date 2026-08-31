@@ -1,0 +1,25 @@
+// Register promotion -- SOURCE program.
+//
+// rmm-zoo property: rp (Global transformations / Register promotion).
+// Source: Moiseenko, Podkopaev & Koznov, "A Survey of Programming Language
+//         Memory Models" (2021), Tables 1-2 -- the Global transformations group;
+//         Sevcik, "Safe Optimisations for Shared-Memory Concurrent Programs"
+//         (PLDI 2011).
+//
+// Register promotion caches a shared location in a register across a region with
+// no intervening synchronisation, so the loads inside the region read the
+// register rather than memory and only the final value is written back. It is a
+// GLOBAL transformation because its soundness depends on the whole region, not
+// on an adjacent pair of accesses -- and it is the reason the zoo has rp as a
+// column of its own. The zoo records rp = true for every model that has the cell
+// (12 of them), but has no cell for MRD or sMRD.
+//
+// Here x is read back twice after being written; opt.lit replaces both reads by
+// the promoted register value.
+x := 0;
+y := 0;
+x := 1;
+r1 := x;
+x := 2;
+r2 := x;
+y := r1 + r2

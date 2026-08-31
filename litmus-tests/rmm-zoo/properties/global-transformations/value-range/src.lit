@@ -1,0 +1,27 @@
+// Value-range reasoning -- SOURCE program.
+//
+// rmm-zoo property: vr (Global transformations / Value range).
+// Source: Moiseenko, Podkopaev & Koznov, "A Survey of Programming Language
+//         Memory Models" (2021), Tables 1-2 -- the Global transformations group.
+//         The zoo records vr = true for exactly three models: SC, Promising and
+//         sMRD (Richards et al., OOPSLA 2025), which is MoRDor's own model.
+//
+// Value-range reasoning lets an optimiser narrow the set of values a read can
+// return using facts the program guarantees, and then simplify branches that
+// those facts decide. The de-facto constraint below -- the bracketed [ ... ]
+// section, the same device litmus-tests/symmrd/alignment.lit uses -- states the
+// implementation guarantee that x never holds a value outside 0..1.
+//
+// Under that guarantee the test (r1 < 2) is always true, so both arms of the
+// branch write y := 1 and opt.lit collapses the branch entirely.
+[x >= 0]
+[x <= 1]
+%%
+x := 0;
+y := 0;
+r1 := x;
+if (r1 < 2) {
+  y := 1
+} else {
+  y := 2
+}

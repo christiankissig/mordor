@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 267
+Total tests: 319
 Generated: 2025-10-17T09:41:48.288Z
 
 ## Test Files
@@ -279,3 +279,65 @@ Generated: 2025-10-17T09:41:48.288Z
 - fowm2024/load intro - potential aliasing.lit
 - fowm2024/load intro - no aliasing.lit
 - basic.lit.lit
+
+
+## rmm-zoo property and model coverage
+
+> Added to close MoRDor's coverage gaps against the Relaxed Memory Model Zoo
+> (<https://rmm-zoo.kissig.org>). Structured by the zoo's property columns
+> (`properties/`) and by model family (`models/`). See
+> [`rmm-zoo/README.md`](rmm-zoo/README.md) for the coverage analysis and the
+> reference-verdict tables.
+
+- rmm-zoo/models/cpp-release-sequences/RS+cpp20.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add-eadd.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add-est-atomic.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add-est.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add-st.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-eadd.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-est.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-st-eadd-atomics.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-st-eadd.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-st-est-atomics.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-st-est.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-strel.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs.lit
+- rmm-zoo/models/ra-sra-wra/2+2W+rel+acq.lit
+- rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit
+- rmm-zoo/models/ra-sra-wra/Oscillating.lit
+- rmm-zoo/models/ra-sra-wra/SF.lit
+- rmm-zoo/models/ra-sra-wra/WW.lit
+- rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit
+- rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
+- rmm-zoo/properties/atomicity-mca/IRIW+rel+acq.lit
+- rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit
+- rmm-zoo/properties/atomicity-mca/IRIW+scfences.lit
+- rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit
+- rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit
+- rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit
+- rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit
+- rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit
+- rmm-zoo/properties/atomicity-mca/WRC+rlx.lit
+- rmm-zoo/properties/elimination/load-store/opt.lit
+- rmm-zoo/properties/elimination/load-store/src.lit
+- rmm-zoo/properties/elimination/store-store/opt.lit
+- rmm-zoo/properties/elimination/store-store/src.lit
+- rmm-zoo/properties/global-transformations/register-promotion/opt.lit
+- rmm-zoo/properties/global-transformations/register-promotion/src.lit
+- rmm-zoo/properties/global-transformations/thread-inlining/opt.lit
+- rmm-zoo/properties/global-transformations/thread-inlining/src.lit
+- rmm-zoo/properties/global-transformations/value-range/opt.lit
+- rmm-zoo/properties/global-transformations/value-range/src.lit
+- rmm-zoo/properties/local-transformations/inverse-roach-motel/opt.lit
+- rmm-zoo/properties/local-transformations/inverse-roach-motel/src.lit
+- rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rel+acq-drf.lit
+- rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rlx-race.lit
+- rmm-zoo/properties/reordering/load-load/opt.lit
+- rmm-zoo/properties/reordering/load-load/src.lit
+- rmm-zoo/properties/reordering/load-store/opt.lit
+- rmm-zoo/properties/reordering/load-store/src.lit
+- rmm-zoo/properties/reordering/store-load/opt.lit
+- rmm-zoo/properties/reordering/store-load/src.lit
+- rmm-zoo/properties/reordering/store-store/opt.lit
+- rmm-zoo/properties/reordering/store-store/src.lit

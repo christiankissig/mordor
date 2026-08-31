@@ -1,0 +1,34 @@
+// mp-rs-st-est-atomics -- two plain stores after the release: the second P0982 case.
+//
+// rmm-zoo: litmus/cpp_memory_model/rs/ -- the release-sequence family, vendored
+//   from gonzalobg/cpp_memory_model and checked in the zoo against the
+//   per-version C++ cat models (cpp11.cat / cpp17.cat / cpp2w.cat, herd7 7.58).
+// Source: ISO/IEC 14882:2011, :2017, :2020 (the [atomics.order] release-sequence
+//   definition); Boehm, Giroux & Vafeiadis, P0668R5 "Revising the C++ Memory
+//   Model" (2018); Boehm, P0982R1 "Weaken Release Sequences" (2018).
+//
+// Reference verdicts (herd7 7.58, from the zoo's rs/README.md):
+//   C++11 ALLOWS  |  C++17 ALLOWS  |  C++20 FORBIDS
+//
+// Fully atomic, so no race: this and mp-rs-add-est-atomic.lit are the two tests
+// whose verdict flips at C++20 alone. P0's own relaxed store of 3 continues the
+// release sequence under C++11 and C++17; P0982 removes it, so C++20 forbids
+// the outcome.
+//
+// Upstream condition: exists([x]=3 /\ 1:a=3 /\ 1:b=0).
+x := 0;
+y := 0;
+{
+  y.store(1, rlx);
+  x.store(1, rel);
+  x.store(3, rlx)
+} ||| {
+  r1 := x.load(acq);
+  if (r1 = 3) {
+    r2 := y.load(rlx)
+  } else {skip}
+} ||| {
+  x.store(2, rlx)
+}
+%%
+allow (r1 = 3 && r2 = 0) [C11]

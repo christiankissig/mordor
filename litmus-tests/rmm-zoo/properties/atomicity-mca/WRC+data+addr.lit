@@ -1,0 +1,29 @@
+// WRC with a data dependency in the middle thread and an address dependency in
+// the last -- the rmm-zoo ARMv8-vs-ARM ordering witness, at C level.
+//
+// rmm-zoo property: mca (Atomicity / Multicopy atomic).
+// Source: Pulte et al., "Simplifying ARM Concurrency: Multicopy-atomic Axiomatic
+//         and Operational Models for ARMv8" (POPL 2018); Sarkar et al., PLDI 2011.
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/ARMv8-vs-ARM/WRC+addrs.
+//
+// Both intra-thread reorderings are ruled out by dependencies, so seeing
+// P1:x=1, P2:y=1 and P2:x=0 means P0's write reached P1 before it reached P2:
+// the two threads did not see the writes in the same order. That is exactly a
+// failure of multicopy atomicity.
+//
+// Reference verdicts: ARMv7 / POWER (non-MCA) ALLOW.
+//                     ARMv8, RVWMO, x86-TSO, SC (MCA) FORBID.
+x := 0;
+y := 0;
+{
+  x := 1
+} ||| {
+  r1 := x;
+  y := r1
+} ||| {
+  r2 := y;
+  rq := &x;
+  r3 := *(rq + (r2 - r2))
+}
+%%
+allow (r1 = 1 && r2 = 1 && r3 = 0) [Power]

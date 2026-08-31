@@ -1,0 +1,31 @@
+// 2+2W in the release-acquire fragment -- the SRA-vs-RA separating behaviour.
+//
+// rmm-zoo edge: SRA strictly weaker than RA is refuted by this; it is the
+//               witness for the RA-vs-SRA ordering edge.
+// Source: Lahav, Giannarakis & Vafeiadis, "Taming Release-Acquire Consistency"
+//         (POPL 2016); Lahav & Boker, "What's Decidable about Causally
+//         Consistent Shared Memory?" (TOPLAS 2022), Ex. 3.6.
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/SRA-vs-RA/2+2W.
+//
+// Each thread writes both locations and then reads the OTHER thread's write to
+// the location it wrote second. Reading r0 = r1 = 1 forces mo to run against
+// program order on both locations, closing a cycle in (hb u mo):
+//   W(x,1) -po-> W(y,2) -mo-> W(y,1) -po-> W(x,2) -mo-> W(x,1).
+// SRA's strong-write-coherence forbids that cycle. RA's write-coherence only
+// forbids mo;hb, and neither mo step is followed by hb back to its source, so
+// RA ALLOWS it.
+//
+// Reference verdicts: RA and WRA ALLOW. SRA and SC FORBID.
+x := 0;
+y := 0;
+{
+  x.store(1, rel);
+  y.store(2, rel);
+  r0 := y.load(acq)
+} ||| {
+  y.store(1, rel);
+  x.store(2, rel);
+  r1 := x.load(acq)
+}
+%%
+allow (r0 = 1 && r1 = 1) [RA]

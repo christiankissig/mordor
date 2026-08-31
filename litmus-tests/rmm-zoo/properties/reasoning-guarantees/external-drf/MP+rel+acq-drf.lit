@@ -1,0 +1,28 @@
+// External DRF -- a race-free program must behave sequentially consistently.
+//
+// rmm-zoo property: edrf (Reasoning guarantees / External DRF).
+// Source: Batty et al., "The Problem of Programming Language Concurrency
+//         Semantics" (ESOP 2015), which names the guarantee and shows it in
+//         tension with permitting thin-air; Boehm & Adve, "Foundations of the
+//         C++ Concurrency Memory Model" (PLDI 2008); Moiseenko et al. (2021),
+//         Tables 1-2 -- the Reasoning guarantees group.
+//
+// External DRF: if a program has no data race under SC, the model gives it only
+// SC behaviours. This is the positive half. The flag is released and acquired,
+// so the accesses to the data location are ordered by happens-before and the
+// program is race free; the stale read must therefore be forbidden, as it is
+// under SC.
+//
+// The zoo records edrf = true for MRD, RC11, IMM and 24 others, false for C11,
+// Java's ordinary accesses and four more; sMRD has no cell.
+data := 0;
+f := 0;
+{
+  data.store(1, rel);
+  f.store(1, rel)
+} ||| {
+  r1 := f.load(acq);
+  r2 := data.load(acq)
+}
+%%
+forbid (r1 = 1 && r2 = 0) [RC11]

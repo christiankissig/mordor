@@ -1,0 +1,37 @@
+// IRIW with an address dependency between each reader's two loads.
+//
+// rmm-zoo property: mca (Atomicity / Multicopy atomic).
+// Source: Sarkar et al., "Understanding POWER Multiprocessors" (PLDI 2011);
+//         Pulte et al., "Simplifying ARM Concurrency" (POPL 2018);
+//         Alglave et al., "Herding Cats" (TOPLAS 2014).
+//
+// This is THE canonical multicopy-atomicity discriminator. The address
+// dependency (`rp + (r1 - r1)`, the C-level analogue of ARM's `EOR r2,r0,r0;
+// LDR r4,[r3,r2]`) removes load-load reordering as an explanation, so the
+// outcome can only arise if the write to x reaches reader 1 before it reaches
+// reader 2 -- i.e. only if writes are NOT multicopy atomic.
+//
+// Reference verdicts: POWER and ARMv7 (non-MCA) ALLOW.
+//                     ARMv8, RVWMO, x86-TSO and SC (MCA) FORBID.
+//
+// Note for semantic-dependency models (MRD / sMRD): the dependency here is
+// syntactic but semantically dead -- `r1 - r1` is 0 whatever r1 is -- so a model
+// that computes dependencies semantically drops it and behaves as for
+// IRIW+rlx.lit. That divergence is the point of keeping both files.
+x := 0;
+y := 0;
+{
+  x := 1
+} ||| {
+  y := 1
+} ||| {
+  r1 := x;
+  rp := &y;
+  r2 := *(rp + (r1 - r1))
+} ||| {
+  r3 := y;
+  rq := &x;
+  r4 := *(rq + (r3 - r3))
+}
+%%
+allow (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [Power]
