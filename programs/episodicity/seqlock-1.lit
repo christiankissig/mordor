@@ -32,7 +32,7 @@ do {
 
   // Retry if seq changed or was odd (write in progress)
   rodd  := rr1 & 1;
-  rdiff := rr1 | rr2;
+  rdiff := rr1 ^ rr2;
   rretry := rodd | rdiff;
 } while (rretry != 0);
 
