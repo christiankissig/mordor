@@ -32,6 +32,13 @@ These files are therefore kept here **as reference only**. They are *not* scanne
 by the integration suite (which scans `litmus-tests/`). To verify them under
 their intended semantics, use a tool that implements promising semantics.
 
+Two files were left behind in `litmus-tests/popl_grounding/` when the rest moved:
+`CYC.lit`, byte-identical to the copy already here and so simply deleted, and
+`Coh-CYC (Promising).lit`, moved here. Both name `[Promising]`, so the suite was
+checking them under whatever coherence model was in effect, which is the `smrd`
+default. `popl_grounding/` keeps `Coh-CYC (Soham).lit`, the same shape annotated
+`[Soham]` — a model name the registry does know.
+
 ## Runnable approximations
 
 Copies of these tests reannotated to `[IMM]` live in
@@ -68,3 +75,4 @@ record of the intended promising outcome.
 | `Upd-Stuck.lit`        | allow  `r1=1 ∧ r2=0` |
 | `Page 7 Column 1.lit`  | forbid `r1=1 ∧ r2=0 ∧ r3=1 ∧ r4=0` |
 | `Page 7 Column 1b.lit` | forbid `r2=3 ∧ r3=0` (release sequence) |
+| `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, annotated `[Promising=allow]` |
