@@ -20,8 +20,15 @@ already explains. `properties/atomicity-mca/` fills that in.
 
 ```
 properties/     one directory per zoo property column (models.json propertySchema)
-models/         witness families belonging to a model or model family
 ```
+
+The `models/` subtree that once sat beside it held witness families for models
+MoRDor does not implement — C11/C17/C20 and RA/SRA. Those files name a model the
+registry has no entry for, so the suite was checking them under the `smrd`
+fallback rather than under the model they were written for. They now live in
+`litmus-tests-cpp/` and `litmus-tests-ra/`, out of the scanned tree, each with a
+README recording the reference verdicts. Individual `properties/` files carrying
+those annotations moved with them.
 
 Every `.lit` file carries a header comment naming the zoo property or edge it
 belongs to, the primary literature it comes from, and the reference verdicts
@@ -80,7 +87,7 @@ which attributes it to Poetzl & Kroening (2015) §4.
 | Key | Column | MoRDor coverage |
 |---|---|---|
 | `rp` | Register promotion | **new** `properties/global-transformations/register-promotion/` |
-| `ti` | Thread inlining | **new** `properties/global-transformations/thread-inlining/` |
+| `ti` | Thread inlining | **new**, `[C11]`, moved to `litmus-tests-cpp/properties/global-transformations/thread-inlining/` |
 | `vr` | Value range | **new** `properties/global-transformations/value-range/` |
 
 All three were blank. `vr` matters most here: the zoo records `vr = true` for
@@ -91,8 +98,8 @@ own model is characterised by.
 
 | Key | Column | MoRDor coverage |
 |---|---|---|
-| `edrf` | External DRF | **new** `properties/reasoning-guarantees/external-drf/` |
-| `coh` | Coherence | `test6/{CoRR1,CoRW,CoWR,CoWW}.lit`; **new** `models/ra-sra-wra/{WW,Oscillating,SF}.lit` are single-location coherence violations |
+| `edrf` | External DRF | **new** `properties/reasoning-guarantees/external-drf/`; its racy witness `MP+rlx-race.lit` is `[C11]` and moved to `litmus-tests-cpp/` |
+| `coh` | Coherence | `test6/{CoRR1,CoRW,CoWR,CoWW}.lit`; **new** `litmus-tests-ra/models/ra-sra-wra/{WW,Oscillating,SF}.lit` are single-location coherence violations |
 | `no_ub` | No undefined behaviour | `symmrd/` (`LB+UB+data.lit` and the `refinement/` variants) |
 | `in_order` | In-order execution | the LB family: `ISO/3-LB.lit`, `esop_problem/lb.lit`, `popl_bubbly/LB.lit`, … |
 | `no_oota` | No out-of-thin-air | `avoidoota/` (31 tests), `on_thin_air_reads19/`, `own/OOTA7.lit` |
@@ -101,7 +108,7 @@ own model is characterised by.
 
 | Key | Column | MoRDor coverage |
 |---|---|---|
-| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (11 tests) |
+| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (7 tests here; 3 more carry `[C11]`/`[RA]`/`[SRA]` and moved to `litmus-tests-cpp/` and `litmus-tests-ra/`; `MP+fence+addr.lit` is parked in `litmus-tests-review/`) |
 
 This was the gap. The zoo has an `mca` cell for 63 models (31 true, 32 false) and
 **none for MRD or sMRD**.
@@ -123,89 +130,55 @@ single write is left as an explanation.
 | `IRIW+rlx.lit` | POWER/C11 allow; SC/TSO/ARMv8 forbid | allows |
 | `IRIW+addrs.lit` | POWER/ARMv7 allow; **ARMv8/RVWMO/SC forbid** | allows |
 | `IRIW+ctrls.lit` | POWER/ARMv7/ARMv8 allow; SC forbids | allows |
-| `IRIW+scfences.lit` | C11/C++17 allow; **RC11/C++20/SC forbid** | allows |
-| `IRIW+rel+acq.lit` | WRA/RA/SRA/C11 allow; SC forbids | allows |
 | `WRC+rlx.lit` | POWER/C11 allow; SC/TSO/ARMv8 forbid | allows |
 | `WRC+data+addr.lit` | POWER/ARMv7 allow; **ARMv8/RVWMO/SC forbid** | allows |
-| `WRC+rel+acq.lit` | all forbid (negative control) | forbids ✓ |
 | `RWC+addr+fence.lit` | POWER/ARMv7 allow; SC/x86-TSO forbid | allows |
 | `ISA2+data+addrs.lit` | POWER/ARMv7/ARMv8 allow (P0 unfenced); SC forbids | allows |
-| `MP+fence+addr.lit` | POWER/ARM/ARMv8/SC forbid; bare Coherence allows (positive control) | forbids ✓ |
+| `MP+fence+addr.lit` (now in `litmus-tests-review/`) | POWER/ARM/ARMv8/SC forbid; bare Coherence allows (positive control) | **allows ✗** |
 
 Reading the table: **sMRD as MoRDor implements it is not multicopy atomic**, and
-the mechanism is specific. It forbids `MP+fence+addr` and `WRC+rel+acq`, so it
-does honour fence and release-acquire ordering; but it allows `IRIW+addrs` and
-`WRC+data+addr`, because the address dependencies there are *syntactic and
+it allows every shape in the family — the controls included.
+
+Part of that is sMRD working as intended. It allows `IRIW+addrs` and
+`WRC+data+addr` because the address dependencies there are *syntactic and
 semantically dead* — `rp + (r1 - r1)` is the same address whatever `r1` is, and a
-semantic-dependency model drops it by design. That is sMRD working as intended
-(it is the same reasoning that makes `symmrd/LB+UB+data.lit` allowed), not a
-defect, but it does mean the C-level analogues of the ARM/POWER `mca` witnesses
-do not transfer: on hardware those dependencies are preserved *because* they are
-syntactic. Recording that is the point of keeping `IRIW+rlx` and `IRIW+addrs`
-side by side.
+semantic-dependency model drops it by design (the same reasoning that makes
+`symmrd/LB+UB+data.lit` allowed). That is not a defect, but it does mean the
+C-level analogues of the ARM/POWER `mca` witnesses do not transfer: on hardware
+those dependencies are preserved *because* they are syntactic. Recording that is
+the point of keeping `IRIW+rlx` and `IRIW+addrs` side by side.
+
+The controls are a different matter. `MP+fence+addr` is a *positive* control —
+every model with fence ordering forbids it, and only a bare coherence checker
+allows it — and MoRDor allows it under `[Power]`, i.e. under IMM. The two
+release-acquire controls now in `litmus-tests-ra/` behave the same way. That
+points at fence and release-acquire ordering in the checker rather than at
+multicopy atomicity, and wants investigating on its own.
+
+An earlier revision of this table recorded `MP+fence+addr` and `WRC+rel+acq` as
+`forbids ✓`. Those readings came from a build in which `forbid` assertions
+short-circuited to valid without any execution being checked (`src/assertion.ml`;
+see the commit "Check the executions a forbid assertion is given"), so every
+`forbid` in the repository reported `✓`. Every row above has been re-measured
+since.
 
 `IRIW+scfences` is a second finding worth flagging: MoRDor allows it, matching
 C11/C++17 and the known SC-fence defect that P0668 repaired, not RC11/C++20.
 
-## `models/ra-sra-wra/`
+## `models/ra-sra-wra/` — moved
 
-The release-acquire family: WRA ⊂ RA ⊂ SRA. Sources: Lahav, Giannarakis &
-Vafeiadis (POPL 2016); Lahav & Boker (TOPLAS 2022) Ex. 3.5–3.7. Vendored from the
-zoo's `strictly-weaker/SRA-vs-RA/`, `strictly-weaker/RA-vs-WRA/` and
-`strictly-weaker/SC-vs-SRA/` witness sets. MoRDor had none of these.
+The release-acquire family (WRA ⊂ RA ⊂ SRA) is annotated `[RA]` / `[SRA]`, which
+`ModelRegistry` has no entry for, so the suite was checking it under the `smrd`
+fallback. It now lives in `litmus-tests-ra/`, with the reference verdicts and the
+per-test analysis in `litmus-tests-ra/README.md`.
 
-| Test | Reference verdict | MoRDor (sMRD) |
-|---|---|---|
-| `2+2W+rel+acq.lit` | RA/WRA allow; SRA/SC forbid | allows |
-| `MP+rel+acq.lit` | all forbid (negative control) | forbids ✓ |
-| `Oscillating.lit` | WRA allows; RA/SRA/C11/SC forbid | forbids ✓ |
-| `SF.lit` | WRA allows; RA/SRA/C11/SC forbid | forbids ✓ |
-| `WW.lit` | WRA allows; RA/SRA/C11/SC forbid | forbids ✓ |
+## `models/cpp-release-sequences/` — moved
 
-sMRD sits with RA and above on all four: it has a coherence order, so the three
-WRA-only outcomes are all ruled out, and it allows `2+2W` as RA does. The
-`SC-vs-SRA/IRIW` witness lives in `properties/atomicity-mca/IRIW+rel+acq.lit`
-rather than being duplicated here.
-
-## `models/cpp-release-sequences/`
-
-The release-sequence family, vendored from `gonzalobg/cpp_memory_model` via the
-zoo's `litmus/cpp_memory_model/rs/`. Sources: ISO/IEC 14882:2011, :2017, :2020;
-Boehm, Giroux & Vafeiadis P0668R5 (2018); Boehm P0982R1 (2018).
-
-MoRDor had exactly one release-sequence test (`c20/rs-example.lit`) against the
-zoo's sixteen. These fourteen files cover all sixteen upstream tests — two pairs
-of upstream files are the same program under opposite conditions
-(`mp-rs.cpp11`/`mp-rs.cpp17.undef`, `mp-rs-add-st.cpp11`/`.cpp17.undef`) and two
-more differ only in which disjunct they ask about (`mp-rs-st-eadd-atomics`), plus
-`RS+cpp20.lit` from the zoo's C++20-vs-C11 edge.
-
-| Test | C++11 | C++17 | C++20 | MoRDor (sMRD) |
-|---|---|---|---|---|
-| `mp-rs.lit` | forbid | allow* | allow* | allows |
-| `mp-rs-strel.lit` | forbid | forbid | forbid | forbids ✓ |
-| `mp-rs-add.lit` | forbid | forbid | forbid | forbids ✓ |
-| `mp-rs-eadd.lit` | forbid | forbid | forbid | forbids ✓ |
-| `mp-rs-est.lit` | allow* | allow* | allow* | allows ✓ |
-| `mp-rs-add-eadd.lit` | forbid | forbid | forbid | forbids ✓ |
-| `mp-rs-add-est-atomic.lit` | allow | allow | forbid | allows |
-| `mp-rs-add-est.lit` | allow* | allow* | allow* | allows ✓ |
-| `mp-rs-add-st.lit` | forbid | allow* | allow* | allows |
-| `mp-rs-st-eadd-atomics.lit` | forbid | allow | forbid | allows |
-| `mp-rs-st-eadd.lit` | allow* | allow* | allow* | allows ✓ |
-| `mp-rs-st-est-atomics.lit` | allow | allow | forbid | allows |
-| `mp-rs-st-est.lit` | forbid* | allow* | allow* | allows |
-| `RS+cpp20.lit` | — | — | allow | allows ✓ |
-
-`*` = the allowing model reports the execution as a data race. Reference columns
-are herd7 7.58 verdicts from the zoo's `rs/README.md`.
-
-MoRDor tracks **C++17** on this family: it agrees with all three versions
-wherever they agree, and on every test where the versions differ it takes the
-C++17 reading — allowing what C++11 forbade (`mp-rs`, `mp-rs-add-st`,
-`mp-rs-st-est`) and allowing what C++20 forbids (`mp-rs-add-est-atomic`,
-`mp-rs-st-est-atomics`, `mp-rs-st-eadd-atomics`). So sMRD as implemented has not
-taken up P0982's weakened release sequences.
+The release-sequence family is annotated `[C11]` / `[C17]` / `[C20]`, which
+`ModelRegistry` has no entry for, so the suite was checking it under the `smrd`
+fallback. It now lives in `litmus-tests-cpp/`, with the standards' verdicts, the
+C++11/17/20 comparison table and the finding that MoRDor tracks C++17 on this
+family in `litmus-tests-cpp/README.md`.
 
 ## Conventions
 

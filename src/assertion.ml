@@ -93,6 +93,21 @@ module SetOperations = struct
     | EBinOp (ENum a, ",", ENum b) -> (Z.to_int a, Z.to_int b)
     | _ -> failwith "Invalid tuple in set membership: expected (int, int)"
 
+  (** [pair_in_execution execution (a, b)] tests whether both events are in the
+      execution.
+
+      A relation only relates events the execution contains, so a membership
+      test naming an event it does not execute is asking about a pair that
+      cannot be in any relation. Such an execution neither witnesses nor
+      contradicts the test, and answering [(a, b) notin .dp] with [true] there
+      would let it contradict a forbid it says nothing about.
+
+      @param execution The execution.
+      @param pair The event pair under test.
+      @return [true] if both events are executed. *)
+  let pair_in_execution execution (a, b) =
+    USet.mem execution.e a && USet.mem execution.e b
+
   (** [eval_set_expr expr structure execution] evaluates set membership
       directly.
 
@@ -108,12 +123,16 @@ module SetOperations = struct
     match expr with
     | EBinOp (tuple_expr, "in", EVar set_name) ->
         let pair = eval_tuple tuple_expr in
-        let rel = Execution.get_relation set_name structure execution in
-          USet.mem rel pair
+          pair_in_execution execution pair
+          &&
+          let rel = Execution.get_relation set_name structure execution in
+            USet.mem rel pair
     | EBinOp (tuple_expr, "notin", EVar set_name) ->
         let pair = eval_tuple tuple_expr in
-        let rel = Execution.get_relation set_name structure execution in
-          not (USet.mem rel pair)
+          pair_in_execution execution pair
+          &&
+          let rel = Execution.get_relation set_name structure execution in
+            not (USet.mem rel pair)
     | EBinOp (e1, "&&", e2) ->
         eval_set_expr e1 structure execution
         && eval_set_expr e2 structure execution
@@ -141,7 +160,10 @@ module AssertionInstanceTracking = struct
         let pair = SetOperations.eval_tuple tuple_expr in
         let rel = Execution.get_relation set_name structure execution in
         let is_member = USet.mem rel pair in
-        let result = if op = "in" then is_member else not is_member in
+        let result =
+          SetOperations.pair_in_execution execution pair
+          && if op = "in" then is_member else not is_member
+        in
           [
             {
               Context.relation_name = set_name;
@@ -658,8 +680,12 @@ module ConditionChecker = struct
         |> List.map
              (Expr.evaluate ~env:(Hashtbl.find_opt last_writes_to_variables))
       in
-      let cond_expr_and_rf_conditions = inst_cond_expr @ rf_conditions in
-      let is_sat = Solver.is_sat cond_expr_and_rf_conditions in
+      (* The execution's own path predicates have to hold alongside the
+         condition.  Asking the solver about the condition and the rf equalities
+         alone leaves every register the rf edges do not pin free, so a
+         condition the execution's values contradict still comes back sat. *)
+      let query = inst_cond_expr @ rf_conditions @ execution.ex_p in
+      let is_sat = Solver.is_sat query in
         Logs_safe.debug (fun m -> m "Solver result: %b" is_sat);
         is_sat
 
@@ -1262,15 +1288,13 @@ module AssertionChecker = struct
       | Ir.CondExpr _ -> false
     in
 
-    (* Handle empty execution list, or non-UB assertions with any execution
-       list.  For UB assertions with a non-empty execution list we skip the
-       early return so that process_executions can synthesise Witnessed /
-       Contradicted instances from local_ub_reasons — which is impossible
-       without visiting the executions.
-    *)
+    (* Short-circuit only when there are truly no executions to process.  Any
+       assertion with executions in hand has to visit them: a forbid is
+       contradicted by an execution satisfying its condition, and visiting the
+       executions is the only way Witnessed / Contradicted instances get
+       synthesised. *)
     let%lwt early_result =
-      if executions = [] || not is_ub_assertion then
-        handle_no_executions exhaustive outcome
+      if executions = [] then handle_no_executions exhaustive outcome
       else Lwt.return None
     in
 

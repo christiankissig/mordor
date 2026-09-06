@@ -77,10 +77,10 @@ let make_structure ?(fj = USet.create ()) ?(malloc_events = USet.create ())
   }
 
 (** Build a [symbolic_execution] with the given event set [e] and id. Accepts
-    optional [ppo], [dp], [rf], [fix_rf_map], [final_env]. *)
+    optional [ppo], [dp], [rf], [fix_rf_map], [final_env], [ex_p]. *)
 let make_execution ?(ppo = USet.create ()) ?(dp = USet.create ())
     ?(rf = USet.create ()) ?(fix_rf_map = Hashtbl.create 0)
-    ?(final_env = Hashtbl.create 0) ~id e =
+    ?(final_env = Hashtbl.create 0) ?(ex_p = []) ~id e =
   {
     id;
     e;
@@ -88,7 +88,7 @@ let make_execution ?(ppo = USet.create ()) ?(dp = USet.create ())
     dp;
     ppo;
     rmw = USet.create ();
-    ex_p = [];
+    ex_p;
     fix_rf_map;
     pointer_map = None;
     final_env;
@@ -555,6 +555,222 @@ let test_ub_and_valid_fields outcome has_ub expected_ub expected_valid label ()
     Alcotest.(check bool) (label ^ ": valid") expected_valid result.valid
 
 (* ================================================================== *)
+(*  Bug 3 - plain conditions: the early return must not bypass         *)
+(*  process_executions for non-UB assertions either                    *)
+(* ================================================================== *)
+
+(** Build an [Outcome] assertion carrying a plain condition expression. *)
+let cond_assertion outcome expr =
+  Outcome { outcome; condition = CondExpr expr; model = None }
+
+(** A UB-free fixture whose execution binds [r1] to 1 in its final environment,
+    so the condition alone decides the outcome. *)
+let make_cond_fixture () =
+  let tbl, m, w, ppo, evts = make_clean_events 60 "η" in
+  let structure =
+    make_structure tbl ~malloc_events:(USet.of_list [ m ])
+      ~write_events:(USet.of_list [ w ])
+  in
+  let final_env = Hashtbl.create 1 in
+    Hashtbl.add final_env "r1" (ENum Z.one);
+    (structure, make_execution ~id:1 ~ppo ~final_env evts)
+
+let r1_eq n = EBinOp (EVar "r1", "=", ENum (Z.of_int n))
+
+(** Primary regression test: a forbid over a plain condition that some execution
+    satisfies is contradicted, not valid. Before the fix the guard read
+    [executions = [] || not is_ub_assertion], so every non-exhaustive forbid
+    over a condition returned [empty_result] (valid=true) without visiting a
+    single execution. *)
+let test_forbid_cond_contradicted () =
+  let structure, ex = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid(r1 = 1) with a satisfying execution: valid=false" false
+      result.valid
+
+(** The same condition under [allow] is witnessed - the pair is what makes the
+    bug visible: before the fix both forms reported valid=true. *)
+let test_allow_cond_witnessed () =
+  let structure, ex = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow(r1 = 1) with a satisfying execution: valid=true" true result.valid
+
+(** A forbid no execution satisfies stays valid. *)
+let test_forbid_cond_unsatisfied () =
+  let structure, ex = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 2))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid(r1 = 2), no satisfying execution: valid=true" true result.valid
+
+(** A contradicted forbid records the execution that contradicts it, which is
+    only possible if the executions were visited. *)
+let test_forbid_cond_instances_contradicted () =
+  let structure, ex = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    assert_instances_some_nonempty "forbid(r1 = 1)" result;
+    assert_all_contradicted "forbid(r1 = 1)" (instances_of result)
+
+(** With no executions at all, the original short-circuit still stands. *)
+let test_forbid_cond_empty_non_exhaustive () =
+  let structure, _ = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 1))
+         [] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid(cond) empty list: valid=true preserved" true result.valid
+
+(* ================================================================== *)
+(*  Bug 4 - an execution's path predicates constrain its condition     *)
+(* ================================================================== *)
+
+(** The same fixture, but the register is left symbolic and pinned to 0 by the
+    execution's path predicates instead of being a literal in [final_env]. *)
+let make_symbolic_cond_fixture value =
+  let tbl, m, w, ppo, evts = make_clean_events 80 "θ" in
+  let structure =
+    make_structure tbl ~malloc_events:(USet.of_list [ m ])
+      ~write_events:(USet.of_list [ w ])
+  in
+  let final_env = Hashtbl.create 1 in
+    Hashtbl.add final_env "r1" (EVar "α");
+    let ex_p = [ EBinOp (EVar "α", "=", ENum (Z.of_int value)) ] in
+      (structure, make_execution ~id:1 ~ppo ~final_env ~ex_p evts)
+
+(** An execution whose path predicates say α = 0 does not witness r1 = 1. The
+    solver query used to carry only the condition and the rf equalities, so α
+    stayed free and "α = 1" came back sat for an execution that never produces
+    it. *)
+let test_ex_p_blocks_unreachable_condition () =
+  let structure, ex = make_symbolic_cond_fixture 0 in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow(r1 = 1) against an α = 0 execution: valid=false" false result.valid
+
+(** The forbid counterpart: nothing to contradict it, so it stands. *)
+let test_ex_p_forbid_unreachable_condition () =
+  let structure, ex = make_symbolic_cond_fixture 0 in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid(r1 = 1) against an α = 0 execution: valid=true" true result.valid
+
+(** Path predicates that agree with the condition still let it through. *)
+let test_ex_p_admits_reachable_condition () =
+  let structure, ex = make_symbolic_cond_fixture 1 in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow(r1 = 1) against an α = 1 execution: valid=true" true result.valid
+
+(* ================================================================== *)
+(*  Bug 5 - a membership test naming an event the execution does not   *)
+(*  run is not answered "true"                                         *)
+(* ================================================================== *)
+
+(** [(a, b) notin .dp] over a fixture whose execution runs only [a]. Before the
+    fix this answered [true] — the pair is not in [dp], because [b] is not in
+    the execution at all — and so contradicted any forbid asking about it. *)
+let make_membership_fixture ~run_both =
+  let tbl, m, w, ppo, evts = make_clean_events 100 "ι" in
+  let structure =
+    make_structure tbl ~malloc_events:(USet.of_list [ m ])
+      ~write_events:(USet.of_list [ w ])
+  in
+  let e = if run_both then evts else USet.of_list [ m ] in
+    (structure, make_execution ~id:1 ~ppo e, m, w)
+
+let notin_dp (a, b) =
+  EBinOp
+    (EBinOp (ENum (Z.of_int a), ",", ENum (Z.of_int b)), "notin", EVar ".dp")
+
+(** An execution that does not run the second event does not contradict
+    [forbid ((m, w) notin .dp)]. *)
+let test_membership_absent_event_forbid () =
+  let structure, ex, m, w = make_membership_fixture ~run_both:false in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (notin_dp (m, w)))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid((m,w) notin .dp), w not executed: valid=true" true result.valid
+
+(** Nor does it witness the allow form. *)
+let test_membership_absent_event_allow () =
+  let structure, ex, m, w = make_membership_fixture ~run_both:false in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (notin_dp (m, w)))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow((m,w) notin .dp), w not executed: valid=false" false result.valid
+
+(** When both events run and the edge is genuinely absent, the allow is
+    witnessed as before — the guard only rules out the vacuous case. *)
+let test_membership_present_events_allow () =
+  let structure, ex, m, w = make_membership_fixture ~run_both:true in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (notin_dp (m, w)))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow((m,w) notin .dp), both executed: valid=true" true result.valid
+
+(* ================================================================== *)
 (*  Suite assembly                                                     *)
 (* ================================================================== *)
 
@@ -649,6 +865,41 @@ let suite =
         Alcotest.test_case
           "forbid(ub) mixed: only UB exec produces Contradicted instance" `Quick
           test_forbid_ub_mixed_executions;
+      ]
+    (* Bug 3: plain conditions must be checked, not short-circuited *)
+    @ [
+        Alcotest.test_case
+          "forbid(cond) regression: contradicted by a satisfying execution"
+          `Quick test_forbid_cond_contradicted;
+        Alcotest.test_case "allow(cond): witnessed by a satisfying execution"
+          `Quick test_allow_cond_witnessed;
+        Alcotest.test_case "forbid(cond): valid when no execution satisfies it"
+          `Quick test_forbid_cond_unsatisfied;
+        Alcotest.test_case "forbid(cond): contradicting instance recorded"
+          `Quick test_forbid_cond_instances_contradicted;
+        Alcotest.test_case "forbid(cond) empty list: valid=true preserved"
+          `Quick test_forbid_cond_empty_non_exhaustive;
+      ]
+    (* Bug 4: path predicates constrain the condition *)
+    @ [
+        Alcotest.test_case
+          "ex_p: allow not witnessed by an execution whose predicates forbid it"
+          `Quick test_ex_p_blocks_unreachable_condition;
+        Alcotest.test_case
+          "ex_p: forbid stands when no execution's predicates admit it" `Quick
+          test_ex_p_forbid_unreachable_condition;
+        Alcotest.test_case "ex_p: allow witnessed when the predicates agree"
+          `Quick test_ex_p_admits_reachable_condition;
+      ]
+    (* Bug 5: membership tests over events the execution does not run *)
+    @ [
+        Alcotest.test_case
+          "membership: absent event does not contradict a forbid" `Quick
+          test_membership_absent_event_forbid;
+        Alcotest.test_case "membership: absent event does not witness an allow"
+          `Quick test_membership_absent_event_allow;
+        Alcotest.test_case "membership: both events present still witnesses"
+          `Quick test_membership_present_events_allow;
       ]
     (* ub and valid field invariants *)
     @ List.map
