@@ -20,6 +20,15 @@ Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 Every file here has an issue: #36 and #41-#65. Each records the symptom, the model actually in effect, where
 the test comes from and what to look at next.
 
+The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
+models. Fifteen tests are checked under one of those, so a divergence is a defect and the issue is labelled
+`bug`. The other ten name a model that is not — `[Problem]`, `[JR]`, `[Bubbly]` and `[Sevcik]` have a
+`model_options_table` entry with `coherent = None` and so fall through to the `smrd` default, while
+`[Bridging]`, `[Grounding]`, `[Power]` and `[IMM]` map to `imm`. Those are labelled `smrd-unsupported` and
+carry no `bug` label: they compare one model's expectation against another model's verdict, and the two are
+not claimed to agree, so a divergence there may be entirely correct. Each needs triaging as "does sMRD agree
+with the reference on this shape?" before it is treated as a defect.
+
 ## How these were found
 
 Until 2026-09-06 the suite was green on every one of these. Three
