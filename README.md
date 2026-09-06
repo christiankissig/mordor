@@ -18,8 +18,15 @@ MoRDor is a reference implementation of Symbolic Modular Relaxed Dependencies
 ![MoRDor finding a use-after-free and verifying the fix](demo/out/mordor-demo.gif)
 
 The web UI above finds a use-after-free reachable when the flag is written with
-a relaxed store, then confirms it is gone once the store is made releasing. See
-[demo/README.md](demo/README.md) for how the recording is produced (`make demo`).
+a relaxed store, then confirms it is gone once the store is made releasing.
+
+The same analysis from the command line:
+
+![The same use-after-free found and fixed from the command line](demo/out/mordor-cli-demo.gif)
+
+See [demo/README.md](demo/README.md) for how the recordings are produced
+(`make demo` and `make demo-cli`). Every command in the CLI clip is really run —
+the output on screen is captured from `mordor` itself.
 
 ## Overview
 

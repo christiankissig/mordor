@@ -19,6 +19,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { run, haveFfmpeg, encode } from './record.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..');
@@ -325,27 +326,7 @@ async function ensureServer(opts) {
   throw new Error(`server did not come up within ${opts.serverTimeout}s:\n${log}`);
 }
 
-function run(cmd, args, { cwd } = {}) {
-  return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    let err = '';
-    p.stderr.on('data', (b) => { err += b.toString(); });
-    p.on('error', reject);
-    p.on('exit', (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(`${cmd} exited ${code}\n${err.slice(-3000)}`)));
-  });
-}
 
-async function haveFfmpeg() {
-  try {
-    await run('ffmpeg', ['-version']);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /* ------------------------------------------------------------------ */
 /* the director: page-driving helpers used by the scenes                */
@@ -622,33 +603,6 @@ async function record(opts) {
   return webm;
 }
 
-async function encode(webm, opts) {
-  const made = [];
-
-  if (opts.gif) {
-    const gif = path.join(opts.out, `${opts.name}.gif`);
-    const filter =
-      `fps=${opts.fps},scale=${opts.gifWidth}:-2:flags=lanczos,split[a][b];`
-      + `[a]palettegen=max_colors=${opts.colors}:stats_mode=diff[p];`
-      + `[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`;
-    await run('ffmpeg', ['-y', '-i', webm, '-filter_complex', filter, '-loop', '0', gif]);
-    made.push(gif);
-  }
-
-  if (opts.mp4) {
-    const mp4 = path.join(opts.out, `${opts.name}.mp4`);
-    await run('ffmpeg', [
-      '-y', '-i', webm,
-      // yuv420p + even dimensions: what browsers and QuickTime will actually play
-      '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p',
-      '-c:v', 'libx264', '-preset', 'slow', '-crf', '24',
-      '-movflags', '+faststart', '-an', mp4,
-    ]);
-    made.push(mp4);
-  }
-
-  return made;
-}
 
 /* ------------------------------------------------------------------ */
 

@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Playwright-driven demo recording of the MoRDor web UI (GIF + MP4)",
+  "description": "Playwright-driven demo recordings of the MoRDor web UI and CLI (GIF + MP4)",
   "scripts": {
     "demo": "node demo.mjs",
     "demo:headed": "node demo.mjs --headed",
+    "demo:cli": "node cli-demo.mjs",
+    "demo:cli:headed": "node cli-demo.mjs --headed",
     "postinstall": "playwright install chromium"
   },
   "devDependencies": {
