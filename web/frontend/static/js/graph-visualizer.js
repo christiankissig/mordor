@@ -24,6 +24,22 @@ const EDGE_COLORS = {
     default: '#6a6a6a' 
 };
 
+// Line style and weight per relation, mirroring the DOT writer in
+// src/eventstructureviz.ml so an exported file reads like one from
+// `mordor visual-es --output-mode dot`. The colours stay the UI's, since the
+// point of exporting from here is to get the graph on screen.
+const EDGE_DOT_STYLES = {
+    po:  { style: 'solid',  penwidth: 1.0 },
+    rmw: { style: 'solid',  penwidth: 2.0 },
+    lo:  { style: 'dashed', penwidth: 1.0 },
+    fj:  { style: 'dotted', penwidth: 1.0 },
+    dp:  { style: 'bold',   penwidth: 1.5 },
+    ppo: { style: 'bold',   penwidth: 1.5 },
+    rf:  { style: 'bold',   penwidth: 1.5 },
+    uaf: { style: 'dashed', penwidth: 2.0 },
+    default: { style: 'solid', penwidth: 1.0 }
+};
+
 class GraphVisualizer {
     constructor() {
         this.graphs = [];  // Array to store all graphs
@@ -815,6 +831,27 @@ class GraphVisualizer {
             this.log('Graph exported as PNG');
         });
 
+        // Export DOT button
+        document.getElementById('export-dot-btn').addEventListener('click', () => {
+            if (!this.cy.nodes().length) {
+                this.log('No graph to export as DOT.', 'error');
+                return;
+            }
+            const dot = this.toDot() + '\n';
+            const blob = new Blob([dot], { type: 'text/vnd.graphviz' });
+            const link = document.createElement('a');
+            link.download = `graph-${this.currentIndex}.dot`;
+            link.href = URL.createObjectURL(blob);
+            link.click();
+            URL.revokeObjectURL(link.href);
+            const hidden = this.cy.edges().filter(e => e.style('display') === 'none').length;
+            this.log(
+                `Graph exported as DOT (${this.cy.nodes().length} nodes, ` +
+                `${this.cy.edges().length - hidden} edges` +
+                (hidden ? `, ${hidden} filtered out` : '') + ')'
+            );
+        });
+
         // Save JSON button
         document.getElementById('save-json-btn').addEventListener('click', () => {
             if (!this.data.length) {
@@ -1086,6 +1123,56 @@ class GraphVisualizer {
                 edge.style('display', this.visibleRelations.has(baseType) ? 'element' : 'none');
             });
         }
+    }
+
+    dotEscape(text) {
+        return String(text)
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"')
+            .replace(/\n/g, '\\n');
+    }
+
+    dotNodeId(id) {
+        // A DOT id starting with a digit has to be quoted; the CLI writes e<N>,
+        // so match that and keep the two interchangeable.
+        return 'e' + String(id).replace(/[^A-Za-z0-9_]/g, '_');
+    }
+
+    /**
+     * Serialise what is on the canvas as Graphviz DOT.
+     *
+     * Reads the rendered graph rather than the payload behind it, so the
+     * relation filter and any use-after-free edges carry over -- the file is
+     * the graph you are looking at, not the one that arrived.
+     */
+    toDot() {
+        const lines = ['digraph G {'];
+        lines.push('  node [shape=box, style="rounded", ];');
+
+        this.cy.nodes().forEach(n => {
+            const attrs = [];
+            if (n.data('isRoot')) {
+                attrs.push('penwidth=2.0', 'color="#1177bb"', 'shape=doublecircle');
+            }
+            attrs.push(`label="${this.dotEscape(n.data('label'))}"`);
+            lines.push(`  ${this.dotNodeId(n.id())} [${attrs.join(', ')}];`);
+        });
+
+        this.cy.edges().forEach(e => {
+            if (e.style('display') === 'none') return;
+            const type = e.data('type');
+            const baseType = type.split(' - ')[0];
+            const shape = EDGE_DOT_STYLES[baseType] || EDGE_DOT_STYLES.default;
+            const color = EDGE_COLORS[baseType] || EDGE_COLORS.default;
+            lines.push(
+                `  ${this.dotNodeId(e.source().id())} -> ${this.dotNodeId(e.target().id())}` +
+                ` [label="${this.dotEscape(type)}", color="${color}",` +
+                ` style="${shape.style}", penwidth=${shape.penwidth.toFixed(1)}];`
+            );
+        });
+
+        lines.push('}');
+        return lines.join('\n');
     }
 
     setupResizer() {
