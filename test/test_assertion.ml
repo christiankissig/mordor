@@ -555,6 +555,101 @@ let test_ub_and_valid_fields outcome has_ub expected_ub expected_valid label ()
     Alcotest.(check bool) (label ^ ": valid") expected_valid result.valid
 
 (* ================================================================== *)
+(*  Bug 3 - plain conditions: the early return must not bypass         *)
+(*  process_executions for non-UB assertions either                    *)
+(* ================================================================== *)
+
+(** Build an [Outcome] assertion carrying a plain condition expression. *)
+let cond_assertion outcome expr =
+  Outcome { outcome; condition = CondExpr expr; model = None }
+
+(** A UB-free fixture whose execution binds [r1] to 1 in its final environment,
+    so the condition alone decides the outcome. *)
+let make_cond_fixture () =
+  let tbl, m, w, ppo, evts = make_clean_events 60 "η" in
+  let structure =
+    make_structure tbl ~malloc_events:(USet.of_list [ m ])
+      ~write_events:(USet.of_list [ w ])
+  in
+  let final_env = Hashtbl.create 1 in
+    Hashtbl.add final_env "r1" (ENum Z.one);
+    (structure, make_execution ~id:1 ~ppo ~final_env evts)
+
+let r1_eq n = EBinOp (EVar "r1", "=", ENum (Z.of_int n))
+
+(** Primary regression test: a forbid over a plain condition that some execution
+    satisfies is contradicted, not valid. Before the fix the guard read
+    [executions = [] || not is_ub_assertion], so every non-exhaustive forbid
+    over a condition returned [empty_result] (valid=true) without visiting a
+    single execution. *)
+let test_forbid_cond_contradicted () =
+  let structure, ex = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid(r1 = 1) with a satisfying execution: valid=false" false
+      result.valid
+
+(** The same condition under [allow] is witnessed - the pair is what makes the
+    bug visible: before the fix both forms reported valid=true. *)
+let test_allow_cond_witnessed () =
+  let structure, ex = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow(r1 = 1) with a satisfying execution: valid=true" true result.valid
+
+(** A forbid no execution satisfies stays valid. *)
+let test_forbid_cond_unsatisfied () =
+  let structure, ex = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 2))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid(r1 = 2), no satisfying execution: valid=true" true result.valid
+
+(** A contradicted forbid records the execution that contradicts it, which is
+    only possible if the executions were visited. *)
+let test_forbid_cond_instances_contradicted () =
+  let structure, ex = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    assert_instances_some_nonempty "forbid(r1 = 1)" result;
+    assert_all_contradicted "forbid(r1 = 1)" (instances_of result)
+
+(** With no executions at all, the original short-circuit still stands. *)
+let test_forbid_cond_empty_non_exhaustive () =
+  let structure, _ = make_cond_fixture () in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 1))
+         [] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid(cond) empty list: valid=true preserved" true result.valid
+
+(* ================================================================== *)
 (*  Suite assembly                                                     *)
 (* ================================================================== *)
 
@@ -649,6 +744,20 @@ let suite =
         Alcotest.test_case
           "forbid(ub) mixed: only UB exec produces Contradicted instance" `Quick
           test_forbid_ub_mixed_executions;
+      ]
+    (* Bug 3: plain conditions must be checked, not short-circuited *)
+    @ [
+        Alcotest.test_case
+          "forbid(cond) regression: contradicted by a satisfying execution"
+          `Quick test_forbid_cond_contradicted;
+        Alcotest.test_case "allow(cond): witnessed by a satisfying execution"
+          `Quick test_allow_cond_witnessed;
+        Alcotest.test_case "forbid(cond): valid when no execution satisfies it"
+          `Quick test_forbid_cond_unsatisfied;
+        Alcotest.test_case "forbid(cond): contradicting instance recorded"
+          `Quick test_forbid_cond_instances_contradicted;
+        Alcotest.test_case "forbid(cond) empty list: valid=true preserved"
+          `Quick test_forbid_cond_empty_non_exhaustive;
       ]
     (* ub and valid field invariants *)
     @ List.map
