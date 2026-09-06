@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 285
+Total tests: 284
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -47,7 +47,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - avoidoota/listing2_5.lit
 - avoidoota/listing2_5pwg.lit
 - avoidoota/listing3.lit
-- avoidoota/litmus-tests-review/avoidoota/listing10.lit
 - basic/coproduct-exns.lit
 - basic/lb.lit
 - basic/par-comp.lit

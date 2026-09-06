@@ -709,6 +709,68 @@ let test_ex_p_admits_reachable_condition () =
       "allow(r1 = 1) against an α = 1 execution: valid=true" true result.valid
 
 (* ================================================================== *)
+(*  Bug 5 - a membership test naming an event the execution does not   *)
+(*  run is not answered "true"                                         *)
+(* ================================================================== *)
+
+(** [(a, b) notin .dp] over a fixture whose execution runs only [a]. Before the
+    fix this answered [true] — the pair is not in [dp], because [b] is not in
+    the execution at all — and so contradicted any forbid asking about it. *)
+let make_membership_fixture ~run_both =
+  let tbl, m, w, ppo, evts = make_clean_events 100 "ι" in
+  let structure =
+    make_structure tbl ~malloc_events:(USet.of_list [ m ])
+      ~write_events:(USet.of_list [ w ])
+  in
+  let e = if run_both then evts else USet.of_list [ m ] in
+    (structure, make_execution ~id:1 ~ppo e, m, w)
+
+let notin_dp (a, b) =
+  EBinOp
+    (EBinOp (ENum (Z.of_int a), ",", ENum (Z.of_int b)), "notin", EVar ".dp")
+
+(** An execution that does not run the second event does not contradict
+    [forbid ((m, w) notin .dp)]. *)
+let test_membership_absent_event_forbid () =
+  let structure, ex, m, w = make_membership_fixture ~run_both:false in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (notin_dp (m, w)))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid((m,w) notin .dp), w not executed: valid=true" true result.valid
+
+(** Nor does it witness the allow form. *)
+let test_membership_absent_event_allow () =
+  let structure, ex, m, w = make_membership_fixture ~run_both:false in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (notin_dp (m, w)))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow((m,w) notin .dp), w not executed: valid=false" false result.valid
+
+(** When both events run and the edge is genuinely absent, the allow is
+    witnessed as before — the guard only rules out the vacuous case. *)
+let test_membership_present_events_allow () =
+  let structure, ex, m, w = make_membership_fixture ~run_both:true in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (notin_dp (m, w)))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow((m,w) notin .dp), both executed: valid=true" true result.valid
+
+(* ================================================================== *)
 (*  Suite assembly                                                     *)
 (* ================================================================== *)
 
@@ -828,6 +890,16 @@ let suite =
           test_ex_p_forbid_unreachable_condition;
         Alcotest.test_case "ex_p: allow witnessed when the predicates agree"
           `Quick test_ex_p_admits_reachable_condition;
+      ]
+    (* Bug 5: membership tests over events the execution does not run *)
+    @ [
+        Alcotest.test_case
+          "membership: absent event does not contradict a forbid" `Quick
+          test_membership_absent_event_forbid;
+        Alcotest.test_case "membership: absent event does not witness an allow"
+          `Quick test_membership_absent_event_allow;
+        Alcotest.test_case "membership: both events present still witnesses"
+          `Quick test_membership_present_events_allow;
       ]
     (* ub and valid field invariants *)
     @ List.map

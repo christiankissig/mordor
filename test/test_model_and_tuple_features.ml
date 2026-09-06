@@ -73,22 +73,34 @@ end
 (** {1 Set Membership Tests} *)
 
 module TestSetMembership = struct
+  (* [events] is the execution's event set. A relation only relates events the
+     execution runs, and a membership test naming one it does not run is not
+     answered - so any event a test asks about has to be in here, whether or not
+     it is an endpoint of [ppo_pairs]. *)
   (** Helper to create minimal execution *)
-  let make_test_execution ppo_pairs =
+  let make_test_execution ?(events = []) ppo_pairs =
     let ppo = USet.create () in
       List.iter (fun (a, b) -> USet.add ppo (a, b) |> ignore) ppo_pairs;
-      {
-        id = 0;
-        e = USet.create ();
-        rf = USet.create ();
-        rmw = USet.create ();
-        dp = USet.create ();
-        ppo;
-        ex_p = [];
-        fix_rf_map = Hashtbl.create 0;
-        pointer_map = Some (Hashtbl.create 0);
-        final_env = Hashtbl.create 0;
-      }
+      let e = USet.create () in
+        List.iter
+          (fun (a, b) ->
+            USet.add e a |> ignore;
+            USet.add e b |> ignore
+          )
+          ppo_pairs;
+        List.iter (fun ev -> USet.add e ev |> ignore) events;
+        {
+          id = 0;
+          e;
+          rf = USet.create ();
+          rmw = USet.create ();
+          dp = USet.create ();
+          ppo;
+          ex_p = [];
+          fix_rf_map = Hashtbl.create 0;
+          pointer_map = Some (Hashtbl.create 0);
+          final_env = Hashtbl.create 0;
+        }
 
   (** Helper to create minimal structure *)
   let make_test_structure () = SymbolicEventStructure.create ()
@@ -207,6 +219,7 @@ module TestSetMembership = struct
   type set_expr_test_data = {
     name : string;
     ppo_pairs : (int * int) list;
+    events : int list;  (** Events the execution runs, beyond ppo endpoints. *)
     expr_builder : unit -> expr;
     expected : bool;
     description : string;
@@ -217,6 +230,7 @@ module TestSetMembership = struct
       {
         name = "in_true";
         ppo_pairs = [ (3, 4) ];
+        events = [];
         expr_builder =
           (fun () ->
             let tuple = EBinOp (ENum (Z.of_int 3), ",", ENum (Z.of_int 4)) in
@@ -228,6 +242,7 @@ module TestSetMembership = struct
       {
         name = "notin_true";
         ppo_pairs = [ (1, 2) ];
+        events = [ 3; 4 ];
         expr_builder =
           (fun () ->
             let tuple = EBinOp (ENum (Z.of_int 3), ",", ENum (Z.of_int 4)) in
@@ -239,6 +254,7 @@ module TestSetMembership = struct
       {
         name = "and";
         ppo_pairs = [ (1, 2) ];
+        events = [ 3; 4 ];
         expr_builder =
           (fun () ->
             let t1 = EBinOp (ENum (Z.of_int 1), ",", ENum (Z.of_int 2)) in
@@ -252,10 +268,10 @@ module TestSetMembership = struct
       };
     ]
 
-  let test_eval_set_expr { ppo_pairs; expr_builder; expected; description; _ }
-      () =
+  let test_eval_set_expr
+      { ppo_pairs; events; expr_builder; expected; description; _ } () =
     let structure = make_test_structure () in
-    let execution = make_test_execution ppo_pairs in
+    let execution = make_test_execution ~events ppo_pairs in
     let expr = expr_builder () in
     let result = SetOperations.eval_set_expr expr structure execution in
       check bool description expected result
