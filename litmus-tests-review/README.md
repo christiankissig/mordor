@@ -17,6 +17,9 @@ the one the literature records.
 
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
+Every file here has an issue: #36 and #41-#65. Each records the symptom, the model actually in effect, where
+the test comes from and what to look at next.
+
 ## How these were found
 
 Until 2026-09-06 the suite was green on every one of these. Three
@@ -41,28 +44,28 @@ the first honest reading.
 
 | Test | Note |
 |---|---|
-| `jctc/JCTC6.lit` | Needs Lifting to pair justifications under complementary guards; `find_distinguishing_predicate` returns `None` because the else-path predicate carries an extra conjunct. Pending #36. |
-| `symmrd/LB+UB+data+z.lit` | Moved here in `a075ff9` ("consider initial event in dslwb"), which records no reason. |
-| `avoidoota/listing10.lit` | A stray nested copy asserting `allow ((2,3) ∉ .dp)` — the negation of `avoidoota/listing11.lit` on the same program. It passed only because the membership test was answered for an execution that does not run event 2. |
+| [`jctc/JCTC6.lit`](jctc/JCTC6.lit) #36 | Lifting cannot pair the justifications of thread 2's two writes under complementary guards: `find_distinguishing_predicate` returns `None` because the else-path predicate carries an extra conjunct. |
+| [`symmrd/LB+UB+data+z.lit`](symmrd/LB+UB+data+z.lit) #65 | Moved here in `a075ff9` ("consider initial event in dslwb"), which records no reason. |
+| [`avoidoota/listing10.lit`](avoidoota/listing10.lit) #42 | A stray nested copy asserting `allow ((2,3) ∉ .dp)` — the negation of `avoidoota/listing11.lit` on the same program. It passed only because the membership test was answered for an execution that does not run event 2. |
 
 ### MoRDor is too permissive — a `forbid` it finds a witness for
 
 | Test | Assertion | Model |
 |---|---|---|
-| `avoidoota/additional_nonlb.lit` | forbid `@x=42 ∧ @y=42 ∧ @z=42` | sMRD |
-| `avoidoota/listing16.lit` | forbid `r1=17 ∧ r2=17 ∧ r3=17` | sMRD |
-| `avoidoota/listing19.lit` | forbid `r1=17 ∧ r3=17 ∧ r5=17` | sMRD |
-| `avoidoota/listing27_forbid.lit` | forbid `r1=1 ∧ r2=1` | sMRD |
-| `jctc/JCTC12.lit` | forbid `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
-| `own/ORI.lit` | forbid `r3=42 ∧ r1=1` | sMRD |
-| `own/ORI2.lit` | forbid `rk=42 ∧ ra=1` | sMRD |
-| `on_thin_air_reads19/P5.lit` | forbid `r1=1` | `[JR]` → sMRD |
-| `esop_problem/lb+ctrldat+ctrl-single.lit` | forbid `r1=42 ∧ r2=42` | `[Problem]` → sMRD |
-| `popl_bubbly/LB+deps.lit` | forbid `r1=42 ∧ r2=42` | `[Bubbly]` → sMRD |
-| `popl_bridging/Preserving detour.lit` | forbid `r1=1 ∧ r2=1 ∧ r3=1` | `[Bridging]` → IMM |
-| `sevcik_thesis/Skip/LB+locks.lit` | forbid `r1=1 ∧ r2=1` | `[Sevcik]` → sMRD |
-| `popl_promising/Page 7 Column 1b.lit` | forbid `r2=3 ∧ r3=0` | `[IMM]` |
-| `rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit` | forbid `r1=1 ∧ r2=0` | `[Power]` → IMM |
+| [`avoidoota/additional_nonlb.lit`](avoidoota/additional_nonlb.lit) #41 | forbid `@x=42 ∧ @y=42 ∧ @z=42` | sMRD |
+| [`avoidoota/listing16.lit`](avoidoota/listing16.lit) #43 | forbid `r1=17 ∧ r2=17 ∧ r3=17` | sMRD |
+| [`avoidoota/listing19.lit`](avoidoota/listing19.lit) #44 | forbid `r1=17 ∧ r3=17 ∧ r5=17` | sMRD |
+| [`avoidoota/listing27_forbid.lit`](avoidoota/listing27_forbid.lit) #45 | forbid `r1=1 ∧ r2=1` | sMRD |
+| [`jctc/JCTC12.lit`](jctc/JCTC12.lit) #48 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
+| [`own/ORI.lit`](own/ORI.lit) #55 | forbid `r3=42 ∧ r1=1` | sMRD |
+| [`own/ORI2.lit`](own/ORI2.lit) #56 | forbid `rk=42 ∧ ra=1` | sMRD |
+| [`on_thin_air_reads19/P5.lit`](on_thin_air_reads19/P5.lit) #54 | forbid `r1=1` | `[JR]` → sMRD |
+| [`esop_problem/lb+ctrldat+ctrl-single.lit`](esop_problem/lb+ctrldat+ctrl-single.lit) #47 | forbid `r1=42 ∧ r2=42` | `[Problem]` → sMRD |
+| [`popl_bubbly/LB+deps.lit`](popl_bubbly/LB+deps.lit) #59 | forbid `r1=42 ∧ r2=42` | `[Bubbly]` → sMRD |
+| [`popl_bridging/Preserving detour.lit`](popl_bridging/Preserving detour.lit) #58 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | `[Bridging]` → IMM |
+| [`sevcik_thesis/Skip/LB+locks.lit`](sevcik_thesis/Skip/LB+locks.lit) #64 | forbid `r1=1 ∧ r2=1` | `[Sevcik]` → sMRD |
+| [`popl_promising/Page 7 Column 1b.lit`](popl_promising/Page 7 Column 1b.lit) #61 | forbid `r2=3 ∧ r3=0` | `[IMM]` |
+| [`rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit`](rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit) #63 | forbid `r1=1 ∧ r2=0` | `[Power]` → IMM |
 
 Most of this group is out-of-thin-air: the `avoidoota` listings, `JCTC12`, `P5`,
 `ORI`/`ORI2` and the load-buffering shapes are all asking that a value not be
@@ -82,15 +85,15 @@ the checker is the common thread and the place to start.
 
 | Test | Assertion | Model |
 |---|---|---|
-| `jctc/JCTC2.lit` | allow `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
-| `jctc/JCTC3.lit` | allow `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
-| `jctc/JCTC9b.lit` | allow `r1=1 ∧ r3=1` | sMRD |
-| `jctc/JCTC19.lit` | allow `r1=42 ∧ r2=42 ∧ r3=42` | sMRD |
-| `jctc/JCTC20.lit` | allow `r1=42 ∧ r2=42 ∧ r3=42` | sMRD |
-| `esop_problem/RRE.lit` | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[Problem]` → sMRD |
-| `popl_grounding/FADD.lit` | allow `r1=1 ∧ r3=1` | `[Grounding]` → IMM |
-| `pldi_repairing/LB.lit` | allow `r1=1 ∧ r2=1` | `[RC11]` |
-| `popl_promising/Upd-Stuck.lit` | allow `r1=1 ∧ r2=0` | `[IMM]` |
+| [`jctc/JCTC2.lit`](jctc/JCTC2.lit) #50 | allow `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
+| [`jctc/JCTC3.lit`](jctc/JCTC3.lit) #52 | allow `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
+| [`jctc/JCTC9b.lit`](jctc/JCTC9b.lit) #53 | allow `r1=1 ∧ r3=1` | sMRD |
+| [`jctc/JCTC19.lit`](jctc/JCTC19.lit) #49 | allow `r1=42 ∧ r2=42 ∧ r3=42` | sMRD |
+| [`jctc/JCTC20.lit`](jctc/JCTC20.lit) #51 | allow `r1=42 ∧ r2=42 ∧ r3=42` | sMRD |
+| [`esop_problem/RRE.lit`](esop_problem/RRE.lit) #46 | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[Problem]` → sMRD |
+| [`popl_grounding/FADD.lit`](popl_grounding/FADD.lit) #60 | allow `r1=1 ∧ r3=1` | `[Grounding]` → IMM |
+| [`pldi_repairing/LB.lit`](pldi_repairing/LB.lit) #57 | allow `r1=1 ∧ r2=1` | `[RC11]` |
+| [`popl_promising/Upd-Stuck.lit`](popl_promising/Upd-Stuck.lit) #62 | allow `r1=1 ∧ r2=0` | `[IMM]` |
 
 These generate executions — `JCTC19` gets 8, `Upd-Stuck` 248 — but none whose
 path predicates admit the asserted values. Before the path predicates were part
