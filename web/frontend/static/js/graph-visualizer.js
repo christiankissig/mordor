@@ -26,6 +26,16 @@ const EDGE_COLORS = {
     default: '#6a6a6a' 
 };
 
+// Elided nodes are the one graph element whose fill has to work on both
+// canvases. They are markers rather than events -- the far end of a fwd or we
+// edge, an event the execution does not contain -- so they read as background,
+// and the background is exactly what the theme flips. Everything else on the
+// canvas is a saturated colour that carries over.
+const ELIDED_NODE_COLORS = {
+    dark:  { background: '#2d2d2d', border: '#00ced1', text: '#9a9a9a' },
+    light: { background: '#cfe8ff', border: '#2a7fc0', text: '#14395c' }
+};
+
 // Line style and weight per relation, mirroring the DOT writer in
 // src/eventstructureviz.ml so an exported file reads like one from
 // `mordor visual-es --output-mode dot`. The colours stay the UI's, since the
@@ -71,73 +81,102 @@ class GraphVisualizer {
 
         this.cy = cytoscape({
             container: document.getElementById('cy'),
-            style: [
-                {
-                    selector: 'node',
-                    style: {
-                        'background-color': '#0e639c',
-                        'label': 'data(label)',
-                        'color': '#ffffff',
-                        'text-valign': 'center',
-                        'text-halign': 'center',
-                        'font-size': '11px',
-                        'font-weight': 'bold',
-                        'shape': 'roundrectangle',
-                        'width': 'label',
-                        'min-width': '30px',
-                        'height': '20px',
-                        'padding': '12px',
-                        'text-wrap': 'wrap',
-                        'text-max-width': '180px'
-                    }
-                },
-                {
-                    selector: 'node[isRoot]',
-                    style: {
-                        'background-color': '#1177bb',
-                        'border-width': '3px',
-                        'border-color': '#ffffff'
-                    }
-                },
-                {
-                    // Drawn only as the far end of a fwd/we edge: the event is
-                    // not in the execution, elision is what removed it.
-                    selector: 'node[?isElided]',
-                    style: {
-                        'background-color': '#2d2d2d',
-                        'border-width': '2px',
-                        'border-style': 'dashed',
-                        'border-color': '#00ced1',
-                        'color': '#9a9a9a'
-                    }
-                },
-                {
-                    selector: 'edge',
-                    style: {
-                        'width': 2,
-                        'line-color': 'data(color)',
-                        'target-arrow-color': 'data(color)',
-                        'target-arrow-shape': 'triangle',
-                        'curve-style': 'bezier',
-                        'arrow-scale': 1.2,
-                        'label': 'data(type)',
-                        'font-size': '9px',
-                        'color': '#cccccc',
-                        'text-background-color': '#1e1e1e',
-                        'text-background-opacity': 0.8,
-                        'text-background-padding': '2px'
-                    }
-                }
-            ],
+            style: GraphVisualizer.stylesheet(GraphVisualizer.currentTheme()),
             layout: { name: 'preset' },
             minZoom: 0.1,
             maxZoom: 3,
             wheelSensitivity: 0.2
         });
 
+        this.watchTheme();
         this.setupEventListeners();
         this.setupResizer();
         this.setupGraphInteractions();
+    }
+
+    /** 'light' or 'dark', as index.html has stamped it on <html>. */
+    static currentTheme() {
+        return document.documentElement.getAttribute('data-theme') === 'light'
+            ? 'light'
+            : 'dark';
+    }
+
+    /** The cytoscape stylesheet for a theme. Rebuilt rather than patched on a
+     *  toggle, so repeated toggles cannot pile up overriding rules. */
+    static stylesheet(theme) {
+        const elided = ELIDED_NODE_COLORS[theme] || ELIDED_NODE_COLORS.dark;
+        return [
+            {
+                selector: 'node',
+                style: {
+                    'background-color': '#0e639c',
+                    'label': 'data(label)',
+                    'color': '#ffffff',
+                    'text-valign': 'center',
+                    'text-halign': 'center',
+                    'font-size': '11px',
+                    'font-weight': 'bold',
+                    'shape': 'roundrectangle',
+                    'width': 'label',
+                    'min-width': '30px',
+                    'height': '20px',
+                    'padding': '12px',
+                    'text-wrap': 'wrap',
+                    'text-max-width': '180px'
+                }
+            },
+            {
+                selector: 'node[isRoot]',
+                style: {
+                    'background-color': '#1177bb',
+                    'border-width': '3px',
+                    'border-color': '#ffffff'
+                }
+            },
+            {
+                // Drawn only as the far end of a fwd/we edge: the event is
+                // not in the execution, elision is what removed it.
+                selector: 'node[?isElided]',
+                style: {
+                    'background-color': elided.background,
+                    'border-width': '2px',
+                    'border-style': 'dashed',
+                    'border-color': elided.border,
+                    'color': elided.text
+                }
+            },
+            {
+                selector: 'edge',
+                style: {
+                    'width': 2,
+                    'line-color': 'data(color)',
+                    'target-arrow-color': 'data(color)',
+                    'target-arrow-shape': 'triangle',
+                    'curve-style': 'bezier',
+                    'arrow-scale': 1.2,
+                    'label': 'data(type)',
+                    'font-size': '9px',
+                    'color': '#cccccc',
+                    'text-background-color': '#1e1e1e',
+                    'text-background-opacity': 0.8,
+                    'text-background-padding': '2px'
+                }
+            }
+        ];
+    }
+
+    /** Re-style when the theme toggle in index.html flips data-theme. */
+    watchTheme() {
+        if (typeof MutationObserver === 'undefined') return;
+        new MutationObserver(() => {
+            this.cy
+                .style()
+                .fromJson(GraphVisualizer.stylesheet(GraphVisualizer.currentTheme()))
+                .update();
+        }).observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['data-theme']
+        });
     }
 
     setupGraphInteractions() {
@@ -1170,7 +1209,10 @@ class GraphVisualizer {
             if (n.data('isRoot')) {
                 attrs.push('penwidth=2.0', 'color="#1177bb"', 'shape=doublecircle');
             } else if (n.data('isElided')) {
-                attrs.push('style="rounded,dashed"', 'color="#00ced1"');
+                // graphviz renders on white, so take the light palette
+                attrs.push('style="rounded,dashed,filled"',
+                           `color="${ELIDED_NODE_COLORS.light.border}"`,
+                           `fillcolor="${ELIDED_NODE_COLORS.light.background}"`);
             }
             attrs.push(`label="${this.dotEscape(n.data('label'))}"`);
             lines.push(`  ${this.dotNodeId(n.id())} [${attrs.join(', ')}];`);
