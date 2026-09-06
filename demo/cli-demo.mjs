@@ -338,10 +338,15 @@ function director(page, opts) {
       if (hold) await d.beat(hold);
     },
 
-    async card(title, subtitle, hold = 1600) {
+    /**
+     * Show a title card. `keep` leaves it up — for the last one, so a looping
+     * GIF restarts from the card instead of sitting on a dead terminal.
+     */
+    async card(title, subtitle, hold = 1600, { keep = false } = {}) {
       if (!opts.cards) return;
       await page.evaluate(([t, s]) => window.__term.card(t, s), [title, subtitle]);
       await d.beat(hold);
+      if (keep) return;
       await page.evaluate(() => window.__term.hideCard());
       await d.beat(400);
     },
@@ -511,7 +516,7 @@ const SCENES = [
     title: 'close',
     async run(d) {
       await d.say('');
-      await d.card('MoRDor', 'github.com/christiankissig/mordor', 1900);
+      await d.card('MoRDor', 'github.com/christiankissig/mordor', 1900, { keep: true });
     },
   },
 ];
@@ -542,7 +547,6 @@ async function record(opts) {
       console.log(`  · ${scene.title}`);
       await scene.run(d);
     }
-    await d.beat(600);
   } finally {
     await context.close();
     await browser.close();
