@@ -108,7 +108,7 @@ own model is characterised by.
 
 | Key | Column | MoRDor coverage |
 |---|---|---|
-| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (8 tests here; 3 more carry `[C11]`/`[RA]`/`[SRA]` and moved to `litmus-tests-cpp/` and `litmus-tests-ra/`) |
+| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (7 tests here; 3 more carry `[C11]`/`[RA]`/`[SRA]` and moved to `litmus-tests-cpp/` and `litmus-tests-ra/`; `MP+fence+addr.lit` is parked in `litmus-tests-review/`) |
 
 This was the gap. The zoo has an `mca` cell for 63 models (31 true, 32 false) and
 **none for MRD or sMRD**.
@@ -134,7 +134,7 @@ single write is left as an explanation.
 | `WRC+data+addr.lit` | POWER/ARMv7 allow; **ARMv8/RVWMO/SC forbid** | allows |
 | `RWC+addr+fence.lit` | POWER/ARMv7 allow; SC/x86-TSO forbid | allows |
 | `ISA2+data+addrs.lit` | POWER/ARMv7/ARMv8 allow (P0 unfenced); SC forbids | allows |
-| `MP+fence+addr.lit` | POWER/ARM/ARMv8/SC forbid; bare Coherence allows (positive control) | **allows ✗** |
+| `MP+fence+addr.lit` (now in `litmus-tests-review/`) | POWER/ARM/ARMv8/SC forbid; bare Coherence allows (positive control) | **allows ✗** |
 
 Reading the table: **sMRD as MoRDor implements it is not multicopy atomic**, and
 it allows every shape in the family — the controls included.

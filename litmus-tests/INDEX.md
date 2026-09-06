@@ -1,13 +1,14 @@
 # Litmus Tests Index
 
-Total tests: 284
+Total tests: 261
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
 > scanned: `litmus-tests-promising/` (`[Promising]`), `litmus-tests-cpp/`
 > (`[C11]`, `[C17]`, `[C20]`) and `litmus-tests-ra/` (`[RA]`, `[SRA]`). Each has
-> a README with the reference verdicts.
+> a README with the reference verdicts. Tests whose assertion MoRDor does not
+> validate are parked in `litmus-tests-review/`, also unscanned.
 
 ## Test Files
 
@@ -23,7 +24,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - atomics/mp-atomic.lit
 - atomics/mp-atomic2.lit
 - avoidoota/additional_inventintload.lit
-- avoidoota/additional_nonlb.lit
 - avoidoota/additional_twosource.lit
 - avoidoota/listing1.lit
 - avoidoota/listing11.lit
@@ -31,10 +31,8 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - avoidoota/listing13.lit
 - avoidoota/listing14.lit
 - avoidoota/listing15.lit
-- avoidoota/listing16.lit
 - avoidoota/listing17.lit
 - avoidoota/listing18.lit
-- avoidoota/listing19.lit
 - avoidoota/listing20.lit
 - avoidoota/listing21.lit
 - avoidoota/listing22.lit
@@ -43,7 +41,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - avoidoota/listing25.lit
 - avoidoota/listing26.lit
 - avoidoota/listing27_allow.lit
-- avoidoota/listing27_forbid.lit
 - avoidoota/listing2_5.lit
 - avoidoota/listing2_5pwg.lit
 - avoidoota/listing3.lit
@@ -52,9 +49,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - basic/par-comp.lit
 - basic/rw.lit
 - c20/rs-example.lit
-- esop_problem/RRE.lit
 - esop_problem/cse.lit
-- esop_problem/lb+ctrldat+ctrl-single.lit
 - esop_problem/lb+ctrldata+ctrl-double.lit
 - esop_problem/lb+ctrldata+po.lit
 - esop_problem/lb+datas.lit
@@ -77,7 +72,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - jctc/JCTC1.lit
 - jctc/JCTC10.lit
 - jctc/JCTC11.lit
-- jctc/JCTC12.lit
 - jctc/JCTC13.lit
 - jctc/JCTC14.lit
 - jctc/JCTC15.lit
@@ -86,22 +80,16 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - jctc/JCTC17-smaller.lit
 - jctc/JCTC17.lit
 - jctc/JCTC18.lit
-- jctc/JCTC19.lit
-- jctc/JCTC2.lit
-- jctc/JCTC20.lit
-- jctc/JCTC3.lit
 - jctc/JCTC4.lit
 - jctc/JCTC5.lit
 - jctc/JCTC7.lit
 - jctc/JCTC8.lit
 - jctc/JCTC8b.lit
 - jctc/JCTC9.lit
-- jctc/JCTC9b.lit
 - on_thin_air_reads19/P1.lit
 - on_thin_air_reads19/P2.lit
 - on_thin_air_reads19/P3.lit
 - on_thin_air_reads19/P4.lit
-- on_thin_air_reads19/P5.lit
 - on_thin_air_reads19/P6.lit
 - on_thin_air_reads19/TC7.lit
 - on_thin_air_reads19/TC9a.lit
@@ -115,8 +103,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - own/JCTC12.lit
 - own/LF.lit
 - own/OOTA7.lit
-- own/ORI.lit
-- own/ORI2.lit
 - own/VRA-JCTC1.lit
 - own/coproductReorder.lit
 - own/ctrl_subsumed_by_data.lit
@@ -137,7 +123,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - own/sync/writeElisionRel.lit
 - pldi_repairing/IRIW+acq+sc.lit
 - pldi_repairing/LB+deps.lit
-- pldi_repairing/LB.lit
 - pldi_repairing/RWC+syncs.lit
 - pldi_repairing/W+WRC.lit
 - popl_bridging/ARM FADD.lit
@@ -148,16 +133,13 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - popl_bridging/Load buffering with release writes.lit
 - popl_bridging/MP+rel+acq.lit
 - popl_bridging/PSC.lit
-- popl_bridging/Preserving detour.lit
 - popl_bridging/RMW Atomicity.lit
 - popl_bridging/rfi is not always preserved.lit
-- popl_bubbly/LB+deps.lit
 - popl_bubbly/LB+false-deps.lit
 - popl_bubbly/LB.lit
 - popl_grounding/Coh-CYC (Soham).lit
 - popl_grounding/Coh.lit
 - popl_grounding/Cwrites.lit
-- popl_grounding/FADD.lit
 - popl_grounding/LB.lit
 - popl_grounding/LBfd.lit
 - popl_grounding/RNG.lit
@@ -174,11 +156,9 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - popl_promising/LBr.lit
 - popl_promising/MP+fences.lit
 - popl_promising/Page 7 Column 1.lit
-- popl_promising/Page 7 Column 1b.lit
 - popl_promising/Par-Inc.lit
 - popl_promising/SB+fences.lit
 - popl_promising/SB.lit
-- popl_promising/Upd-Stuck.lit
 - popl_promising/LBaa/LBa'0.lit
 - popl_promising/LBaa/LBa'1.lit
 - requests/0nONvMSw7 (MP).lit
@@ -209,7 +189,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit
 - sevcik_thesis/Reordering (f1.3)/RA.lit
 - sevcik_thesis/Reordering (f1.3)/RB.lit
-- sevcik_thesis/Skip/LB+locks.lit
 - sevcik_thesis/Skip/Redundant Write after Read Elimination.lit
 - sevcik_thesis/Skip/Reordering with external actions.lit
 - sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit
@@ -283,7 +262,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 - rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit
 - rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit
-- rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit
 - rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit
 - rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit
 - rmm-zoo/properties/atomicity-mca/WRC+rlx.lit
