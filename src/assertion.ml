@@ -658,8 +658,12 @@ module ConditionChecker = struct
         |> List.map
              (Expr.evaluate ~env:(Hashtbl.find_opt last_writes_to_variables))
       in
-      let cond_expr_and_rf_conditions = inst_cond_expr @ rf_conditions in
-      let is_sat = Solver.is_sat cond_expr_and_rf_conditions in
+      (* The execution's own path predicates have to hold alongside the
+         condition.  Asking the solver about the condition and the rf equalities
+         alone leaves every register the rf edges do not pin free, so a
+         condition the execution's values contradict still comes back sat. *)
+      let query = inst_cond_expr @ rf_conditions @ execution.ex_p in
+      let is_sat = Solver.is_sat query in
         Logs_safe.debug (fun m -> m "Solver result: %b" is_sat);
         is_sat
 

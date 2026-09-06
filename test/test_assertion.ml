@@ -77,10 +77,10 @@ let make_structure ?(fj = USet.create ()) ?(malloc_events = USet.create ())
   }
 
 (** Build a [symbolic_execution] with the given event set [e] and id. Accepts
-    optional [ppo], [dp], [rf], [fix_rf_map], [final_env]. *)
+    optional [ppo], [dp], [rf], [fix_rf_map], [final_env], [ex_p]. *)
 let make_execution ?(ppo = USet.create ()) ?(dp = USet.create ())
     ?(rf = USet.create ()) ?(fix_rf_map = Hashtbl.create 0)
-    ?(final_env = Hashtbl.create 0) ~id e =
+    ?(final_env = Hashtbl.create 0) ?(ex_p = []) ~id e =
   {
     id;
     e;
@@ -88,7 +88,7 @@ let make_execution ?(ppo = USet.create ()) ?(dp = USet.create ())
     dp;
     ppo;
     rmw = USet.create ();
-    ex_p = [];
+    ex_p;
     fix_rf_map;
     pointer_map = None;
     final_env;
@@ -650,6 +650,65 @@ let test_forbid_cond_empty_non_exhaustive () =
       "forbid(cond) empty list: valid=true preserved" true result.valid
 
 (* ================================================================== *)
+(*  Bug 4 - an execution's path predicates constrain its condition     *)
+(* ================================================================== *)
+
+(** The same fixture, but the register is left symbolic and pinned to 0 by the
+    execution's path predicates instead of being a literal in [final_env]. *)
+let make_symbolic_cond_fixture value =
+  let tbl, m, w, ppo, evts = make_clean_events 80 "θ" in
+  let structure =
+    make_structure tbl ~malloc_events:(USet.of_list [ m ])
+      ~write_events:(USet.of_list [ w ])
+  in
+  let final_env = Hashtbl.create 1 in
+    Hashtbl.add final_env "r1" (EVar "α");
+    let ex_p = [ EBinOp (EVar "α", "=", ENum (Z.of_int value)) ] in
+      (structure, make_execution ~id:1 ~ppo ~final_env ~ex_p evts)
+
+(** An execution whose path predicates say α = 0 does not witness r1 = 1. The
+    solver query used to carry only the condition and the rf equalities, so α
+    stayed free and "α = 1" came back sat for an execution that never produces
+    it. *)
+let test_ex_p_blocks_unreachable_condition () =
+  let structure, ex = make_symbolic_cond_fixture 0 in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow(r1 = 1) against an α = 0 execution: valid=false" false result.valid
+
+(** The forbid counterpart: nothing to contradict it, so it stands. *)
+let test_ex_p_forbid_unreachable_condition () =
+  let structure, ex = make_symbolic_cond_fixture 0 in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Forbid (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "forbid(r1 = 1) against an α = 0 execution: valid=true" true result.valid
+
+(** Path predicates that agree with the condition still let it through. *)
+let test_ex_p_admits_reachable_condition () =
+  let structure, ex = make_symbolic_cond_fixture 1 in
+  let result =
+    sync
+      (check_assertion
+         (cond_assertion Allow (r1_eq 1))
+         [ ex ] structure ~exhaustive:false
+      )
+  in
+    Alcotest.(check bool)
+      "allow(r1 = 1) against an α = 1 execution: valid=true" true result.valid
+
+(* ================================================================== *)
 (*  Suite assembly                                                     *)
 (* ================================================================== *)
 
@@ -758,6 +817,17 @@ let suite =
           `Quick test_forbid_cond_instances_contradicted;
         Alcotest.test_case "forbid(cond) empty list: valid=true preserved"
           `Quick test_forbid_cond_empty_non_exhaustive;
+      ]
+    (* Bug 4: path predicates constrain the condition *)
+    @ [
+        Alcotest.test_case
+          "ex_p: allow not witnessed by an execution whose predicates forbid it"
+          `Quick test_ex_p_blocks_unreachable_condition;
+        Alcotest.test_case
+          "ex_p: forbid stands when no execution's predicates admit it" `Quick
+          test_ex_p_forbid_unreachable_condition;
+        Alcotest.test_case "ex_p: allow witnessed when the predicates agree"
+          `Quick test_ex_p_admits_reachable_condition;
       ]
     (* ub and valid field invariants *)
     @ List.map
