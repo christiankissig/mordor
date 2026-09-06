@@ -46,7 +46,7 @@ different question from the one the file asks.
 | `properties/atomicity-mca/IRIW+rel+acq.lit` | allow `r1=1 ∧ r2=0 ∧ r3=1 ∧ r4=0` | WRA/RA/SRA/C11 allow; SC forbids | allows ✓ |
 | `properties/atomicity-mca/WRC+rel+acq.lit` | forbid `r1=1 ∧ r2=1 ∧ r3=0` | all forbid (negative control) | **allows ✗** |
 
-## The two negative controls do not hold
+## The two negative controls do not hold — #67, #68
 
 `MP+rel+acq` and `WRC+rel+acq` are message passing over a release write and an
 acquire read. **Every** model in the zoo's RA family forbids them, sMRD included
@@ -55,6 +55,12 @@ vacuous. MoRDor reports a witnessing execution for both.
 
 This is not the missing-model problem. It is what the sMRD checker does with
 release-acquire synchronisation, and it wants investigating on its own.
+
+Measured since: RC11 and IMM both forbid these two, in one execution fewer each.
+The root cause is in `src/coherence.ml`'s `SMRD.build_cache`, which builds
+`hb = (ppo ∪ dp)⁺` — `rf` is not in it, so a release write read by an acquire
+read creates no synchronises-with edge and the coherence axiom cannot see the
+message-passing chain. #67 and #68 carry the detail.
 
 It was previously invisible, and `litmus-tests/rmm-zoo/README.md` still records
 both as `forbids ✓` in its `properties/atomicity-mca/` table. That reading was

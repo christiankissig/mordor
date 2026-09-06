@@ -86,7 +86,7 @@ message passing with a fence on the writer and an address dependency on the
 reader. Every model with fence ordering forbids it — the zoo carries it as a
 *positive control*, the shape only a bare coherence checker allows — and MoRDor
 allows it under IMM. The two release-acquire controls with the same character,
-`MP+rel+acq` and `WRC+rel+acq`, are in `litmus-tests-ra/` because they also name
+`MP+rel+acq` and `WRC+rel+acq` (#67, #68), are in `litmus-tests-ra/` because they also name
 an unimplemented model; see that README. Fence and release-acquire ordering in
 the checker is the common thread and the place to start.
 
