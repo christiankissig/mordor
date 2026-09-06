@@ -88,6 +88,8 @@ let make_execution ?(ppo = USet.create ()) ?(dp = USet.create ())
     dp;
     ppo;
     rmw = USet.create ();
+    fwd = USet.create ();
+    we = USet.create ();
     ex_p;
     fix_rf_map;
     pointer_map = None;

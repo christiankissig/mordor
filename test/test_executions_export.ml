@@ -58,7 +58,8 @@ module TestData = struct
   let make_execution ?(id = 0) ?(events = USet.of_list [ 0; 1; 2 ])
       ?(rf = USet.of_list [ (1, 2) ]) ?(dp = USet.create ())
       ?(ppo = USet.of_list [ (0, 1); (1, 2) ]) ?(rmw = USet.create ())
-      ?(ex_p = []) () : symbolic_execution =
+      ?(fwd = USet.create ()) ?(we = USet.create ()) ?(ex_p = []) () :
+      symbolic_execution =
     {
       id;
       e = events;
@@ -66,6 +67,8 @@ module TestData = struct
       dp;
       ppo;
       rmw;
+      fwd;
+      we;
       ex_p;
       fix_rf_map = Hashtbl.create 0;
       pointer_map = None;
@@ -123,6 +126,29 @@ let test_execution_to_json_relations () =
     check pair_list "ppo" [ (0, 2); (1, 2) ] (List.sort compare j.ppo);
     check (list string) "predicates" [ "true" ] j.predicates
 
+(** The forwarding context reaches the export. Both relations name an event the
+    execution does not contain -- elision is what removed it -- so they are
+    copied verbatim rather than filtered against the event set the way po is. *)
+let test_execution_to_json_forwarding_context () =
+  let s = TestData.make_structure () in
+  let exec =
+    TestData.make_execution
+      ~events:(USet.of_list [ 1; 2 ])
+      ~fwd:(USet.of_list [ (1, 6) ])
+      ~we:(USet.of_list [ (4, 1) ])
+      ()
+  in
+  let j = execution_to_json s exec in
+    check pair_list "fwd survives an absent target" [ (1, 6) ] j.fwd;
+    check pair_list "we survives an absent target" [ (4, 1) ] j.we
+
+(** An execution with no forwarding exports empty relations, not absent ones. *)
+let test_execution_to_json_no_forwarding () =
+  let s = TestData.make_structure () in
+  let j = execution_to_json s (TestData.make_execution ()) in
+    check pair_list "fwd" [] j.fwd;
+    check pair_list "we" [] j.we
+
 (** build_executions_document returns None until the pipeline has produced both
     a structure and an executions set. *)
 let test_build_document_requires_structure_and_executions () =
@@ -176,6 +202,14 @@ let suite =
       ("event_to_json read", `Quick, test_event_to_json_read);
       ("execution_to_json filters po", `Quick, test_execution_to_json_filters_po);
       ("execution_to_json relations", `Quick, test_execution_to_json_relations);
+      ( "execution_to_json forwarding context",
+        `Quick,
+        test_execution_to_json_forwarding_context
+      );
+      ( "execution_to_json without forwarding",
+        `Quick,
+        test_execution_to_json_no_forwarding
+      );
       ( "build_executions_document preconditions",
         `Quick,
         test_build_document_requires_structure_and_executions

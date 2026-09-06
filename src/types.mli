@@ -140,15 +140,6 @@ val func_add : ('a, 'b) func -> 'a -> 'b -> ('a, 'b) func
 (** Get a value from the function map, using default if not found *)
 val func_get : ('a, 'b) func -> 'a -> 'b
 
-type justification = {
-  p : expr list; (* Predicates/conditions *)
-  d : string uset; (* Dependency symbols *)
-  fwd : (int * int) uset; (* Forwarding edges (event pairs) *)
-  we : (int * int) uset; (* Write-elision edges (event pairs) *)
-  w : event; (* The write event being justified *)
-}
-[@@deriving show]
-
 (** Symbolic Execution *)
 type symbolic_execution = {
   id : int; (* Unique identifier *)
@@ -157,11 +148,25 @@ type symbolic_execution = {
   dp : (int * int) uset; (* Dependencies *)
   ppo : (int * int) uset; (* Preserved program order *)
   rmw : (int * int) uset; (* RMW pairs *)
+  fwd : (int * int) uset; (* Forwarding edges, over all justifications *)
+  we : (int * int) uset; (* Write elisions, over all justifications *)
   ex_p : expr list; (* Predicates *)
   fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer
   mappings *)
   final_env : (string, expr) Hashtbl.t;
+}
+[@@deriving show]
+
+(* Declared after symbolic_execution: both records carry fwd and we, and a bare
+   field resolves to the last type defining it, so this order keeps existing
+   just.fwd / just.we readers pointing at a justification. *)
+type justification = {
+  p : expr list; (* Predicates/conditions *)
+  d : string uset; (* Dependency symbols *)
+  fwd : (int * int) uset; (* Forwarding edges (event pairs) *)
+  we : (int * int) uset; (* Write-elision edges (event pairs) *)
+  w : event; (* The write event being justified *)
 }
 [@@deriving show]
 

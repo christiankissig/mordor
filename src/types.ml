@@ -221,18 +221,6 @@ type symbolic_event_structure = {
 }
 [@@deriving show]
 
-(** Justifications *)
-type justification = {
-  p : expr list; [@opaque] (* Predicates/conditions *)
-  d : string uset; [@printer pp_string_uset] (* Dependency symbols *)
-  fwd : (int * int) uset; [@printer pp_int_urel]
-      (* Forwarding edges (event pairs) *)
-  we : (int * int) uset; [@printer pp_int_urel]
-      (* Write-elision edges (event pairs) *)
-  w : event; (* The write event being justified *)
-}
-[@@deriving show]
-
 let pp_fix_rf_map fmt fix_rf_map =
   Format.fprintf fmt "{%s}"
     (String.concat ", "
@@ -262,10 +250,32 @@ type symbolic_execution = {
   dp : (int * int) uset; [@printer pp_int_urel]
   ppo : (int * int) uset; [@printer pp_int_urel]
   rmw : (int * int) uset; [@printer pp_int_urel]
+  fwd : (int * int) uset; [@printer pp_int_urel]
+      (** Forwarding edges accumulated over the execution's justifications. *)
+  we : (int * int) uset; [@printer pp_int_urel]
+      (** Write-elision edges accumulated over the execution's justifications.
+      *)
   ex_p : expr list; [@printer pp_expr_list]
   fix_rf_map : (string, expr) Hashtbl.t; [@printer pp_fix_rf_map]
   pointer_map : (int, value_type) Hashtbl.t option; [@opaque]
   final_env : (string, expr) Hashtbl.t; [@printer pp_env]
+}
+[@@deriving show]
+
+(* Declared after symbolic_execution on purpose.  Both records carry fwd and we,
+   and OCaml resolves a bare field to the last type that defines it, so this
+   order is what keeps the existing just.fwd / just.we readers pointing at a
+   justification.  Accesses on symbolic_execution's copies are annotated. *)
+
+(** Justifications *)
+type justification = {
+  p : expr list; [@opaque] (* Predicates/conditions *)
+  d : string uset; [@printer pp_string_uset] (* Dependency symbols *)
+  fwd : (int * int) uset; [@printer pp_int_urel]
+      (* Forwarding edges (event pairs) *)
+  we : (int * int) uset; [@printer pp_int_urel]
+      (* Write-elision edges (event pairs) *)
+  w : event; (* The write event being justified *)
 }
 [@@deriving show]
 

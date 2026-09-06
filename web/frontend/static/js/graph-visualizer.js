@@ -20,6 +20,8 @@ const EDGE_COLORS = {
     fr: '#f48771',    // Red
     lo: '#0e639c',    // Blue
     fj: '#89d185',    // Green
+    fwd: '#00ced1',   // Dark turquoise - forwarding
+    we: '#c71585',    // Medium violet red - write elision
     uaf: '#ff0000',   // Bright Red for use-after-free
     default: '#6a6a6a' 
 };
@@ -36,6 +38,8 @@ const EDGE_DOT_STYLES = {
     dp:  { style: 'bold',   penwidth: 1.5 },
     ppo: { style: 'bold',   penwidth: 1.5 },
     rf:  { style: 'bold',   penwidth: 1.5 },
+    fwd: { style: 'dashed', penwidth: 1.5 },
+    we:  { style: 'dashed', penwidth: 1.5 },
     uaf: { style: 'dashed', penwidth: 2.0 },
     default: { style: 'solid', penwidth: 1.0 }
 };
@@ -93,6 +97,18 @@ class GraphVisualizer {
                         'background-color': '#1177bb',
                         'border-width': '3px',
                         'border-color': '#ffffff'
+                    }
+                },
+                {
+                    // Drawn only as the far end of a fwd/we edge: the event is
+                    // not in the execution, elision is what removed it.
+                    selector: 'node[?isElided]',
+                    style: {
+                        'background-color': '#2d2d2d',
+                        'border-width': '2px',
+                        'border-style': 'dashed',
+                        'border-color': '#00ced1',
+                        'color': '#9a9a9a'
                     }
                 },
                 {
@@ -1153,6 +1169,8 @@ class GraphVisualizer {
             const attrs = [];
             if (n.data('isRoot')) {
                 attrs.push('penwidth=2.0', 'color="#1177bb"', 'shape=doublecircle');
+            } else if (n.data('isElided')) {
+                attrs.push('style="rounded,dashed"', 'color="#00ced1"');
             }
             attrs.push(`label="${this.dotEscape(n.data('label'))}"`);
             lines.push(`  ${this.dotNodeId(n.id())} [${attrs.join(', ')}];`);
@@ -1550,6 +1568,7 @@ class GraphVisualizer {
                         id: String(n.id),
                         label: label,
                         isRoot: n.isRoot,
+                        isElided: n.isElided,
                         source_start_line: n.source_start_line,
                         source_start_col: n.source_start_col,
                         source_end_line: n.source_end_line,

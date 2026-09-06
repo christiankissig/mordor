@@ -36,6 +36,12 @@ module FreezeResult : sig
     ppo : (int * int) uset;  (** Preserved program order. *)
     rf : (int * int) uset;  (** Read-from relation. *)
     rmw : (int * int) uset;  (** Read-modify-write pairs. *)
+    fwd : (int * int) uset;
+        (** Forwarding edges of the justification combination this came from.
+            Outside {!equal}, {!hash} and {!contains}, so results that agree on
+            the relations above still deduplicate; the survivor absorbs the
+            others' contexts. *)
+    we : (int * int) uset;  (** Write elisions, on the same terms as [fwd]. *)
     pp : expr list;  (** Path predicates that must be satisfied. *)
     conds : expr list;  (** Additional conditions. *)
   }

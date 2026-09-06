@@ -58,6 +58,8 @@ module TestData = struct
       dp = USet.create ();
       ppo;
       rmw = USet.create ();
+      fwd = USet.create ();
+      we = USet.create ();
       ex_p = [];
       fix_rf_map = Hashtbl.create 0;
       pointer_map = None;

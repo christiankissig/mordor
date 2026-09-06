@@ -96,6 +96,8 @@ module TestSetMembership = struct
           rmw = USet.create ();
           dp = USet.create ();
           ppo;
+          fwd = USet.create ();
+          we = USet.create ();
           ex_p = [];
           fix_rf_map = Hashtbl.create 0;
           pointer_map = Some (Hashtbl.create 0);

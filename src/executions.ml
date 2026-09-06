@@ -216,6 +216,13 @@ module FreezeResult = struct
     ppo : (int * int) uset;  (** Preserved program order. *)
     rf : (int * int) uset;  (** Read-from relation. *)
     rmw : (int * int) uset;  (** Read-modify-write pairs. *)
+    fwd : (int * int) uset;
+        (** Forwarding edges of the justification combination this came from.
+            Not part of {!equal}, {!hash} or {!contains}: two results that agree
+            on the relations above are the same execution whichever forwarding
+            reached them, and deduplication unions the contexts rather than
+            keeping one and dropping the other. *)
+    we : (int * int) uset;  (** Write elisions, on the same terms as [fwd]. *)
     pp : expr list;  (** Path predicates that must be satisfied. *)
     conds : expr list;  (** Additional conditions. *)
   }
@@ -1053,6 +1060,10 @@ module Freeze = struct
                   ppo;
                   rf;
                   rmw;
+                  (* Filled in by the caller, which is what knows the
+                     justification combination these came from. *)
+                  fwd = USet.create ();
+                  we = USet.create ();
                   pp = execution_predicates;
                   conds = [ EBoolean true ];
                 }
@@ -1483,7 +1494,15 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                 (List.length freeze_results)
                 (List.length just_combo) (USet.size path.path)
           );
-          freeze_results
+          (* The forwarding context is the combination's, not the freeze's, so
+             it is attached here.  Each result gets its own copy: deduplication
+             unions into whichever it keeps, and sharing would make that union
+             visible to results it never applied to. *)
+          List.map
+            (fun (fr : FreezeResult.t) ->
+              { fr with fwd = USet.clone fwd; we = USet.clone we }
+            )
+            freeze_results
       in
 
       let* results = compute.run freeze_just_combo input_stream in
@@ -1567,6 +1586,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
               dp = freeze_res.dp;
               ppo = freeze_res.ppo;
               rmw = freeze_res.rmw;
+              fwd = freeze_res.fwd;
+              we = freeze_res.we;
               ex_p = freeze_res.pp;
               fix_rf_map = final_map;
               pointer_map = None;
@@ -1595,15 +1616,21 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
 
     let dedup_freeze_results stream =
       Logs_safe.debug (fun m -> m "Deduplicating freeze results...");
+      (* Duplicates are the same execution reached through different forwarding
+         contexts.  Keeping the first and dropping the rest loses every context
+         but one, so the kept result absorbs theirs. *)
       let seen = FreezeResultCache.create 1024 in
         let* stream = stream in
           List.filter_map
-            (fun fr ->
-              if FreezeResultCache.mem seen fr then None
-              else (
-                FreezeResultCache.add seen fr ();
-                Some fr
-              )
+            (fun (fr : FreezeResult.t) ->
+              match FreezeResultCache.find_opt seen fr with
+              | Some (kept : FreezeResult.t) ->
+                  ignore (USet.inplace_union kept.fwd fr.fwd);
+                  ignore (USet.inplace_union kept.we fr.we);
+                  None
+              | None ->
+                  FreezeResultCache.add seen fr fr;
+                  Some fr
             )
             stream
           |> Lwt.return
@@ -1652,13 +1679,18 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
       let* stream = stream in
       let seen = ExecutionCache.create 1024 in
 
+      (* As in dedup_freeze_results: merge the forwarding contexts of executions
+         that collapse together instead of keeping one arbitrarily. *)
       List.filter_map
-        (fun ex ->
-          if ExecutionCache.mem seen ex then None
-          else (
-            ExecutionCache.add seen ex ();
-            Some ex
-          )
+        (fun (ex : symbolic_execution) ->
+          match ExecutionCache.find_opt seen ex with
+          | Some (kept : symbolic_execution) ->
+              ignore (USet.inplace_union kept.fwd ex.fwd);
+              ignore (USet.inplace_union kept.we ex.we);
+              None
+          | None ->
+              ExecutionCache.add seen ex ex;
+              Some ex
         )
         stream
       |> Lwt.return

@@ -40,6 +40,10 @@ module EventStructureViz = struct
           (** constraints List of symbolic constraints restricting this event *)
       source_span : source_span option; [@default None]
           (** source_span Optional source code location for debugging *)
+      elided : bool; [@default false]
+          (** elided The event is not in the execution; it is drawn only as the
+              endpoint of a forwarding or write-elision edge, which is what
+              elided it. *)
     }
 
     (** [compare v1 v2] compares two vertices by their ID.
@@ -69,8 +73,10 @@ module EventStructureViz = struct
       - [FJ]: Fork-Join - thread creation/joining relationships
       - [DP preds]: Data Dependency with predicates
       - [PPO preds]: Preserved Program Order with predicates
-      - [RF preds]: Read-From relationship with predicates *)
-  type edge_label = PO | RMW | LO | FJ | DP | PPO | RF
+      - [RF preds]: Read-From relationship with predicates
+      - [FWD]: Forwarding - a read took its value from an earlier write
+      - [WE]: Write elision - a write was elided by a later one *)
+  type edge_label = PO | RMW | LO | FJ | DP | PPO | RF | FWD | WE
 
   (** {3 Edge Module}
 
@@ -109,6 +115,9 @@ module EventStructureViz = struct
         (** type_ Event type (e.g., "Read", "Write", "Fence") *)
     label : int;  (** label Event label number *)
     isRoot : bool;  (** isRoot Whether this is the root/initial event *)
+    isElided : bool; [@default false]
+        (** isElided Whether the event is drawn only as a forwarding or
+            write-elision endpoint, having been elided from the execution *)
     location : string option; [@default None]
         (** location Optional memory location string *)
     value : string option; [@default None]
@@ -180,7 +189,13 @@ module EventStructureViz = struct
       try Hashtbl.find structure.restrict event_id with Not_found -> []
     in
     let source_span = Hashtbl.find_opt source_spans event_id in
-      { Vertex.id = event_id; event = evt; constraints; source_span }
+      {
+        Vertex.id = event_id;
+        event = evt;
+        constraints;
+        source_span;
+        elided = false;
+      }
 
   (** [add_vertices_to_graph g event_ids structure source_spans] adds all
       specified events as vertices to the graph.
@@ -426,6 +441,53 @@ module EventStructureViz = struct
       |> URelation.transitive_reduction
       |> add_edges RMW;
 
+      (* The forwarding context the execution was justified under.
+
+         Both relations point at an event the execution does not contain:
+         elision is what removed it (freezing takes elided = pi_2 (fwd U we)),
+         so filtering these to pairs with both endpoints present drops every
+         one of them.  Draw the missing endpoint as an elided vertex instead --
+         that a read took its value from a write which is consequently not in
+         the execution is the whole content of the relation.
+
+         No transitive reduction: these are the edges the justifications
+         carried, and collapsing a chain would misreport which write a read was
+         forwarded from. *)
+      let add_context_edges label relation =
+        USet.iter
+          (fun (src, dst) ->
+            (* Keep the pair only if the surviving end is in the execution;
+               a pair with neither end present belongs to another path. *)
+            if USet.mem e src || USet.mem e dst then (
+              List.iter
+                (fun event_id ->
+                  if
+                    (not (Hashtbl.mem vertex_map event_id))
+                    && Hashtbl.mem structure.events event_id
+                  then (
+                    let v =
+                      {
+                        (create_vertex event_id structure source_spans) with
+                        Vertex.elided = true;
+                      }
+                    in
+                      G.add_vertex g v;
+                      Hashtbl.add vertex_map event_id v
+                  )
+                )
+                [ src; dst ];
+              if Hashtbl.mem vertex_map src && Hashtbl.mem vertex_map dst then
+                let v_src = Hashtbl.find vertex_map src in
+                let v_dst = Hashtbl.find vertex_map dst in
+                  G.add_edge_e g (G.E.create v_src label v_dst)
+            )
+          )
+          relation
+      in
+
+      add_context_edges FWD exec.fwd;
+      add_context_edges WE exec.we;
+
       g
 
   (** {1 Export Functions (DOT and JSON)} *)
@@ -572,6 +634,8 @@ module EventStructureViz = struct
         | DP -> ("dp", 0xFFA500, `Bold, 1.5)
         | PPO -> ("ppo", 0x800080, `Bold, 1.5)
         | RF -> ("rf", 0xA52A2A, `Bold, 1.5)
+        | FWD -> ("fwd", 0x00CED1, `Dashed, 1.5)
+        | WE -> ("we", 0xC71585, `Dashed, 1.5)
       in
         [ `Label label_txt; `Color color; `Style style; `Penwidth penwidth ]
 
@@ -647,6 +711,7 @@ module EventStructureViz = struct
       label = evt.label;
       (* Direct assignment from event.label *)
       isRoot = v.Vertex.id = 0;
+      isElided = v.Vertex.elided;
       location;
       value;
       constraints;
@@ -673,6 +738,8 @@ module EventStructureViz = struct
     | DP -> "dp"
     | PPO -> "ppo"
     | RF -> "rf"
+    | FWD -> "fwd"
+    | WE -> "we"
 
   (** [sort_edges_po_first edges] sorts edges to place program order edges
       first.
