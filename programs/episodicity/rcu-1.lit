@@ -24,7 +24,7 @@ rdet := malloc rN;
     *rn := rv+1;
     rsucc := cas(acquire,release,rC,rs,rn);
   } while (rsucc = 0);
-  *(rcu + rtid) := 0;
+  *(rrcu + rtid) := 0;
 
   // reclaim
   *(rdet + rtid) := rs;
@@ -40,7 +40,7 @@ rdet := malloc rN;
   {
     do
     {
-      rtemp := *(rcu + 0);
+      rtemp := *(rrcu + 0);
     }
     while (rtemp = 1);
   };
@@ -50,7 +50,7 @@ rdet := malloc rN;
   {
     do
     {
-      rtemp := *(rcu + 1);
+      rtemp := *(rrcu + 1);
     }
     while (rtemp = 1);
   };
@@ -60,7 +60,7 @@ rdet := malloc rN;
   {
     do
     {
-      rtemp := *(rcu + 2);
+      rtemp := *(rrcu + 2);
     }
     while (rtemp = 1);
   };
