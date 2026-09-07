@@ -1361,6 +1361,22 @@ let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
          match (acc : loop_episodicity_result option) with
          | Some result when result.is_episodic -> Lwt.return (Some result)
          | _ ->
+             (* Name the split being tried. Which boundary a verdict belongs to
+                is otherwise guesswork: the conditions log per bisection but
+                nothing says which one, and the summary keeps only the last. *)
+             Logs_safe.debug (fun m ->
+                 m "Loop %d: bisection left [%s] | right [%s]." loop_id
+                   (USet.values left
+                   |> List.sort compare
+                   |> List.map string_of_int
+                   |> String.concat "; "
+                   )
+                   (USet.values right
+                   |> List.sort compare
+                   |> List.map string_of_int
+                   |> String.concat "; "
+                   )
+             );
              let* result =
                check_loop_bisection_episodicity ctx cache loop_id left right
              in
