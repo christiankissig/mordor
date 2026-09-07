@@ -1367,8 +1367,11 @@ module TestEventOrdering = struct
         (fun e -> Hashtbl.add events e.label e)
         [ init; iter0_write; iter1_read ];
       let loop_indices = Hashtbl.create 2 in
+        (* Both in loop 0. loop_indices holds enclosing loop ids, not
+           iteration numbers; po_iter below is what puts them in successive
+           iterations. *)
         Hashtbl.add loop_indices iter0_write.label [ 0 ];
-        Hashtbl.add loop_indices iter1_read.label [ 1 ];
+        Hashtbl.add loop_indices iter1_read.label [ 0 ];
         let po_iter = USet.of_list [ (iter0_write.label, iter1_read.label) ] in
         let structure =
           {
@@ -1411,7 +1414,7 @@ module TestEventOrdering = struct
         [ init; iter0_write; iter1_write ];
       let loop_indices = Hashtbl.create 2 in
         Hashtbl.add loop_indices iter0_write.label [ 0 ];
-        Hashtbl.add loop_indices iter1_write.label [ 1 ];
+        Hashtbl.add loop_indices iter1_write.label [ 0 ];
         let po_iter = USet.of_list [ (iter0_write.label, iter1_write.label) ] in
         let structure =
           {
@@ -1515,8 +1518,8 @@ module TestEventOrdering = struct
         [ init; iter0; iter1; iter2 ];
       let loop_indices = Hashtbl.create 3 in
         Hashtbl.add loop_indices iter0.label [ 0 ];
-        Hashtbl.add loop_indices iter1.label [ 1 ];
-        Hashtbl.add loop_indices iter2.label [ 2 ];
+        Hashtbl.add loop_indices iter1.label [ 0 ];
+        Hashtbl.add loop_indices iter2.label [ 0 ];
         let po_iter =
           USet.of_list
             [ (iter0.label, iter1.label); (iter1.label, iter2.label) ]

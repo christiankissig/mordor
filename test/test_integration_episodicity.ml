@@ -454,7 +454,11 @@ failure at 4 is intended *)
        Loop 3 keeps its false but loses the [1]: it now reports no compatible
        bisection of its events, so no condition is evaluated at all and the
        failing set is empty. An empty list here means the check is skipped, so
-       this asserts only the verdict. *)
+       this asserts only the verdict.
+
+       Loop 1 fails the write condition alone; the events condition it also
+       failed was an artefact of Condition 4 comparing the whole program's
+       po_iter against a ppo built from the loop's slice. *)
     {
       filepath = "programs/episodicity/hp-1.lit";
       loop_expectations =
@@ -462,7 +466,7 @@ failure at 4 is intended *)
           {
             loop_id = 1;
             expected_episodic = false;
-            expected_failing_conditions = [ 2; 4 ];
+            expected_failing_conditions = [ 2 ];
           };
           {
             loop_id = 2;
@@ -480,8 +484,10 @@ failure at 4 is intended *)
          encoding; loops 1 and 2 fail the write and events conditions, loop 3 \
          admits no bisection";
     };
-    (* As for hp-1: what MoRDor reports today, where all four were expected
-       episodic. Loop 1 additionally fails the register condition. *)
+    (* Loops 2, 3 and 4 are episodic again, as the table has them. Loop 1, the
+       increment loop, is not: no single bisection satisfies all four, though
+       each condition is satisfiable by some bisection -- one boundary gets the
+       write and events conditions, another the register and events. *)
     {
       filepath = "programs/episodicity/rcu-1.lit";
       loop_expectations =
@@ -493,23 +499,23 @@ failure at 4 is intended *)
           };
           {
             loop_id = 2;
-            expected_episodic = false;
-            expected_failing_conditions = [ 4 ];
+            expected_episodic = true;
+            expected_failing_conditions = [];
           };
           {
             loop_id = 3;
-            expected_episodic = false;
-            expected_failing_conditions = [ 4 ];
+            expected_episodic = true;
+            expected_failing_conditions = [];
           };
           {
             loop_id = 4;
-            expected_episodic = false;
-            expected_failing_conditions = [ 4 ];
+            expected_episodic = true;
+            expected_failing_conditions = [];
           };
         ];
       description =
-        "RCU - no loop episodic under the symbolic do-while encoding; loop 1 \
-         also fails the register condition";
+        "RCU - sync loops 2, 3, 4 episodic; the increment loop is not, no \
+         single bisection satisfying all four conditions";
     };
   ]
 

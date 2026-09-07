@@ -1156,7 +1156,18 @@ module EventsCondition = struct
       |> USet.union (URelation.compose [ dp_ppo; ppo_iter; dp_ppo ])
     in
 
-    let unordered_pairs = USet.set_minus structure.po_iter cross_iter_ppo in
+    (* Restricted to the loop. structure.po_iter relates cross-iteration pairs
+       of every loop in the program, while cross_iter_ppo is built from the
+       forwarding context of the elaboration, which since 3a3be0f covers only
+       the loop and its po-predecessors. Subtracting one from the other left
+       every pair outside that slice unordered and reported: rcu-1's inc loop
+       has nine events and was reporting some 780 violations, near enough the
+       same count for every bisection, because almost none of them were its
+       own. delta_loop was computed for this and never applied. *)
+    let unordered_pairs =
+      USet.intersection structure.po_iter delta_loop |> fun within ->
+      USet.set_minus within cross_iter_ppo
+    in
 
     let violations = ref [] in
     let satisfied = ref true in
