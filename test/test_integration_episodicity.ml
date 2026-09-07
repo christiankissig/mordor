@@ -441,24 +441,32 @@ failure at 4 is intended *)
     single_episodic "programs/episodicity/spinlock-1.lit"
       "Spinlock - Loop 1 is episodic";
     (* These record what MoRDor reports today, not what the paper's table
-       claims. Loops 1 and 2 were expected episodic; under the symbolic
-       do-while encoding they are not, and not for a reason the analysis can be
-       tuned out of: the encoding gives one unravelled iteration plus the
-       residual loop, so the read at the top of the body -- rp := *rhp -- may
-       take its value from *rhp := rrC in the copy before it, which Condition 2
-       counts as a write from a previous iteration. That is what the loop is
-       for; publish the hazard pointer, read it back, repeat until stable.
-       Whether Condition 2 should admit it across that boundary is the open
-       question, not whether the implementation computes it correctly.
+       claims, and not a considered verdict on the program: loops 1 and 2 are
+       expected episodic and are currently reported otherwise for a reason that
+       is a defect in the checker.
 
-       Loop 3 keeps its false but loses the [1]: it now reports no compatible
-       bisection of its events, so no condition is evaluated at all and the
-       failing set is empty. An empty list here means the check is skipped, so
-       this asserts only the verdict.
+       Both loops sit inside another do-while, and the symbolic encoding gives
+       one unravelled body plus the residual loop, so their events arrive as two
+       po-incomparable copies -- loop 1's are 65..69 and 255..259, with no po
+       edge between the chains. all_bisections ranks events by how many of the
+       loop's events precede them and keeps the prefix of size k only when
+       exactly k events rank below k, which enumerates the order ideals of a
+       total order and nothing else. With the ranks tied across two chains that
+       holds only at k = 0 and k = |E|, and k = |E| leaves the right side empty,
+       so the sole surviving candidate is the empty bisection. With no left
+       there is no earlier part of an iteration for a read to read from, so
+       every loop read that may see a loop write is a write-condition
+       violation. Loop 3 is the same mechanism with no candidate at all, which
+       is what "could not analyze" reports.
 
-       Loop 1 fails the write condition alone; the events condition it also
-       failed was an artefact of Condition 4 comparing the whole program's
-       po_iter against a ppo built from the loop's slice. *)
+       Enumerating the po-downward-closed subsets properly is 36 candidates for
+       loop 1 and 8281 for loop 2, against 2^10 and 2^48 -- tractable to
+       enumerate, not yet to check at two minutes a bisection. The Todoist task
+       carries the options. Until one lands, read these as "fails against the
+       empty bisection", not as "not episodic".
+
+       An empty failing-condition list skips the check, so loop 3 asserts only
+       its verdict. *)
     {
       filepath = "programs/episodicity/hp-1.lit";
       loop_expectations =
@@ -480,9 +488,10 @@ failure at 4 is intended *)
           };
         ];
       description =
-        "Hazard pointers - no loop episodic under the symbolic do-while \
-         encoding; loops 1 and 2 fail the write and events conditions, loop 3 \
-         admits no bisection";
+        "Hazard pointers - loops 1 and 2 judged against the empty bisection, \
+         the only candidate all_bisections yields for a body duplicated into \
+         po-incomparable copies, so both fail the write condition; loop 3 \
+         yields no candidate at all";
     };
     (* Loops 2, 3 and 4 are episodic again, as the table has them. Loop 1, the
        increment loop, is not: no single bisection satisfies all four, though
