@@ -1165,7 +1165,8 @@ end
     @param elab_ctx The elaboration context.
     @param pre_justs The initial set of justifications.
     @return Promise of justifications after batch elaborations. *)
-let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
+let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
+    elab_ctx pre_justs =
   let landmark = Landmark.register "Elaborations.batch_elaborations" in
     Landmark.enter landmark;
 
@@ -1199,6 +1200,37 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
          the log are post-filter, and the filter looks like it is doing nothing. *)
       let covered_this_round = ref 0 in
 
+      (* Keep one justification per (p, d, w) triple.
+
+         ForwardElab emits, for a justification with forwarding set F and every
+         candidate edge e not in F, one with F union {e}. Over a fixed point that
+         enumerates the power set of the forwardable edges, and on hp-1 it does
+         not converge. What episodicity reads off the result is narrower: only
+         Condition 4 consumes justifications, and only through Freeze.freeze_dp,
+         which looks at just.p, just.d and just.w.label. Two justifications
+         agreeing there contribute the same dp edges however much forwarding
+         reached them -- 767 of hp-1's projected onto 24 triples, one of them
+         142 times over.
+
+         This is an approximation, not a projection, and only safe one way
+         round. Dropping a variant also drops whatever forwarding from *it*
+         would have reached, so a (p, d, w) obtainable only through the dropped
+         chain is lost. Losing one costs dp edges, and Condition 4 subtracts dp
+         from po_iter and reports the remainder: fewer edges leave more pairs
+         unordered and more violations reported. The error is towards "not
+         episodic", never towards claiming episodicity that does not hold.
+
+         Off by default. The executions pipeline reads just.fwd and just.we --
+         they are carried onto symbolic_execution and drawn in the Web UI -- so
+         only the episodicity path, which does not, may ask for this. *)
+      let seen_pdw = Hashtbl.create 64 in
+      let pdw_key (j : justification) =
+        ( List.map Expr.to_string j.p |> List.sort compare,
+          USet.values j.d |> List.sort compare,
+          j.w.label
+        )
+      in
+
       let filter_justs new_justs justs =
         let sorted_justs =
           List.stable_sort
@@ -1210,6 +1242,9 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
             (fun just ->
               if
                 (not (JustificationCache.mem just_cache just))
+                && ((not collapse_forwarding)
+                   || not (Hashtbl.mem seen_pdw (pdw_key just))
+                   )
                 && (not
                       (List.exists
                          (fun just' -> Justification.covers just' just)
@@ -1223,6 +1258,8 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
                      )
               then (
                 JustificationCache.add just_cache just ();
+                if collapse_forwarding then
+                  Hashtbl.replace seen_pdw (pdw_key just) ();
                 kept := just :: !kept
               )
               else incr covered_this_round
@@ -1464,7 +1501,8 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
     @param structure The event structure.
     @param init_ppo Initial PPO relations.
     @return Promise of generated justifications. *)
-let generate_justifications ?(num_threads = 1) structure fwd_es_ctx init_ppo =
+let generate_justifications ?(num_threads = 1) ?(collapse_forwarding = false)
+    structure fwd_es_ctx init_ppo =
   let po = structure.po in
   let events = structure.events in
 
@@ -1484,7 +1522,7 @@ let generate_justifications ?(num_threads = 1) structure fwd_es_ctx init_ppo =
 
   Logs_safe.debug (fun m -> m "Starting elaborations...");
 
-  batch_elaborations ~num_threads elab_ctx pre_justs
+  batch_elaborations ~num_threads ~collapse_forwarding elab_ctx pre_justs
 
 (** [step_generate_justifications lwt_ctx] step to generate justifications.
 
@@ -1493,8 +1531,8 @@ let generate_justifications ?(num_threads = 1) structure fwd_es_ctx init_ppo =
 
     @param lwt_ctx The Lwt promise of the context.
     @return Promise of the context with generated justifications. *)
-let step_generate_justifications (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
-    =
+let step_generate_justifications ?(collapse_forwarding = false)
+    (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
     match ctx.structure with
     | Some structure ->
@@ -1511,8 +1549,8 @@ let step_generate_justifications (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
         in
         let init_ppo = Eventstructures.init_ppo structure in
           let* final_justs =
-            generate_justifications ~num_threads:ctx.num_threads structure
-              fwd_es_ctx init_ppo
+            generate_justifications ~num_threads:ctx.num_threads
+              ~collapse_forwarding structure fwd_es_ctx init_ppo
           in
             Logs_safe.debug (fun m ->
                 m "Generated %d justifications." (List.length final_justs)

@@ -1207,7 +1207,14 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
       is_episodic = None;
     }
   in
-    let* ctx = Lwt.return ctx |> Elaborations.step_generate_justifications in
+    (* Condition 4 is the only consumer, and it reads justifications only
+       through Freeze.freeze_dp -- p, d and w.label. Justifications differing
+       only in forwarding context are the same dp edges to it, so ask the
+       elaboration not to enumerate them; see the note on filter_justs. *)
+    let* ctx =
+      Lwt.return ctx
+      |> Elaborations.step_generate_justifications ~collapse_forwarding:true
+    in
     let fwd_es_ctx = Option.get ctx.fwd_es_ctx in
     let justifications = Option.get ctx.justifications in
     let cache = { cache with structure; fwd_es_ctx; justifications } in
