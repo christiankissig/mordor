@@ -141,20 +141,29 @@ let violated_conditions (result : loop_episodicity_result) =
 
 (** {1 Event Structure Utilities} *)
 
-(** Get all events in a specific loop from the symbolic event structure.
+(** The events of one loop.
+
+    [structure.loop_indices] maps an event to the ids of the loops enclosing it
+    (interpret.ml stores [loop_ctx.loops] there), so membership is a lookup of
+    [loop_id] in that list -- which is what
+    {!SymbolicEventStructure.events_in_loop} does, and what the "Events by loop"
+    debug dump reports.
+
+    This used to go through [get_iteration_for_loop], which reads the same list
+    as iteration numbers and returns its last element without consulting the
+    loop id it was passed. Every loop of a program therefore got the same
+    answer: every event enclosed by any loop. On hp-1, asking for the inner
+    loop's 10 events returned all 48, because the inner loop is nested in the
+    outer one and the union is the outer one. Conditions 1-4 were unaffected --
+    they already call events_in_loop -- but the elaboration slice and the
+    bisection enumeration were not.
 
     @param structure The symbolic event structure to query
     @param loop_id The identifier of the loop
     @return A set of event labels that belong to the specified loop *)
 let get_events_in_loop (structure : symbolic_event_structure) (loop_id : int) :
     int uset =
-  USet.filter
-    (fun evt_label ->
-      match get_iteration_for_loop structure.loop_indices evt_label loop_id with
-      | Some _ -> true
-      | None -> false
-    )
-    structure.e
+  SymbolicEventStructure.events_in_loop structure loop_id
 
 (** The part of the structure a loop's dependencies can come from.
 
@@ -1101,76 +1110,66 @@ module EventsCondition = struct
     let events_in_loop =
       SymbolicEventStructure.events_in_loop structure loop_id
     in
-    (* Group events by iteration number *)
-    let events_by_iteration = Hashtbl.create 10 in
-      USet.iter
-        (fun event ->
-          match get_iteration_for_loop structure.loop_indices event loop_id with
-          | Some iter ->
-              let existing =
-                Hashtbl.find_opt events_by_iteration iter
-                |> Option.value ~default:(USet.create ())
-              in
-                Hashtbl.replace events_by_iteration iter
-                  (USet.add existing event)
-          | None -> ()
+    (* No grouping by iteration here. A table was built at this point and never
+       read; it was also the last caller of get_iteration_for_loop, which cannot
+       answer the question it is named for -- loop_indices holds the ids of the
+       loops enclosing an event, not an iteration number per loop, so every
+       event of a nested loop came back with the same "iteration". *)
+
+    (* Compute (ppo ∪ dp)* for the loop *)
+    let delta_loop = URelation.cross events_in_loop events_in_loop in
+    (* TODO use contextual predicates *)
+    let fwd_es_ctx = fwd_es_ctx in
+    let ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
+    let ppo =
+      fwd_es_ctx.ppo.ppo_sync
+      |> USet.union fwd_es_ctx.ppo.ppo_base
+      |> USet.union fwd_es_ctx.ppo.ppo_loc_base
+      |> USet.union fwd_es_ctx.ppo.ppo_base
+    in
+    let dp =
+      List.fold_left
+        (fun acc just ->
+          Freeze.freeze_dp structure just |> USet.inplace_union acc
         )
-        events_in_loop;
+        (USet.create ()) justifications
+    in
+    let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
 
-      (* Compute (ppo ∪ dp)* for the loop *)
-      let delta_loop = URelation.cross events_in_loop events_in_loop in
-      (* TODO use contextual predicates *)
-      let fwd_es_ctx = fwd_es_ctx in
-      let ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
-      let ppo =
-        fwd_es_ctx.ppo.ppo_sync
-        |> USet.union fwd_es_ctx.ppo.ppo_base
-        |> USet.union fwd_es_ctx.ppo.ppo_loc_base
-        |> USet.union fwd_es_ctx.ppo.ppo_base
-      in
-      let dp =
-        List.fold_left
-          (fun acc just ->
-            Freeze.freeze_dp structure just |> USet.inplace_union acc
-          )
-          (USet.create ()) justifications
-      in
-      let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
+    let ppo_iter =
+      fwd_es_ctx.ppo.ppo_iter_sync
+      |> USet.union fwd_es_ctx.ppo.ppo_iter_base
+      |> USet.union fwd_es_ctx.ppo.ppo_iter_loc_base
+      |> USet.union fwd_es_ctx.ppo.ppo_iter_base
+    in
+    let cross_iter_ppo =
+      ppo_iter
+      |> USet.union (URelation.compose [ dp_ppo; ppo_iter ])
+      |> USet.union (URelation.compose [ ppo_iter; dp_ppo ])
+      |> USet.union (URelation.compose [ dp_ppo; ppo_iter; dp_ppo ])
+    in
 
-      let ppo_iter =
-        fwd_es_ctx.ppo.ppo_iter_sync
-        |> USet.union fwd_es_ctx.ppo.ppo_iter_base
-        |> USet.union fwd_es_ctx.ppo.ppo_iter_loc_base
-        |> USet.union fwd_es_ctx.ppo.ppo_iter_base
-      in
-      let cross_iter_ppo =
-        ppo_iter
-        |> USet.union (URelation.compose [ dp_ppo; ppo_iter ])
-        |> USet.union (URelation.compose [ ppo_iter; dp_ppo ])
-        |> USet.union (URelation.compose [ dp_ppo; ppo_iter; dp_ppo ])
-      in
+    let unordered_pairs = USet.set_minus structure.po_iter cross_iter_ppo in
 
-      let unordered_pairs = USet.set_minus structure.po_iter cross_iter_ppo in
+    let violations = ref [] in
+    let satisfied = ref true in
+      USet.iter
+        (fun (e1, e2) ->
+          let violation =
+            LoopConditionViolation
+              (LoopIterationOrderingViolation
+                 ( -1,
+                   Hashtbl.find_opt source_spans e1,
+                   Hashtbl.find_opt source_spans e2
+                 )
+              )
+          in
+            violations := violation :: !violations;
+            satisfied := false
+        )
+        unordered_pairs;
 
-      let violations = ref [] in
-      let satisfied = ref true in
-        USet.iter
-          (fun (e1, e2) ->
-            let violation =
-              LoopConditionViolation
-                (LoopIterationOrderingViolation
-                   ( -1,
-                     Hashtbl.find_opt source_spans e1,
-                     Hashtbl.find_opt source_spans e2
-                   )
-                )
-            in
-              violations := violation :: !violations;
-              satisfied := false
-          )
-          unordered_pairs;
-
-        Lwt.return { satisfied = !satisfied; violations = !violations }
+      Lwt.return { satisfied = !satisfied; violations = !violations }
 end
 
 (** {1 Main Episodicity Check} *)
