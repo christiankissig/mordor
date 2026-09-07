@@ -493,7 +493,21 @@ module RegisterCondition = struct
                   USet.intersection written_regs must_not_write
                 in
 
-                (* Record violations for invalid writes *)
+                (* Record violations for invalid writes. Named in the log the
+                   way the write condition names its reads: a count alone says
+                   the condition failed but not on what, and which register it
+                   is decides whether a bisection is one boundary away from
+                   working. *)
+                if USet.size invalid_written_regs > 0 then
+                  Logs_safe.debug (fun m ->
+                      m
+                        "Register condition: %s read before written in an \
+                         iteration."
+                        (USet.to_list invalid_written_regs
+                        |> List.sort compare
+                        |> String.concat ", "
+                        )
+                  );
                 USet.iter
                   (fun reg ->
                     let violation =
@@ -1127,36 +1141,62 @@ module EventsCondition = struct
     let delta_loop = URelation.cross events_in_loop events_in_loop in
     (* TODO use contextual predicates *)
     let fwd_es_ctx = fwd_es_ctx in
+    (* ppo_rmw was computed here and dropped, ppo_base being unioned twice in
+       its place. It is (ppo_sync ; rmw) U (rmw ; ppo_sync) -- what carries an
+       RMW's synchronisation across its own read/write pair, and so the only
+       thing that lets a fetch-and-add's acquire read and release write order
+       anything through the RMW. Both loops this condition struggles with are
+       built on one: rcu-1's increment on a fadd and a cas, hp-1's outer loop on
+       a cas.
+
+       The combination follows ForwardingContext.ppo, which is
+       ppo_loc_base (alias-filtered) U ppo_rmw U ppo_base, unioned with ppo_sync
+       by its callers in executions.ml. The alias filtering is the one part not
+       reproduced here: this takes ppo_loc_base raw, which orders more pairs
+       than the filtered relation would and so reports fewer violations. *)
     let ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
     let ppo =
       fwd_es_ctx.ppo.ppo_sync
       |> USet.union fwd_es_ctx.ppo.ppo_base
       |> USet.union fwd_es_ctx.ppo.ppo_loc_base
-      |> USet.union fwd_es_ctx.ppo.ppo_base
+      |> USet.union ppo_rmw
     in
-    let dp =
-      List.fold_left
-        (fun acc just ->
-          Freeze.freeze_dp structure just |> USet.inplace_union acc
-        )
-        (USet.create ()) justifications
-    in
-    let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
+      Logs_safe.debug (fun m ->
+          m
+            "Loop %d: ppo components — sync %d, base %d, loc_base %d, rmw %d; \
+             union %d."
+            loop_id
+            (USet.size fwd_es_ctx.ppo.ppo_sync)
+            (USet.size fwd_es_ctx.ppo.ppo_base)
+            (USet.size fwd_es_ctx.ppo.ppo_loc_base)
+            (USet.size ppo_rmw) (USet.size ppo)
+      );
 
-    let ppo_iter =
-      fwd_es_ctx.ppo.ppo_iter_sync
-      |> USet.union fwd_es_ctx.ppo.ppo_iter_base
-      |> USet.union fwd_es_ctx.ppo.ppo_iter_loc_base
-      |> USet.union fwd_es_ctx.ppo.ppo_iter_base
-    in
-    let cross_iter_ppo =
-      ppo_iter
-      |> USet.union (URelation.compose [ dp_ppo; ppo_iter ])
-      |> USet.union (URelation.compose [ ppo_iter; dp_ppo ])
-      |> USet.union (URelation.compose [ dp_ppo; ppo_iter; dp_ppo ])
-    in
+      let dp =
+        List.fold_left
+          (fun acc just ->
+            Freeze.freeze_dp structure just |> USet.inplace_union acc
+          )
+          (USet.create ()) justifications
+      in
+      let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
 
-    (* Restricted to the loop. structure.po_iter relates cross-iteration pairs
+      (* No ppo_rmw counterpart on this side: compute_ppo_rmw composes with
+       ppo_sync, and there is no iteration-crossing variant of it. The duplicate
+       ppo_iter_base that stood where one would go is dropped. *)
+      let ppo_iter =
+        fwd_es_ctx.ppo.ppo_iter_sync
+        |> USet.union fwd_es_ctx.ppo.ppo_iter_base
+        |> USet.union fwd_es_ctx.ppo.ppo_iter_loc_base
+      in
+      let cross_iter_ppo =
+        ppo_iter
+        |> USet.union (URelation.compose [ dp_ppo; ppo_iter ])
+        |> USet.union (URelation.compose [ ppo_iter; dp_ppo ])
+        |> USet.union (URelation.compose [ dp_ppo; ppo_iter; dp_ppo ])
+      in
+
+      (* Restricted to the loop. structure.po_iter relates cross-iteration pairs
        of every loop in the program, while cross_iter_ppo is built from the
        forwarding context of the elaboration, which since 3a3be0f covers only
        the loop and its po-predecessors. Subtracting one from the other left
@@ -1164,30 +1204,30 @@ module EventsCondition = struct
        has nine events and was reporting some 780 violations, near enough the
        same count for every bisection, because almost none of them were its
        own. delta_loop was computed for this and never applied. *)
-    let unordered_pairs =
-      USet.intersection structure.po_iter delta_loop |> fun within ->
-      USet.set_minus within cross_iter_ppo
-    in
+      let unordered_pairs =
+        USet.intersection structure.po_iter delta_loop |> fun within ->
+        USet.set_minus within cross_iter_ppo
+      in
 
-    let violations = ref [] in
-    let satisfied = ref true in
-      USet.iter
-        (fun (e1, e2) ->
-          let violation =
-            LoopConditionViolation
-              (LoopIterationOrderingViolation
-                 ( -1,
-                   Hashtbl.find_opt source_spans e1,
-                   Hashtbl.find_opt source_spans e2
-                 )
-              )
-          in
-            violations := violation :: !violations;
-            satisfied := false
-        )
-        unordered_pairs;
+      let violations = ref [] in
+      let satisfied = ref true in
+        USet.iter
+          (fun (e1, e2) ->
+            let violation =
+              LoopConditionViolation
+                (LoopIterationOrderingViolation
+                   ( -1,
+                     Hashtbl.find_opt source_spans e1,
+                     Hashtbl.find_opt source_spans e2
+                   )
+                )
+            in
+              violations := violation :: !violations;
+              satisfied := false
+          )
+          unordered_pairs;
 
-      Lwt.return { satisfied = !satisfied; violations = !violations }
+        Lwt.return { satisfied = !satisfied; violations = !violations }
 end
 
 (** {1 Main Episodicity Check} *)
