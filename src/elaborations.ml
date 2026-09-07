@@ -1193,6 +1193,12 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
          the double-drop that the reflexive [Justification.covers] would
          otherwise produce when two same-length cover-equivalents are both in
          the input list. *)
+      (* Candidates this round's elaborators produced that filter_justs threw
+         away, either as already seen or as covered by a justification already
+         kept. Reported at the end of the round: without it the only counts in
+         the log are post-filter, and the filter looks like it is doing nothing. *)
+      let covered_this_round = ref 0 in
+
       let filter_justs new_justs justs =
         let sorted_justs =
           List.stable_sort
@@ -1219,6 +1225,7 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
                 JustificationCache.add just_cache just ();
                 kept := just :: !kept
               )
+              else incr covered_this_round
             )
             sorted_justs;
           List.rev !kept
@@ -1405,12 +1412,10 @@ let batch_elaborations ?(num_threads = 1) elab_ctx pre_justs =
 
                 let new_justs = acc_justs in
                   Logs_safe.debug (fun m ->
-                      m "Total new justifications this iteration: %d"
-                        (List.length new_justs)
-                  );
-                  Logs_safe.debug (fun m ->
-                      m "After filtering covered justifications: %d"
-                        (List.length new_justs)
+                      m
+                        "Total new justifications this iteration: %d (%d \
+                         discarded as seen or covered)"
+                        (List.length new_justs) !covered_this_round
                   );
 
                   if List.length new_justs = 0 then (
