@@ -894,10 +894,63 @@ module WriteCondition = struct
          program that stores 0 to mean "no allocation yet", as the CAS loops do,
          needs an allocation's address told apart from that 0, but asserting it
          over the whole verification changes which executions exist. *)
-      let allocations_are_not_null =
+      let allocation_locs =
         USet.to_list structure.malloc_events
         |> List.filter_map (Events.get_loc structure)
-        |> List.map (fun loc -> Expr.binop loc "!=" (ENum Z.zero))
+      in
+      let allocations_are_not_null =
+        List.map (fun loc -> Expr.binop loc "!=" (ENum Z.zero)) allocation_locs
+      in
+      (* Distinct allocations are disjoint, so no address in one is an address
+         in another -- interiors included, not just the bases.
+
+         structure.constraints records that the allocation bases differ, and
+         that each differs from every global. It says nothing about a location
+         reached by pointer arithmetic: (rrcu + rtid) is not a base, so nothing
+         relates it to another allocation, nor to another array's element.
+
+         That is what the aliasing query runs out of. Asked whether rv := *rs
+         may read the write to (rrcu + rtid), it traces back which writes could
+         have put an address into rC -- the sharpening may_read_from exists for
+         -- and the trace ends at a location of exactly this shape, where
+         possible equality is answered yes for want of anything to say
+         otherwise. Every read through a pointer then aliases every array
+         element in the program.
+
+         Pairs of locations, so (L + i) != (L' + j) and (L + i) != L' both
+         follow. Locations sharing a base are left alone: whether (rrcu + i) and
+         (rrcu + j) alias depends on i and j, which is the program's business
+         and not a fact about allocation. *)
+      let allocation_interiors_are_disjoint =
+        let base loc =
+          match loc with
+          | EBinOp (b, "+", _) -> b
+          | b -> b
+        in
+        let located =
+          Hashtbl.fold
+            (fun _ (e : event) acc -> e.loc :: acc)
+            structure.events []
+          |> List.filter_map Fun.id
+          |> List.sort_uniq Expr.compare
+          |> List.filter_map (fun loc ->
+              let b = base loc in
+                if List.exists (Expr.equal b) allocation_locs then Some (loc, b)
+                else None
+          )
+        in
+        let rec pairs = function
+          | [] -> []
+          | (loc, b) :: rest ->
+              List.filter_map
+                (fun (loc', b') ->
+                  if Expr.equal b b' then None
+                  else Some (Expr.binop loc "!=" loc')
+                )
+                rest
+              @ pairs rest
+        in
+          pairs located
       in
       let writes_in_loop = candidate_writes in
       let violations = ref [] in
@@ -936,6 +989,7 @@ module WriteCondition = struct
                             )
                             @ structure.constraints
                             @ allocations_are_not_null
+                            @ allocation_interiors_are_disjoint
                           in
                           let same_loc =
                             may_read_from structure ~sources ~state read_event

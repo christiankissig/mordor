@@ -45,26 +45,6 @@ rdet := malloc rN;
     while (rtemp = 1);
   };
 
-  rtemp := *(rr + 1);
-  if (rtemp = 1)
-  {
-    do
-    {
-      rtemp := *(rrcu + 1);
-    }
-    while (rtemp = 1);
-  };
-
-  rtemp := *(rr + 2);
-  if (rtemp = 1)
-  {
-    do
-    {
-      rtemp := *(rrcu + 2);
-    }
-    while (rtemp = 1);
-  };
-
   // reclaim
   rtemp := *(rdet + rtid);
   free(rtemp);

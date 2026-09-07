@@ -493,38 +493,27 @@ failure at 4 is intended *)
          po-incomparable copies, so both fail the write condition; loop 3 \
          yields no candidate at all";
     };
-    (* Loops 2, 3 and 4 are episodic again, as the table has them. Loop 1, the
-       increment loop, is not: no single bisection satisfies all four, though
-       each condition is satisfiable by some bisection -- one boundary gets the
-       write and events conditions, another the register and events. *)
+    (* Both episodic, as the table has them. The increment loop was the last to
+       come back: its reads through the pointer the fetch-and-add returns were
+       held to alias the writes into the rcu array, because nothing said an
+       address inside one allocation is not an address inside another. See
+       allocation_interiors_are_disjoint in the write condition. *)
     {
       filepath = "programs/episodicity/rcu-1.lit";
       loop_expectations =
         [
           {
             loop_id = 1;
-            expected_episodic = false;
-            expected_failing_conditions = [ 1; 2; 4 ];
+            expected_episodic = true;
+            expected_failing_conditions = [];
           };
           {
             loop_id = 2;
             expected_episodic = true;
             expected_failing_conditions = [];
           };
-          {
-            loop_id = 3;
-            expected_episodic = true;
-            expected_failing_conditions = [];
-          };
-          {
-            loop_id = 4;
-            expected_episodic = true;
-            expected_failing_conditions = [];
-          };
         ];
-      description =
-        "RCU - sync loops 2, 3, 4 episodic; the increment loop is not, no \
-         single bisection satisfying all four conditions";
+      description = "RCU - both loops episodic";
     };
   ]
 
@@ -535,13 +524,15 @@ failure at 4 is intended *)
    and 21 events to 360 and 493, and the elaboration fixed point did not
    converge on either. It does now — the forwarding contexts it was enumerating
    are collapsed for the episodicity path, since Condition 4 reads
-   justifications only through freeze_dp — and both produce verdicts, hp-1 in
-   about two minutes and rcu-1 in about twelve.
+   justifications only through freeze_dp.
 
-   Twelve minutes is most of this suite's runtime, and run_cli_episodicity has
-   no timeout: it blocks on close_process_in, so a program that stops
-   converging again would hang the suite rather than fail it. Worth a timeout
-   before either grows. *)
+   rcu-1 is 97 events and about 35 seconds since its two dead sync loops went:
+   the program has one thread, so waiting on the other two rcu slots was
+   unreachable. hp-1 is 360 events and about two minutes.
+
+   run_cli_episodicity still has no timeout — it blocks on close_process_in —
+   so a program that stops converging again would hang the suite rather than
+   fail it. Worth a timeout before either grows. *)
 let disabled_files = []
 
 (* Test that checks episodicity analysis with expected results *)
