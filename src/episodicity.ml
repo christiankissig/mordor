@@ -949,7 +949,14 @@ module WriteCondition = struct
                       )
                       |> String.concat "; "
                     in
-                      m "Loop %d: read %d at %s may take its value from [%s]."
+                      (* These are the violating sources, not the permitted
+                         ones: writes in the loop, not po-before the read, whose
+                         location may alias it -- each one is recorded as a
+                         WriteFromPreviousIteration below. An empty list is a
+                         read that satisfies the condition. *)
+                      m
+                        "Loop %d: read %d at %s could read a loop write not \
+                         ⊑-before it: [%s]."
                         loop_id read_event
                         (Events.get_loc structure read_event
                         |> Option.map show_expr
