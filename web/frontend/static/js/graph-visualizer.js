@@ -63,6 +63,10 @@ class GraphVisualizer {
         this.highlightMarker = null; // Store current highlight element
         this.loops = []; // Store loop information
         this.episodicityResults = {}; // Store episodicity results by loop_id
+        // Whether a run is still in flight. Loop information arrives long
+        // before the episodicity results -- minutes, on the larger programs --
+        // and a loop with no result yet is not a loop with nothing to say.
+        this.episodicityPending = false;
         this.assertionResults = null; // Store assertion results
         this.uafResults = []; // Store executions with use-after-free
         this.currentEndpoint = '/api/visualize/stream'; // Default endpoint
@@ -341,6 +345,21 @@ class GraphVisualizer {
         this.highlightMarkers = null;
     }
     
+    /** The badge for a loop: its verdict, or why there is not one yet. */
+    episodicityBadge(episodicityData) {
+        if (episodicityData) {
+            const ok = episodicityData.is_episodic;
+            return `<span style="font-size: 0.85rem; color: ${ok ? 'var(--green)' : 'var(--red)'}; font-weight: bold;">${ok ? '✓ Episodic' : '✗ Non-episodic'}</span>`;
+        }
+        if (this.episodicityPending) {
+            return '<span style="font-size: 0.85rem; color: var(--text-muted);">⋯ checking</span>';
+        }
+        // The run finished and this loop still has no result: the analysis
+        // could not get a bisection of its events, so no condition was
+        // evaluated. Silence here reads as a pass, which it is not.
+        return '<span style="font-size: 0.85rem; color: var(--text-muted);" title="No compatible bisection of the loop\u2019s events, so no condition was evaluated.">— not analysed</span>';
+    }
+
     renderLoops() {
         const loopsContent = document.getElementById('loops-content');
         
@@ -364,7 +383,7 @@ class GraphVisualizer {
                     <div class="loop-header" style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="display: flex; align-items: center; gap: 0.75rem;">
                             <strong style="color: var(--teal);">Loop ${loop.id}</strong>
-                            ${episodicityData ? `<span style="font-size: 0.85rem; color: ${episodicityData.is_episodic ? 'var(--green)' : 'var(--red)'}; font-weight: bold;">${episodicityData.is_episodic ? '✓ Episodic' : '✗ Non-episodic'}</span>` : ''}
+                            ${this.episodicityBadge(episodicityData)}
                         </div>
                         ${episodicityData ? '<span class="loop-toggle">▼</span>' : ''}
                     </div>
@@ -983,6 +1002,7 @@ class GraphVisualizer {
                     if (payload.episodicityResults) {
                         this.episodicityResults = payload.episodicityResults;
                     }
+                    this.episodicityPending = false;
                     if (payload.assertionResults) {
                         this.assertionResults = payload.assertionResults;
                     }
@@ -1407,6 +1427,7 @@ class GraphVisualizer {
         this.executionCount = 0;
         this.loops = [];
         this.episodicityResults = {};
+        this.episodicityPending = true;
         this.assertionResults = null;
         this.uafResults = [];
         this.visibleRelations = null; // reset to show all
@@ -1509,6 +1530,9 @@ class GraphVisualizer {
                 this.log(this.currentAction.charAt(0).toUpperCase() + this.currentAction.slice(1) + ' complete: ' + this.executionCount + ' executions', 'success');
                 this.updateCarouselUI();
                 document.getElementById('status').textContent = 'Complete';
+                // Any loop still without a result has one no longer coming.
+                this.episodicityPending = false;
+                this.renderLoops();
                 // If no UAF found by the end, show a clean "none found" message
                 if (this.uafResults.length === 0) {
                     document.getElementById('uaf-content').innerHTML = '<p style="padding: 1rem; color: var(--green);">&#10003; No use-after-free found.</p>';
@@ -1564,6 +1588,8 @@ class GraphVisualizer {
 
             // Re-enable button if the stream ended without a 'complete' event
             // (e.g. the server closed the connection after a pipeline/parse error)
+            this.episodicityPending = false;
+            this.renderLoops();
             document.getElementById('action-btn').disabled = false;
             if (document.getElementById('status').textContent === 'Processing...') {
                 document.getElementById('status').textContent = 'Error';
@@ -1571,6 +1597,8 @@ class GraphVisualizer {
         }).catch((err) => {
             if (err.name === 'AbortError') return; // clean close, not an error
             this.log('Connection error: ' + err.message, 'error');
+            this.episodicityPending = false;
+            this.renderLoops();
             document.getElementById('action-btn').disabled = false;
         });
     }
