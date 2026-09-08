@@ -619,13 +619,21 @@ end) : MEMORY_MODEL = struct
       in
       let f_sc = ModelUtils.match_events events e Fence (Some SC) None None in
 
+      (* psc_base = [E_sc U (F_sc;hb?)] ; scb ; [E_sc U (hb?;F_sc)]
+
+         Both unions have to copy. USet.inplace_union mutates its first
+         argument, so building these two with it left sc_events holding
+         E_sc U (F_sc;hb?) U (hb?;F_sc) and both ends of the composition
+         pointing at that one set -- each end carrying the other's term. Which
+         of the two got there first was not even determined: OCaml does not
+         specify the evaluation order of list elements. *)
       let psc_base =
         URelation.compose
           [
-            USet.inplace_union sc_events
+            USet.union sc_events
               (URelation.compose [ f_sc; URelation.reflexive_closure e hb ]);
             scb;
-            USet.inplace_union sc_events
+            USet.union sc_events
               (URelation.compose [ URelation.reflexive_closure e hb; f_sc ]);
           ]
       in
