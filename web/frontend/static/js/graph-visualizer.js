@@ -1258,10 +1258,38 @@ class GraphVisualizer {
      * Reads the rendered graph rather than the payload behind it, so the
      * relation filter and any use-after-free edges carry over -- the file is
      * the graph you are looking at, not the one that arrived.
+     *
+     * That extends to the arrangement: every node carries the position the
+     * current layout gave it, pinned, so `neato -n` reproduces this picture
+     * rather than laying one out afresh. One cytoscape unit is written as one
+     * point, which makes positions and sizes scale together.
+     *
+     * No layout engine is named in the file. Setting one would break `dot` on
+     * a graphviz built without that engine, and the positions are meant to be
+     * an addition to the export, not a condition on rendering it.
      */
     toDot() {
+        // Cytoscape's y grows downward and Graphviz's grows upward, so the
+        // box is flipped as well as shifted; translating to the origin only
+        // keeps the coordinates positive, which is easier to read.
+        const bb = this.cy.elements().boundingBox();
+        const pos = n => {
+            const p = n.position();
+            return { x: p.x - bb.x1, y: bb.y2 - p.y };
+        };
+
         const lines = ['digraph G {'];
-        lines.push('  node [shape=box, style="rounded", ];');
+        lines.push('  // Positions are the layout this was exported from.');
+        lines.push('  // To reproduce it:');
+        lines.push('  //     neato -n -Tpdf graph.dot -o graph.pdf');
+        lines.push('  // The pins mean plain neato places the nodes the same');
+        lines.push('  // way. dot ignores pos and lays the graph out afresh,');
+        lines.push('  // which still renders -- no engine is named here, so a');
+        lines.push('  // graphviz built without neato is not shut out.');
+        lines.push('  // Sizes are the on-screen ones and act as minimums:');
+        lines.push('  // graphviz measures text with its own fonts and grows a');
+        lines.push('  // box whose label needs the room.');
+        lines.push('  node [shape=box, style="rounded", fontsize=11];');
 
         this.cy.nodes().forEach(n => {
             const attrs = [];
@@ -1273,6 +1301,11 @@ class GraphVisualizer {
                            `color="${ELIDED_NODE_COLORS.light.border}"`,
                            `fillcolor="${ELIDED_NODE_COLORS.light.background}"`);
             }
+            const p = pos(n);
+            // The trailing ! pins the node; width and height are inches.
+            attrs.push(`pos="${p.x.toFixed(1)},${p.y.toFixed(1)}!"`,
+                       `width=${(n.outerWidth() / 72).toFixed(3)}`,
+                       `height=${(n.outerHeight() / 72).toFixed(3)}`);
             attrs.push(`label="${this.dotEscape(n.data('label'))}"`);
             lines.push(`  ${this.dotNodeId(n.id())} [${attrs.join(', ')}];`);
         });
