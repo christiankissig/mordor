@@ -367,7 +367,7 @@ module ReadFromValidation = struct
       (fun (w, r) ->
         if w = 0 then None
         else
-          (* Not from the justification, though a TODO here long asked for it.
+          (* Not from the justification, though a note here long asked for it.
              Value assignment concretises a write's value from whatever model
              Solver.solve happens to return for that justification's
              predicates: an arbitrary witness that licenses dropping the
