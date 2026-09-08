@@ -628,12 +628,22 @@ module EventStructureContext = struct
        relations share inside a loop, and it carries none of the pairs po_iter
        has beyond po -- which is what an iteration-crossing relation is for.
 
-       Left as it stands: every episodicity verdict on record was measured with
-       it, and taking the complement in po_iter would swing it the other way,
-       putting po_iter whole into the ppo_iter episodicity.ml builds from these
-       and leaving the events condition nothing to report. Neither raw relation
-       is what that condition wants -- it wants the alias-filtered one, as the
-       note there says. *)
+       Measured: the ppo_iter episodicity.ml builds from these comes out equal
+       to po plus a handful of sync pairs on every fixture. seqlock-1 po 136,
+       ppo_iter 137; spinlock-1 21 / 22; rcu-1 276 / 292; hp-1's outer loop
+       1378 / 2034. The events condition is ordering iteration-crossing pairs
+       by plain program order.
+
+       Neither raw relation is right. Taking the complement in po_iter instead
+       swings it the other way -- po_iter then lies whole inside ppo_iter and
+       the condition is satisfied vacuously, measured 0 violations on every
+       fixture. What the condition wants is the alias-filtered relation, the
+       same gap the note at episodicity.ml records on the ppo side. With both
+       -- complement in po_iter here, Solver.expoteq filtering there -- the
+       relation drops to 2 pairs on seqlock-1, 44 on rcu-1, 1004 on hp-1's
+       outer loop, and every verdict on record is reproduced: 534 unit and 278
+       integration tests green, all 17 episodicity fixtures included, with the
+       same bisection selected on rcu-1. See the Todoist task. *)
     USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
     USet.set_minus po ppo_iter_loc_eq
     |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base

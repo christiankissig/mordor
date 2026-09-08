@@ -158,6 +158,18 @@ let violated_conditions (result : loop_episodicity_result) =
     they already call events_in_loop -- but the elaboration slice and the
     bisection enumeration were not.
 
+    It can still name events that are not in [structure.e]. [loop_indices] is
+    one of the program-wide tables interpret.ml hands over whole (interpret.ml
+    stamps every event it ever creates), while [e] is the event set of this
+    structure, so an event dropped on the way out keeps its loop membership.
+    branch_condition/nested_fail is the one fixture where it shows: loop 1's
+    members come back as [8; 9; 12] and only 8 is in [e]. One bisection is
+    enumerated, [] | [8; 9; 12], the write condition finds no reads and no
+    writes in the loop, and all six of the events condition's violations are
+    pairs of [po_iter] over 9 and 12 -- events that do not exist and that no
+    [ppo] can ever order. The suite pins that loop as failing conditions 3 and
+    4; only the 3 is real.
+
     @param structure The symbolic event structure to query
     @param loop_id The identifier of the loop
     @return A set of event labels that belong to the specified loop *)
@@ -1221,7 +1233,10 @@ module EventsCondition = struct
        ppo_loc_base (alias-filtered) U ppo_rmw U ppo_base, unioned with ppo_sync
        by its callers in executions.ml. The alias filtering is the one part not
        reproduced here: this takes ppo_loc_base raw, which orders more pairs
-       than the filtered relation would and so reports fewer violations. *)
+       than the filtered relation would and so reports fewer violations.
+
+       The same gap on the ppo_iter side below is the larger one, and is what
+       the Todoist task is about; the two are meant to be closed together. *)
     let ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
     let ppo =
       fwd_es_ctx.ppo.ppo_sync
@@ -1251,7 +1266,16 @@ module EventsCondition = struct
 
       (* No ppo_rmw counterpart on this side: compute_ppo_rmw composes with
        ppo_sync, and there is no iteration-crossing variant of it. The duplicate
-       ppo_iter_base that stood where one would go is dropped. *)
+       ppo_iter_base that stood where one would go is dropped.
+
+       ppo_iter_loc_base is po \ ppo_iter_loc_eq, not po_iter \ ppo_iter_loc_eq
+       -- see the note at its definition in forwarding.ml -- so what this builds
+       is plain program order plus a few sync pairs, measured equal to po within
+       a handful on every fixture. Correcting it takes two changes together, the
+       complement there and Solver.expoteq filtering here, mirroring what
+       ForwardingContext.ppo does to ppo_loc_base. Measured: every verdict on
+       record is reproduced, both suites green. Either change alone is wrong --
+       the complement on its own makes the condition vacuous. *)
       let ppo_iter =
         fwd_es_ctx.ppo.ppo_iter_sync
         |> USet.union fwd_es_ctx.ppo.ppo_iter_base
