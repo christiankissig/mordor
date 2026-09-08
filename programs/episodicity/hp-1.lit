@@ -17,17 +17,16 @@ rn := malloc 1;
 *rn := 0;
 
 do {
-  // I6
-  *rhp := rC;
-
-  // I7-I10: re-load hp[tid] until stable through fence
+  // I6-I10: protect. Publish a candidate, fence, and check C still holds it.
+  // Folly's hazptr_holder reads C once above the loop and carries it in a
+  // register; reading it at the top of the body is the same protocol without
+  // the carried register, and without the branch a carry needs.
   do {
-    rp := *rhp;
-    fence(relacq);   // I8
-    rrC := *rC;
-    *rhp := rrC;               // I9: atomic read of C into hp[tid]
-    rrhp := *rhp
-  } while (rp != rrhp);       // I10
+    rp := *rC;         // ptr = C.load(relaxed)
+    *rhp := rp;        // I6/I9: reset_protection(ptr)
+    fence(relacq);     // I8: separates the publish from the reload of C
+    rrC := *rC         // p = C.load(acquire)
+  } while (rrC != rp); // I10: retry with the new value
 
   // I11-I13
   rs := *rhp;

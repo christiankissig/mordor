@@ -10,15 +10,15 @@ rn := malloc 1;
 *rn := 0;
 
 do {
-  *rhp := rC;
-
+  // protect: publish a candidate, fence, and check C still holds it.
+  // Folly reads C once above the loop and carries it; reading it at the top
+  // of the body is the same protocol without the carried register.
   do {
-    rp := *rhp;
-    fence(relacq);
-    rrC := *rC;
-    *rhp := rrC;
-    rrhp := *rhp
-  } while (rp != rrhp);
+    rp   := *rC;        // ptr = C.load(relaxed)
+    *rhp := rp;         // reset_protection(ptr)
+    fence(relacq);      // separates the publish from the reload of C
+    rrC  := *rC;        // p = C.load(acquire)
+  } while (rrC != rp);  // retry with the new value
 
   rs := *rhp;
   rv := *rs;
