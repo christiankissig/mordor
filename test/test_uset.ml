@@ -46,4 +46,43 @@ module TestURelation = struct
     ]
 end
 
-let suite = ("USet", TestURelation.suite)
+module TestUSet = struct
+  (** [filter_map] keeps what [f] answers [Some] for and drops the rest. *)
+  let test_filter_map_keeps_and_drops () =
+    let s = USet.of_list [ 1; 2; 3; 4; 5 ] in
+    let result =
+      USet.filter_map (fun x -> if x mod 2 = 0 then Some (x * 10) else None) s
+    in
+      check int "two evens survive" 2 (USet.size result);
+      check bool "contains 20" true (USet.mem result 20);
+      check bool "contains 40" true (USet.mem result 40);
+      check bool "does not contain 10" false (USet.mem result 10);
+      ()
+
+  (** It is a set, so results that collide are one element. *)
+  let test_filter_map_collapses_duplicates () =
+    let s = USet.of_list [ 1; 2; 3 ] in
+    let result = USet.filter_map (fun _ -> Some 0) s in
+      check int "all three map to one" 1 (USet.size result);
+      ()
+
+  (** All [None] gives the empty set, and the input is not touched. *)
+  let test_filter_map_drops_everything () =
+    let s = USet.of_list [ 1; 2; 3 ] in
+    let result = USet.filter_map (fun _ -> None) s in
+      check int "nothing survives" 0 (USet.size result);
+      check int "source is unchanged" 3 (USet.size s);
+      ()
+
+  let suite =
+    [
+      test_case "filter_map keeps and drops" `Quick
+        test_filter_map_keeps_and_drops;
+      test_case "filter_map collapses duplicates" `Quick
+        test_filter_map_collapses_duplicates;
+      test_case "filter_map drops everything" `Quick
+        test_filter_map_drops_everything;
+    ]
+end
+
+let suite = ("USet", TestURelation.suite @ TestUSet.suite)

@@ -363,7 +363,7 @@ module ReadFromValidation = struct
       @param rf Read-from relation.
       @return Set of value equality expressions. *)
   let env_rf structure rf =
-    USet.map
+    USet.filter_map
       (fun (w, r) ->
         if w = 0 then None
         else
@@ -376,15 +376,6 @@ module ReadFromValidation = struct
                 failwith ("Read event " ^ string_of_int r ^ " has no value!")
       )
       rf
-    (* TODO replace with filter_map *)
-    |> fun constraints ->
-    USet.fold
-      (fun (acc : expr uset) (expr_opt : expr option) ->
-        match expr_opt with
-        | Some expr -> USet.add acc expr
-        | None -> acc
-      )
-      constraints (USet.create ())
 
   (** [check_rf structure rf] computes location equality constraints.
 
@@ -394,7 +385,7 @@ module ReadFromValidation = struct
       @param rf Read-from relation.
       @return Set of location equality expressions. *)
   let check_rf structure rf =
-    USet.map
+    USet.filter_map
       (fun (w, r) ->
         if w = 0 then None
         else
@@ -406,15 +397,6 @@ module ReadFromValidation = struct
                 failwith ("Read event " ^ string_of_int r ^ " has no location!")
       )
       rf
-    (* TODO replace with filter_map *)
-    |> fun constraints ->
-    USet.fold
-      (fun (acc : expr uset) (expr_opt : expr option) ->
-        match expr_opt with
-        | Some expr -> USet.add acc expr
-        | None -> acc
-      )
-      constraints (USet.create ())
 
   (** [adjacent_same_location_allocation_events structure path rhb p] finds
       adjacent allocations at same location.

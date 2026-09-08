@@ -229,6 +229,17 @@ module USet : sig
       @return New set with elements where f returns true. *)
   val filter : ('a -> bool) -> 'a t -> 'a t
 
+  (** [filter_map f s] maps and filters in one pass.
+
+      Creates a new set of the elements [f] answers [Some] for, dropping the
+      rest. [map] followed by a fold that unwraps the options is the same thing
+      built out of two sets.
+
+      @param f Transformation returning [Some] to keep, [None] to drop.
+      @param s The set.
+      @return New set of the [Some] results. *)
+  val filter_map : ('a -> 'b option) -> 'a t -> 'b t
+
   (** [ifilter f s] filters in-place.
 
       Removes elements not satisfying predicate, mutating [s].
@@ -427,6 +438,15 @@ end = struct
       s
 
   let filter f s = Hash_set.filter s ~f
+
+  let filter_map f s =
+    let result = Hash_set.Poly.create () in
+      Hash_set.iter s ~f:(fun v ->
+          match f v with
+          | Some v' -> Hash_set.add result v'
+          | None -> ()
+      );
+      result
 
   let ifilter f s =
     Hash_set.filter_inplace s ~f;
