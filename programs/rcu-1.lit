@@ -22,7 +22,7 @@ do {
   *rn := rv+1;
   rsucc := cas(acquire,release,rC,rs,rn);
 } while (rsucc = 0);
-*(rcu + rtid) := 0;
+*(rrcu + rtid) := 0;
 
 // reclaim
 *(rdet + rtid) := rs;
@@ -37,27 +37,7 @@ if (rtemp = 1)
 {
   do
   {
-    rtemp := *(rcu + 0);
-  }
-  while (rtemp = 1);
-};
-
-rtemp := *(rr + 1);
-if (rtemp = 1)
-{
-  do
-  {
-    rtemp := *(rcu + 1);
-  }
-  while (rtemp = 1);
-};
-
-rtemp := *(rr + 2);
-if (rtemp = 1)
-{
-  do
-  {
-    rtemp := *(rcu + 2);
+    rtemp := *(rrcu + 0);
   }
   while (rtemp = 1);
 };

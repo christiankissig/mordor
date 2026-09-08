@@ -481,7 +481,8 @@ failure at 4 is intended *)
       "RCU increment loop - episodic";
     (* The increment loop pruned out on its own, from when rcu-1 still carried
        its sync loops. rcu-1 has since been pruned to much the same program, so
-       the two are near-duplicates at 31 and 33 events. *)
+       the two are near-duplicates at 28 and 31 events -- rcu-inc is rcu-1 plus
+       the trailing clear of the rcu flag. *)
     single_episodic "programs/episodicity/rcu-inc.lit"
       "RCU increment loop alone - episodic";
   ]
@@ -491,10 +492,10 @@ failure at 4 is intended *)
    hp-1 and rcu-1 were held out while their episodicity analysis did not
    finish. Both run now, and every fixture in the directory is checked:
 
-     rcu-1     31 events   1.3 s   1 loop,  episodic
-     rcu-inc   33 events   1.3 s   1 loop,  episodic
-     hp-1      81 events    30 s   2 loops, both episodic
-     hp-inc    90 events    25 s   2 loops, both episodic
+     rcu-1     28 events   0.9 s   1 loop,  episodic
+     rcu-inc   31 events   1.0 s   1 loop,  episodic
+     hp-1      80 events    25 s   2 loops, both episodic
+     hp-inc    90 events    24 s   2 loops, both episodic
 
    The -inc files were the increment loop pruned out of each while the full
    programs were too slow to run. The full programs have since been pruned to

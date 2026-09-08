@@ -1,4 +1,4 @@
-name=hp 1 inc
+name=hp inc
 %%
 rC  := malloc 1;
 *rC := 0;

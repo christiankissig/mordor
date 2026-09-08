@@ -7,10 +7,6 @@ rC  := malloc 1;
 rhp := malloc 1;     // hp[N], N=1
 *rhp := 0;
 
-// rlist as raw pointer + size
-rlist  := malloc 1;  // rlist[0], capacity=1 (rcount < R=1 never triggers scan inline)
-rcount := 0;
-
 // --- inc ---
 // I5
 rn := malloc 1;
