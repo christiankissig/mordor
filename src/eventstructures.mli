@@ -72,11 +72,16 @@ val generate_max_conflictfree_sets : symbolic_event_structure -> path_info list
     not other write po-between w and r to the same location as w relative to the
     constraints of r.
 
+    [exclude] names events that are not in the caller's execution, so that a
+    write it has elided cannot shadow anything. It defaults to empty, which
+    reads the condition off the structure alone.
+
+    @param exclude Events the execution does not contain
     @param structure The symbolic event structure
     @param write The write event label
     @param read The read event label
-    @return [Lwt.t] of [true] if condition holds, [false] otherwise *)
-val dslwb : symbolic_event_structure -> int -> int -> bool
+    @return [true] if condition holds, [false] otherwise *)
+val dslwb : ?exclude:int uset -> symbolic_event_structure -> int -> int -> bool
 
 (** [structure] Get PPO relation from initial events and to terminal events.
 

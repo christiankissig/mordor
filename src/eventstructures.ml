@@ -361,8 +361,16 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
 
 (* Check if write w is downward-closed same-location write before read r. This
    prevents r reading from shadowed writes w.*)
+(* [exclude] names events the caller's execution does not contain -- the elided
+   set, in practice.  A shadowing write has to be in the execution to shadow
+   anything, and the write-elision tests are exactly where that bites: in
+   write-before-lift.lit the second [y := 1] shadows the first, so when the
+   second is elided the read must be free to take the first, and without this
+   filter it is not.  Without it the freezing pass loses executions on
+   write-before-lift, RREWA, Redundant Write after Read Elimination,
+   PPO000-019, listing20 and listing21. *)
 (* TODO optimize; pregenerate *)
-let dslwb structure w r =
+let dslwb ?(exclude = USet.create ()) structure w r =
   let write_events =
     structure.write_events
     |> USet.union structure.malloc_events
@@ -378,6 +386,7 @@ let dslwb structure w r =
           r2 = r (* w2 po bfore r *)
           && w2 <> w (* w2 is not w *)
           && USet.mem write_events w2 (* w2 is a write *)
+          && (not (USet.mem exclude w2)) (* w2 is in the execution *)
           && USet.mem structure.po (w, w2)
           (* w2 po after w, thus in between w and r *)
         then

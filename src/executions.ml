@@ -751,7 +751,7 @@ module Freeze = struct
             in
               let*? () = (loc_eq, "RF locs not equal") in
               (* Check that writes are not shadowed for read-from *)
-              let has_dslwb = dslwb structure w r in
+              let has_dslwb = dslwb ~exclude:elided structure w r in
                 let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
 
                 true
