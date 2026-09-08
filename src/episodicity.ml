@@ -1212,8 +1212,36 @@ module EventsCondition = struct
        by its callers in executions.ml. The alias filtering is the one part not
        reproduced here: this takes ppo_loc_base raw, which orders more pairs
        than the filtered relation would and so reports fewer violations. The
-       ppo_iter below is filtered; this one still is not, and closing the gap
-       shrinks dp_ppo, so it wants its own measurement pass. *)
+       ppo_iter below is filtered; this one deliberately is not.
+
+       Measured, and it does not come out the way the ppo_iter side did. ppo
+       feeds dp_ppo, which cross_iter_ppo composes with on both sides, so
+       filtering removes coverage rather than adding it, and three of the four
+       real-world fixtures recorded episodic stop being so: seqlock-1,
+       spinlock-1 and rcu-1. Only hp-1 survives.
+
+       Two things came out of that. Filtering exactly as ForwardingContext.ppo
+       does is wrong here for a reason that has nothing to do with aliasing: its
+       test answers false when either event has no location, so every pair
+       touching a branch or a fence is dropped, and ppo_loc_base is the only
+       relation that reaches those events at all -- it is po less the pairs
+       already known to share a location. That is what loses spinlock-1, on
+       (branch, CAS read) and (branch, CAS write). Reading a missing location as
+       "not provably distinct" and keeping the pair holds spinlock-1 at
+       episodic.
+
+       The other two flip under either reading, and genuinely. seqlock-1's retry
+       loop is three relaxed reads at two locations with no fence between them,
+       and the pairs left unordered are the seq reads against the data read in
+       both directions -- nothing orders those, under any bisection. rcu-1 does
+       have bisections that satisfy this condition once ppo is filtered, [18..21]
+       and [18..22], but both violate the register condition, so no bisection
+       satisfies all four.
+
+       So this is not a precision fix waiting to be made. Landing it changes what
+       the tool says about two programs the paper's table records as episodic,
+       which is a question about the programs and not about this line. See the
+       Todoist task. *)
     let ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
     let ppo =
       fwd_es_ctx.ppo.ppo_sync
