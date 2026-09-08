@@ -896,34 +896,44 @@ class GraphVisualizer {
             this.log('View reset to fit');
         });
 
-        document.getElementById('export-png-btn').addEventListener('click', () => {
-            const png = this.cy.png({ full: true, scale: 2 });
-            const link = document.createElement('a');
-            link.download = `graph-${this.currentIndex}.png`;
-            link.href = png;
-            link.click();
-            this.log('Graph exported as PNG');
-        });
+        // Export menu. Unlike the layout dropdown this is a menu of actions
+        // rather than a selector, so the button keeps its label -- there is no
+        // current choice for it to name.
+        const exportWrapper = document.getElementById('export-dropdown-wrapper');
+        const exportBtn = document.getElementById('export-dropdown-btn');
+        const exportContent = document.getElementById('export-dropdown-content');
 
-        // Export DOT button
-        document.getElementById('export-dot-btn').addEventListener('click', () => {
-            if (!this.cy.nodes().length) {
-                this.log('No graph to export as DOT.', 'error');
+        const closeExport = () => {
+            exportWrapper.classList.remove('open');
+            exportBtn.textContent = 'Export \u25b2';
+        };
+
+        exportBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (exportWrapper.classList.contains('open')) {
+                closeExport();
                 return;
             }
-            const dot = this.toDot() + '\n';
-            const blob = new Blob([dot], { type: 'text/vnd.graphviz' });
-            const link = document.createElement('a');
-            link.download = `graph-${this.currentIndex}.dot`;
-            link.href = URL.createObjectURL(blob);
-            link.click();
-            URL.revokeObjectURL(link.href);
-            const hidden = this.cy.edges().filter(e => e.style('display') === 'none').length;
-            this.log(
-                `Graph exported as DOT (${this.cy.nodes().length} nodes, ` +
-                `${this.cy.edges().length - hidden} edges` +
-                (hidden ? `, ${hidden} filtered out` : '') + ')'
-            );
+            exportWrapper.classList.add('open');
+            exportBtn.textContent = 'Export \u25bc';
+            const rect = exportBtn.getBoundingClientRect();
+            requestAnimationFrame(() => {
+                exportContent.style.top = (rect.top - exportContent.offsetHeight - 4) + 'px';
+                exportContent.style.left = rect.left + 'px';
+            });
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!exportWrapper.contains(e.target)) closeExport();
+        });
+
+        exportContent.querySelectorAll('.export-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeExport();
+                if (option.dataset.value === 'png') this.exportPng();
+                else this.exportDot();
+            });
         });
 
         // Save JSON button
@@ -1198,6 +1208,35 @@ class GraphVisualizer {
                 edge.style('display', this.visibleRelations.has(baseType) ? 'element' : 'none');
             });
         }
+    }
+
+    exportPng() {
+        const png = this.cy.png({ full: true, scale: 2 });
+        const link = document.createElement('a');
+        link.download = `graph-${this.currentIndex}.png`;
+        link.href = png;
+        link.click();
+        this.log('Graph exported as PNG');
+    }
+
+    exportDot() {
+        if (!this.cy.nodes().length) {
+            this.log('No graph to export as DOT.', 'error');
+            return;
+        }
+        const dot = this.toDot() + '\n';
+        const blob = new Blob([dot], { type: 'text/vnd.graphviz' });
+        const link = document.createElement('a');
+        link.download = `graph-${this.currentIndex}.dot`;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        const hidden = this.cy.edges().filter(e => e.style('display') === 'none').length;
+        this.log(
+            `Graph exported as DOT (${this.cy.nodes().length} nodes, ` +
+            `${this.cy.edges().length - hidden} edges` +
+            (hidden ? `, ${hidden} filtered out` : '') + ')'
+        );
     }
 
     dotEscape(text) {

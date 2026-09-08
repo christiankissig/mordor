@@ -335,13 +335,14 @@ pre.line-numbers > code {
 .graph-controls { position: absolute; bottom: 10px; left: 10px; display: none; gap: 0.5rem; z-index: 100; }
 .graph-controls.active { display: flex; }
 .graph-controls select { padding: 0.4rem 0.6rem; background: var(--panel-translucent); border: 1px solid var(--border); color: var(--text-strong); border-radius: 4px; font-size: 0.85rem; cursor: pointer; }
-.layout-dropdown { position: relative; display: inline-block; }
-.layout-btn { background: var(--panel-translucent) !important; border: 1px solid var(--border) !important; color: var(--text-strong) !important; padding: 0.4rem 0.6rem !important; border-radius: 4px !important; font-size: 0.85rem !important; cursor: pointer; white-space: nowrap; transition: background 0.2s; }
-.layout-btn:hover { background: var(--control-hover) !important; }
-.layout-dropdown-content { display: none; position: fixed; background: var(--bg-elev2); border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.5); z-index: 9999; min-width: 150px; }
-.layout-dropdown.open .layout-dropdown-content { display: block; }
-.layout-option { padding: 8px 12px; font-size: 13px; color: var(--text); cursor: pointer; }
-.layout-option:hover { background: var(--border); }
+.layout-dropdown, .export-dropdown { position: relative; display: inline-block; }
+.layout-btn, .export-btn { background: var(--panel-translucent) !important; border: 1px solid var(--border) !important; color: var(--text-strong) !important; padding: 0.4rem 0.6rem !important; border-radius: 4px !important; font-size: 0.85rem !important; cursor: pointer; white-space: nowrap; transition: background 0.2s; }
+.layout-btn:hover, .export-btn:hover { background: var(--control-hover) !important; }
+.layout-dropdown-content, .export-dropdown-content { display: none; position: fixed; background: var(--bg-elev2); border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.5); z-index: 9999; min-width: 150px; }
+.layout-dropdown.open .layout-dropdown-content,
+.export-dropdown.open .export-dropdown-content { display: block; }
+.layout-option, .export-option { padding: 8px 12px; font-size: 13px; color: var(--text); cursor: pointer; }
+.layout-option:hover, .export-option:hover { background: var(--border); }
 .layout-option.active { color: var(--teal); }
 .graph-controls button { padding: 0.4rem 0.8rem; background: var(--panel-translucent); border: 1px solid var(--border); color: var(--text-strong); border-radius: 4px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
 .graph-controls button:hover { background: var(--control-hover); }

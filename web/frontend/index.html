@@ -150,8 +150,13 @@
                         </div>
                     </div>
                     <button id="fit-btn">Fit</button>
-                    <button id="export-png-btn">Export PNG</button>
-                    <button id="export-dot-btn">Export DOT</button>
+                    <div class="export-dropdown" id="export-dropdown-wrapper">
+                        <button id="export-dropdown-btn" class="export-btn">Export ▲</button>
+                        <div class="export-dropdown-content" id="export-dropdown-content">
+                            <div class="export-option" data-value="png">Export PNG</div>
+                            <div class="export-option" data-value="dot">Export DOT</div>
+                        </div>
+                    </div>
                     <button id="save-json-btn">💾 Save JSON</button>
                 </div>
                 
