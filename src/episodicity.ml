@@ -1457,6 +1457,12 @@ let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
        )
        None
 
+(* Hand one loop's result to [on_loop_result], if a caller asked for it. *)
+let report_loop_result on_loop_result (result : loop_episodicity_result) =
+  match on_loop_result with
+  | Some send -> send result
+  | None -> Lwt.return_unit
+
 (** Main episodicity testing function called from the analysis pipeline.
 
     This function:
@@ -1466,9 +1472,15 @@ let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
     + Checks episodicity for each loop
     + Stores results in the context
 
+    @param on_loop_result
+      Called with each loop's result as soon as that loop is decided, before the
+      next one starts. Analysing a whole program can run for minutes, and a
+      caller streaming to a UI has a verdict to show long before the last loop
+      settles.
     @param lwt_ctx The Mordor context wrapped in Lwt
     @return The updated Mordor context with episodicity results *)
-let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+let step_test_episodicity ?on_loop_result (lwt_ctx : mordor_ctx Lwt.t) :
+    mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
     match ctx.program_stmts with
     | Some program ->
@@ -1555,7 +1567,7 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                       Hashtbl.add is_episodic_table loop_id result.is_episodic;
                       loop_episodicity_results :=
                         result :: !loop_episodicity_results;
-                      Lwt.return_unit
+                      report_loop_result on_loop_result result
                   | None ->
                       (* No compatible bisection of the loop's events exists —
                          typically because the loop contributes no events to the
@@ -1590,21 +1602,19 @@ let step_test_episodicity (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
         );
         Lwt.return ctx
 
-(** Send episodicity results via a callback function.
+(** Send one loop's result on its own, in the shape the whole-program summary
+    uses.
 
-    Serializes the episodicity results to JSON and sends them using the provided
-    send function.
+    Pass this to {!step_test_episodicity} as [~on_loop_result] to stream
+    verdicts as they land. A receiver that keys results by [loop_id] — the web
+    frontend does — accumulates these into the same picture the summary gives,
+    without waiting on the loops still running.
 
     @param send_func Function to send the JSON string (async)
-    @param ctx The Mordor context wrapped in Lwt
-    @return The unmodified Mordor context *)
-let send_episodicity_results (send_func : string -> unit Lwt.t)
-    (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
-  let* ctx = ctx in
-    match ctx.episodicity_results with
-    | Some results ->
-        let json = loop_episodicity_result_summary_to_yojson results in
-        let json_str = Yojson.Safe.to_string json in
-          let* () = send_func json_str in
-            Lwt.return ctx
-    | None -> Lwt.return ctx
+    @param result The result for the loop just decided *)
+let send_loop_episodicity_result (send_func : string -> unit Lwt.t)
+    (result : loop_episodicity_result) : unit Lwt.t =
+  { type_ = "episodicity-results"; loop_episodicity_results = [ result ] }
+  |> loop_episodicity_result_summary_to_yojson
+  |> Yojson.Safe.to_string
+  |> send_func
