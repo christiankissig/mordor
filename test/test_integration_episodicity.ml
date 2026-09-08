@@ -440,116 +440,71 @@ failure at 4 is intended *)
       "Seqlock - Loop 1 is episodic";
     single_episodic "programs/episodicity/spinlock-1.lit"
       "Spinlock - Loop 1 is episodic";
-    (* These record what MoRDor reports today, not what the paper's table
-       claims, and not a considered verdict on the program: loops 1 and 2 are
-       expected episodic and are currently reported otherwise for a reason that
-       is a defect in the checker.
+    (* Both loops episodic, as the paper's table has them. Three separate
+       things had to be fixed to get here, none of them the bisection
+       enumeration that was suspected the longest:
 
-       Both loops sit inside another do-while, and the symbolic encoding gives
-       one unravelled body plus the residual loop, so their events arrive as two
-       po-incomparable copies -- loop 1's are 65..69 and 255..259, with no po
-       edge between the chains. all_bisections ranks events by how many of the
-       loop's events precede them and keeps the prefix of size k only when
-       exactly k events rank below k, which enumerates the order ideals of a
-       total order and nothing else. With the ranks tied across two chains that
-       holds only at k = 0 and k = |E|, and k = |E| leaves the right side empty,
-       so the sole surviving candidate is the empty bisection. With no left
-       there is no earlier part of an iteration for a read to read from, so
-       every loop read that may see a loop write is a write-condition
-       violation. Loop 3 is the same mechanism with no candidate at all, which
-       is what "could not analyze" reports.
-
-       Enumerating the po-downward-closed subsets properly is 36 candidates for
-       loop 1 and 8281 for loop 2, against 2^10 and 2^48 -- tractable to
-       enumerate, not yet to check at two minutes a bisection. The Todoist task
-       carries the options. Until one lands, read these as "fails against the
-       empty bisection", not as "not episodic".
-
-       An empty failing-condition list skips the check, so loop 3 asserts only
-       its verdict. *)
+       - the program's protect loop was not the protocol. It published into hp
+         and compared hp-before against hp-after, never checking the published
+         pointer against a later read of C, with the fence on the far side of
+         the store where it separates nothing.
+       - the events condition subtracted the whole program's po_iter from a ppo
+         built from the loop's slice, so every pair outside the slice counted
+         as unordered.
+       - the write condition held a read against writes it conflicts with. The
+         do-while encoding gives each loop a branch whose arms carry copies of
+         the body, so a loop containing another sees the inner body once per
+         arm and the copies conflict pairwise; all ten of loop 2's violations
+         were a read in one copy against the publish in another. *)
     {
       filepath = "programs/episodicity/hp-1.lit";
       loop_expectations =
         [
           {
             loop_id = 1;
-            expected_episodic = false;
-            expected_failing_conditions = [ 2 ];
+            expected_episodic = true;
+            expected_failing_conditions = [];
           };
           {
             loop_id = 2;
-            expected_episodic = false;
-            expected_failing_conditions = [ 2; 4 ];
-          };
-          {
-            loop_id = 3;
-            expected_episodic = false;
+            expected_episodic = true;
             expected_failing_conditions = [];
           };
         ];
-      description =
-        "Hazard pointers - loops 1 and 2 judged against the empty bisection, \
-         the only candidate all_bisections yields for a body duplicated into \
-         po-incomparable copies, so both fail the write condition; loop 3 \
-         yields no candidate at all";
+      description = "Hazard pointers - both loops episodic";
     };
-    (* Both episodic, as the table has them. The increment loop was the last to
-       come back: its reads through the pointer the fetch-and-add returns were
+    (* Episodic. Its reads through the pointer the fetch-and-add returns were
        held to alias the writes into the rcu array, because nothing said an
        address inside one allocation is not an address inside another. See
        allocation_interiors_are_disjoint in the write condition. *)
-    {
-      filepath = "programs/episodicity/rcu-1.lit";
-      loop_expectations =
-        [
-          {
-            loop_id = 1;
-            expected_episodic = true;
-            expected_failing_conditions = [];
-          };
-          {
-            loop_id = 2;
-            expected_episodic = true;
-            expected_failing_conditions = [];
-          };
-        ];
-      description = "RCU - both loops episodic";
-    };
-    (* The increment loop on its own -- the one the table is about. 33 events
-       against rcu-1's 97, and a second and a half against thirty-five, because
-       a loop removed takes both its own events and the copy of the
-       continuation it forces on every loop before it. *)
+    single_episodic "programs/episodicity/rcu-1.lit"
+      "RCU increment loop - episodic";
+    (* The increment loop pruned out on its own, from when rcu-1 still carried
+       its sync loops. rcu-1 has since been pruned to much the same program, so
+       the two are near-duplicates at 31 and 33 events. *)
     single_episodic "programs/episodicity/rcu-inc.lit"
       "RCU increment loop alone - episodic";
   ]
 
-(* hp-1 and its pruned variant are skipped.
+(* Nothing skipped.
 
    hp-1 and rcu-1 were held out while their episodicity analysis did not
-   finish: the symbolic do-while encoding grew their event structures from 15
-   and 21 events to 360 and 493, and the elaboration fixed point did not
-   converge on either. It does now — the forwarding contexts it was enumerating
-   are collapsed for the episodicity path, since Condition 4 reads
-   justifications only through freeze_dp.
+   finish. Both run now, and every fixture in the directory is checked:
 
-   rcu-1 is 97 events and about 35 seconds since its two dead sync loops went:
-   the program has one thread, so waiting on the other two rcu slots was
-   unreachable. rcu-inc.lit is its increment loop alone, 33 events and a second
-   and a half.
+     rcu-1     31 events   1.3 s   1 loop,  episodic
+     rcu-inc   33 events   1.3 s   1 loop,  episodic
+     hp-1      81 events    30 s   2 loops, both episodic
+     hp-inc    90 events    25 s   2 loops, both episodic
 
-   hp-1 is out again, and so is hp-inc.lit, the same pruning applied to it.
-   Pruning does not help there: it takes hp-1 from 360 events to 99, but the two
-   loops in question are the increment loop and the hazard-pointer loop nested
-   in it, so they keep their 10 and 48 events and their 36 and 8281 candidate
-   boundaries. Loop 1 takes about two and a half minutes and loop 2 does not
-   finish. The cost is per bisection -- each one re-elaborates -- and that is
-   what wants fixing before either goes back in.
+   The -inc files were the increment loop pruned out of each while the full
+   programs were too slow to run. The full programs have since been pruned to
+   much the same thing, so the pairs are near-duplicates now and one of each
+   could go.
 
-   run_cli_episodicity still has no timeout — it blocks on close_process_in —
-   so a program that does not finish hangs the suite rather than failing it.
-   That is why these are skipped rather than left to run. *)
-let disabled_files =
-  [ "programs/episodicity/hp-1.lit"; "programs/episodicity/hp-inc.lit" ]
+   run_cli_episodicity has no timeout -- it blocks on close_process_in -- so a
+   program that stops finishing would hang the suite rather than fail it. That
+   is worth fixing before anything larger is added here. *)
+let disabled_files = []
 
 (* Test that checks episodicity analysis with expected results *)
 let test_episodicity_spec spec () =

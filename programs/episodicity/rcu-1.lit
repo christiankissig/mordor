@@ -24,27 +24,3 @@ rdet := malloc rN;
     *rn := rv+1;
     rsucc := cas(acquire,release,rC,rs,rn);
   } while (rsucc = 0);
-  *(rrcu + rtid) := 0;
-
-  // reclaim
-  *(rdet + rtid) := rs;
-
-  // sync
-  rr := malloc (rN+1);
-  rtemp := *(rrcu + 0);*(rr + 0) := rtemp;
-  rtemp := *(rrcu + 1);*(rr + 1) := rtemp;
-  rtemp := *(rrcu + 2);*(rr + 2) := rtemp;
-
-  rtemp := *(rr + 0);
-  if (rtemp = 1)
-  {
-    do
-    {
-      rtemp := *(rrcu + 0);
-    }
-    while (rtemp = 1);
-  };
-
-  // reclaim
-  rtemp := *(rdet + rtid);
-  free(rtemp);
