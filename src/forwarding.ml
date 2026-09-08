@@ -383,10 +383,6 @@ type ppo_relations = {
       (** Synchronization preserved program order.
 
           Orderings from acquire-release, SC fences, and volatile accesses. *)
-  ppo_loc_eq : (int * int) uset;
-      (** Location equality PPO component.
-
-          Orderings between events that may access the same location. *)
   ppo_iter_loc_base : (int * int) uset;
       (** Base location-based preserved program order between iterations.
 
@@ -399,10 +395,6 @@ type ppo_relations = {
       (** Synchronization preserved program order between iterations.
 
           Orderings from acquire-release, SC fences, and volatile accesses. *)
-  ppo_iter_loc_eq : (int * int) uset;
-      (** Location equality PPO component between iterations.
-
-          Orderings between events that may access the same location. *)
 }
 
 (** Event structure context.
@@ -443,12 +435,10 @@ module EventStructureContext = struct
           ppo_init = USet.create ();
           ppo_base = USet.create ();
           ppo_sync = USet.create ();
-          ppo_loc_eq = USet.create ();
           ppo_loc_base = USet.create ();
           (* PPO relations between events in successive iterations of the same loop. *)
           ppo_iter_base = USet.create ();
           ppo_iter_sync = USet.create ();
-          ppo_iter_loc_eq = USet.create ();
           ppo_iter_loc_base = USet.create ();
         };
       ppo_cache = PpoCache.create ();
@@ -614,42 +604,56 @@ module EventStructureContext = struct
       (compute_ppo_sync es_ctx.structure e po_iter)
     |> ignore;
 
-    (* Filter for location equality with semantic equality *)
+    (* Filter for location equality with semantic equality.
+
+       Both halves of this split are local. They are what splits po in two --
+       the pairs already known to share a location, which go into ppo_base and
+       are preserved unconditionally, and the rest, which become ppo_loc_base
+       and get filtered per execution by ForwardingContext.ppo -- and once the
+       split is made nothing reads either half again. They were fields of
+       ppo_relations, kept alive for the lifetime of the event structure for
+       no reader. *)
     let ppo_loc_eq = compute_ppo_loc_eq structure e po in
-      USet.clear es_ctx.ppo.ppo_loc_eq |> ignore;
-      USet.inplace_union es_ctx.ppo.ppo_loc_eq ppo_loc_eq |> ignore;
+    let ppo_iter_loc_eq = compute_ppo_loc_eq ~iter:true structure e po_iter in
 
-      let ppo_iter_loc_eq = compute_ppo_loc_eq ~iter:true structure e po_iter in
-        USet.clear es_ctx.ppo.ppo_iter_loc_eq |> ignore;
-        USet.inplace_union es_ctx.ppo.ppo_iter_loc_eq ppo_iter_loc_eq |> ignore;
+    (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
+       computed in that complement for each execution later on. *)
+    USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
+    USet.set_minus po ppo_loc_eq
+    |> USet.inplace_union es_ctx.ppo.ppo_loc_base
+    |> ignore;
 
-        (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
-           computed in that complement for each execution later on. *)
-        USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
-        USet.set_minus po es_ctx.ppo.ppo_loc_eq
-        |> USet.inplace_union es_ctx.ppo.ppo_loc_base
-        |> ignore;
+    (* The iteration-crossing half takes its complement in po as well, not in
+       po_iter. What comes out is po less the same-location pairs the two
+       relations share inside a loop, and it carries none of the pairs po_iter
+       has beyond po -- which is what an iteration-crossing relation is for.
 
-        USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
-        USet.set_minus po ppo_iter_loc_eq
-        |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base
-        |> ignore;
+       Left as it stands: every episodicity verdict on record was measured with
+       it, and taking the complement in po_iter would swing it the other way,
+       putting po_iter whole into the ppo_iter episodicity.ml builds from these
+       and leaving the events condition nothing to report. Neither raw relation
+       is what that condition wants -- it wants the alias-filtered one, as the
+       note there says. *)
+    USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
+    USet.set_minus po ppo_iter_loc_eq
+    |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base
+    |> ignore;
 
-        USet.clear es_ctx.ppo.ppo_base |> ignore;
-        es_ctx.ppo.ppo_sync
-        |> USet.union es_ctx.ppo.ppo_loc_eq
-        |> USet.inplace_union es_ctx.ppo.ppo_base
-        |> ignore;
+    USet.clear es_ctx.ppo.ppo_base |> ignore;
+    es_ctx.ppo.ppo_sync
+    |> USet.union ppo_loc_eq
+    |> USet.inplace_union es_ctx.ppo.ppo_base
+    |> ignore;
 
-        USet.clear es_ctx.ppo.ppo_iter_base |> ignore;
-        es_ctx.ppo.ppo_iter_sync
-        |> USet.union es_ctx.ppo.ppo_iter_loc_eq
-        |> USet.inplace_union es_ctx.ppo.ppo_iter_base
-        |> ignore;
+    USet.clear es_ctx.ppo.ppo_iter_base |> ignore;
+    es_ctx.ppo.ppo_iter_sync
+    |> USet.union ppo_iter_loc_eq
+    |> USet.inplace_union es_ctx.ppo.ppo_iter_base
+    |> ignore;
 
-        clear_caches es_ctx;
+    clear_caches es_ctx;
 
-        Lwt.return_unit
+    Lwt.return_unit
 end
 
 (** Forwarding context.

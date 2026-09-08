@@ -305,6 +305,104 @@ let parse_episodicity_output output_lines =
   in
     process_lines output_lines
 
+(* How long one program gets before the suite gives up on it.
+
+   This is here to turn a program that has stopped terminating into a failing
+   test, not to police how long a working one takes, so the default leaves a
+   wide margin: the slowest fixture, hp-1, takes about 25 s, and a cold
+   [dune exec] has to build first. Override with MORDOR_EPISODICITY_TIMEOUT,
+   in seconds. *)
+let episodicity_timeout =
+  match Sys.getenv_opt "MORDOR_EPISODICITY_TIMEOUT" with
+  | Some s -> (
+      match float_of_string_opt s with
+      | Some t when t > 0. -> t
+      | _ -> 300.
+    )
+  | None -> 300.
+
+(* What became of a run: the command's exit status, or the deadline passing. *)
+type run_outcome = Exited of int | Timed_out of float
+
+(* waitpid and read report EINTR to a process that catches a signal; neither
+   means the operation failed. *)
+let rec waitpid_no_eintr pid =
+  try snd (Unix.waitpid [] pid)
+  with Unix.Unix_error (Unix.EINTR, _, _) -> waitpid_no_eintr pid
+
+(* Split captured output the way input_line did: no empty line for the newline
+   that terminates the last one. *)
+let lines_of buffer =
+  let s = Buffer.contents buffer in
+  let s =
+    if String.length s > 0 && s.[String.length s - 1] = '\n' then
+      String.sub s 0 (String.length s - 1)
+    else s
+  in
+    if s = "" then [] else String.split_on_char '\n' s
+
+(* Run [cmd] under /bin/sh with its output captured, giving up after [timeout]
+   seconds and returning what was read up to that point.
+
+   The child puts itself in a new session before it execs, so that giving up
+   can signal the whole group. [cmd] is a [dune exec]: killing the shell alone
+   would leave the mordor process it started running, and — still holding the
+   write end of the pipe — the read would not even end. *)
+let run_capture ~timeout cmd =
+  let read_fd, write_fd = Unix.pipe () in
+  let pid = Unix.fork () in
+    if pid = 0 then (
+      (* Child. Anything that goes wrong here exits rather than unwinding into
+         a second copy of the test runner. *)
+      ( try
+          Unix.close read_fd;
+          ignore (Unix.setsid ());
+          Unix.dup2 write_fd Unix.stdout;
+          Unix.dup2 write_fd Unix.stderr;
+          Unix.close write_fd;
+          Unix.execv "/bin/sh" [| "/bin/sh"; "-c"; cmd |]
+        with _ -> ()
+      );
+      exit 127
+    );
+    Unix.close write_fd;
+    let buffer = Buffer.create 65536 in
+    let chunk = Bytes.create 65536 in
+    let deadline = Unix.gettimeofday () +. timeout in
+    let rec drain () =
+      let remaining = deadline -. Unix.gettimeofday () in
+        if remaining <= 0. then `Deadline
+        else
+          match Unix.select [ read_fd ] [] [] remaining with
+          | exception Unix.Unix_error (Unix.EINTR, _, _) -> drain ()
+          | [], _, _ -> `Deadline
+          | _ -> (
+              match Unix.read read_fd chunk 0 (Bytes.length chunk) with
+              | exception Unix.Unix_error (Unix.EINTR, _, _) -> drain ()
+              | 0 -> `Eof
+              | n ->
+                  Buffer.add_subbytes buffer chunk 0 n;
+                  drain ()
+            )
+    in
+    let verdict = drain () in
+      Unix.close read_fd;
+      let outcome =
+        match verdict with
+        | `Eof -> (
+            match waitpid_no_eintr pid with
+            | Unix.WEXITED code -> Exited code
+            | Unix.WSIGNALED _ | Unix.WSTOPPED _ -> Exited (-1)
+          )
+        | `Deadline ->
+            (* Negative pid: the session the child made for itself, so mordor
+               goes with the shell that started it. *)
+            (try Unix.kill (-pid) Sys.sigkill with Unix.Unix_error _ -> ());
+            ignore (waitpid_no_eintr pid);
+            Timed_out timeout
+      in
+        (outcome, lines_of buffer)
+
 (* Execute CLI command and capture result *)
 let run_cli_episodicity filepath =
   (* Use dune exec to ensure we can find the executable regardless of context *)
@@ -313,22 +411,33 @@ let run_cli_episodicity filepath =
       "dune exec mordor -- episodicity --step-counter 2 --single \"%s\" 2>&1"
       filepath
   in
-  let ic = Unix.open_process_in cmd in
-  let output = ref [] in
-    try
-      while true do
-        output := input_line ic :: !output
-      done;
-      (0, []) (* Never reached *)
-    with End_of_file ->
-      let exit_code = Unix.close_process_in ic in
-      let status =
-        match exit_code with
-        | Unix.WEXITED code -> code
-        | Unix.WSIGNALED _ -> -1
-        | Unix.WSTOPPED _ -> -1
+    run_capture ~timeout:episodicity_timeout cmd
+
+(* Report the run itself, before anything is parsed out of it.
+
+   A program that stops finishing fails its own test here and lets the rest of
+   the suite run, which is the point of the deadline: hp-1 was held out of the
+   suite entirely while its analysis did not terminate, because the alternative
+   was a suite that hung. The tail of the output says how far it got. *)
+let check_run_completed filepath (outcome, output) =
+  match outcome with
+  | Exited code ->
+      Alcotest.(check int)
+        (Printf.sprintf "CLI should exit successfully for %s" filepath)
+        0 code
+  | Timed_out seconds ->
+      let tail =
+        let n = List.length output in
+          List.filteri (fun i _ -> i >= n - 10) output |> String.concat "\n"
       in
-        (status, List.rev !output)
+        Alcotest.fail
+          (Printf.sprintf
+             "%s: episodicity analysis did not finish within %.0f s (raise \
+              MORDOR_EPISODICITY_TIMEOUT to allow longer). Last lines of \
+              output:\n\
+              %s"
+             filepath seconds tail
+          )
 
 (* Per-loop expectation: check a specific loop by its id *)
 type loop_expectation = {
@@ -495,14 +604,14 @@ failure at 4 is intended *)
    flag clear and the hazard pointer clear -- which has been folded back into
    the files the paper cites by name.
 
-   run_cli_episodicity has no timeout -- it blocks on close_process_in -- so a
-   program that stops finishing would hang the suite rather than fail it. That
-   is worth fixing before anything larger is added here. *)
+   A run that stops finishing now fails its own test after
+   MORDOR_EPISODICITY_TIMEOUT seconds instead of hanging the suite, so a fixture
+   whose analysis regresses costs one red test rather than a wedged CI job. *)
 let disabled_files = []
 
 (* Test that checks episodicity analysis with expected results *)
 let test_episodicity_spec spec () =
-  let exit_code, output = run_cli_episodicity spec.filepath in
+  let outcome, output = run_cli_episodicity spec.filepath in
   let output_str = String.concat "\n" output in
 
   Printf.printf "\n[DEBUG] Parsing output for %s\n"
@@ -519,10 +628,8 @@ let test_episodicity_spec spec () =
     )
     output;
 
-  (* Check that CLI exited successfully *)
-  Alcotest.(check int)
-    (Printf.sprintf "CLI should exit successfully for %s" spec.filepath)
-    0 exit_code;
+  (* Check that the CLI ran to completion, and exited successfully *)
+  check_run_completed spec.filepath (outcome, output);
 
   (* Check that we got some output *)
   Alcotest.(check bool)
@@ -613,13 +720,11 @@ let test_episodicity_spec spec () =
 
 (* Test that only checks for successful execution without specific expectations *)
 let test_episodicity_file filepath () =
-  let exit_code, output = run_cli_episodicity filepath in
+  let outcome, output = run_cli_episodicity filepath in
   let output_str = String.concat "\n" output in
 
-  (* Check that CLI exited successfully *)
-  Alcotest.(check int)
-    (Printf.sprintf "CLI should exit successfully for %s" filepath)
-    0 exit_code;
+  (* Check that the CLI ran to completion, and exited successfully *)
+  check_run_completed filepath (outcome, output);
 
   (* Check that we got some output *)
   Alcotest.(check bool)
