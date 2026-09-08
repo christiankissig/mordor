@@ -1345,8 +1345,6 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
     let justifications = Option.get ctx.justifications in
     let cache = { cache with structure; fwd_es_ctx; justifications } in
 
-    (* TODO generate new justifications and forwarding context for the
-             bisection structure, or adapt the existing ones *)
     (* Log each condition by the name it carries in the paper, so a debug run
        reads as the definition does rather than as four opaque numbers. *)
     let check_condition kind check =

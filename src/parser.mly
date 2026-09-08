@@ -555,7 +555,13 @@ outcome_message:
 model_name:
   | UNDERSCORE {"" }
   | name=GLOBAL { String.lowercase_ascii name }
-  | REGISTER { $1 } (* for rc11 - tokenization conflict TODO *)
+  (* The lexer reads 'r' alnum+ as a register, and registers really are
+     named that way -- rx, rcu, rtemp -- so a model name beginning with r
+     arrives as REGISTER rather than GLOBAL. Not removable without renaming
+     either the models or the registers; programs/uaf-bug-rc11.lit is the one
+     file that needs it, and drops to a parse error without it. Uppercase
+     [RC11] takes the GLOBAL branch above and is lowercased there. *)
+  | REGISTER { $1 }
   | SC { "sc" }
   | RELAXED { "relaxed" }
   | RELEASE { "release" }

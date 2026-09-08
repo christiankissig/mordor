@@ -124,8 +124,13 @@ module SymbolicEventStructure = struct
           restrict;
           defacto;
           fj = USet.union a.fj b.fj;
+          (* Empty on purpose, and harmless: p is not built compositionally.
+             Interpretation keeps one env_by_evt table on the side and stamps
+             it onto the structure when it returns (interpret.ml), so whatever
+             stands here is overwritten before the only reader -- the final_env
+             construction in Executions -- looks at it. Same reasoning as the
+             shared events and origin tables below. *)
           p = Hashtbl.create 0;
-          (* TODO value not needed here *)
           constraints = a.constraints @ b.constraints;
           conflict =
             USet.union a.conflict b.conflict
@@ -163,8 +168,13 @@ module SymbolicEventStructure = struct
           restrict;
           defacto;
           fj = USet.union a.fj b.fj;
+          (* Empty on purpose, and harmless: p is not built compositionally.
+             Interpretation keeps one env_by_evt table on the side and stamps
+             it onto the structure when it returns (interpret.ml), so whatever
+             stands here is overwritten before the only reader -- the final_env
+             construction in Executions -- looks at it. Same reasoning as the
+             shared events and origin tables below. *)
           p = Hashtbl.create 0;
-          (* TODO value not needed here *)
           constraints = a.constraints @ b.constraints;
           conflict = USet.union a.conflict b.conflict;
           (* a and b share the same origin table *)
