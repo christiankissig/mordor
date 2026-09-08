@@ -1,6 +1,17 @@
 (** Property-Based Tests for Symbolic MRD Testing invariants, theorems, and
     properties from the paper *)
 
+(* Properties from the paper that have no test here: DRF-SC (Theorem 5), the
+   standard compilation mappings (Lemma 5.1), store forwarding, J₀ ⊆ J, the
+   three allocation-disjointness claims (π1 ⊗ π2, π ⊗ x, reuse after free) and
+   execution completeness (every maximal conflict-free set considered, every
+   valid rf enumerated, incoherent executions filtered).
+
+   Each had a registered test case whose body was a comment and a unit value.
+   They asserted nothing and reported green, which in the summary is
+   indistinguishable from a property that was checked and holds. This note is
+   what they were carrying. *)
+
 open Alcotest
 open Events
 open Types
@@ -45,31 +56,6 @@ module PropertyThinAirFreedom = struct
         ()
 end
 
-(** Property 2: DRF-SC (Data-Race-Free implies Sequential Consistency) *)
-module PropertyDRFSC = struct
-  (** Theorem 5 from the paper: (J𝑃K_SC ∩ DR = ∅) ⟹ (J𝑃K_SC = J𝑃K_n ⊤) *)
-
-  let test_drf_sc_property () =
-    (* If a program has no data races under SC, then it only exhibits
-       SC behaviors under sMRD *)
-
-    (* Example SC program (properly synchronized):
-       Thread 1:         Thread 2:
-       x.store(1, rel);  while (!y.load(acq)) {}
-       y.store(1, rel);  r1 = x.load(acq);
-    *)
-
-    (* No races: all conflicting accesses ordered by happens-before *)
-    (* The program should only show r1=1 *)
-    (* TODO Printf.printf "PASS: DRF-SC property holds (see paper Theorem 5)\n"*)
-    ()
-
-  let test_racy_program_allows_more () =
-    (* With races, sMRD may allow more behaviors than SC *)
-    (* TODO Printf.printf "PASS: Racy programs allow non-SC behaviors\n"*)
-    ()
-end
-
 (** Property 3: Compilation Correctness (Lemma 5.1) *)
 module PropertyCompilationCorrectness = struct
   (** Lemma 5.1: J𝑃K_n ⊤ ⊇ J𝑃K_RC11 ⊇ Jcomp(𝑃)K_IMM *)
@@ -85,11 +71,6 @@ module PropertyCompilationCorrectness = struct
 
     (* If po ∪ rf is acyclic, then so is dp ∪ ppo ∪ rf when dp ∪ ppo ⊆ po *)
     check bool "po_includes_deps" true (USet.subset dp po);
-    ()
-
-  let test_standard_compilation_mappings () =
-    (* Standard compilation to ARM/Power/x86 remains sound *)
-    (*TODO Printf.printf "PASS: Standard compilation mappings work\n"*)
     ()
 end
 
@@ -185,11 +166,6 @@ module PropertyForwardingCorrectness = struct
        - Event 2 is elided
        - Symbols from event 2 are replaced by symbols from event 1 *)
     check bool "fwd_recorded" true (USet.mem fwd_ctx (1, 2));
-    ()
-
-  let test_store_forwarding_preserves_semantics () =
-    (* TODO Store forwarding: if a write is immediately followed by a read,
-       the value can be forwarded *)
     ()
 
   let test_write_elision_preserves_semantics () =
@@ -296,57 +272,6 @@ module PropertyJustificationMonotonicity = struct
     check bool "elaboration_weakens" true
       (List.length j_after_weak.p <= List.length j_before.p);
     ()
-
-  let test_final_set_includes_initial () =
-    (* J₀ ⊆ J *)
-    (* TODO The final set always includes the initial justifications *)
-    ()
-end
-
-(** Property 8: Disjointness from Allocation *)
-module PropertyAllocationDisjointness = struct
-  let test_fresh_allocations_are_disjoint () =
-    (* Different allocation events introduce disjoint regions *)
-    let alloc1 = VSymbol "π1" in
-    let alloc2 = VSymbol "π2" in
-
-    (* π1 ⊗ π2 should hold (they're disjoint) *)
-    (* TODO This is enforced in the freeze function *)
-    ()
-
-  let test_allocation_disjoint_from_globals () =
-    (* Allocated regions are disjoint from global variables *)
-    let alloc = VSymbol "π" in
-    let global = VVar "x" in
-
-    (* TODO π ⊗ x should hold *)
-    ()
-
-  let test_free_enables_reuse () =
-    (* After free, the region can potentially be reused *)
-    (* TODO But only if ordered by happens-before *)
-    ()
-end
-
-(** Property 9: Execution Completeness *)
-module PropertyExecutionCompleteness = struct
-  let test_all_maximal_sets_considered () =
-    (* Every maximal conflict-free set of events is considered *)
-    let e_all = USet.of_list [ 1; 2; 3; 4 ] in
-    let conflict = USet.of_list [ (2, 3) ] in
-    (* Events 2 and 3 conflict *)
-
-    (* Maximal sets: {1,2,4}, {1,3,4} *)
-    (* TODO Both should generate candidate executions *)
-    ()
-
-  let test_all_rf_relations_enumerated () =
-    (* TODO For each maximal set, all valid RF relations are tried *)
-    ()
-
-  let test_coherence_filters_invalid () =
-    (* TODO Only coherent executions are included in the final result *)
-    ()
 end
 
 let suite =
@@ -356,15 +281,8 @@ let suite =
         `Quick PropertyThinAirFreedom.test_acyclicity_prevents_thin_air;
       test_case "PropertyThinAirFreedom.test_dependencies_break_cycles" `Quick
         PropertyThinAirFreedom.test_dependencies_break_cycles;
-      test_case "PropertyDRFSC.test_drf_sc_property" `Quick
-        PropertyDRFSC.test_drf_sc_property;
-      test_case "PropertyDRFSC.test_race_program_allows_more" `Quick
-        PropertyDRFSC.test_racy_program_allows_more;
       test_case "PropertyCompilationCorrectness.test_smrd_includes_rc11" `Quick
         PropertyCompilationCorrectness.test_smrd_includes_rc11;
-      test_case
-        "PropertyCompilationCorrectness.test_standard_compilation_mappings"
-        `Quick PropertyCompilationCorrectness.test_standard_compilation_mappings;
     ]
     @ PropertyElaborationSoundness.suite
     @ [
@@ -372,11 +290,6 @@ let suite =
           "PropertyForwardingCorrectness.test_load_forwarding_preserves_semantics"
           `Quick
           PropertyForwardingCorrectness.test_load_forwarding_preserves_semantics;
-        test_case
-          "PropertyForwardingCorrectness.test_store_forwarding_preserves_semantics"
-          `Quick
-          PropertyForwardingCorrectness
-          .test_store_forwarding_preserves_semantics;
         test_case
           "PropertyForwardingCorrectness.test_write_elision_preserves_semantics"
           `Quick
@@ -394,27 +307,5 @@ let suite =
           `Quick
           PropertyJustificationMonotonicity
           .test_elaboration_weakens_or_maintains;
-        test_case
-          "PropertyJustificationMonotonicity.test_final_set_includes_initial"
-          `Quick
-          PropertyJustificationMonotonicity.test_final_set_includes_initial;
-        test_case
-          "PropertyAllocationDisjointness.test_fresh_allocations_are_disjoint"
-          `Quick
-          PropertyAllocationDisjointness.test_fresh_allocations_are_disjoint;
-        test_case
-          "PropertyAllocationDisjointness.test_allocation_disjoint_from_globals"
-          `Quick
-          PropertyAllocationDisjointness.test_allocation_disjoint_from_globals;
-        test_case "PropertyAllocationDisjointness.test_free_enables_reuse"
-          `Quick PropertyAllocationDisjointness.test_free_enables_reuse;
-        test_case
-          "PropertyExecutionCompleteness.test_all_maximal_sets_considered"
-          `Quick PropertyExecutionCompleteness.test_all_maximal_sets_considered;
-        test_case
-          "PropertyExecutionCompleteness.test_all_rf_relations_enumerated"
-          `Quick PropertyExecutionCompleteness.test_all_rf_relations_enumerated;
-        test_case "PropertyExecutionCompleteness.test_coherence_filters_invalid"
-          `Quick PropertyExecutionCompleteness.test_coherence_filters_invalid;
       ]
   )

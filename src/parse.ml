@@ -94,7 +94,6 @@ let rec add_loop loop_id ir_node =
           }
     | _ -> { stmt; annotations = { ann with loop_ctx = new_loop_ctx } }
 
-(* TODO rec to handle label case; use ctx annotation instead *)
 let rec convert_stmt_open ~recurse ~source_span ~thread_ctx ~loop_ctx = function
   | Ast.SThreads { threads } ->
       let ir_threads = List.map (List.map recurse) threads in

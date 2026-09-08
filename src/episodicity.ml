@@ -793,7 +793,6 @@ module WriteCondition = struct
         A condition result (async) indicating satisfaction and any violations *)
   let check cache (loop_id : int) : condition_result Lwt.t =
     let { structure; source_spans; _ } = cache in
-    let structure = structure in
     let events_in_loop =
       SymbolicEventStructure.events_in_loop structure loop_id
     in
@@ -1119,7 +1118,6 @@ module BranchCondition = struct
       @return A condition result indicating satisfaction and any violations *)
   let check cache (loop_id : int) : condition_result Lwt.t =
     let { program; structure; source_spans; _ } = cache in
-    let structure = structure in
       Logs_safe.debug (fun m ->
           m "Symbolic Event Structure:\n%s"
             (show_symbolic_event_structure structure)
@@ -1200,7 +1198,6 @@ module EventsCondition = struct
       @return A condition result indicating satisfaction and any violations *)
   let check cache (loop_id : int) : condition_result Lwt.t =
     let { structure; fwd_es_ctx; justifications; source_spans; _ } = cache in
-    let structure = structure in
     let events_in_loop =
       SymbolicEventStructure.events_in_loop structure loop_id
     in
@@ -1212,8 +1209,6 @@ module EventsCondition = struct
 
     (* Compute (ppo ∪ dp)* for the loop *)
     let delta_loop = URelation.cross events_in_loop events_in_loop in
-    (* TODO use contextual predicates *)
-    let fwd_es_ctx = fwd_es_ctx in
     (* ppo_rmw was computed here and dropped, ppo_base being unioned twice in
        its place. It is (ppo_sync ; rmw) U (rmw ; ppo_sync) -- what carries an
        RMW's synchronisation across its own read/write pair, and so the only

@@ -494,29 +494,6 @@ let model_options_table : (string, model_options) Hashtbl.t =
 let get_model_options name =
   Hashtbl.find_opt model_options_table (String.lowercase_ascii name)
 
-(* TODO not used *)
-
-(** List of all supported memory model names. *)
-let model_names =
-  [
-    "Power";
-    "Sevcik";
-    "Problem";
-    "JR";
-    "RC11";
-    "RC11c";
-    "Bridging";
-    "Bubbly";
-    "Grounding";
-    "Soham";
-    "IMM";
-    "RC11UB";
-    "IMMUB";
-    "UB11";
-    "SMRD";
-    "_";
-  ]
-
 (** Apply model-specific options to a context.
 
     Sets the memory model and adjusts coherence settings based on the model's

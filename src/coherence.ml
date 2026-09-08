@@ -585,7 +585,6 @@ end) : MEMORY_MODEL = struct
   (** Check coherence *)
   let check_coherence (cache : cache) (co : (int * int) uset) : bool =
     let { sb; hb; rfi; rf; e; events; rmw; loc_restrict } = cache in
-    let e = e in
 
     (* rb = rf⁻¹;co *)
     let rb = URelation.compose [ rfi; co ] in

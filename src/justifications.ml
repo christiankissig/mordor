@@ -173,9 +173,10 @@ end = struct
     && List.for_all
          (fun e -> List.exists (fun e' -> Expr.equal e e') just_x.p)
          just_y.p
-  (* TODO too strict! ppo is a function of fwd, we, and p, which we
-     test above. Less p seems to mean less ppo. Can this be removed altogether? *)
-  (* && USet.equal ppo_x ppo_y *)
+  (* No ppo comparison here. It used to be a conjunct, and it made covering too
+     strict: ppo is a function of fwd, we and p, all three of which are tested
+     above, and fewer p appeared to mean less ppo -- so the pairs it rejected
+     were ones the rest of the test had already accepted. *)
 end
 
 (** {1 Justification Caching} *)
