@@ -367,8 +367,20 @@ module ReadFromValidation = struct
       (fun (w, r) ->
         if w = 0 then None
         else
-          (* TODO w_val should be retrieved from justification to account for
-           elaborations *)
+          (* Not from the justification, though a TODO here long asked for it.
+             Value assignment concretises a write's value from whatever model
+             Solver.solve happens to return for that justification's
+             predicates: an arbitrary witness that licenses dropping the
+             dependency on the read, not the value the write takes in this
+             execution. Constraining rf to it pins every execution to that one
+             witness.
+
+             Measured, 2026-09-08: substituting it removes executions from the
+             forwarding and OOTA tests -- avoidoota/additional_inventintload
+             244 -> 232, avoidoota/listing26 59 -> 51, fwd/rlx/lift_F1r 28 ->
+             24, own/FWD-STRENGTHEN-LIFT 68 -> 52 -- and flips jctc/JCTC18 from
+             allowed to forbidden, which is the causality case the model exists
+             to admit. The structure's value is the right one to read here. *)
           let w_val = vale structure w r in
             match get_val structure r with
             | Some r_val -> Some (Expr.evaluate (Expr.binop w_val "=" r_val))

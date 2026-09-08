@@ -220,6 +220,23 @@ module ValueAssignElab = struct
                     in
                     let new_w_d = Expr.get_symbols wval |> USet.of_list in
                     let d = USet.union new_p_d new_w_d in
+                    (* The one place a justification's write event stops
+                       agreeing with the event structure's. wval is concretised
+                       here and nowhere else -- Justification.relabel would
+                       rewrite loc and rval too, but nothing calls it -- and
+                       only on just.w, never on the structure's copy.
+
+                       It is not, however, the value the write takes in an
+                       execution. Solver.solve above returns whatever model it
+                       finds, so wval here is one arbitrary witness that
+                       licenses dropping the dependency on the read -- which is
+                       the point of the elaboration -- and code reading a
+                       write's value for an execution wants the structure's,
+                       not this. Executions.ReadFromValidation.env_rf says what
+                       happens when you use this one instead.
+
+                       Locations and read values are untouched, so code reading
+                       those is unaffected either way. *)
                     let w = { just.w with wval = Some wval } in
                       [ { just with w; d; p } ]
       | None -> []
@@ -243,7 +260,9 @@ module ForwardElab = struct
       @return Promise of [true] if condition holds. *)
   let fprime elab_ctx pred_fn ppo_loc just e1 e2 =
     if USet.mem ppo_loc (e1, e2) && USet.mem (pred_fn e2) e1 then
-      (* TODO use of get_loc misses effects of value assignment elaboration *)
+      (* Locations, so the structure is the right source: value assignment
+         rewrites wval alone. What it does concretise reaches the comparison
+         anyway, since just.p below is the elaborated predicate. *)
       let loc1 = Events.get_loc elab_ctx.structure e1 in
       let loc2 = Events.get_loc elab_ctx.structure e2 in
         match (loc1, loc2) with
@@ -701,8 +720,13 @@ end = struct
                 let pred_pairs = URelation.cross pred_e1 pred_e2 in
                   USet.for_all
                     (fun (l1, l2) ->
-                      (* TODO looking up events by label misses effects of value
-                         assignment elaboration *)
+                      (* These are arbitrary predecessors, so the structure is
+                         the only source: a justification carries one event,
+                         its own write, and none is in scope here. A predecessor
+                         that is a write whose justification concretised its
+                         value therefore compares under the symbolic one. See
+                         the note in ValueAssignElab.elab; the same holds of the
+                         origin lookup in generate_relabelings. *)
                       let e'1 = Hashtbl.find elab_ctx.structure.events l1 in
                       let e'2 = Hashtbl.find elab_ctx.structure.events l2 in
                         aux p1 e'1 p2 e'2
@@ -808,8 +832,9 @@ end = struct
         (* symbols are not to be mapped over the write event *)
         if USet.mem ppo (w, remapped) then s
         else
-          (* TODO use of get_val misses effects of value assignment elaboration
-             *)
+          (* [remapped] is where a symbol originates, which is a read or an
+             allocation, and value assignment rewrites the write value of a
+             justification's own write event only. Nothing to miss here. *)
           match Events.get_val elab_ctx.structure remapped with
           | Some (ESymbol sym) when is_symbol sym -> sym
           | _ -> s
@@ -1038,9 +1063,11 @@ end = struct
                                             Hashtbl.find
                                               elab_ctx.structure.origin s'
                                           in
-                                          (* TODO looking up events by id
-                                                   misses effect of value
-                                                   assignment elaboration *)
+                                          (* Structure lookup, for the
+                                             same reason as in
+                                             is_closed_relab_equiv: no
+                                             justification for an
+                                             arbitrary origin event. *)
                                           let e1 =
                                             Hashtbl.find
                                               elab_ctx.structure.events o1
