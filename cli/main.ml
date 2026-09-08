@@ -260,6 +260,72 @@ module Display = struct
       flush stdout;
       Lwt.return_unit
 
+  (** Print the dependency relations of every execution.
+
+      The pipeline computes dp per execution, and ppo alongside it. Nothing else
+      in the CLI shows them readably: [executions] emits them inside a full JSON
+      dump, which is the machine-readable answer to the same question, and
+      [visual-es] draws them.
+
+      dp is listed in full, being the small relation and the one the analysis
+      exists to compute. po and ppo are given as sizes, with the po edges ppo
+      does not preserve spelled out -- listing either in full buries dp under a
+      quadratic number of edges, and which edges are dropped is what "preserved"
+      program order means.
+
+      @param lwt_ctx The Mordor context after dependency calculation
+      @return The unmodified context *)
+  let print_dependencies (lwt_ctx : mordor_ctx Lwt.t) =
+    let* ctx = lwt_ctx in
+    let edges rel =
+      USet.values rel
+      |> List.sort compare
+      |> List.map (fun (a, b) -> Printf.sprintf "%d->%d" a b)
+      |> String.concat ", "
+    in
+      ( match (ctx.structure, ctx.executions) with
+      | Some structure, Some executions ->
+          let execs =
+            USet.values executions
+            |> List.sort (fun (a : symbolic_execution) b -> compare a.id b.id)
+          in
+            (* The execution count is left to print_results, which follows
+               this and states it for every command. *)
+            Printf.printf "=== Dependencies: %s ===\n" ctx.litmus_name;
+            List.iter
+              (fun (ex : symbolic_execution) ->
+                let po =
+                  USet.filter
+                    (fun (a, b) -> USet.mem ex.e a && USet.mem ex.e b)
+                    structure.po
+                in
+                let dropped = USet.set_minus po ex.ppo in
+                let outside = USet.set_minus ex.ppo po in
+                  Printf.printf "Execution %d (%d events):\n" ex.id
+                    (USet.size ex.e);
+                  Printf.printf "  po  %4d\n" (USet.size po);
+                  Printf.printf "  ppo %4d" (USet.size ex.ppo);
+                  if USet.size dropped > 0 then
+                    Printf.printf ", dropping %d of po: %s" (USet.size dropped)
+                      (edges dropped);
+                  if USet.size outside > 0 then
+                    Printf.printf ", %d outside po: %s" (USet.size outside)
+                      (edges outside);
+                  Printf.printf "\n  dp  %4d" (USet.size ex.dp);
+                  if USet.size ex.dp > 0 then Printf.printf ": %s" (edges ex.dp);
+                  Printf.printf "\n"
+              )
+              execs;
+            Printf.printf "===========================\n"
+      | _ ->
+          Printf.printf
+            "No dependencies: the pipeline did not reach dependency \
+             calculation for %s.\n"
+            ctx.litmus_name
+      );
+      flush stdout;
+      Lwt.return ctx
+
   (** Print a formatted header for a test run.
 
       @param name The program name
@@ -499,6 +565,50 @@ module Pipeline = struct
       |> Executions_export.step_export_executions
       |> Display.print_results
 
+  (** {2 Dependencies Command} *)
+
+  (** Report the dependency relations of a single program.
+
+      Runs the pipeline as far as dependency calculation and then reports what
+      it produced. With [--output-mode json] the report is the executions
+      document, which carries dp and ppo among the rest, rather than a second
+      near-identical shape of its own.
+
+      @param name Program name
+      @param program Program source
+      @param config Configuration
+      @return Unit wrapped in Lwt *)
+  let compute_dependencies name program config =
+    Logs.info (fun m -> m "Computing dependencies for program %s." name);
+    let analysed =
+      make_program_context name program config
+      |> Lwt.return
+      |> Parse.step_parse_litmus
+      |> Interpret.step_interpret
+      |> Elaborations.step_generate_justifications
+      |> Executions.step_calculate_dependencies
+    in
+      match config.Config.output_mode with
+      | Some Json ->
+          analysed
+          |> Executions_export.step_export_executions
+          |> Display.print_results
+      | _ -> analysed |> Display.print_dependencies |> Display.print_results
+
+  (** Report dependencies for multiple programs.
+
+      @param tests List of (name, program) pairs
+      @param config Configuration
+      @return Unit wrapped in Lwt *)
+  let dependencies_tests tests config =
+    let* () =
+      Lwt_list.iter_s
+        (fun (name, prog) -> compute_dependencies name prog config)
+        tests
+    in
+      flush stdout;
+      Lwt.return_unit
+
   (** Execute a command on the loaded tests.
 
       Dispatches to the appropriate pipeline function based on the command.
@@ -534,8 +644,15 @@ module Pipeline = struct
         let name, program = List.hd tests in
           compute_futures name program config
     | Config.Dependencies ->
-        Printf.printf "TODO: Dependencies command not implemented yet\n";
-        Lwt.return_unit
+        (* One document per program is one document too many for a consumer
+           reading a single JSON object, so json takes the same single-program
+           restriction the executions command has. The text report labels each
+           program, and is fine over a whole directory. *)
+        if config.Config.output_mode = Some Json && List.length tests <> 1 then
+          failwith
+            "Dependencies command with --output-mode json requires exactly one \
+             input program (use --single)";
+        dependencies_tests tests config
     | Config.Executions ->
         if List.length tests <> 1 then
           failwith
@@ -628,7 +745,8 @@ module CLI = struct
     \  futures       Compute futures (requires --single)\n\
     \  executions    Export all executions with events and relations (po, dp, \
      ppo, rf, rmw) as JSON (requires --single)\n\
-    \  dependencies  Compute dependencies (not yet implemented)\n\n\
+    \  dependencies  Report po, dp and ppo per execution (--output-mode json \
+     emits the executions document; that mode requires --single)\n\n\
      Options:"
 
   (** Command-line argument specifications.
