@@ -511,35 +511,37 @@ module EventStructureContext = struct
     |> USet.inplace_union (URelation.cross e e_rel)
     |> USet.intersection po
 
-  (** [compute_ppo_loc_eq structure e po] computes the location equality PPO
-      component.
+  (** [compute_ppo_loc ~same ?iter structure po] restricts [po] to the pairs
+      whose locations [same] accepts.
 
-      This relation includes pairs of events that may access the same location
-      and thus require ordering to preserve location-based semantics. It is
-      computed by filtering program order with a solver check for location
-      equality under the given predicates.
+      The two relations built on it differ only in that test: [same] is exact
+      equality for the pairs preserved unconditionally, and may-aliasing for the
+      pairs an execution has still to rule out.
+
+      Under [iter] the second event's location is read as the next iteration's:
+      the symbols it reads inside the loop are renamed to their [_next]
+      counterparts, so a location computed from a loop-carried read is compared
+      against the value it takes one iteration on.
 
       TODO computing this relative to the event structure, and not the
       predicates of an execution / value constraints of second event is too
       strong, as it would miss semantic equivalence of memory locations relative
       to execution constraints.
 
+      TODO the [iter] renaming should factor in symbols read ppo-before this
+      location, i.e. not possibly read in a previous iteration.
+
+      @param same The location test.
+      @param iter Whether to read the second location as the next iteration's.
       @param structure The symbolic event structure.
-      @param e The set of events to consider.
-      @param po The program order relation.
-      @return The computed location equality PPO component. *)
-  let compute_ppo_loc_eq ?(iter = false) structure e po =
+      @param po The order to restrict.
+      @return The pairs of [po] whose locations [same] accepts. *)
+  let compute_ppo_loc ~same ?(iter = false) structure po =
     USet.filter
       (fun (e1, e2) ->
         let loc1 = Events.get_loc structure e1 in
         let loc2 =
           if iter then
-            (* if iter, then adjust symbols read in the loop as potentially read
-               in the previous iteration
-
-               TODO this should factor in symbols read ppo-before this
-               location, i.e. not possibly read in a previous iteration
-               *)
             let symbols = symbols_in_loop structure e2 in
               Events.get_loc structure e2
               |> Option.map
@@ -551,10 +553,25 @@ module EventStructureContext = struct
           else Events.get_loc structure e2
         in
           match (loc1, loc2) with
-          | Some l1, Some l2 -> Solver.exeq ~state:[] l1 l2
+          | Some l1, Some l2 -> same l1 l2
           | _ -> false
       )
       po
+
+  (** The pairs of [po] the structure alone proves to share a location. These
+      are preserved unconditionally. *)
+  let compute_ppo_loc_eq ?(iter = false) structure po =
+    compute_ppo_loc
+      ~same:(fun l1 l2 -> Solver.exeq ~state:[] l1 l2)
+      ~iter structure po
+
+  (** The pairs of [po] the structure's constraints do not separate — what
+      {!ForwardingContext.ppo} keeps of [ppo_loc_base] once an execution's
+      predicates are known, decided here with the constraints alone. *)
+  let compute_ppo_loc_alias ?(iter = false) structure po =
+    compute_ppo_loc
+      ~same:(fun l1 l2 -> Solver.expoteq ~state:structure.constraints l1 l2)
+      ~iter structure po
 
   (** [clear_caches es_ctx] clears all caches in the context.
 
@@ -613,8 +630,8 @@ module EventStructureContext = struct
        split is made nothing reads either half again. They were fields of
        ppo_relations, kept alive for the lifetime of the event structure for
        no reader. *)
-    let ppo_loc_eq = compute_ppo_loc_eq structure e po in
-    let ppo_iter_loc_eq = compute_ppo_loc_eq ~iter:true structure e po_iter in
+    let ppo_loc_eq = compute_ppo_loc_eq structure po in
+    let ppo_iter_loc_eq = compute_ppo_loc_eq ~iter:true structure po_iter in
 
     (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
        computed in that complement for each execution later on. *)
@@ -623,29 +640,24 @@ module EventStructureContext = struct
     |> USet.inplace_union es_ctx.ppo.ppo_loc_base
     |> ignore;
 
-    (* The iteration-crossing half takes its complement in po as well, not in
-       po_iter. What comes out is po less the same-location pairs the two
-       relations share inside a loop, and it carries none of the pairs po_iter
-       has beyond po -- which is what an iteration-crossing relation is for.
+    (* The iteration-crossing half, the same complement taken in po_iter.
 
-       Measured: the ppo_iter episodicity.ml builds from these comes out equal
-       to po plus a handful of sync pairs on every fixture. seqlock-1 po 136,
-       ppo_iter 137; spinlock-1 21 / 22; rcu-1 276 / 292; hp-1's outer loop
-       1378 / 2034. The events condition is ordering iteration-crossing pairs
-       by plain program order.
+       It took it in po until 2026-09-08, which left the ppo_iter episodicity.ml
+       builds from these equal to po plus a handful of sync pairs -- seqlock-1
+       po 136 and ppo_iter 137, rcu-1 276 / 292, hp-1's outer loop 1378 / 2034
+       -- so the events condition was ordering iteration-crossing pairs by plain
+       program order.
 
-       Neither raw relation is right. Taking the complement in po_iter instead
-       swings it the other way -- po_iter then lies whole inside ppo_iter and
-       the condition is satisfied vacuously, measured 0 violations on every
-       fixture. What the condition wants is the alias-filtered relation, the
-       same gap the note at episodicity.ml records on the ppo side. With both
-       -- complement in po_iter here, Solver.expoteq filtering there -- the
-       relation drops to 2 pairs on seqlock-1, 44 on rcu-1, 1004 on hp-1's
-       outer loop, and every verdict on record is reproduced: 534 unit and 278
-       integration tests green, all 17 episodicity fixtures included, with the
-       same bisection selected on rcu-1. See the Todoist task. *)
+       This complement alone would be no better. ppo_iter_base already carries
+       ppo_iter_loc_eq, so po_iter would lie whole inside ppo_iter and the
+       condition would hold vacuously: 0 violations on every fixture, including
+       the two that must fail. It works because episodicity.ml alias-filters
+       what it takes from here, as ForwardingContext.ppo does with ppo_loc_base
+       on the other side. Together the relation drops to 2 pairs on seqlock-1,
+       44 on rcu-1 and 1004 on hp-1's outer loop, and reproduces every verdict
+       on record. *)
     USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
-    USet.set_minus po ppo_iter_loc_eq
+    USet.set_minus po_iter ppo_iter_loc_eq
     |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base
     |> ignore;
 

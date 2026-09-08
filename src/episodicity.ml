@@ -1233,10 +1233,9 @@ module EventsCondition = struct
        ppo_loc_base (alias-filtered) U ppo_rmw U ppo_base, unioned with ppo_sync
        by its callers in executions.ml. The alias filtering is the one part not
        reproduced here: this takes ppo_loc_base raw, which orders more pairs
-       than the filtered relation would and so reports fewer violations.
-
-       The same gap on the ppo_iter side below is the larger one, and is what
-       the Todoist task is about; the two are meant to be closed together. *)
+       than the filtered relation would and so reports fewer violations. The
+       ppo_iter below is filtered; this one still is not, and closing the gap
+       shrinks dp_ppo, so it wants its own measurement pass. *)
     let ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
     let ppo =
       fwd_es_ctx.ppo.ppo_sync
@@ -1268,18 +1267,18 @@ module EventsCondition = struct
        ppo_sync, and there is no iteration-crossing variant of it. The duplicate
        ppo_iter_base that stood where one would go is dropped.
 
-       ppo_iter_loc_base is po \ ppo_iter_loc_eq, not po_iter \ ppo_iter_loc_eq
-       -- see the note at its definition in forwarding.ml -- so what this builds
-       is plain program order plus a few sync pairs, measured equal to po within
-       a handful on every fixture. Correcting it takes two changes together, the
-       complement there and Solver.expoteq filtering here, mirroring what
-       ForwardingContext.ppo does to ppo_loc_base. Measured: every verdict on
-       record is reproduced, both suites green. Either change alone is wrong --
-       the complement on its own makes the condition vacuous. *)
+       ppo_iter_loc_base is alias-filtered here, the way ForwardingContext.ppo
+       filters ppo_loc_base before an execution's predicates narrow it further.
+       It is half of one change: the other half is the complement that produces
+       it, taken in po_iter rather than po, and neither half works alone. See
+       the note at its definition in forwarding.ml. *)
       let ppo_iter =
         fwd_es_ctx.ppo.ppo_iter_sync
         |> USet.union fwd_es_ctx.ppo.ppo_iter_base
-        |> USet.union fwd_es_ctx.ppo.ppo_iter_loc_base
+        |> USet.union
+             (EventStructureContext.compute_ppo_loc_alias ~iter:true
+                fwd_es_ctx.structure fwd_es_ctx.ppo.ppo_iter_loc_base
+             )
       in
       let cross_iter_ppo =
         ppo_iter
