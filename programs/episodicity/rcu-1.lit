@@ -20,3 +20,4 @@ do {
   *rn := rv+1;
   rsucc := cas(acquire,release,rC,rs,rn);
 } while (rsucc = 0);
+*(rrcu + rtid) := 0;   // leave the read-side critical section

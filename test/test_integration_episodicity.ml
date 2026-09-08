@@ -479,12 +479,6 @@ failure at 4 is intended *)
        allocation_interiors_are_disjoint in the write condition. *)
     single_episodic "programs/episodicity/rcu-1.lit"
       "RCU increment loop - episodic";
-    (* The increment loop pruned out on its own, from when rcu-1 still carried
-       its sync loops. rcu-1 has since been pruned to much the same program, so
-       the two are near-duplicates at 28 and 31 events -- rcu-inc is rcu-1 plus
-       the trailing clear of the rcu flag. *)
-    single_episodic "programs/episodicity/rcu-inc.lit"
-      "RCU increment loop alone - episodic";
   ]
 
 (* Nothing skipped.
@@ -492,15 +486,14 @@ failure at 4 is intended *)
    hp-1 and rcu-1 were held out while their episodicity analysis did not
    finish. Both run now, and every fixture in the directory is checked:
 
-     rcu-1     28 events   0.9 s   1 loop,  episodic
-     rcu-inc   31 events   1.0 s   1 loop,  episodic
-     hp-1      80 events    25 s   2 loops, both episodic
-     hp-inc    90 events    24 s   2 loops, both episodic
+     rcu-1     31 events   1.0 s   1 loop,  episodic
+     hp-1      90 events    24 s   2 loops, both episodic
 
-   The -inc files were the increment loop pruned out of each while the full
-   programs were too slow to run. The full programs have since been pruned to
-   much the same thing, so the pairs are near-duplicates now and one of each
-   could go.
+   rcu-inc and hp-inc are gone. They were the increment loop pruned out of each
+   while the full programs were too slow to run, and once those were pruned to
+   the retry loops the pairs differed only in the trailing release -- the rcu
+   flag clear and the hazard pointer clear -- which has been folded back into
+   the files the paper cites by name.
 
    run_cli_episodicity has no timeout -- it blocks on close_process_in -- so a
    program that stops finishing would hang the suite rather than fail it. That

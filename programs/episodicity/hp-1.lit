@@ -32,3 +32,5 @@ do {
   // I14
   rcas_succ := cas(acquire, release, rC, rs, rn);
 } while (rcas_succ = 0);      // I15
+
+*rhp := 0;   // I16: clear the hazard pointer
