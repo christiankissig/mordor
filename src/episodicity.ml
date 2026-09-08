@@ -1417,6 +1417,11 @@ let check_loop_bisection_episodicity (ctx : mordor_ctx) cache loop_id left right
     without loop offset. The search terminates at the bisection with the least
     offset, i.e. the smallest left side, confirming episodicity.
 
+    If no bisection is episodic the loop is not, and the result returned is the
+    trivial bisection's -- the first tried. Bisections can fail for different
+    reasons, so the conditions reported would otherwise depend on how far the
+    enumeration ran rather than on the loop.
+
     @param ctx The Mordor context containing the program
     @param cache The episodicity cache with precomputed structures
     @param loop_id The identifier of the loop to check
@@ -1428,10 +1433,10 @@ let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
        (fun acc (left, right) ->
          match (acc : loop_episodicity_result option) with
          | Some result when result.is_episodic -> Lwt.return (Some result)
-         | _ ->
+         | _ -> (
              (* Name the split being tried. Which boundary a verdict belongs to
                 is otherwise guesswork: the conditions log per bisection but
-                nothing says which one, and the summary keeps only the last. *)
+                nothing says which one, and the summary keeps only one. *)
              Logs_safe.debug (fun m ->
                  m "Loop %d: bisection left [%s] | right [%s]." loop_id
                    (USet.values left
@@ -1448,7 +1453,18 @@ let check_loop_episodicity (ctx : mordor_ctx) cache (loop_id : int) :
              let* result =
                check_loop_bisection_episodicity ctx cache loop_id left right
              in
-               Lwt.return_some result
+               (* An episodic bisection always wins and ends the search. Short
+                  of one, keep the first result rather than the last: the
+                  search has to run to the end either way, and the conditions
+                  reported are the caller's explanation of why the loop
+                  failed, so they should not depend on how far the enumeration
+                  happened to get. The trivial bisection comes first, which
+                  makes the explanation the one about the loop as written,
+                  before any boundary was moved. *)
+               match acc with
+               | Some kept when not result.is_episodic -> Lwt.return (Some kept)
+               | _ -> Lwt.return_some result
+           )
        )
        None
 
