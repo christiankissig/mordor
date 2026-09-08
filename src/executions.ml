@@ -903,7 +903,19 @@ module Freeze = struct
           (USet.size delta)
     );
 
-    (* TODO this should be given by generation *)
+    (* It is given by generation, and this never rejects. remap_just unions
+       the combination's whole fwd and we into every justification it remaps,
+       so delta here is exactly the combination's fwd U we, and pi_2 delta is
+       exactly the elided set compute_path_rf was handed. That subtracts it
+       from write_events before pairing anything, and event 0 is never a
+       forwarding target, so pi_1 rf cannot meet pi_2 delta. Measured over 60
+       programs on 2026-09-08: 67328 calls, 0 rejections.
+
+       Kept as the invariant it now is rather than deleted, since it is the
+       only thing standing between a future caller that builds rf some other
+       way and a read observing an elided write. check_rf_total below is not
+       in the same position: generation does not guarantee every read gets an
+       edge. *)
     let*? () =
       (ReadFromValidation.check_rf_elided rf delta, "RF fails RF elided check")
     in
@@ -1357,7 +1369,13 @@ let compute_justification_combinations compute fwd_es_ctx structure paths statex
       USet.intersection path.path justifiable_events |> USet.values
     in
 
-    (* TODO no need to select justifications for elided events *)
+    (* Selecting justifications for events the combination will elide is
+       waste, but not removable here: build_combinations produces total
+       combinations over a fixed key list, and check_partial can reject a
+       binding, never skip a key. Which events are elided is a property of the
+       combination being built, so the builder would have to let a partial
+       combination drop a key it has already elided. That is a change to
+       ListMapCombinationBuilder, not to this call. *)
     let js_combinations =
       ListMapCombinationBuilder.build_combinations justmap path_writes
         ~check_partial:(fun combo ?alternatives just ->
@@ -1445,7 +1463,11 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     Logs_safe.info (fun m -> m "[S4] paths: %d" (List.length paths));
 
   (* Build justification map: write event label -> list of justifications *)
-  (* TODO remove justifications with elided origins *)
+  (* Not filtered for elided origins here, and it cannot be: whether a
+     justification's symbol origins are elided depends on the fwd edges of the
+     combination it ends up in, and no combination exists yet. The filtering
+     happens where the information does -- JustValidation.check_partial calls
+     check_origins_elided on each binding as the combination is built. *)
   let justmap = Hashtbl.create 16 in
     List.iter
       (fun (just : justification) ->

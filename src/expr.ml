@@ -291,6 +291,20 @@ end = struct
           l_flat @ r_flat
     | e -> [ e ]
 
+  (* Two ways these two disagree, both known and neither fixed here.
+
+     is_tautology answers true for "x != y" over distinct variables or
+     symbols, because to_value maps EVar and ESymbol to values and Value.equal
+     then says they differ. Two names are not two values: x and y may well hold
+     the same one, so this is unsound, and Solver.check trusts it -- it answers
+     sat as soon as every expression is a tautology. Predates the numeric work
+     below and was carried through it.
+
+     is_contradiction has no && or || case, so "false && e" and "false || false"
+     come back unknown where their mirrors in is_tautology are decided.
+
+     The property test in test_expr.ml ranges over numbers only, which is why
+     it catches neither. *)
   let rec is_tautology = function
     | EBoolean b -> b
     | EBinOp (lhs, op, rhs) when op = "&&" ->
