@@ -297,17 +297,32 @@ end = struct
         is_tautology lhs && is_tautology rhs
     | EBinOp (lhs, op, rhs) when op = "||" ->
         is_tautology lhs || is_tautology rhs
-    | EBinOp (lhs, op, rhs) when op = "!=" -> (
+    | EBinOp (lhs, op, rhs) -> (
         match (to_value lhs, to_value rhs) with
-        | Some lv, Some rv -> not (Value.equal lv rv)
+        (* Numbers decide every comparison, the mirror of is_contradiction
+           below. Without this "1 < 2" fell through as unknown and "1 <= 2"
+           was answered false, because Value.equal is not <=. *)
+        | Some (VNumber lv), Some (VNumber rv) -> (
+            match op with
+            | "=" -> Z.equal lv rv
+            | "!=" -> not (Z.equal lv rv)
+            | "<" -> Z.lt lv rv
+            | ">" -> Z.gt lv rv
+            | "<=" -> Z.leq lv rv
+            | ">=" -> Z.geq lv rv
+            | _ -> false
+          )
+        (* Anything else is only decidable when both sides are the same
+           value: x = x holds, x < x does not, and is_contradiction has the
+           latter. *)
+        | Some lv, Some rv -> (
+            match op with
+            | "!=" -> not (Value.equal lv rv)
+            | "=" | "<=" | ">=" -> Value.equal lv rv
+            | _ -> false
+          )
         | _ -> false
       )
-    | EBinOp (lhs, op, rhs) when List.mem op [ "="; "<="; ">=" ] -> (
-        match (to_value lhs, to_value rhs) with
-        | Some lv, Some rv -> Value.equal lv rv
-        | _ -> false
-      )
-    (* TODO more cases *)
     | _ -> false
 
   let is_contradiction = function

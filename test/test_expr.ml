@@ -210,6 +210,66 @@ let test_expr_is_tautology () =
       "x < x is not tautology" false
       (Expr.is_tautology not_taut)
 
+(** Numbers decide every comparison. Before this, "<" and ">" fell through as
+    unknown and "1 <= 2" came back false, because the "<=" case asked
+    Value.equal rather than <=. *)
+let test_expr_is_tautology_on_numbers () =
+  let taut =
+    [
+      (e_binop (e_num 1) "<" (e_num 2), "1 < 2");
+      (e_binop (e_num 2) ">" (e_num 1), "2 > 1");
+      (e_binop (e_num 1) "<=" (e_num 2), "1 <= 2");
+      (e_binop (e_num 2) ">=" (e_num 1), "2 >= 1");
+      (e_binop (e_num 2) "<=" (e_num 2), "2 <= 2");
+      (e_binop (e_num 1) "!=" (e_num 2), "1 != 2");
+      (e_binop (e_num 2) "=" (e_num 2), "2 = 2");
+    ]
+  in
+  let not_taut =
+    [
+      (e_binop (e_num 2) "<" (e_num 1), "2 < 1");
+      (e_binop (e_num 1) ">" (e_num 2), "1 > 2");
+      (e_binop (e_num 2) "<=" (e_num 1), "2 <= 1");
+      (e_binop (e_num 1) "=" (e_num 2), "1 = 2");
+      (e_binop (e_num 2) "!=" (e_num 2), "2 != 2");
+    ]
+  in
+    List.iter
+      (fun (e, name) ->
+        Alcotest.(check bool)
+          (name ^ " is a tautology") true (Expr.is_tautology e)
+      )
+      taut;
+    List.iter
+      (fun (e, name) ->
+        Alcotest.(check bool)
+          (name ^ " is not a tautology")
+          false (Expr.is_tautology e)
+      )
+      not_taut
+
+(** Every tautology over numbers must not also be a contradiction, and the other
+    way round. The two are computed separately and can disagree. *)
+let test_expr_tautology_contradiction_disagree () =
+  let ops = [ "="; "!="; "<"; ">"; "<="; ">=" ] in
+    List.iter
+      (fun op ->
+        List.iter
+          (fun (a, b) ->
+            let e = e_binop (e_num a) op (e_num b) in
+            let t = Expr.is_tautology e in
+            let c = Expr.is_contradiction e in
+              Alcotest.(check bool)
+                (Printf.sprintf "%d %s %d is not both" a op b)
+                false (t && c);
+              Alcotest.(check bool)
+                (Printf.sprintf "%d %s %d is decided" a op b)
+                true (t || c)
+          )
+          [ (1, 2); (2, 1); (2, 2) ]
+      )
+      ops
+
 let test_expr_is_contradiction () =
   let x = e_var "x" in
   let contr1 = e_binop x "<" x in
@@ -548,6 +608,10 @@ let suite =
       Alcotest.test_case "Expr substitution" `Quick test_expr_subst;
       Alcotest.test_case "Expr flatten" `Quick test_expr_flatten;
       Alcotest.test_case "Expr is_tautology" `Quick test_expr_is_tautology;
+      Alcotest.test_case "Expr is_tautology on numbers" `Quick
+        test_expr_is_tautology_on_numbers;
+      Alcotest.test_case "Expr tautology and contradiction agree" `Quick
+        test_expr_tautology_contradiction_disagree;
       Alcotest.test_case "Expr is_contradiction" `Quick
         test_expr_is_contradiction;
       (* Helper function tests *)

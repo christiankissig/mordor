@@ -676,7 +676,12 @@ module ConditionChecker = struct
         List.map
           (Expr.evaluate ~env:(Hashtbl.find_opt execution.final_env))
           cond_expr
-        (* TODO replace with memory state; see note above *)
+        (* Tracked as github #5, "Test memory state in assertions", which
+           carries the same caveat as the note above and adds aliasing:
+           last_writes_to_variables is keyed by variable name, so two names
+           for one region are two entries and a region reached through a
+           pointer has none. What is wanted is a memory state the assertion
+           can evaluate symbolic expressions over. *)
         |> List.map
              (Expr.evaluate ~env:(Hashtbl.find_opt last_writes_to_variables))
       in
