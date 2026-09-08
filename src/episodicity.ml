@@ -964,6 +964,25 @@ module WriteCondition = struct
                     (* exclude writes that are ⊑-before the read *)
                     if USet.mem structure.po (write_event, read_event) then
                       Lwt.return false
+                    else if
+                      (* and writes that cannot occur alongside it at all. A
+                         read does not take its value from a write in a
+                         conflicting branch: no execution holds both. The
+                         symbolic do-while encoding makes this the common case
+                         rather than a corner one -- each loop contributes a
+                         branch whose arms carry copies of the body, so a loop
+                         containing another sees the inner body several times
+                         over, once per arm, and the copies conflict pairwise.
+                         All ten of hp-1's outer-loop violations were a read in
+                         one copy against the publish in another.
+
+                         may_read_from already declines such a write when it
+                         traces which write could have put an address in a
+                         symbol; it was only the pair under test that went
+                         unchecked. *)
+                      USet.mem structure.conflict (write_event, read_event)
+                      || USet.mem structure.conflict (read_event, write_event)
+                    then Lwt.return false
                     else
                       (* check if locations match *)
                       match
