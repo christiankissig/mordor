@@ -30,7 +30,6 @@ type context = {
 }
 
 (** Range type for interval-based solving. *)
-type range = Z.t * Z.t (* (min, max) inclusive *)
 
 (** Solver state with context and constraints. *)
 type solver = {
@@ -567,39 +566,6 @@ let simplify_disjunction clauses =
 
     (* Empty result means unsatisfiable *)
     if List.length non_empty = 0 then None else Some non_empty
-
-(** Solve with Z3 and return ranges for each variable.
-
-    Attempts to determine possible value ranges rather than just concrete
-    values.
-
-    @param solver The solver to solve
-    @return [Some ranges] mapping vars to range lists if SAT, [None] if UNSAT *)
-let solve_with_ranges solver =
-  let result = solve solver in
-    match result with
-    | None -> None
-    | Some bindings ->
-        let ranges = Hashtbl.create 16 in
-        let all_symbols = get_all_symbols solver.expressions in
-
-        (* For each symbol, determine its range *)
-        List.iter
-          (fun symbol ->
-            match concrete_value bindings symbol with
-            | Some (VNumber n) ->
-                (* Return single value as range *)
-                (* TODO: Check if other values are possible *)
-                Hashtbl.add ranges symbol [ (n, n) ]
-            | _ ->
-                (* Unknown range - use unbounded *)
-                let min_val = Z.of_int min_int in
-                let max_val = Z.of_int max_int in
-                  Hashtbl.add ranges symbol [ (min_val, max_val) ]
-          )
-          all_symbols;
-
-        Some ranges
 
 (** {1 Solver Introspection} *)
 

@@ -30,11 +30,6 @@ type context = {
       (** Mapping from variable names to Z3 expressions *)
 }
 
-(** Range type for interval-based solving.
-
-    Represents a closed interval [min, max] for integer values. *)
-type range = Z.t * Z.t
-
 (** Solver state containing context and constraint expressions.
 
     This type packages together a Z3 context with the list of constraint
@@ -284,17 +279,6 @@ val concrete_value :
       unsatisfiable *)
 val solve_for_vars :
   solver -> string list -> (string, value_type) Hashtbl.t option
-
-(** Solve with Z3 and return ranges or concrete values.
-
-    For each variable, attempts to determine possible value ranges rather than
-    just a single concrete value. Useful for constraint analysis.
-
-    @param solver The solver containing constraints
-    @return
-      [Some ranges] mapping variables to lists of possible ranges, [None] if
-      unsatisfiable *)
-val solve_with_ranges : solver -> (string, range list) Hashtbl.t option
 
 (** Convert a model to a human-readable string.
 
