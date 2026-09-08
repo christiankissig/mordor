@@ -141,41 +141,15 @@ let violated_conditions (result : loop_episodicity_result) =
 
 (** {1 Event Structure Utilities} *)
 
-(** The events of one loop.
-
-    [structure.loop_indices] maps an event to the ids of the loops enclosing it
-    (interpret.ml stores [loop_ctx.loops] there), so membership is a lookup of
-    [loop_id] in that list -- which is what
-    {!SymbolicEventStructure.events_in_loop} does, and what the "Events by loop"
-    debug dump reports.
-
-    This used to go through [get_iteration_for_loop], which reads the same list
-    as iteration numbers and returns its last element without consulting the
-    loop id it was passed. Every loop of a program therefore got the same
-    answer: every event enclosed by any loop. On hp-1, asking for the inner
-    loop's 10 events returned all 48, because the inner loop is nested in the
-    outer one and the union is the outer one. Conditions 1-4 were unaffected --
-    they already call events_in_loop -- but the elaboration slice and the
-    bisection enumeration were not.
-
-    It can still name events that are not in [structure.e]. [loop_indices] is
-    one of the program-wide tables interpret.ml hands over whole (interpret.ml
-    stamps every event it ever creates), while [e] is the event set of this
-    structure, so an event dropped on the way out keeps its loop membership.
-    branch_condition/nested_fail is the one fixture where it shows: loop 1's
-    members come back as [8; 9; 12] and only 8 is in [e]. One bisection is
-    enumerated, [] | [8; 9; 12], the write condition finds no reads and no
-    writes in the loop, and all six of the events condition's violations are
-    pairs of [po_iter] over 9 and 12 -- events that do not exist and that no
-    [ppo] can ever order. The suite pins that loop as failing conditions 3 and
-    4; only the 3 is real.
-
-    @param structure The symbolic event structure to query
-    @param loop_id The identifier of the loop
-    @return A set of event labels that belong to the specified loop *)
-let get_events_in_loop (structure : symbolic_event_structure) (loop_id : int) :
-    int uset =
-  SymbolicEventStructure.events_in_loop structure loop_id
+(* Everything here asks SymbolicEventStructure.events_in_loop which events a
+   loop has, and that is the only right way to ask. The alternative that used to
+   stand between this module and it, get_iteration_for_loop, read loop_indices
+   as iteration numbers and returned its last element without consulting the
+   loop id it was passed, so every loop of a program got the same answer: every
+   event enclosed by any loop. On hp-1, asking for the inner loop's 10 events
+   returned all 48, the inner loop being nested in the outer one. Conditions 1-4
+   were unaffected -- they already called events_in_loop -- but the elaboration
+   slice below and the bisection enumeration were not. *)
 
 (** The part of the structure a loop's dependencies can come from.
 
@@ -195,7 +169,9 @@ let get_events_in_loop (structure : symbolic_event_structure) (loop_id : int) :
     @param loop_id The loop being checked.
     @return The structure restricted to the loop and what precedes it. *)
 let restrict_to_loop (structure : symbolic_event_structure) loop_id =
-  let events_in_loop = get_events_in_loop structure loop_id in
+  let events_in_loop =
+    SymbolicEventStructure.events_in_loop structure loop_id
+  in
   let keep =
     USet.filter
       (fun event ->
@@ -377,7 +353,9 @@ module Bisection = struct
       all of those subsets fail the first filter anyway — copies of a loop body
       under different branches conflict, so nothing can be split across them. *)
   let all_bisections structure loop_id =
-    let events_in_loop = get_events_in_loop structure loop_id in
+    let events_in_loop =
+      SymbolicEventStructure.events_in_loop structure loop_id
+    in
     let event_list = USet.to_list events_in_loop in
     let preceding event =
       List.length

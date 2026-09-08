@@ -193,10 +193,22 @@ module SymbolicEventStructure = struct
           terminal_events = USet.union a.terminal_events b.terminal_events;
         }
 
-  let events_in_loop structure loop_id =
+  (* Intersected with [e]. [loop_indices] is one of the program-wide tables
+     interpret.ml hands over whole -- every event it ever creates is stamped
+     there -- while [e] is the event set of this structure, so an event dropped
+     on the way out of interpretation keeps its loop membership and the fold
+     alone would name events that are not here.
+
+     branch_condition/nested_fail is where that showed. Loop 1's members came
+     back as [8; 9; 12] against an [e] of twelve events holding neither 9 nor
+     12, so episodicity bisected over two events that did not exist and the
+     events condition reported six violations that no [ppo] could ever order. *)
+  let events_in_loop (structure : t) loop_id =
     Hashtbl.fold
       (fun event loop_indices acc ->
-        if List.mem loop_id loop_indices then USet.add acc event else acc
+        if List.mem loop_id loop_indices && USet.mem structure.e event then
+          USet.add acc event
+        else acc
       )
       structure.loop_indices (USet.create ())
 

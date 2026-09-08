@@ -497,8 +497,12 @@ let test_specifications =
     (* branch condition *)
     single_failing "programs/episodicity/branch_condition/fail.lit" [ 3 ]
       "Branch condition failure - constrains pre-loop symbol";
-    single_failing "programs/episodicity/branch_condition/nested_fail.lit"
-      [ 3; 4 ]
+    (* Condition 3 alone. It used to fail 4 as well, on six po_iter pairs over
+       two events that are not in the structure: events_in_loop folded the
+       program-wide loop_indices table and reported loop 1's members as
+       [8; 9; 12] where only 8 is in e. The bisection enumerated over all three
+       and the events condition had no ppo that could order the other two. *)
+    single_failing "programs/episodicity/branch_condition/nested_fail.lit" [ 3 ]
       "Branch condition failure - nested loop constrains pre-loop symbol";
     (* write condition *)
     single_failing "programs/episodicity/write_condition/fail.lit" [ 2 ]

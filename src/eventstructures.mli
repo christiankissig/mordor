@@ -21,7 +21,9 @@ module SymbolicEventStructure : sig
       composition. *)
   val cross : t -> t -> t
 
-  (** Get events in a loop by loop ID *)
+  (** The events of one loop: those of [e] that [loop_indices] records as
+      enclosed by [loop_id]. Nested loops are enclosed by their parents, so an
+      inner loop's events are also the outer loop's. *)
   val events_in_loop : t -> int -> int uset
 
   (** Get program order predecessors of an event *)
