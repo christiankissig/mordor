@@ -48,12 +48,7 @@ module PropertyThinAirFreedom = struct
 
     let combined = USet.union (USet.union po rf) dp in
       check bool "proper_deps_create_cycle" false (URelation.acyclic combined);
-
-      (* But with independent writes, there's no cycle *)
-      let dp_empty = USet.create () in
-      let combined2 = USet.union (USet.union po rf) dp_empty in
-        (* This might still have a cycle from po ∪ rf, depending on the program *)
-        ()
+      ()
 end
 
 (** Property 3: Compilation Correctness (Lemma 5.1) *)

@@ -105,7 +105,7 @@ let test_empty_structure () =
     Alcotest.(check int) "empty rmw" 0 (USet.size s.rmw);
     Alcotest.(check int) "empty lo" 0 (USet.size s.lo);
     Alcotest.(check int) "empty fj" 0 (USet.size s.fj);
-    (* Alcotest.(check int) "empty p" 0 (Hashtbl.size s.p); TODO *)
+    Alcotest.(check int) "empty p" 0 (Hashtbl.length s.p);
     Alcotest.(check int) "empty constraints" 0 (List.length s.constraints)
 
 (** Test SymbolicEventStructure.dot operation *)

@@ -513,12 +513,21 @@ let test_specifications =
     single_episodic "programs/episodicity/events_condition/cas_inc_loop.lit"
       "Valid episodic loop with RMW events - should be episodic with no \
        failing conditions";
-    (* multiple violations *)
+    (* Multiple violations -- except that this fixture does not deliver them.
+       Under the trivial bisection it fails conditions 1 and 2; under [6] | [7]
+       it fails 1 alone. Neither boundary violates condition 4, so the name's
+       promise of a register-and-events failure is unmet.
+
+       What is asserted is [1], because a loop with no episodic bisection
+       reports the conditions of the last bisection tried, not the union over
+       all of them or any canonical one -- so a fixture failing different
+       conditions under different boundaries pins whichever came last. That
+       reporting is the thing to settle before this fixture is worth
+       rewriting. *)
     single_failing "programs/episodicity/multiple/register_events_fail.lit"
       [ 1 ]
-      (* TODO there is a bijection which fails the test this way, but a
-failure at 4 is intended *)
-      "Multiple condition failures - register and write conditions fail";
+      "Register condition failure under every loop boundary - a register is \
+       read before it is written within the iteration";
     (* valid cases *)
     single_episodic "programs/episodicity/valid/read.lit"
       "Valid episodic loop - should be episodic with no failing conditions";

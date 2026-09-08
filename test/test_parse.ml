@@ -702,7 +702,7 @@ let suite =
       Alcotest.test_case "Parse register" `Quick test_parse_register_expr;
       Alcotest.test_case "Parse global" `Quick test_parse_global_expr;
       Alcotest.test_case "Parse atloc" `Quick test_parse_atloc_expr;
-      (* TODO Alcotest.test_case "Parse aset" `Quick test_parse_aset_expr; *)
+      Alcotest.test_case "Parse aset" `Quick test_parse_aset_expr;
       Alcotest.test_case "Parse addition" `Quick test_parse_addition;
       Alcotest.test_case "Parse subtraction" `Quick test_parse_subtraction;
       Alcotest.test_case "Parse multiplication" `Quick test_parse_multiplication;
