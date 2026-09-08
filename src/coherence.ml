@@ -145,14 +145,19 @@ end
 
 (** Coherence checks module *)
 module CoherenceChecks = struct
-  (** Atomicity check: rmw ∩ (rf⁻¹;co) = ∅ *)
+  (** Atomicity check: rmw ∩ (rb;co) = ∅, for rb = rf⁻¹;co *)
   let rmw_atomicity ~rf ~rfi ~rmw ~co () =
     (* compose twice with co to establish the intermediate write witnessing the violation *)
     URelation.compose [ rfi; co; co ] |> USet.intersection rmw |> USet.is_empty
 
   let thin_air_check ~hb ~rf () = URelation.acyclic (USet.union hb rf)
 
-  (** Coherence axiom check: hb;eco ∪ hb is irreflexive *)
+  (** Coherence axiom check: hb;eco ∪ hb is irreflexive.
+
+      The [∪ hb] term is the reflexive part of RC11's irreflexive(hb;eco?), and
+      it is what asks whether hb is irreflexive at all -- for a transitively
+      closed hb, whether the relation it closes is acyclic. It was missing from
+      the composition below while both comments named it. *)
   let coherence_axiom ?eco ~rf ~rfi ~co ~hb () =
     let rb = URelation.compose [ rfi; co ] in
     (* eco = (rf ∪ co ∪ rb)⁺ *)
@@ -161,7 +166,8 @@ module CoherenceChecks = struct
       else USet.union rf co |> USet.union rb |> URelation.transitive_closure
     in
       (* Coherence: hb;eco ∪ hb is irreflexive *)
-      URelation.is_irreflexive (URelation.compose [ hb; eco ])
+      URelation.is_irreflexive
+        (USet.inplace_union (URelation.compose [ hb; eco ]) hb)
 end
 
 (** {1 Memory Model Implementations} *)
@@ -594,59 +600,12 @@ end) : MEMORY_MODEL = struct
       URelation.transitive_closure (USet.union rf co |> USet.inplace_union rb)
     in
 
-    (* Atomicity: rmw ∩ (rb;co) = ∅ *)
-    if USet.size rmw > 0 then
-      if not (CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()) then false
-      else if
-        (* Coherence: hb;eco ∪ hb is irreflexive *)
-        (* TODO this is under rmw <> 0! *)
-        not (CoherenceChecks.coherence_axiom ~eco ~rf ~rfi ~co ~hb ())
-      then false
-      else
-        (* SC consistency *)
-        let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
-        let scb =
-          USet.union sb (URelation.compose [ sb_non_loc; hb ])
-          |> USet.union (loc_restrict hb)
-          |> USet.union co
-          |> USet.union rb
-        in
+    (* SC consistency: psc is acyclic.
 
-        let sc_events =
-          ModelUtils.match_events events e Init (Some SC) None None
-        in
-        let f_sc = ModelUtils.match_events events e Fence (Some SC) None None in
-
-        let psc_base =
-          URelation.compose
-            [
-              USet.inplace_union sc_events
-                (URelation.compose [ f_sc; URelation.reflexive_closure e hb ]);
-              scb;
-              USet.inplace_union sc_events
-                (URelation.compose [ URelation.reflexive_closure e hb; f_sc ]);
-            ]
-        in
-
-        let psc_f =
-          URelation.compose
-            [
-              f_sc;
-              USet.inplace_union (URelation.compose [ hb; eco; hb ]) hb;
-              f_sc;
-            ]
-        in
-
-        let psc = USet.union psc_base psc_f in
-          URelation.acyclic psc
-    else if
-      (* No RMW operations, just check coherence *)
-      not
-        (URelation.is_irreflexive
-           (USet.inplace_union (URelation.compose [ hb; eco ]) hb)
-        )
-    then false
-    else
+       Behind a closure so that only an execution which has already passed
+       atomicity and coherence pays for it, as was the case when each arm of
+       the RMW split below carried its own copy of this. *)
+    let sc_consistent () =
       let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
       let scb =
         USet.union sb (URelation.compose [ sb_non_loc; hb ])
@@ -681,8 +640,24 @@ end) : MEMORY_MODEL = struct
       in
 
       let psc = USet.union psc_base psc_f in
-      let acyclic = URelation.acyclic psc in
-        acyclic
+        URelation.acyclic psc
+    in
+
+    (* Atomicity: rmw ∩ (rb;co) = ∅. Vacuous with no RMWs to violate it. *)
+    (USet.size rmw = 0 || CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ())
+    (* Coherence: hb;eco ∪ hb is irreflexive.
+
+       This used to sit inside the RMW arm, and the arm without RMWs spelled it
+       out inline in a different form. The two were not the same check: the
+       shared one omitted the [∪ hb] term, so an execution containing an RMW
+       was never asked whether hb was irreflexive -- for hb = (sw ∪ sb)⁺,
+       whether sb ∪ sw is acyclic. One check now, outside the split.
+
+       The rest of this function did not depend on rmw either: both arms ran
+       the same thirty-five lines of SC consistency, which is how they came to
+       disagree in the first place. *)
+    && CoherenceChecks.coherence_axiom ~eco ~rf ~rfi ~co ~hb ()
+    && sc_consistent ()
 
   let check_thin_air (cache : cache) (execution : symbolic_execution) =
     let { hb; rf; _ } = cache in

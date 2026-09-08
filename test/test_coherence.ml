@@ -442,6 +442,35 @@ let test_permutations_three () =
       check int "all permutations are unique" 6 (List.length unique);
       ()
 
+(** A cyclic hb is incoherent whatever eco says.
+
+    [coherence_axiom] is RC11's irreflexive(hb;eco?), and the reflexive half of
+    that [eco?] is what rules out a cyclic hb. It used to be left out: the
+    composition was [hb;eco] alone, which for an empty eco is empty and so
+    trivially irreflexive. Every execution reaching this check through the RMW
+    arm of [RC11.check_coherence] was accepted on that basis. *)
+let test_coherence_axiom_rejects_cyclic_hb () =
+  let empty = USet.create () in
+  (* hb over two events that happen-before each other, transitively closed, so
+     it carries the self-loops a cycle implies. *)
+  let hb = uset_of_list [ (1, 2); (2, 1); (1, 1); (2, 2) ] in
+  let result =
+    CoherenceChecks.coherence_axiom ~rf:empty ~rfi:empty ~co:empty ~hb ()
+  in
+    check bool "cyclic hb is not coherent" false result;
+    ()
+
+(** The same check still passes what it should: an acyclic hb with nothing in
+    eco to contradict it. *)
+let test_coherence_axiom_accepts_acyclic_hb () =
+  let empty = USet.create () in
+  let hb = uset_of_list [ (1, 2); (2, 3); (1, 3) ] in
+  let result =
+    CoherenceChecks.coherence_axiom ~rf:empty ~rfi:empty ~co:empty ~hb ()
+  in
+    check bool "acyclic hb is coherent" true result;
+    ()
+
 (** Test suite *)
 let suite =
   ( "Coherence",
@@ -456,6 +485,10 @@ let suite =
       test_case "rc11_coherent simple" `Quick test_rc11_coherent_simple;
       test_case "rc11c_coherent simple" `Quick test_rc11c_coherent_simple;
       test_case "imm_coherent RMW" `Quick test_imm_coherent_rmw;
+      test_case "coherence_axiom rejects cyclic hb" `Quick
+        test_coherence_axiom_rejects_cyclic_hb;
+      test_case "coherence_axiom accepts acyclic hb" `Quick
+        test_coherence_axiom_accepts_acyclic_hb;
       test_case "cache types" `Quick test_cache_types;
       test_case "permutations empty" `Quick test_permutations_empty;
       test_case "permutations single" `Quick test_permutations_single;
