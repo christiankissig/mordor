@@ -776,6 +776,82 @@ let test_membership_present_events_allow () =
 (*  Suite assembly                                                     *)
 (* ================================================================== *)
 
+
+(* ------------------------------------------------------------------ *)
+(*  Refinement chains (github #85)                                     *)
+(* ------------------------------------------------------------------ *)
+
+(* Until #85 the verdict was a pure function of the allow/forbid keyword:
+   [do_check_refinement] compared an empty placeholder result against itself,
+   so [refinement_holds] was unconditionally true and the result reduced to
+   [outcome = Allow]. Neither program in the chain was ever interpreted.
+
+   These run the whole pipeline on a source text, which is what a chain needs,
+   and assert on the verdict rather than on any internal. *)
+
+let run_litmus source =
+  let ctx =
+    Context.make_context
+      { Context.default_options with dependencies = true }
+      ~output_mode:Context.Json ()
+  in
+    ctx.litmus_name <- "refinement-test";
+    ctx.litmus <- Some source;
+    let ctx =
+      sync
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Elaborations.step_generate_justifications
+        |> Executions.step_calculate_dependencies
+        |> Assertion.step_check_assertions
+        )
+    in
+      ctx.valid
+
+let check_refinement_verdict name source expected () =
+  Alcotest.(check (option bool)) name (Some expected) (run_litmus source)
+
+(* A program refines itself. *)
+let refinement_identity =
+  "x := 0;\n   { x := 42 }|||{ r1 := x }\n   %% ~~> [_=allow] %%\n   x := 0;\n   { x := 42 }|||{ r1 := x }\n"
+
+(* The target invents a write the source never performs, so r1 = 3 is a
+   behaviour the source has not: the refinement does not hold. *)
+let refinement_invented_write outcome =
+  Printf.sprintf
+    "x := 0;\n     { x := 42 }|||{ r1 := x }\n     %%%% ~~> [_=%s] %%%%\n     x := 0;\n     { x := 42; x := 3 }|||{ r1 := x }\n"
+    outcome
+
+(* Two programs with nothing in common. Comparing on the intersection of their
+   observable registers would make this vacuously a refinement. *)
+let refinement_unrelated =
+  "x := 0;\n   { x := 1 }|||{ r1 := x }\n   %% ~~> [_=allow] %%\n   y := 0;\n   { y := 99 }|||{ r9 := y }\n"
+
+let refinement_tests =
+  [
+    Alcotest.test_case "refinement: a program refines itself" `Quick
+      (check_refinement_verdict "identity refinement holds"
+         refinement_identity true
+      );
+    Alcotest.test_case "refinement: an invented write is not a refinement"
+      `Quick
+      (check_refinement_verdict "forbid holds"
+         (refinement_invented_write "forbid")
+         true
+      );
+    Alcotest.test_case "refinement: the same pair asserted allow fails" `Quick
+      (check_refinement_verdict "allow does not hold"
+         (refinement_invented_write "allow")
+         false
+      );
+    Alcotest.test_case "refinement: unrelated programs do not refine" `Quick
+      (check_refinement_verdict "no shared observables is not vacuous"
+         refinement_unrelated false
+      );
+  ]
+
+
 let suite =
   ( "Test_assertion",
     (* Bug 1: allow (ub) — data-driven over exec counts *)
@@ -912,4 +988,6 @@ let suite =
             (test_ub_and_valid_fields outcome has_ub exp_ub exp_valid label)
         )
         ub_validity_cases
+    (* refinement chains *)
+    @ refinement_tests
   )

@@ -765,152 +765,310 @@ module Refinement = struct
     valid : bool;  (** Whether refinement holds. *)
   }
 
-  (** [build_symbol_map executions] creates register to symbols mapping.
+  (** One program of a chain, run through the pipeline. *)
+  type run = {
+    run_structure : symbolic_event_structure;
+    run_executions : symbolic_execution list;
+    run_address_registers : string uset;
+        (** Registers the program uses as addresses. *)
+  }
 
-      Maps each register to the set of all symbolic expressions it takes across
-      all executions.
+  (** [address_registers program] names the registers a program uses as
+      addresses: allocated by [malloc], taken as the address of a dereference,
+      or freed.
 
-      @param executions List of executions.
-      @return Hash table mapping registers to symbol sets. *)
-  let build_symbol_map executions =
-    let map = Hashtbl.create 32 in
-      List.iter
-        (fun (exec : symbolic_execution) ->
-          Hashtbl.iter
-            (fun register sym_expr ->
-              if not (Expr.is_number sym_expr) then (
-                let entry =
-                  match Hashtbl.find_opt map register with
-                  | Some s -> s
-                  | None -> USet.create ()
-                in
-                  USet.add entry sym_expr |> ignore;
-                  Hashtbl.replace map register entry
-              )
-            )
-            exec.fix_rf_map
-        )
-        executions;
-      map
-
-  (** [build_reverse_map executions] creates symbol to registers mapping.
-
-      Maps each symbolic expression (as string) to the set of registers that can
-      hold it across all executions.
-
-      @param executions List of executions.
-      @return Hash table mapping symbol strings to register sets. *)
-  let build_reverse_map executions =
-    let map = Hashtbl.create 32 in
-      List.iter
-        (fun (exec : symbolic_execution) ->
-          Hashtbl.iter
-            (fun register sym_expr ->
-              if not (Expr.is_number sym_expr) then (
-                let sym_str = Expr.to_string sym_expr in
-                let entry =
-                  match Hashtbl.find_opt map sym_str with
-                  | Some s -> s
-                  | None -> USet.create ()
-                in
-                  USet.add entry register |> ignore;
-                  Hashtbl.replace map sym_str entry
-              )
-            )
-            exec.fix_rf_map
-        )
-        executions;
-      map
-
-  (** [can_match_execution to_exec from_execs from_map to_reverse_map] checks if
-      execution can be matched.
-
-      Determines if [to_exec] (from refined program) can be matched with any
-      execution in [from_execs] (from original program) based on symbolic value
-      correspondence.
-
-      @param to_exec Execution from refined program.
-      @param from_execs Executions from original program.
-      @param from_map Symbol map for original program.
-      @param to_reverse_map Reverse symbol map for refined program.
-      @return [true] if a matching execution exists. *)
-  let can_match_execution to_exec from_execs from_map to_reverse_map =
-    (* Start with all from executions as candidates *)
-    let candidates = ref from_execs in
-
-    (* Filter candidates based on each symbol in to_exec *)
-    Hashtbl.iter
-      (fun sym_str value ->
-        match Hashtbl.find_opt to_reverse_map sym_str with
-        | None -> ()
-        | Some registers ->
-            (* Get all possible source symbols for these registers *)
-            let source_syms =
-              USet.fold
-                (fun (acc : expr USet.t) register ->
-                  match Hashtbl.find_opt from_map register with
-                  | Some syms -> USet.union acc syms
-                  | None -> acc
-                )
-                registers
-                (USet.create () : expr USet.t)
-            in
-              (* Filter candidates: must have at least one matching symbol with same value *)
-              candidates :=
-                List.filter
-                  (fun from_exec ->
-                    USet.exists
-                      (fun source_sym ->
-                        let source_sym_str = Expr.to_string source_sym in
-                          match
-                            Hashtbl.find_opt from_exec.fix_rf_map source_sym_str
-                          with
-                          | Some from_val -> Expr.equal from_val value
-                          | None -> false
-                      )
-                      source_syms
-                  )
-                  !candidates
-      )
-      to_exec.fix_rf_map;
-
-    (* At least one candidate should remain *)
-    List.length !candidates > 0
-
-  (** [check_refinement from_prog to_prog] checks refinement relation.
-
-      Verifies that every execution of [to_prog] can be matched with an
-      execution of [from_prog], meaning the transformation preserves behaviors.
-
-      @param from_prog Original program (as promise).
-      @param to_prog Refined program (as promise).
-      @return Promise of refinement result. *)
-  let check_refinement from_prog to_prog =
-    let%lwt from_result = from_prog in
-    let%lwt to_result = to_prog in
-
-    let from_execs = from_result.executions in
-    let to_execs = to_result.executions in
-
-    let from_map = build_symbol_map from_execs in
-    let to_reverse_map = build_reverse_map to_execs in
-
-    (* Check if every "to" execution can be matched with a "from" execution *)
-    let refinement_holds =
-      List.for_all
-        (fun to_exec ->
-          can_match_execution to_exec from_execs from_map to_reverse_map
-        )
-        to_execs
+      These are not observable behaviour. An allocation address is chosen by the
+      allocator, so two runs that allocate at different addresses exhibit the
+      same behaviour, and the address domain is unbounded -- enumerating it does
+      not terminate. What a pointer points *at* is observed through the
+      registers the program loads out of it, which are kept. *)
+  let address_registers (program : Context.ir_node list) =
+    let acc = USet.create () in
+    let add_expr e =
+      List.iter (fun v -> USet.add acc v |> ignore) (Expr.extract_variables e)
     in
+    let rec walk_nodes nodes = List.iter walk_node nodes
+    and walk_node (node : Context.ir_node) =
+      match node.stmt with
+      | Threads { threads } -> List.iter walk_nodes threads
+      | If { then_body; else_body; _ } ->
+          walk_nodes then_body;
+          Option.iter walk_nodes else_body
+      | While { body; _ } | Do { body; _ } -> walk_nodes body
+      | Labeled { stmt; _ } -> walk_node stmt
+      | RegMalloc { register; _ } -> USet.add acc register |> ignore
+      | RegisterRefAssign { register; _ } -> USet.add acc register |> ignore
+      | Free { register } -> USet.add acc register |> ignore
+      | DerefLoad { address; _ } | DerefStore { address; _ } -> add_expr address
+      | Cas { address; _ } | Fadd { address; _ } -> add_expr address
+      | _ -> ()
+    in
+      walk_nodes program;
+      acc
 
-    Lwt.return
-      {
-        structure = to_result.structure;
-        executions = to_result.executions;
-        events = to_result.events;
-        valid = refinement_holds;
-      }
+  (** How many distinct observations we are willing to enumerate for one
+      execution before giving up. The refinement programs are small; a run that
+      exceeds this is telling us the observable state is not finite enough to
+      decide this way, and we say so rather than guess. *)
+  let observation_cap = 512
+
+  (** [run_program options litmus] runs one program of the chain through the
+      pipeline and returns its structure and coherent executions.
+
+      This is what was missing. [do_check_refinement] used to compare a hardcoded
+      empty result against itself, so no program in the chain was ever
+      interpreted (github #85). *)
+  let run_program (options : Context.options) (litmus : Context.ir_litmus) =
+    let ctx =
+      Context.make_context
+        { options with model = options.model }
+        ~step_counter:options.step_counter ()
+    in
+      Option.iter (fun name -> ctx.litmus_name <- name) litmus.config.name;
+      (* The model is the chain's, applied once by [do_check_refinement], not
+         each program's own. Re-applying it here would reset [ubopt] from the
+         chain's [UB11] back to the head program's "undefined". *)
+      ctx.litmus_defacto <- Some litmus.config.defacto;
+      ctx.litmus_constraints <- Some litmus.config.constraints;
+      ctx.program_stmts <- Some litmus.program;
+      (* No assertion: the chain's own outcome is what we are deciding, and
+         [step_check_assertions] is not part of this pipeline anyway. *)
+      ctx.assertions <- None;
+      let%lwt ctx =
+        Lwt.return ctx
+        |> Interpret.step_interpret
+        |> Elaborations.step_generate_justifications
+        |> Executions.step_calculate_dependencies
+      in
+        match (ctx.structure, ctx.executions) with
+        | Some structure, Some executions ->
+            Lwt.return
+              (Some
+                 {
+                   run_structure = structure;
+                   run_executions = USet.to_list executions;
+                   run_address_registers = address_registers litmus.program;
+                 }
+              )
+        | _ ->
+            Logs_safe.err (fun m ->
+                m "Refinement: a program in the chain produced no executions"
+            );
+            Lwt.return None
+
+  (** [observable_registers run] names the registers a run's executions end
+      with.
+
+      [final_env] is the register environment merged over the terminal events,
+      so it is the program's observable state. *)
+  let observable_registers run =
+    List.fold_left
+      (fun acc (exec : symbolic_execution) ->
+        Hashtbl.fold (fun reg _ acc -> USet.add acc reg) exec.final_env acc
+      )
+      (USet.create ()) run.run_executions
+    |> USet.filter (fun reg -> not (USet.mem run.run_address_registers reg))
+
+  (** The name under which the solver reports register [reg]'s value.
+
+      A fresh variable rather than the register's own symbolic expression, so
+      that the model is guaranteed to bind it even when the execution's
+      predicates leave the underlying symbols free. *)
+  let obs_var reg = EVar ("$obs$" ^ reg)
+
+  (** [observations structure exec regs] is the set of concrete observations
+      [exec] admits, one per assignment of values to [regs].
+
+      Returns [None] if the enumeration did not terminate within
+      {!observation_cap} -- the caller must not read that as "no observations".
+
+      Enumeration rather than a containment query, because a source execution's
+      internal symbols would have to be existentially quantified to ask
+      "is every observation of [t] an observation of some [s]" directly, and the
+      solver interface here has no quantifiers. The programs are small enough
+      that enumerating is exact. *)
+  let observations structure (exec : symbolic_execution) regs =
+    let rf_conditions =
+      ExecutionAnalysis.build_rf_conditions structure exec
+    in
+    let bindings =
+      List.map
+        (fun reg ->
+          let value =
+            Expr.evaluate ~env:(Hashtbl.find_opt exec.final_env) (EVar reg)
+          in
+            (reg, EBinOp (obs_var reg, "=", value))
+        )
+        regs
+    in
+    let base =
+      exec.ex_p @ rf_conditions @ List.map snd bindings
+    in
+    let rec loop acc blocked n =
+      if n > observation_cap then (
+        Logs_safe.err (fun m ->
+            m
+              "Refinement: execution %d still admits new observations after \
+               %d; at least one of [%s] is unconstrained, so its behaviour \
+               cannot be enumerated"
+              exec.id observation_cap (String.concat "; " regs)
+        );
+        None
+      )
+      else
+        match Solver.quick_solve (base @ blocked) with
+        | None -> Some acc
+        | Some model ->
+            let point =
+              List.map
+                (fun reg ->
+                  (reg, Solver.concrete_value model ("$obs$" ^ reg))
+                )
+                regs
+            in
+              if List.exists (fun (_, v) -> Option.is_none v) point then (
+                (* A register the model does not pin is not an observation we
+                   can compare; treat the execution as undecidable rather than
+                   inventing one. *)
+                Logs_safe.err (fun m ->
+                    m
+                      "Refinement: execution %d leaves [%s] unbound, so its \
+                       observation is not a value"
+                      exec.id
+                      (String.concat "; "
+                         (List.filter_map
+                            (fun (r, v) -> if Option.is_none v then Some r else None)
+                            point
+                         )
+                      )
+                );
+                None
+              )
+              else
+                let block =
+                  EOr
+                    (List.map
+                       (fun (reg, v) ->
+                         EBinOp
+                           (obs_var reg, "!=", Expr.of_value (Option.get v))
+                       )
+                       point
+                    )
+                in
+                let key =
+                  List.map
+                    (fun (reg, v) ->
+                      (reg, Expr.to_string (Expr.of_value (Option.get v)))
+                    )
+                    point
+                in
+                  loop (key :: acc) (block :: blocked) (n + 1)
+    in
+      loop [] [] 0
+
+  (** [run_observations run regs] is every observation the run admits, or [None]
+      if any execution could not be enumerated. *)
+  let run_observations run regs =
+    List.fold_left
+      (fun acc exec ->
+        match acc with
+        | None -> None
+        | Some seen -> (
+            match observations run.run_structure exec regs with
+            | None -> None
+            | Some points -> Some (List.rev_append points seen)
+          )
+      )
+      (Some []) run.run_executions
+
+  (** [check_refinement source target] holds when every observation of [target]
+      is an observation of [source].
+
+      That is refinement in the usual sense: the transformation may remove
+      behaviours, never introduce one. The observable interface is the registers
+      the two programs have in common; a register only one of them has is
+      internal to it and says nothing about the pair. *)
+  let check_refinement source target =
+    let source_regs = observable_registers source in
+    let target_regs = observable_registers target in
+    let regs =
+      USet.union source_regs target_regs |> USet.values
+      |> List.sort String.compare
+    in
+    let only_in name a b =
+      USet.filter (fun r -> not (USet.mem b r)) a
+      |> USet.values |> List.sort String.compare
+      |> function
+      | [] -> None
+      | rs -> Some (name ^ ": " ^ String.concat ", " rs)
+    in
+      Logs_safe.info (fun m ->
+          m "Refinement: comparing on %d observable register(s): [%s]"
+            (List.length regs) (String.concat "; " regs)
+      );
+      (* The two programs have to end in the same registers to be comparable at
+         all. Taking the intersection instead would make two programs with no
+         register in common refine each other vacuously, which is the same shape
+         of empty verdict github #85 is about. *)
+      match
+        List.filter_map Fun.id
+          [
+            only_in "only in the source" source_regs target_regs;
+            only_in "only in the target" target_regs source_regs;
+          ]
+      with
+      | _ :: _ as diffs ->
+          Logs_safe.info (fun m ->
+              m
+                "Refinement: the programs do not end in the same registers                  (%s), so the target has a behaviour the source has not"
+                (String.concat "; " diffs)
+          );
+          Some false
+      | [] -> (
+      match
+        (run_observations source regs, run_observations target regs)
+      with
+      | Some source_points, Some target_points ->
+          let source_set =
+            List.map
+              (fun p ->
+                String.concat ","
+                  (List.map (fun (r, v) -> r ^ "=" ^ v) p)
+              )
+              source_points
+            |> List.sort_uniq String.compare
+          in
+          let missing =
+            List.filter
+              (fun p ->
+                let key =
+                  String.concat ","
+                    (List.map (fun (r, v) -> r ^ "=" ^ v) p)
+                in
+                  not (List.mem key source_set)
+              )
+              target_points
+          in
+            List.iter
+              (fun p ->
+                Logs_safe.info (fun m ->
+                    m "Refinement: target behaviour not in source: %s"
+                      (String.concat ", "
+                         (List.map (fun (r, v) -> r ^ " = " ^ v) p)
+                      )
+                )
+              )
+              missing;
+            Some (missing = [])
+      | _ ->
+          Logs_safe.err (fun m ->
+              m
+                "Refinement: could not enumerate the observable behaviours \
+                 (cap %d); the chain is not decided"
+                observation_cap
+          );
+          None
+      )
 
   (** [collect_chain acc ast] collects programs in chained assertion.
 
@@ -924,78 +1082,88 @@ module Refinement = struct
     | Chained { rest; _ } :: _ -> collect_chain (ast :: acc) rest
     | _ -> List.rev (ast :: acc)
 
-  (** [create_dummy_assertion model] creates assertion for execution generation.
+  (** [chain_outcomes ast] is the outcome asserted at each link of the chain.
 
-      Creates a trivially true assertion to generate executions without
-      filtering by outcome.
+      A chain [p1 ~~>[o1] p2 ~~>[o2] p3] carries its own outcome at every arrow,
+      and each is about the pair it sits between. The previous code read only
+      the first. *)
+  let rec chain_outcomes ast =
+    match ast.assertions with
+    | Chained { outcome; rest; _ } :: _ -> outcome :: chain_outcomes rest
+    | _ -> []
 
-      @param model Optional memory model.
-      @return Dummy outcome assertion. *)
-  let create_dummy_assertion model =
-    Outcome
-      {
-        outcome = Allow;
-        condition = Ir.CondExpr (EBinOp (ENum Z.zero, "=", ENum Z.zero));
-        model;
-      }
+  (** [do_check_refinement options ast] decides a chained refinement assertion.
 
-  (** [do_check_refinement ast] performs refinement check on AST.
+      Each program in the chain is run through the pipeline and compared with
+      its predecessor. A link asserting [allow] passes when the refinement
+      holds, one asserting [forbid] when it does not.
 
-      Main refinement checking function that processes chained assertions and
-      validates refinement across the chain.
-
+      @param options The analysis options to run each program under.
       @param ast The litmus test AST with chained assertions.
       @return Promise of refinement result. *)
-  let do_check_refinement ast =
-    (* Extract model and outcome from first assertion *)
-    let model, outcome =
-      match ast.assertions with
-      | [] -> (None, Forbid)
-      | Chained { model; outcome; _ } :: _ -> (Some model, outcome)
-      | _ -> (None, Allow)
-    in
-
+  let do_check_refinement (options : Context.options) ast =
     let tests = collect_chain [] ast in
-    let final = List.hd (List.rev tests) in
-    let test_progs = List.rev (List.tl (List.rev tests)) in
-
-    let dummy_assertion = create_dummy_assertion model in
-
-    (* Replace assertions with dummy for all tests *)
-    let tests_with_dummy =
-      List.map
-        (fun litmus -> { litmus with assertions = [ dummy_assertion ] })
-        (test_progs @ [ final ])
+    let outcomes = chain_outcomes ast in
+    (* A chain names its model on the arrow -- [%% ~~> [UB11=allow] %%] -- and
+       [step_parse_litmus] only applies the model of an [Outcome] or a [Model]
+       assertion, so a chain's never reached the options. [UB11] in particular
+       gates the [e / !r -> e] rewrite that its own tests are about. *)
+    let options =
+      match ast.assertions with
+      | Chained { model; _ } :: _ when model <> "" ->
+          let probe = Context.make_context { options with model } () in
+            Context.apply_model_options probe model;
+            probe.options
+      | _ -> options
     in
-
-    (* Create empty result for now (would integrate with actual structure creation) *)
-    let%lwt final_result =
-      Lwt.return
-        {
-          structure = SymbolicEventStructure.create ();
-          executions = [];
-          events = Hashtbl.create 0;
-          valid = false;
-        }
-    in
-
-    (* Check refinement for each test *)
-    let refinement_result = ref final_result in
-    let%lwt all_pass =
-      lwt_pevery
-        (fun _test_litmus ->
-          let test_result_lwt = Lwt.return final_result in
-          let%lwt ref_result =
-            check_refinement test_result_lwt (Lwt.return final_result)
+    let%lwt runs = Lwt_list.map_s (run_program options) tests in
+      match
+        List.fold_left
+          (fun acc r -> match (acc, r) with Some xs, Some x -> Some (x :: xs) | _ -> None)
+          (Some []) runs
+      with
+      | None ->
+          Logs_safe.err (fun m ->
+              m "Refinement: chain not decided, a program produced no executions"
+          );
+          Lwt.return
+            {
+              structure = SymbolicEventStructure.create ();
+              executions = [];
+              events = Hashtbl.create 0;
+              valid = false;
+            }
+      | Some rev_runs ->
+          let runs = List.rev rev_runs in
+          let last = List.nth runs (List.length runs - 1) in
+          let rec walk rs os all_pass =
+            match (rs, os) with
+            | source :: (target :: _ as rest), outcome :: os' ->
+                let holds = check_refinement source target in
+                let link_pass =
+                  match holds with
+                  | None -> false
+                  | Some h -> h = (outcome = Allow)
+                in
+                  Logs_safe.info (fun m ->
+                      m "Refinement link: holds=%s asserted=%s -> %b"
+                        (match holds with
+                         | None -> "undecided"
+                         | Some h -> string_of_bool h)
+                        (match outcome with Allow -> "allow" | Forbid -> "forbid")
+                        link_pass
+                  );
+                  walk rest os' (all_pass && link_pass)
+            | _ -> all_pass
           in
-            refinement_result := ref_result;
-            (* XOR with forbid: if outcome is Forbid, we expect refinement to fail *)
-            Lwt.return (ref_result.valid <> (outcome = Forbid))
-        )
-        test_progs
-    in
-
-    Lwt.return { !refinement_result with valid = all_pass }
+          let all_pass = walk runs outcomes true in
+            Lwt.return
+              {
+                structure = last.run_structure;
+                executions = last.run_executions;
+                events = last.run_structure.events;
+                valid = all_pass;
+              }
 end
 
 (** {1 Per-Execution Assertion Checking} *)
@@ -1374,7 +1542,8 @@ module AssertionChecker = struct
       @param executions List of executions.
       @param structure The event structure.
       @return Promise of assertion result. *)
-  let check_chained_assertion model outcome rest executions structure =
+  let check_chained_assertion ~options ~program ~config model outcome rest
+      executions structure =
     Logs_safe.info (fun m ->
         m "Performing refinement check for chained assertion"
     );
@@ -1385,18 +1554,15 @@ module AssertionChecker = struct
     in
     let ub = List.length ub_reasons > 0 in
 
+    (* The head of the chain is the program this context already ran, so hand
+       [do_check_refinement] the real thing rather than the empty placeholder
+       it used to build. Without the program and its config the first link had
+       nothing to compare against. *)
     let%lwt result =
-      Refinement.do_check_refinement
+      Refinement.do_check_refinement options
         {
-          config =
-            {
-              name = None;
-              model = None;
-              values = [];
-              defacto = [];
-              constraints = [];
-            };
-          program = [];
+          config;
+          program;
           assertions = [ Chained { model; outcome; rest } ];
         }
     in
@@ -1418,14 +1584,44 @@ module AssertionChecker = struct
       @param structure The event structure.
       @param exhaustive Whether to check exhaustively.
       @return Promise of assertion result. *)
-  let check assertion executions structure ~exhaustive =
+  let check ?ctx assertion executions structure ~exhaustive =
     match assertion with
     | Model { model } -> check_model_assertion model executions structure
     | Outcome { outcome; condition; model } ->
         check_outcome_assertion outcome condition model executions structure
           ~exhaustive
-    | Chained { model; outcome; rest } ->
-        check_chained_assertion model outcome rest executions structure
+    | Chained { model; outcome; rest } -> (
+        (* A chain needs the source program itself, which only the context has.
+           Without one there is nothing to compare and we say so, rather than
+           returning a verdict read off the allow/forbid keyword (github #85). *)
+        match ctx with
+        | None ->
+            Logs_safe.err (fun m ->
+                m
+                  "Refinement assertion reached the checker without a                    context; the chain cannot be decided"
+            );
+            Lwt.return
+              {
+                valid = false;
+                ub = false;
+                ub_reasons = [];
+                checked_executions = None;
+                assertion_instances = None;
+              }
+        | Some (ctx : mordor_ctx) ->
+            check_chained_assertion ~options:ctx.options
+              ~program:(Option.value ctx.program_stmts ~default:[])
+              ~config:
+                {
+                  name = Some ctx.litmus_name;
+                  model = None;
+                  values = [];
+                  defacto = Option.value ctx.litmus_defacto ~default:[];
+                  constraints =
+                    Option.value ctx.litmus_constraints ~default:[];
+                }
+              model outcome rest executions structure
+      )
 end
 
 (** {1 Public API} *)
@@ -1486,7 +1682,7 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                       assertion_instances = None;
                     }
             | Some assertions ->
-                check_assertion assertions execution_list structure
+                check_assertion ~ctx assertions execution_list structure
                   ~exhaustive:ctx.options.exhaustive
           in
             ctx.valid <- Some assertion_result.valid;

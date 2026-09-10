@@ -1,6 +1,6 @@
-# Refinement litmus tests (reference only)
+# Refinement litmus tests
 
-These six files are **refinement chains**, not `allow`/`forbid` predicates. The
+These files are **refinement chains**, not `allow`/`forbid` predicates. The
 format is two whole programs separated by a `~~>` header:
 
 ```
@@ -12,51 +12,42 @@ format is two whole programs separated by a `~~>` header:
 The question is whether the target refines the source — whether every behaviour
 of the target is a behaviour of the source. `[_=allow]` asserts that it does,
 `[_=forbid]` that it does not. `[UB11=allow]` names the model the chain is read
-under.
+under, and that model governs the whole chain.
 
 Moved out of the scanned suite in `f467724` ("shelfing refinement litmus tests"),
-which records no reason.
+which records no reason, and held here while refinement checking was a stub
+(#85).
 
-## Why they are still here — #85
+## Five have returned to the suite
 
-**MoRDor does not decide these assertions.** `Refinement.do_check_refinement`
-(`src/assertion.ml:949`) compares an empty placeholder result against itself
-rather than the two programs, so `refinement_holds` is unconditionally `true` and
-the reported verdict reduces to `outcome = Allow`. Every `allow` chain reports
-`Valid: true`; every `forbid` chain reports `Valid: false`. The programs are
-never looked at.
+With #85 fixed, `avoidoota/listing7.lit`, `avoidoota/listing8.lit` and the
+`symmrd/refinement/` triple decide correctly and live in `litmus-tests/` again:
 
-Measured at `c91c19a`:
-
-| File | Asserts | Reports | Decided? |
+| File | Asserts | Refinement | Why |
 |---|---|---|---|
-| `symmrd/refinement/LB+UB+data.lit` | `[UB11=allow]` | `Valid: true` | no |
-| `symmrd/refinement/LB+UB+data+z.lit` | `[UB11=allow]` | `Valid: true` | no |
-| `symmrd/refinement/LB+UBoff+data.lit` | `[_=forbid]` | `Valid: false` | no |
-| `avoidoota/listing7.lit` | `[_=forbid]` | `Valid: false` | no |
-| `avoidoota/listing8.lit` | `[_=forbid]` | `Valid: false` | no |
-| `avoidoota/listing9.lit` | `[_=forbid]` | `Valid: false` | no |
+| `avoidoota/listing7.lit` | forbid | does not hold | the target invents a write (`x := 3`) |
+| `avoidoota/listing8.lit` | forbid | does not hold | same shape |
+| `symmrd/refinement/LB+UB+data.lit` | allow (`UB11`) | holds | under `UB11` the `e / !r -> e` fold makes the two programs agree |
+| `symmrd/refinement/LB+UB+data+z.lit` | allow (`UB11`) | holds | same, with the extra `z` hop |
+| `symmrd/refinement/LB+UBoff+data.lit` | forbid | does not hold | the UB fold off, so the target's `r1 = 1` outcome is genuinely new |
 
-The two `true` rows are the trap: they would go green in the integration suite
-without anything being checked. That is the same vacuous-pass shape as #41, #44
-and #45, and the reason none of these six can be returned to `litmus-tests/`
-until #85 is fixed.
+The `UB11` pair is what forced a second fix alongside #85: `step_parse_litmus`
+applies the model of an `Outcome` or a `Model` assertion but never a `Chained`
+one, so a chain's model annotation had never reached the options and `ubopt`
+stayed false.
 
-`litmus-tests-cpp/properties/global-transformations/thread-inlining/{src,opt}.lit`
-is a refinement pair as well, so #85 blocks it independently of the missing C++
-model.
+## What is left — #87
 
-## The programs
+`avoidoota/listing9.lit` is the pointer-publication idiom: the source loads the
+published pointer once and reads both fields through it, the target re-loads
+between them and can mix a field of the old object with one of the new. The
+refinement genuinely does not hold, which is what the file asserts, but MoRDor
+reports **undecided** rather than deciding it:
 
-`avoidoota/listing7.lit` and `listing8.lit` are the same shape: a target that
-invents a write (`x := 3` where the source has none), asserted `forbid` because
-write introduction is not a refinement. `listing9.lit` is the pointer-publication
-shape, where the target re-loads the published pointer between the two field
-reads; the `TEMP FIX` comments record where `&global` had to be replaced by an
-explicit `malloc`.
+```
+Refinement: execution 16 still admits new observations after 512; at least one
+  of [ra; rb] is unconstrained, so its behaviour cannot be enumerated
+```
 
-The `symmrd/refinement/` triple is load-buffering with a division by `!r1`, so
-`r1 = 0` is undefined behaviour. The target replaces `y := 1 / !r1` with `y := 1`,
-which is a refinement exactly when the UB assumption may be exploited: allowed
-under `[UB11]`, forbidden with the UB fold off (`LB+UBoff+data.lit`). See #65 for
-the related question of propagating UB assumptions into later uses.
+`rglob` is initialised to 0, so `rfp` may be null and `*(rfp + 0)` is a load
+through a null pointer whose result nothing constrains. See #87.

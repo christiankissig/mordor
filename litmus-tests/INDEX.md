@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 281
+Total tests: 286
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -8,7 +8,8 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 > scanned: `litmus-tests-promising/` (`[Promising]`), `litmus-tests-cpp/`
 > (`[C11]`, `[C17]`, `[C20]`) and `litmus-tests-ra/` (`[RA]`, `[SRA]`). Each has
 > a README with the reference verdicts. Tests whose assertion MoRDor does not
-> validate are parked in `litmus-tests-review/`, also unscanned.
+> validate are parked in `litmus-tests-review/`, also unscanned, as is the one
+> refinement chain it cannot yet decide (`litmus-tests-refinement/`, #87).
 
 ## Test Files
 
@@ -48,6 +49,8 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - avoidoota/listing2_5.lit
 - avoidoota/listing2_5pwg.lit
 - avoidoota/listing3.lit
+- avoidoota/listing7.lit
+- avoidoota/listing8.lit
 - basic/coproduct-exns.lit
 - basic/lb.lit
 - basic/par-comp.lit
@@ -65,13 +68,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - fowm2024/load intro - potential aliasing.lit
 - fowm2024/nullptr - no use.lit
 - fowm2024/nullptr - use.lit
-- fwd/ra/lift_rel.lit
-- fwd/ra/lift_relrel.lit
-- fwd/rlx/lift.lit
-- fwd/rlx/lift_F1r.lit
-- fwd/rlx/lift_F1w.lit
-- fwd/rlx/lift_F1wr.lit
-- fwd/rlx/lift_F2w.lit
 - imm/FADD RMW Atomicity.lit
 - imm/LB+falsedep+Fsc.lit
 - jctc/JCTC1.lit
@@ -129,13 +125,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - own/paper115.lit
 - own/relaxed-store-elided.lit
 - own/speculative_optimisation.lit
-- own/sync/fence0lift.lit
-- own/sync/fence1lift.lit
-- own/sync/fence2lift.lit
-- own/sync/rel1lift.lit
-- own/sync/rel2lift.lit
-- own/sync/writeElision.lit
-- own/sync/writeElisionRel.lit
 - own/volatile-store-not-elided.lit
 - pldi_repairing/IRIW+acq+sc.lit
 - pldi_repairing/LB+deps.lit
@@ -177,8 +166,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - popl_promising/Par-Inc.lit
 - popl_promising/SB+fences.lit
 - popl_promising/SB.lit
-- popl_promising/LBaa/LBa'0.lit
-- popl_promising/LBaa/LBa'1.lit
 - requests/0nONvMSw7 (MP).lit
 - requests/1MR_opBNP (2+2W with obs thread).lit
 - requests/2zm8LRQsJ (LB).lit
@@ -196,21 +183,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - sevcik_thesis/MP.lit
 - sevcik_thesis/Redundant Read after Read Elimination.lit
 - sevcik_thesis/Roach Motel Semantics.lit
-- sevcik_thesis/Irrelevant Read Elimination/IREA.lit
-- sevcik_thesis/Irrelevant Read Elimination/IREB.lit
-- sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIA.lit
-- sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIB.lit
-- sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIC.lit
-- sevcik_thesis/Redundant Read Elimination (f1.4)/RRERA.lit
-- sevcik_thesis/Redundant Read Elimination (f1.4)/RRERB.lit
-- sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit
-- sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit
-- sevcik_thesis/Reordering (f1.3)/RA.lit
-- sevcik_thesis/Reordering (f1.3)/RB.lit
-- sevcik_thesis/Skip/Redundant Write after Read Elimination.lit
-- sevcik_thesis/Skip/Reordering with external actions.lit
-- sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit
-- sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPB.lit
 - single-thread-lift-tests/basic-lift.lit
 - single-thread-lift-tests/basic-not-lift.lit
 - single-thread-lift-tests/lift-above-read-2.lit
@@ -265,19 +237,40 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - test6/Z6.3.lit
 - test6/Z6.4.lit
 - test6/Z6.5.lit
-
-
-## rmm-zoo property and model coverage
-
-> Added to close MoRDor's coverage gaps against the Relaxed Memory Model Zoo
-> (<https://rmm-zoo.kissig.org>). Structured by the zoo's property columns
-> (`properties/`). See [`rmm-zoo/README.md`](rmm-zoo/README.md) for the coverage
-> analysis and the reference-verdict tables. The `models/` families moved to
-> `litmus-tests-cpp/` and `litmus-tests-ra/`, along with the `properties/` files
-> carrying their annotations. `models/ra-sra-wra/MP+rel+acq.lit` and
-> `properties/atomicity-mca/WRC+rel+acq.lit` came back when sMRD's `hb` gained
-> synchronises-with (#67, #68) and are annotated `[SMRD]`.
-
+- fwd/ra/lift_rel.lit
+- fwd/ra/lift_relrel.lit
+- fwd/rlx/lift.lit
+- fwd/rlx/lift_F1r.lit
+- fwd/rlx/lift_F1w.lit
+- fwd/rlx/lift_F1wr.lit
+- fwd/rlx/lift_F2w.lit
+- own/sync/fence0lift.lit
+- own/sync/fence1lift.lit
+- own/sync/fence2lift.lit
+- own/sync/rel1lift.lit
+- own/sync/rel2lift.lit
+- own/sync/writeElision.lit
+- own/sync/writeElisionRel.lit
+- popl_promising/LBaa/LBa'0.lit
+- popl_promising/LBaa/LBa'1.lit
+- sevcik_thesis/Irrelevant Read Elimination/IREA.lit
+- sevcik_thesis/Irrelevant Read Elimination/IREB.lit
+- sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIA.lit
+- sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIB.lit
+- sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIC.lit
+- sevcik_thesis/Redundant Read Elimination (f1.4)/RRERA.lit
+- sevcik_thesis/Redundant Read Elimination (f1.4)/RRERB.lit
+- sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit
+- sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit
+- sevcik_thesis/Reordering (f1.3)/RA.lit
+- sevcik_thesis/Reordering (f1.3)/RB.lit
+- sevcik_thesis/Skip/Redundant Write after Read Elimination.lit
+- sevcik_thesis/Skip/Reordering with external actions.lit
+- sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit
+- sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPB.lit
+- symmrd/refinement/LB+UB+data+z.lit
+- symmrd/refinement/LB+UB+data.lit
+- symmrd/refinement/LB+UBoff+data.lit
 - rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
