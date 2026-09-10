@@ -1,0 +1,18 @@
+// The coherence order that admitted an execution is assertable as `.co`.
+//
+// MoRDor's own test, for #66. Thread 1 writes x twice, so any execution
+// containing both writes has a non-empty coherence order between them, and
+// program order forces 2 before 3. Before this the order was searched for,
+// used and thrown away with the search, so no assertion could name it and
+// "why was this execution admitted?" had no answer from the tool.
+//
+// (2,3) is the pair of writes in the order the search settles on; the reverse
+// is excluded by po, which try_all_coherence_orders filters permutations by.
+x := 0;
+{
+  x := 1;
+  x := 2
+}|||{
+  r1 := x
+}
+%% allow ((2,3) ∈ .co) []

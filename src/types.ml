@@ -221,6 +221,10 @@ type symbolic_event_structure = {
 }
 [@@deriving show]
 
+let pp_int_urel_opt fmt = function
+  | None -> Format.fprintf fmt "-"
+  | Some r -> pp_int_urel fmt r
+
 let pp_fix_rf_map fmt fix_rf_map =
   Format.fprintf fmt "{%s}"
     (String.concat ", "
@@ -256,6 +260,18 @@ type symbolic_execution = {
       (** Write-elision edges accumulated over the execution's justifications.
       *)
   ex_p : expr list; [@printer pp_expr_list]
+  mutable co : (int * int) uset option; [@printer pp_int_urel_opt]
+      (** The coherence order under which the execution was admitted, once a
+          model has accepted it; [None] before the coherence stage has run, or
+          if no order admits it.
+
+          The coherence stage searched for this and threw it away with the
+          search, so "why was this execution admitted?" could not be answered
+          from the tool at all (github #66). It is the canonically least
+          admitting order -- the per-location permutations are enumerated in
+          sorted order and the first accepted combination is taken -- so it is a
+          function of the execution and the model, not of the search's
+          traversal. It is still one witness among possibly many. *)
   fix_rf_map : (string, expr) Hashtbl.t; [@printer pp_fix_rf_map]
   pointer_map : (int, value_type) Hashtbl.t option; [@opaque]
   final_env : (string, expr) Hashtbl.t; [@printer pp_env]

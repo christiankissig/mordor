@@ -3,7 +3,8 @@
     Serialises all symbolic executions of a litmus test into a structured
     document that includes per-event details and the program-order (po),
     data-dependency (dp), preserved-program-order (ppo), reads-from (rf),
-    read-modify-write (rmw), forwarding (fwd) and write-elision (we) relations.
+    read-modify-write (rmw), forwarding (fwd), write-elision (we) and
+    coherence-order (co) relations.
 
     The default output format is JSON, but the document is also emitted as a
     pretty-printed string for textual inspection. *)
@@ -50,6 +51,10 @@ type json_execution = {
       (** Forwarding edges, accumulated over the justifications this execution
           was frozen from *)
   we : (int * int) list; [@default []]  (** Write elisions, likewise *)
+  co : (int * int) list; [@default []]
+      (** The coherence order the model admitted this execution under -- the
+          canonically least such order, empty when the execution has fewer than
+          two writes to any one location or coherence has not been run *)
 }
 [@@deriving yojson]
 
@@ -115,6 +120,7 @@ let execution_to_json (structure : symbolic_event_structure)
       rmw = USet.values exec.rmw;
       fwd = USet.values exec.fwd;
       we = USet.values exec.we;
+      co = (match exec.co with Some co -> USet.values co | None -> []);
     }
 
 (** Build the structured executions document from a Mordor context.

@@ -322,12 +322,15 @@ module IMM : MEMORY_MODEL = struct
         ]
     in
 
-    (* ar_ = (rf \ po) ∪ bob ∪ ppo ∪ strong_ *)
+    (* ar_ = (rf \ po) ∪ bob ∪ ppo ∪ strong_
+
+       Accumulator-first for the same reason as [eco] below: the pipeline form
+       folds into [bob], [ppo] and [strong_] instead. *)
     let ar_ =
-      thread_external_restriction rf
-      |> USet.inplace_union bob
-      |> USet.inplace_union ppo
-      |> USet.inplace_union strong_
+      let acc = thread_external_restriction rf in
+      let acc = USet.inplace_union acc bob in
+      let acc = USet.inplace_union acc ppo in
+        USet.inplace_union acc strong_
     in
 
     (* psc_a = [F_sc];hb *)
@@ -362,13 +365,25 @@ module IMM : MEMORY_MODEL = struct
       let fr = URelation.compose [ rfi; co ] in
       let fre = thread_external_restriction fr in
 
-      (* eco = rf ∪ co;rf ∪ co ∪ fr;rf ∪ fr *)
+      (* eco = rf ∪ co;rf ∪ co ∪ fr;rf ∪ fr
+
+         [USet.inplace_union a b] mutates [a], and [x |> USet.inplace_union y]
+         passes [y] as [a] -- so written as a pipeline this folded eco into
+         [rf] and then into [co] rather than into the accumulator.  [rf] is a
+         cache field shared by every candidate coherence order, so the first
+         candidate checked left it holding eco and every later candidate was
+         checked against a corrupted [rf]; and [co] itself came out of the line
+         holding eco, which is what [coe] and [detour] below then read.  The
+         search's answer depended on the order candidates were tried in, which
+         for an exhaustive search it cannot.
+
+         Only the freshly composed accumulator is mutated now. *)
       let eco =
-        URelation.compose [ co; rf ]
-        |> USet.inplace_union rf
-        |> USet.inplace_union co
-        |> USet.inplace_union (URelation.compose [ fr; rf ])
-        |> USet.inplace_union fr
+        let acc = URelation.compose [ co; rf ] in
+        let acc = USet.inplace_union acc rf in
+        let acc = USet.inplace_union acc co in
+        let acc = USet.inplace_union acc (URelation.compose [ fr; rf ]) in
+          USet.inplace_union acc fr
       in
 
       let eco_adj_map = URelation.adjacency_map eco in
@@ -822,9 +837,17 @@ let build_location_restriction structure execution eqlocs :
     (int * int) uset -> (int * int) uset =
  fun x -> USet.filter (fun (a, b) -> USet.mem eqlocs (a, b)) x
 
-(** Try all coherence orders *)
+(** [try_all_coherence_orders ...] is the coherence order that admits
+    [execution], or [None] if none does.
+
+    It used to answer [bool] and throw the order away with the search, so
+    nothing downstream could say what an execution had been admitted under
+    (github #66). The order returned is the canonically least admitting one:
+    each location's po-respecting permutations are enumerated in sorted order
+    and the first accepted combination wins, so the answer is a function of the
+    execution and the model rather than of the traversal. *)
 let try_all_coherence_orders cache structure execution check_coherence eqlocs =
-  if USet.size execution.e = 0 then false
+  if USet.size execution.e = 0 then None
   else
     let ({ po; restrict; _ } : symbolic_event_structure) = structure in
     let writes =
@@ -844,7 +867,8 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
          model's coherence / thin-air axioms. Returning [true] unconditionally
          was unsound — e.g. a read reading from a write that happens-after it is
          a coherence violation even with co = ∅. *)
-      check_coherence cache (USet.create ())
+      let empty = USet.create () in
+        if check_coherence cache empty then Some empty else None
     else
       (* Check if reads from init *)
       let reads_from_init = USet.exists (fun (_, w) -> w = 0) execution.rf in
@@ -931,20 +955,25 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
 
               (* Convert each valid permutation to pairs, keeping init
                  co-minimal by prepending it before the real writes. *)
+              (* Sorted, so that the first accepted combination below is the
+                 canonically least one rather than whichever [permutations]
+                 happened to yield first. That is what makes the exported order
+                 a function of the execution and the model. *)
+              (* Sorted, so the first accepted combination below is the
+                 canonically least one rather than whichever [permutations]
+                 happened to yield first. That is what makes the order this
+                 function returns a function of the execution and the model. *)
               List.map
                 (fun perm -> to_pairs [] (if has_init then 0 :: perm else perm))
                 valid_perms
+              |> List.sort compare
           )
       in
 
       let rec choose_one i vals =
         if i < 0 then (
           let co = URelation.transitive_closure (USet.of_list vals) in
-          let accepted = check_coherence cache co in
-            (* The order that admitted the execution is otherwise thrown away
-               with the search, and it is what an extended coherence cycle has
-               to be read against. *)
-            if accepted then
+            if check_coherence cache co then (
               Logs_safe.debug (fun m ->
                   m "Coherence: execution %d admitted under co = {%s}"
                     execution.id
@@ -954,30 +983,37 @@ let try_all_coherence_orders cache structure execution check_coherence eqlocs =
                     |> String.concat "; "
                     )
               );
-            accepted
+              Some co
+            )
+            else None
         )
         else
           let rec try_perms = function
-            | [] -> false
-            | p :: ps ->
-                let result = choose_one (i - 1) (vals @ p) in
-                  if result then true else try_perms ps
+            | [] -> None
+            | p :: ps -> (
+                match choose_one (i - 1) (vals @ p) with
+                | Some co -> Some co
+                | None -> try_perms ps
+              )
           in
             try_perms (List.nth writes_per_location i)
       in
-
-      let result = choose_one (List.length writes_per_location - 1) [] in
-        result
+        choose_one (List.length writes_per_location - 1) []
 
 (** {1 Coherence Checking Entry Point} *)
 
+(** [check_for_coherence structure execution restrictions] is the coherence
+    order under which the model admits [execution], or [None] if it does not.
+
+    The witnessing order comes back with the answer rather than being discarded
+    with the search; see {!try_all_coherence_orders} (github #66). *)
 let check_for_coherence structure execution restrictions =
-  if USet.size execution.e = 0 then false
+  if USet.size execution.e = 0 then None
   else
     match ModelRegistry.lookup restrictions.coherent with
     | None ->
         Logs_safe.warn (fun m -> m "Unknown model: %s" restrictions.coherent);
-        false
+        None
     | Some model ->
         let module M = (val model : MEMORY_MODEL) in
         (* Create location equivalence relation using semantic equality *)
@@ -1012,7 +1048,7 @@ let check_for_coherence structure execution restrictions =
         let cache = M.build_cache execution structure loc_restrict in
 
         (* Check thin-air *)
-        if not (M.check_thin_air cache execution) then false
+        if not (M.check_thin_air cache execution) then None
         else
           (* Try all coherence orders *)
           try_all_coherence_orders cache structure execution M.check_coherence

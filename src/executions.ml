@@ -146,7 +146,10 @@ end = struct
   (** [get_relation name structure execution] retrieves a relation by name.
 
       Looks up relations from either the event structure or execution. Supported
-      names: [".ppo"], [".po"], [".rf"], [".dp"], [".rmw"].
+      names: [".ppo"], [".po"], [".rf"], [".dp"], [".rmw"], [".co"].
+
+      [".co"] is the order coherence admitted the execution under, and is empty
+      before the coherence stage has run.
 
       @param name The relation name (must include leading dot).
       @param structure The event structure.
@@ -160,6 +163,7 @@ end = struct
     | ".rf" -> execution.rf
     | ".dp" -> execution.dp
     | ".rmw" -> execution.rmw
+    | ".co" -> Option.value execution.co ~default:(USet.create ())
     | _ ->
         Logs_safe.warn (fun m ->
             m "Unknown or unsupported relation: %s, returning empty" name
@@ -1628,6 +1632,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
               fwd = freeze_res.fwd;
               we = freeze_res.we;
               ex_p = freeze_res.pp;
+              co = None;
               fix_rf_map = final_map;
               pointer_map = None;
               final_env;
@@ -1738,8 +1743,13 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     let stream_filter_coherent_executions input_stream =
       let* input_stream = input_stream in
       let check_exec exec =
-        if check_for_coherence structure exec restrictions then Some exec
-        else None
+        match check_for_coherence structure exec restrictions with
+        | Some co ->
+            (* Keep the order that admitted it, so the export and any [.co]
+               assertion can be read against the same witness. *)
+            exec.co <- Some co;
+            Some exec
+        | None -> None
       in
         let* results = compute.run check_exec input_stream in
           List.filter_map Fun.id results |> Lwt.return

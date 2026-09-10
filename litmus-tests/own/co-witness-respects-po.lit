@@ -1,0 +1,13 @@
+// The control for co-witness-exported.lit: the coherence order never runs
+// against program order, so the reverse pair is in no execution's `.co`.
+//
+// Without it, co-witness-exported.lit would also pass if `.co` returned every
+// pair of same-location writes rather than an ordered witness.
+x := 0;
+{
+  x := 1;
+  x := 2
+}|||{
+  r1 := x
+}
+%% forbid ((3,2) ∈ .co) []

@@ -151,6 +151,8 @@ type symbolic_execution = {
   fwd : (int * int) uset; (* Forwarding edges, over all justifications *)
   we : (int * int) uset; (* Write elisions, over all justifications *)
   ex_p : expr list; (* Predicates *)
+  mutable co : (int * int) uset option;
+      (* The order under which coherence admitted this execution *)
   fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer
   mappings *)
