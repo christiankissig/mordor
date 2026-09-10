@@ -3,11 +3,11 @@
  * Handles visualization and interaction with execution graphs
  */
 
-const EXAMPLES = {
-    sb: "name = SB\n%%\n{ x := 1 } ||| { y := 1 }\n%% allow (x = 0 && y = 0) [rc11]",
-    mp: "name = MP\n%%\n{ x := 1; y := 1 } ||| { r1 := y; r2 := x }\n%% forbid (r1 = 1 && r2 = 0) [rc11]",
-    lb: "name = LB\n%%\n{ r1 := x; y := 1 } ||| { r2 := y; x := 1 }\n%% forbid (r1 = 1 && r2 = 1) [rc11]"
-};
+// Examples come from /api/examples, which serves them out of the corpus the
+// integration suite scans. They used to be three string literals here, free to
+// drift from the tests (see github #76); EXAMPLES is now filled at load time
+// and keyed by the example's corpus path.
+const EXAMPLES = {};
 
 // Edge color mapping - moved from backend
 const EDGE_COLORS = { 
@@ -789,6 +789,8 @@ class GraphVisualizer {
         // Update highlighting on input
         textarea.addEventListener('input', updateHighlight);
         
+        this.loadExampleLibrary();
+
         document.getElementById('examples').addEventListener('change', (e) => {
             const example = EXAMPLES[e.target.value];
             if (example) {
@@ -1366,6 +1368,38 @@ class GraphVisualizer {
                 document.body.style.userSelect = '';
             }
         });
+    }
+
+    // Fill the examples dropdown from the corpus, grouped as the server groups
+    // them. A failed fetch leaves the dropdown with just its placeholder rather
+    // than breaking the editor.
+    async loadExampleLibrary() {
+        const select = document.getElementById('examples');
+        try {
+            const response = await fetch('/api/examples');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const entries = await response.json();
+            const groups = new Map();
+            for (const entry of entries) {
+                EXAMPLES[entry.path] = entry.source;
+                if (!groups.has(entry.group)) groups.set(entry.group, []);
+                groups.get(entry.group).push(entry);
+            }
+            for (const [name, items] of groups) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = name;
+                for (const item of items) {
+                    const option = document.createElement('option');
+                    option.value = item.path;
+                    option.textContent = item.label;
+                    optgroup.appendChild(option);
+                }
+                select.appendChild(optgroup);
+            }
+            this.log(`Loaded ${entries.length} examples`);
+        } catch (err) {
+            this.log(`Could not load the example library: ${err.message}`, 'error');
+        }
     }
 
     updateExecutionInfo(data) {
