@@ -790,6 +790,7 @@ class GraphVisualizer {
         textarea.addEventListener('input', updateHighlight);
         
         this.loadExampleLibrary();
+        this.setupJustificationsToggle();
 
         document.getElementById('examples').addEventListener('change', (e) => {
             const example = EXAMPLES[e.target.value];
@@ -1402,11 +1403,43 @@ class GraphVisualizer {
         }
     }
 
+    // The justifications the execution was frozen from. They used to be dropped
+    // at the freeze/dedup boundary (github #3), so an execution could not say
+    // what justified it; the button reports how many there are and toggles the
+    // list.
+    renderJustifications(justifications) {
+        const button = document.getElementById('justifications-btn');
+        const overlay = document.getElementById('justifications-overlay');
+        if (!button || !overlay) return;
+
+        const items = Array.isArray(justifications) ? justifications : [];
+        this.justifications = items;
+        overlay.hidden = true;
+        button.textContent = items.length === 0 ? 'none' : `${items.length} — show`;
+        button.disabled = items.length === 0;
+        overlay.textContent = items.join('\n');
+    }
+
+    setupJustificationsToggle() {
+        const button = document.getElementById('justifications-btn');
+        const overlay = document.getElementById('justifications-overlay');
+        if (!button || !overlay) return;
+        button.addEventListener('click', () => {
+            const items = this.justifications || [];
+            if (items.length === 0) return;
+            overlay.hidden = !overlay.hidden;
+            button.textContent = overlay.hidden
+                ? `${items.length} — show`
+                : `${items.length} — hide`;
+        });
+    }
+
     updateExecutionInfo(data) {
         // Handle case where data might be undefined (event structure)
         if (!data) {
             document.getElementById('predicates').textContent = '⊤';
             document.getElementById('final-registers').textContent = 'N/A';
+            this.renderJustifications(null);
             document.getElementById('has-uaf').textContent = 'N/A';
             document.getElementById('has-uaf').style.color = 'var(--text)';
             document.getElementById('has-unbounded-deref').textContent = 'N/A';
@@ -1423,6 +1456,8 @@ class GraphVisualizer {
         // The register state the execution ends in, merged over its terminal
         // events. An event structure carries none, so the field is absent there
         // rather than empty, and reads as N/A.
+        this.renderJustifications(data.justifications);
+
         const env = data.final_env;
         document.getElementById('final-registers').textContent =
             (Array.isArray(env) && env.length > 0)
@@ -1565,6 +1600,7 @@ class GraphVisualizer {
         // Clear execution info fields
         document.getElementById('predicates').textContent = '⊤';
         document.getElementById('final-registers').textContent = 'N/A';
+        this.renderJustifications(null);
         document.getElementById('has-uaf').textContent = 'N/A';
         document.getElementById('has-uaf').style.color = 'var(--text)';
         document.getElementById('has-unbounded-deref').textContent = 'N/A';

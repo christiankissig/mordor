@@ -227,9 +227,41 @@ module FreezeResult = struct
             reached them, and deduplication unions the contexts rather than
             keeping one and dropping the other. *)
     we : (int * int) uset;  (** Write elisions, on the same terms as [fwd]. *)
+    mutable justs : justification list;
+        (** The justification combination this result was frozen from. On the
+            same terms as [fwd]: not part of {!equal}, {!hash} or {!contains},
+            and deduplication unions the sets rather than keeping one.
+
+            Discarded until github #3, so an execution could not say what
+            justified it. *)
     pp : expr list;  (** Path predicates that must be satisfied. *)
     conds : expr list;  (** Additional conditions. *)
   }
+
+  (** [merge_justs kept fr] folds [fr]'s justifications into [kept]'s.
+
+      Deduplication keeps one result and drops the rest, and the dropped ones
+      are the same execution reached from a different justification
+      combination. Keeping only the survivor's would under-report what
+      justified the execution. *)
+  let merge_justs (kept : t) (fr : t) =
+    let seen = Hashtbl.create (List.length kept.justs) in
+      List.iter
+        (fun j -> Hashtbl.replace seen (Justification.to_string j) ())
+        kept.justs;
+      let extra =
+        List.filter
+          (fun j ->
+            let key = Justification.to_string j in
+              if Hashtbl.mem seen key then false
+              else (
+                Hashtbl.replace seen key ();
+                true
+              )
+          )
+          fr.justs
+      in
+        kept.justs <- kept.justs @ extra
 
   (** [equal fr1 fr2] tests freeze result equality.
 
@@ -1074,6 +1106,7 @@ module Freeze = struct
                      justification combination these came from. *)
                   fwd = USet.create ();
                   we = USet.create ();
+                  justs = [];
                   pp = execution_predicates;
                   conds = [ EBoolean true ];
                 }
@@ -1543,7 +1576,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
              visible to results it never applied to. *)
           List.map
             (fun (fr : FreezeResult.t) ->
-              { fr with fwd = USet.clone fwd; we = USet.clone we }
+              { fr with fwd = USet.clone fwd; we = USet.clone we; justs = just_combo }
             )
             freeze_results
       in
@@ -1632,6 +1665,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
               fwd = freeze_res.fwd;
               we = freeze_res.we;
               ex_p = freeze_res.pp;
+              justifications = freeze_res.justs;
               co = None;
               fix_rf_map = final_map;
               pointer_map = None;
@@ -1671,6 +1705,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
               | Some (kept : FreezeResult.t) ->
                   ignore (USet.inplace_union kept.fwd fr.fwd);
                   ignore (USet.inplace_union kept.we fr.we);
+                  FreezeResult.merge_justs kept fr;
                   None
               | None ->
                   FreezeResultCache.add seen fr fr;
@@ -1731,7 +1766,27 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
           | Some (kept : symbolic_execution) ->
               ignore (USet.inplace_union kept.fwd ex.fwd);
               ignore (USet.inplace_union kept.we ex.we);
-              None
+              (* Same reason the forwarding contexts are merged: the duplicate
+                 is this execution reached from a different justification
+                 combination, and keeping only the survivor's would under-report
+                 what justified it. *)
+              let seen = Hashtbl.create (List.length kept.justifications) in
+                List.iter
+                  (fun j -> Hashtbl.replace seen (Justification.to_string j) ())
+                  kept.justifications;
+                kept.justifications <-
+                  kept.justifications
+                  @ List.filter
+                      (fun j ->
+                        let key = Justification.to_string j in
+                          if Hashtbl.mem seen key then false
+                          else (
+                            Hashtbl.replace seen key ();
+                            true
+                          )
+                      )
+                      ex.justifications;
+                None
           | None ->
               ExecutionCache.add seen ex ex;
               Some ex

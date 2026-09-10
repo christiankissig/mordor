@@ -91,6 +91,7 @@ let make_execution ?(ppo = USet.create ()) ?(dp = USet.create ())
     fwd = USet.create ();
     we = USet.create ();
     ex_p;
+    justifications = [];
     co = None;
     fix_rf_map;
     pointer_map = None;

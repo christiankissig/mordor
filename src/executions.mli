@@ -42,9 +42,16 @@ module FreezeResult : sig
             the relations above still deduplicate; the survivor absorbs the
             others' contexts. *)
     we : (int * int) uset;  (** Write elisions, on the same terms as [fwd]. *)
+    mutable justs : justification list;
+        (** The justification combination this result was frozen from, on the
+            same terms as [fwd]. *)
     pp : expr list;  (** Path predicates that must be satisfied. *)
     conds : expr list;  (** Additional conditions. *)
   }
+
+  (** [merge_justs kept fr] folds [fr]'s justifications into [kept]'s, skipping
+      ones it already has. *)
+  val merge_justs : t -> t -> unit
 end
 
 module Freeze : sig

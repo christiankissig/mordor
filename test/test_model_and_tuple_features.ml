@@ -99,6 +99,7 @@ module TestSetMembership = struct
           fwd = USet.create ();
           we = USet.create ();
           ex_p = [];
+          justifications = [];
           co = None;
           fix_rf_map = Hashtbl.create 0;
           pointer_map = Some (Hashtbl.create 0);

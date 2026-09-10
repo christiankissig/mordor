@@ -140,6 +140,15 @@ val func_add : ('a, 'b) func -> 'a -> 'b -> ('a, 'b) func
 (** Get a value from the function map, using default if not found *)
 val func_get : ('a, 'b) func -> 'a -> 'b
 
+(* [symbolic_execution] and [justification] both carry [fwd] and [we], and are
+   one recursive group so that an execution can hold the justifications it was
+   frozen from (github #3). OCaml resolves a bare field to the last type in the
+   group defining it, so [justification] staying last is what keeps existing
+   just.fwd / just.we readers pointing at a justification; accesses on the
+   execution's copies are annotated. Warning 30 is exactly that overlap, and it
+   is deliberate. *)
+[@@@warning "-30"]
+
 (** Symbolic Execution *)
 type symbolic_execution = {
   id : int; (* Unique identifier *)
@@ -151,6 +160,8 @@ type symbolic_execution = {
   fwd : (int * int) uset; (* Forwarding edges, over all justifications *)
   we : (int * int) uset; (* Write elisions, over all justifications *)
   ex_p : expr list; (* Predicates *)
+  mutable justifications : justification list;
+      (* The justifications this execution was frozen from *)
   mutable co : (int * int) uset option;
       (* The order under which coherence admitted this execution *)
   fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
@@ -158,12 +169,11 @@ type symbolic_execution = {
   mappings *)
   final_env : (string, expr) Hashtbl.t;
 }
-[@@deriving show]
 
 (* Declared after symbolic_execution: both records carry fwd and we, and a bare
    field resolves to the last type defining it, so this order keeps existing
    just.fwd / just.we readers pointing at a justification. *)
-type justification = {
+and justification = {
   p : expr list; (* Predicates/conditions *)
   d : string uset; (* Dependency symbols *)
   fwd : (int * int) uset; (* Forwarding edges (event pairs) *)
@@ -171,6 +181,8 @@ type justification = {
   w : event; (* The write event being justified *)
 }
 [@@deriving show]
+
+[@@@warning "+30"]
 
 (** Future set type *)
 type future = (int * int) uset

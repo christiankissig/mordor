@@ -119,6 +119,14 @@
                   <div><strong>Predicates:</strong> <span id="predicates">⊤</span></div>
                   <div><strong>Final registers:</strong> <span
                       id="final-registers">N/A</span></div>
+                  <div><strong>Justifications:</strong>
+                    <button id="justifications-btn" class="btn-secondary"
+                        title="Show the justifications this execution was frozen from"
+                        style="padding:0.1rem 0.4rem; background:var(--control-bg); border:1px solid var(--border-strong); color:var(--text); border-radius:4px; cursor:pointer;">
+                      0 — show</button>
+                    <div id="justifications-overlay" hidden
+                        style="margin-top:0.4rem; max-height:14rem; overflow:auto; padding:0.4rem; background:var(--control-bg); border:1px solid var(--border-strong); border-radius:4px; font-family:monospace; font-size:0.8rem; white-space:pre-wrap;"></div>
+                  </div>
                   <div><strong>Use-after-free:</strong> <span
                       id="has-uaf">N/A</span></div>
                   <div><strong>Unbounded Deref:</strong> <span

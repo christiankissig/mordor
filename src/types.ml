@@ -247,6 +247,15 @@ let pp_env fmt env =
     )
 
 (* The main type with custom printers *)
+(* [symbolic_execution] and [justification] both carry [fwd] and [we], and are
+   one recursive group so that an execution can hold the justifications it was
+   frozen from (github #3). OCaml resolves a bare field to the last type in the
+   group defining it, so [justification] staying last is what keeps existing
+   just.fwd / just.we readers pointing at a justification; accesses on the
+   execution's copies are annotated. Warning 30 is exactly that overlap, and it
+   is deliberate. *)
+[@@@warning "-30"]
+
 type symbolic_execution = {
   id : int;
   e : int uset; [@printer pp_int_uset]
@@ -260,6 +269,13 @@ type symbolic_execution = {
       (** Write-elision edges accumulated over the execution's justifications.
       *)
   ex_p : expr list; [@printer pp_expr_list]
+  mutable justifications : justification list; [@opaque]
+      (** The justifications this execution was frozen from.
+
+          Dropped at the freeze/dedup boundary until github #3, so an execution
+          could not say what justified it. Deduplication unions them rather than
+          keeping one combination's, so an execution reachable more than one way
+          lists every way. *)
   mutable co : (int * int) uset option; [@printer pp_int_urel_opt]
       (** The coherence order under which the execution was admitted, once a
           model has accepted it; [None] before the coherence stage has run, or
@@ -276,7 +292,6 @@ type symbolic_execution = {
   pointer_map : (int, value_type) Hashtbl.t option; [@opaque]
   final_env : (string, expr) Hashtbl.t; [@printer pp_env]
 }
-[@@deriving show]
 
 (* Declared after symbolic_execution on purpose.  Both records carry fwd and we,
    and OCaml resolves a bare field to the last type that defines it, so this
@@ -284,7 +299,7 @@ type symbolic_execution = {
    justification.  Accesses on symbolic_execution's copies are annotated. *)
 
 (** Justifications *)
-type justification = {
+and justification = {
   p : expr list; [@opaque] (* Predicates/conditions *)
   d : string uset; [@printer pp_string_uset] (* Dependency symbols *)
   fwd : (int * int) uset; [@printer pp_int_urel]
@@ -294,6 +309,8 @@ type justification = {
   w : event; (* The write event being justified *)
 }
 [@@deriving show]
+
+[@@@warning "+30"]
 
 (** Futures *)
 type future = (int * int) uset

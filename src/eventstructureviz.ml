@@ -165,6 +165,9 @@ module EventStructureViz = struct
         (** is_valid Optional validity status *)
     undefined_behaviour : Yojson.Safe.t option; [@default None]
         (** undefined_behaviour Optional undefined behaviour information *)
+    justifications : string list; [@default []]
+        (** The justifications this execution was frozen from, rendered
+            (github #3). Empty for an event structure, which has none. *)
     final_env : (string * string) list; [@default []]
         (** final_env The register environment the execution ends in, sorted by
             register name. Merged over the terminal events, so it is the
@@ -936,7 +939,8 @@ let step_send_event_structure_graph ~(send_data : string -> unit Lwt.t)
             preds = None;
             is_valid = None;
             undefined_behaviour = None;
-                      final_env = [];
+                      justifications = [];
+            final_env = [];
           }
       in
       let es_message =
@@ -1037,6 +1041,9 @@ let send_single_execution_graph ~send_data ~build_exec_graph checked_executions
         preds = Some exec_preds_string;
         is_valid;
         undefined_behaviour;
+        justifications =
+          List.map Justifications.Justification.to_string exec.justifications
+          |> List.sort_uniq String.compare;
         final_env;
       }
   in

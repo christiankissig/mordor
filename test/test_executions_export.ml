@@ -70,6 +70,7 @@ module TestData = struct
       fwd;
       we;
       ex_p;
+      justifications = [];
       co = None;
       fix_rf_map = Hashtbl.create 0;
       pointer_map = None;
