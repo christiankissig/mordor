@@ -490,6 +490,13 @@ let model_options_table : (string, model_options) Hashtbl.t =
     Hashtbl.add tbl "immub" { coherent = Some "imm"; ubopt = true };
     Hashtbl.add tbl "smrd" { coherent = Some "smrd"; ubopt = false };
     Hashtbl.add tbl "ub11" { coherent = None; ubopt = true };
+    (* [_] is the litmus syntax for "any model": the grammar's [model_name]
+       rule maps UNDERSCORE to the empty string, so [""] is the name that
+       actually arrives here and ["_"] never does. Both are listed -- the
+       empty one because it is what an [_] annotation parses to, and it has to
+       be a known name rather than an unknown one, or every [_] test fails the
+       check added for #86. *)
+    Hashtbl.add tbl "" { coherent = None; ubopt = false };
     Hashtbl.add tbl "_" { coherent = None; ubopt = false };
     (* [default_options.model] is ["undefined"], the pipeline's name for "no
        annotation given", and [make_context_with_model] applies it. It is a

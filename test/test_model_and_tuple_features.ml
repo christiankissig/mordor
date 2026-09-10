@@ -342,8 +342,12 @@ module TestContextModelOptions = struct
      coherence model at whatever was already in effect -- the [smrd] default --
      so a [C11] or [RA] test was answered by sMRD without anything saying so.
      That is what put 43 files in litmus-tests-{cpp,promising,ra}/. *)
+  (* [make_context] stores the options record it is given, and
+     [apply_model_options] mutates it, so pass a copy -- otherwise a test that
+     applies [rc11] leaves [default_options.coherent] set for whatever runs
+     next. *)
   let apply model opts =
-    let ctx = make_context opts () in
+    let ctx = make_context { opts with exhaustive = opts.exhaustive } () in
       apply_model_options ctx model;
       ctx
 
@@ -393,6 +397,14 @@ module TestContextModelOptions = struct
     let ctx = apply "rc11" default_options in
       check string "rc11 applied" "rc11" ctx.options.coherent
 
+  (* [_] means "any model". The grammar maps UNDERSCORE to the empty string, so
+     that -- not ["_"] -- is the name that reaches the table, and it has to be
+     known or the #86 check rejects every [_] annotation. *)
+  let test_underscore_model_is_known () =
+    let ctx = apply "" default_options in
+      check string "coherence model left at the default" "smrd"
+        ctx.options.coherent
+
   let test_default_options_allow_unknown_model () =
     check bool "unknown models are fatal by default" false
       default_options.allow_unknown_model
@@ -414,6 +426,7 @@ module TestContextModelOptions = struct
       test_case "known_model_mapped_to_default_is_not_unknown" `Quick
         test_known_model_mapped_to_default_is_not_unknown;
       test_case "known_model_sets_coherent" `Quick test_known_model_sets_coherent;
+      test_case "underscore_model_is_known" `Quick test_underscore_model_is_known;
     ]
 end
 
