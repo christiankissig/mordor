@@ -54,6 +54,32 @@ const EDGE_DOT_STYLES = {
     default: { style: 'solid', penwidth: 1.0 }
 };
 
+// TikZ line styles for the graphviz ones, so the two writers cannot drift
+// apart: EDGE_DOT_STYLES stays the single list of relations and EDGE_COLORS the
+// single list of colours, and this only says how a graphviz style spells in
+// TikZ. graphviz's "bold" is weight, which penwidth already carries.
+// Read values and allocation addresses are Greek letters, and a Greek letter is
+// mathematics in a paper, not a stray glyph. Mapped to math mode so the figure
+// matches the prose around it, and so the file compiles under pdflatex, whose
+// fonts have no Greek.
+const TEX_GREEK = {
+    '\u03b1': '$\\alpha$',   '\u03b2': '$\\beta$',    '\u03b3': '$\\gamma$',
+    '\u03b4': '$\\delta$',   '\u03b5': '$\\epsilon$', '\u03b6': '$\\zeta$',
+    '\u03b7': '$\\eta$',     '\u03b8': '$\\theta$',   '\u03b9': '$\\iota$',
+    '\u03ba': '$\\kappa$',   '\u03bb': '$\\lambda$',  '\u03bc': '$\\mu$',
+    '\u03bd': '$\\nu$',      '\u03be': '$\\xi$',      '\u03bf': '$o$',
+    '\u03c0': '$\\pi$',      '\u03c1': '$\\rho$',     '\u03c3': '$\\sigma$',
+    '\u03c4': '$\\tau$',     '\u03c5': '$\\upsilon$', '\u03c6': '$\\varphi$',
+    '\u03c7': '$\\chi$',     '\u03c8': '$\\psi$',     '\u03c9': '$\\omega$'
+};
+
+const DOT_STYLE_TO_TIKZ = {
+    solid:  '',
+    dashed: 'dashed',
+    dotted: 'dotted',
+    bold:   ''
+};
+
 class GraphVisualizer {
     constructor() {
         this.graphs = [];  // Array to store all graphs
@@ -935,6 +961,7 @@ class GraphVisualizer {
                 e.stopPropagation();
                 closeExport();
                 if (option.dataset.value === 'png') this.exportPng();
+                else if (option.dataset.value === 'tikz') this.exportTikz();
                 else this.exportDot();
             });
         });
@@ -1328,6 +1355,185 @@ class GraphVisualizer {
 
         lines.push('}');
         return lines.join('\n');
+    }
+
+    // LaTeX-special characters in a node label. Symbolic expressions bring
+    // _ # % & { } through, and a bare one of those is a LaTeX error rather than
+    // a wrong glyph, so this is not cosmetic. Backslash goes first, or the
+    // escapes escape each other.
+    texEscape(text) {
+        return String(text)
+            .replace(/\\/g, '\\textbackslash{}')
+            .replace(/([&%$#_{}])/g, '\\$1')
+            .replace(/~/g, '\\textasciitilde{}')
+            .replace(/\^/g, '\\textasciicircum{}')
+            .replace(/[\u03b1-\u03c9]/g, c => TEX_GREEK[c] || c)
+            .replace(/\n/g, ' ');
+    }
+
+    // Characters no 8-bit LaTeX font has. MoRDor names allocations with CJK
+    // characters, and those survive texEscape as themselves, so a file carrying
+    // one needs a Unicode engine. Saying which up front is the difference
+    // between a header note and a puzzling error (github #77 raises this).
+    needsUnicodeEngine(text) {
+        return /[^\u0000-\u024f]/.test(String(text));
+    }
+
+    // A TikZ node name has to survive as a macro argument, so keep it to
+    // letters and digits the way dotNodeId does for DOT.
+    tikzNodeId(id) {
+        return 'n' + String(id).replace(/[^A-Za-z0-9]/g, '');
+    }
+
+    // TikZ colour names cannot carry a '#', so each hex gets a stable name and
+    // is recorded for the \definecolor block emitted with the picture.
+    tikzColorName(hex) {
+        if (!this.tikzColoursUsed) this.tikzColoursUsed = new Set();
+        this.tikzColoursUsed.add(hex);
+        return 'mrd' + hex.replace('#', '');
+    }
+
+    // The picture on screen, as a figure for a document.
+    //
+    // The .dot export answers "here is the graph, lay it out yourself"; this
+    // answers "here is *this* picture, put it in my paper" (github #77). Both
+    // read the same positions. What differs is that TikZ takes coordinates as
+    // first-class, and the labels can be set by the document's own fonts.
+    toTikz() {
+        // Cytoscape's y grows downward and TikZ's upward, so the box is flipped
+        // as well as shifted. 72 screen pixels to the centimetre keeps a typical
+        // execution near text width without anyone having to scale it.
+        const bb = this.cy.elements().boundingBox();
+        const unit = 72;
+        const pos = n => {
+            const p = n.position();
+            return { x: (p.x - bb.x1) / unit, y: (bb.y2 - p.y) / unit };
+        };
+
+        // Only the relations actually drawn get a style, so the filter the user
+        // set is the figure they get.
+        const relations = new Set();
+        this.cy.edges().forEach(e => {
+            if (e.style('display') === 'none') return;
+            relations.add(e.data('type').split(' - ')[0]);
+        });
+
+        this.tikzColoursUsed = new Set();
+        let unicodeLabels = false;
+        const body = [];
+        body.push('\\begin{tikzpicture}[');
+        body.push('    every node/.style={font=\\small},');
+        body.push('    mrd event/.style={draw, rounded corners, inner sep=3pt,');
+        body.push('        minimum width=1cm, align=center},');
+        body.push('    mrd root/.style={mrd event, draw=' +
+                  this.tikzColorName('#1177bb') + ', line width=1pt, double},');
+        body.push('    mrd elided/.style={mrd event, dashed, draw=' +
+                  this.tikzColorName(ELIDED_NODE_COLORS.light.border) +
+                  ', fill=' + this.tikzColorName(ELIDED_NODE_COLORS.light.background) + '},');
+        for (const relation of [...relations].sort()) {
+            const shape = EDGE_DOT_STYLES[relation] || EDGE_DOT_STYLES.default;
+            const colour = EDGE_COLORS[relation] || EDGE_COLORS.default;
+            const dash = DOT_STYLE_TO_TIKZ[shape.style] || '';
+            body.push('    mrd ' + relation + '/.style={-{Stealth[length=2mm]}, draw=' +
+                      this.tikzColorName(colour) + ', line width=' +
+                      (shape.penwidth * 0.4).toFixed(1) + 'pt' +
+                      (dash ? ', ' + dash : '') + '},');
+        }
+        body.push(']');
+
+        this.cy.nodes().forEach(n => {
+            const p = pos(n);
+            if (this.needsUnicodeEngine(n.data('label'))) unicodeLabels = true;
+            const style = n.data('isRoot') ? 'mrd root'
+                        : n.data('isElided') ? 'mrd elided'
+                        : 'mrd event';
+            body.push('  \\node[' + style + '] (' + this.tikzNodeId(n.id()) + ') at (' +
+                      p.x.toFixed(3) + ',' + p.y.toFixed(3) + ') {' +
+                      this.texEscape(n.data('label')) + '};');
+        });
+
+        // Parallel edges. po, ppo and dp routinely run between the same pair of
+        // events; drawn straight they would be coincident lines. Fan them out by
+        // position among the parallels, alternating sides so the bundle stays
+        // centred on the straight line a lone edge would take.
+        const counts = new Map();
+        const drawn = [];
+        this.cy.edges().forEach(e => {
+            if (e.style('display') === 'none') return;
+            const key = e.source().id() + ' ' + e.target().id();
+            const index = counts.get(key) || 0;
+            counts.set(key, index + 1);
+            drawn.push({ edge: e, index, key });
+        });
+
+        for (const { edge, index, key } of drawn) {
+            const type = edge.data('type');
+            const relation = type.split(' - ')[0];
+            const parallel = counts.get(key);
+            // 0, +18, -18, +36, -36 ... so a lone edge stays straight.
+            const step = Math.ceil(index / 2) * 18;
+            const bend = index === 0 ? 0 : (index % 2 === 1 ? step : -step);
+            const bendOpt = bend === 0 ? '' : ', bend left=' + bend;
+            // Labels of a bundle would pile up at the midpoint; stagger them.
+            const where = parallel > 1
+                ? ['midway', 'near start', 'near end'][index % 3]
+                : 'midway';
+            body.push('  \\draw[mrd ' + relation + bendOpt + '] (' +
+                      this.tikzNodeId(edge.source().id()) + ') to node[' + where +
+                      ', above, font=\\tiny, sloped] {' + this.texEscape(type) + '} (' +
+                      this.tikzNodeId(edge.target().id()) + ');');
+        }
+
+        body.push('\\end{tikzpicture}');
+
+        const header = [
+            '% Exported from MoRDor. The node positions are the layout this was',
+            '% exported from, including any node you dragged.',
+            '%',
+            '% Requires, in the preamble:',
+            '%     \\usepackage{tikz}',
+            '%     \\usepackage{xcolor}',
+            '%     \\usetikzlibrary{arrows.meta}',
+            '%',
+            '% Greek letters in labels are already math mode. The rest is set as',
+            '% ordinary text; to typeset a whole label as mathematics, wrap the',
+            '% node contents in $...$ -- there is one node per line, so that is a',
+            '% search and replace rather than an edit.',
+        ];
+        if (unicodeLabels) {
+            header.push('%');
+            header.push('% NOTE: some labels carry characters outside Latin and');
+            header.push('% Greek -- MoRDor names allocations with CJK characters.');
+            header.push('% Compile with xelatex or lualatex, not pdflatex.');
+        }
+        const colours = [...this.tikzColoursUsed].map(hex => {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return '\\definecolor{' + this.tikzColorName(hex) + '}{RGB}{' +
+                   r + ',' + g + ',' + b + '}';
+        });
+        return header.concat(colours, body).join('\n');
+    }
+
+    exportTikz() {
+        if (!this.cy.nodes().length) {
+            this.log('No graph to export as TikZ.', 'error');
+            return;
+        }
+        const tikz = this.toTikz() + '\n';
+        const blob = new Blob([tikz], { type: 'text/x-tex' });
+        const link = document.createElement('a');
+        link.download = `graph-${this.currentIndex}.tikz`;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        const hidden = this.cy.edges().filter(e => e.style('display') === 'none').length;
+        this.log(
+            `Graph exported as TikZ (${this.cy.nodes().length} nodes, ` +
+            `${this.cy.edges().length - hidden} edges` +
+            (hidden ? `, ${hidden} filtered out` : '') + ')'
+        );
     }
 
     setupResizer() {
