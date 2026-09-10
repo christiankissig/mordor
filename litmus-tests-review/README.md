@@ -18,9 +18,9 @@ the one the literature records.
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
 Every file here has an issue in the #36, #41-#65 range. Each records the symptom, the model actually in
-effect, where the test comes from and what to look at next. Eighteen files
-remain; #41, #44, #45, #47, #55, #56, #57 and #59 have been fixed and their
-files returned to `litmus-tests/`.
+effect, where the test comes from and what to look at next. Seventeen files
+remain; #41, #42, #44, #45, #47, #55, #56, #57 and #59 have been fixed and
+their files returned to `litmus-tests/`.
 
 The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
 models. Ten tests are checked under one of those, so a divergence is a defect and the issue is labelled
@@ -57,7 +57,17 @@ the first honest reading.
 |---|---|
 | [`jctc/JCTC6.lit`](jctc/JCTC6.lit) #36 | Lifting cannot pair the justifications of thread 2's two writes under complementary guards: `find_distinguishing_predicate` returns `None` because the else-path predicate carries an extra conjunct. |
 | [`symmrd/LB+UB+data+z.lit`](symmrd/LB+UB+data+z.lit) #65 | Moved here in `a075ff9` ("consider initial event in dslwb"), which records no reason. |
-| [`avoidoota/listing10.lit`](avoidoota/listing10.lit) #42 | A stray nested copy asserting `allow ((2,3) ∉ .dp)` — the negation of `avoidoota/listing11.lit` on the same program. It passed only because the membership test was answered for an execution that does not run event 2. |
+
+`avoidoota/listing10.lit` #42 has left this table, and the description it
+carried here was wrong on both counts. It is not a stray copy — it dates from
+the first litmus commit, `8aa5b1a`, and `c1cdb61` merged it back to a review
+path nested inside the scanned tree, which is what `0bca217` mistook for a
+duplicate. And it is not the negation of `listing11.lit` on the same program:
+`listing11` is the same program with **volatile** accesses, and the pair exists
+to separate on exactly that. Both assertions are original and neither has ever
+been changed. Volatile is now implemented (#83) and the membership test counts
+an event elided by forwarding as run, so the two files disagree where they were
+written to disagree.
 
 ### MoRDor is too permissive — a `forbid` it finds a witness for
 

@@ -1,0 +1,21 @@
+// The relaxed half of the listing10/listing11 pair: a read of a location the
+// thread has just written may be forwarded, and the dependency then goes.
+//
+// Source: the MRD line's numbered out-of-thin-air listings. Both files date
+// from the first litmus commit (8aa5b1a) and neither assertion has ever been
+// changed -- only the syntax was normalised. listing11.lit is the same program
+// with volatile accesses, asserting the opposite, and the two differ in nothing
+// else. That is the pair: (2,3) is the read-to-write dependency, and whether it
+// can be dropped is what volatility decides.
+//
+// It was parked twice over. c1cdb61 merged it back to
+// litmus-tests/avoidoota/litmus-tests-review/avoidoota/listing10.lit -- a
+// review path nested inside the scanned tree -- and 0bca217 read the mangled
+// path as a stray copy of listing11 rather than the original file it is.
+// Under it, `notin` required both events to be in the execution, and the read
+// is elided by forwarding in exactly the execution that witnesses the
+// assertion, so the observation was answered false (#42).
+x := 0;
+r1 := x;
+y := r1;
+%% allow ((2,3) ∉ .dp) []

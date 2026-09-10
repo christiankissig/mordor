@@ -305,3 +305,15 @@ let is_rdmw structure e =
   match Hashtbl.find_opt structure.events e with
   | Some event -> event.is_rdmw
   | None -> false
+
+(** [is_volatile structure e] holds when event [e] is a volatile access.
+
+    Volatile accesses may not be elided: the point of the annotation is that
+    every one of them is a real access to memory, so an implementation may not
+    satisfy a volatile read from a preceding write it has already seen, nor drop
+    a volatile write that a later one overwrites. {!Elaborations.ForwardElab}
+    keeps them out of the elided position of [fwd] and [we] on that basis. *)
+let is_volatile structure e =
+  match Hashtbl.find_opt structure.events e with
+  | Some event -> event.volatile
+  | None -> false

@@ -1,0 +1,12 @@
+// The control for volatile-store-not-elided.lit: the same program with relaxed
+// accesses, where eliding the overwritten store -- and dropping its dependency
+// on the read of y -- is exactly what the model should allow.
+//
+// Without it, volatile-store-not-elided.lit alone would also pass if write
+// elision were disabled for everything rather than for volatile accesses.
+y := 0;
+x := 0;
+r1 := y;
+x := r1;
+x := 7;
+%% allow ((3,4) ∉ .dp) []

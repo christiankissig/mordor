@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 278
+Total tests: 281
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -27,6 +27,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - avoidoota/additional_nonlb.lit
 - avoidoota/additional_twosource.lit
 - avoidoota/listing1.lit
+- avoidoota/listing10.lit
 - avoidoota/listing11.lit
 - avoidoota/listing12.lit
 - avoidoota/listing13.lit
@@ -126,6 +127,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - own/paper112F.lit
 - own/paper113.lit
 - own/paper115.lit
+- own/relaxed-store-elided.lit
 - own/speculative_optimisation.lit
 - own/sync/fence0lift.lit
 - own/sync/fence1lift.lit
@@ -134,6 +136,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - own/sync/rel2lift.lit
 - own/sync/writeElision.lit
 - own/sync/writeElisionRel.lit
+- own/volatile-store-not-elided.lit
 - pldi_repairing/IRIW+acq+sc.lit
 - pldi_repairing/LB+deps.lit
 - pldi_repairing/LB.lit

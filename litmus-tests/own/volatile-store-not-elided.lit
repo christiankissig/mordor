@@ -1,0 +1,20 @@
+// A volatile store may not be elided by a later store to the same location.
+//
+// MoRDor's own test, for #83. `x :v= r1` is overwritten by `x :v= 7`, so write
+// elision would drop it and with it the dependency on the read of y. Volatile
+// says every store is a real access to memory, so the elision is not available
+// and the dependency stands in every execution.
+//
+// relaxed-store-elided.lit is the same program without the volatile
+// annotations, and asserts the opposite. The pair separates on volatility
+// alone, which is the point: `volatile` was parsed, printed with a `v` prefix
+// and consulted by no relation at all, so the two files behaved identically.
+//
+// Volatile now keeps its accesses out of the elided position of both `fwd` and
+// `we` in Elaborations.ForwardElab. This file goes from 8 executions to 1.
+y :v= 0;
+x :v= 0;
+r1 :v= y;
+x :v= r1;
+x :v= 7;
+%% forbid ((3,4) ∉ .dp) []

@@ -102,11 +102,22 @@ module SetOperations = struct
       contradicts the test, and answering [(a, b) notin .dp] with [true] there
       would let it contradict a forbid it says nothing about.
 
+      An event elided by forwarding or write elision is the exception, and it is
+      the one the question is usually about. It {e was} executed -- the read
+      happened and its value came from the write it was forwarded from -- and
+      what the elision removed is exactly its dependency. Treating it as absent
+      answers [(2,3) notin .dp] with [false] on the execution that demonstrates
+      the dependency being dropped, which is the observation
+      [avoidoota/listing10.lit] exists to make. [delta = fwd u we] is on the
+      execution, so its right-hand side is the elided set.
+
       @param execution The execution.
       @param pair The event pair under test.
-      @return [true] if both events are executed. *)
-  let pair_in_execution execution (a, b) =
-    USet.mem execution.e a && USet.mem execution.e b
+      @return [true] if both events are executed, elided or otherwise. *)
+  let pair_in_execution (execution : symbolic_execution) (a, b) =
+    let elided = USet.union execution.fwd execution.we |> URelation.pi_2 in
+    let ran ev = USet.mem execution.e ev || USet.mem elided ev in
+      ran a && ran b
 
   (** [eval_set_expr expr structure execution] evaluates set membership
       directly.

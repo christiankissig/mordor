@@ -334,9 +334,15 @@ module ForwardElab = struct
     let read_events = elab_ctx.structure.read_events in
     let rlx_write_events = elab_ctx.structure.rlx_write_events in
     let rlx_read_events = elab_ctx.structure.rlx_read_events in
-    let w_cross_r = URelation.cross write_events rlx_read_events in
-    let r_cross_r = URelation.cross read_events read_events in
-    let w_cross_w = URelation.cross write_events rlx_write_events in
+    (* The second component is the event the edge elides, and a volatile access
+       may not be elided -- every one of them is a real access to memory, so a
+       volatile read may not be satisfied from a preceding write and a volatile
+       write may not be dropped.  The mode sets do not carry this: a volatile
+       access is relaxed as far as [rlx_read_events] is concerned. *)
+    let elidable = USet.filter (fun e -> not (Events.is_volatile elab_ctx.structure e)) in
+    let w_cross_r = URelation.cross write_events (elidable rlx_read_events) in
+    let r_cross_r = URelation.cross read_events (elidable read_events) in
+    let w_cross_w = URelation.cross write_events (elidable rlx_write_events) in
     let combined = USet.union w_cross_r r_cross_r in
     let combined = USet.union combined w_cross_w in
       USet.filter
@@ -355,7 +361,13 @@ module ForwardElab = struct
       @return Promise of the set of write-exclusion edges. *)
   let we elab_ctx pred_fn ctx ppo_loc just =
     let write_events = elab_ctx.structure.write_events in
-    let w_cross_w = URelation.cross write_events write_events in
+    (* [inverse] below puts [e1] -- the po-earlier write, the overwritten one --
+       in the elided position, so that is the side volatile has to be kept out
+       of. *)
+    let elidable =
+      USet.filter (fun e -> not (Events.is_volatile elab_ctx.structure e)) write_events
+    in
+    let w_cross_w = URelation.cross elidable write_events in
       USet.filter
         (fun (e1, e2) -> fprime elab_ctx pred_fn ppo_loc just e1 e2)
         w_cross_w
