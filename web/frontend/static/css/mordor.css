@@ -353,6 +353,32 @@ pre.line-numbers > code {
 .graph-stats strong { color: var(--text-strong); }
 .graph-stats span { color: var(--teal); }
 
+/* The two justification panels opt out of the `div { display: flex }` rules
+   above.
+
+   Those rules exist to lay a stat out as "label ... value" on one row, and they
+   apply to every div in the panel -- which caught the justification list, laid
+   its entries out side by side, and, because an author `display` beats the
+   `hidden` attribute's user-agent `display: none`, left the per-execution
+   overlay permanently visible with a Show/Hide button that changed only its
+   own label. */
+#justification-set,
+#justification-set div,
+#justifications-overlay {
+    display: block;
+}
+
+#justifications-overlay[hidden] {
+    display: none;
+}
+
+/* One justification per line, its derivation indented under it. */
+#justification-set div,
+#justifications-overlay {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .execution-info {
     position: absolute;
     top: 70px;

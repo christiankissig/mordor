@@ -1620,8 +1620,12 @@ class GraphVisualizer {
         count.textContent = String(entries.length);
         panel.replaceChildren();
         for (const entry of entries) {
+            // One entry per block: the justification on its own line, the
+            // elaboration step that derived it indented on the next. The panel
+            // is laid out with display:block (see mordor.css) so these stack
+            // rather than running side by side.
             const item = document.createElement('div');
-            item.style.marginBottom = '0.35rem';
+            item.style.marginBottom = '0.45rem';
             const head = document.createElement('div');
             head.textContent = entry.justification;
             const derivation = document.createElement('div');
