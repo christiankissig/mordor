@@ -338,6 +338,65 @@ module TestContextModelOptions = struct
       opts.ubopt <- true;
       check bool "ubopt can be set" true opts.ubopt
 
+  (* A name the table does not have is fatal. Before this it warned and left the
+     coherence model at whatever was already in effect -- the [smrd] default --
+     so a [C11] or [RA] test was answered by sMRD without anything saying so.
+     That is what put 43 files in litmus-tests-{cpp,promising,ra}/. *)
+  let apply model opts =
+    let ctx = make_context opts () in
+      apply_model_options ctx model;
+      ctx
+
+  let contains haystack needle =
+    let n = String.length needle and h = String.length haystack in
+    let rec go i =
+      i + n <= h && (String.sub haystack i n = needle || go (i + 1))
+    in
+      go 0
+
+  let test_unknown_model_fails () =
+    match
+      apply "c11" { default_options with allow_unknown_model = false } |> ignore
+    with
+    | () -> fail "unknown model did not raise"
+    | exception Failure msg ->
+        check bool "names the model" true (contains msg "\"c11\"");
+        check bool "names the escape hatch" true
+          (contains msg "--allow-unknown-model")
+
+  (* [promising] is unknown like any other, but says why: it is operational, so
+     there is no axiomatic model to map it onto rather than one nobody wrote. *)
+  let test_promising_says_why () =
+    match
+      apply "promising" { default_options with allow_unknown_model = false }
+      |> ignore
+    with
+    | () -> fail "promising did not raise"
+    | exception Failure msg ->
+        check bool "explains promising" true (contains msg "operational")
+
+  let test_unknown_model_allowed_leaves_coherent () =
+    let opts = { default_options with allow_unknown_model = true } in
+    let ctx = apply "c11" opts in
+      check string "coherence model untouched" "smrd" ctx.options.coherent;
+      check string "model name recorded" "c11" ctx.options.model
+
+  (* [coherent = None] in the table is the other case: a name MoRDor knows and
+     deliberately maps onto the default. It must keep working. *)
+  let test_known_model_mapped_to_default_is_not_unknown () =
+    let ctx = apply "sevcik" default_options in
+      check string "coherence model left at the default" "smrd"
+        ctx.options.coherent;
+      check string "model name recorded" "sevcik" ctx.options.model
+
+  let test_known_model_sets_coherent () =
+    let ctx = apply "rc11" default_options in
+      check string "rc11 applied" "rc11" ctx.options.coherent
+
+  let test_default_options_allow_unknown_model () =
+    check bool "unknown models are fatal by default" false
+      default_options.allow_unknown_model
+
   let suite =
     [
       test_case "default_options_coherent" `Quick test_default_options_coherent;
@@ -346,6 +405,15 @@ module TestContextModelOptions = struct
       test_case "default_options_ubopt" `Quick test_default_options_ubopt;
       test_case "model_name_mutable" `Quick test_model_name_mutable;
       test_case "ubopt_mutable" `Quick test_ubopt_mutable;
+      test_case "default_options_allow_unknown_model" `Quick
+        test_default_options_allow_unknown_model;
+      test_case "unknown_model_fails" `Quick test_unknown_model_fails;
+      test_case "promising_says_why" `Quick test_promising_says_why;
+      test_case "unknown_model_allowed_leaves_coherent" `Quick
+        test_unknown_model_allowed_leaves_coherent;
+      test_case "known_model_mapped_to_default_is_not_unknown" `Quick
+        test_known_model_mapped_to_default_is_not_unknown;
+      test_case "known_model_sets_coherent" `Quick test_known_model_sets_coherent;
     ]
 end
 

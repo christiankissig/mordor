@@ -680,6 +680,8 @@ module CLI = struct
     mutable litmus_dir : string;  (** Directory for litmus tests *)
     mutable log_level : Logs.level option;  (** Logging level *)
     mutable num_threads : int;  (** Number of threads for parallel execution *)
+    mutable allow_unknown_model : bool;
+        (** Accept a memory model name the registry does not know *)
   }
 
   (** Create initial parse state with defaults. *)
@@ -695,6 +697,7 @@ module CLI = struct
       litmus_dir = "litmus_tests";
       log_level = None;
       num_threads = 1;
+      allow_unknown_model = false;
     }
 
   (** Convert parse state to immutable configuration.
@@ -721,6 +724,7 @@ module CLI = struct
             default_options with
             loop_semantics = state.loop_semantics;
             step_counter = Option.value state.step_counter ~default:2;
+            allow_unknown_model = state.allow_unknown_model;
           }
         in
           {
@@ -830,6 +834,12 @@ module CLI = struct
             state.step_counter <- Some n
           ),
         " Per-loop iteration bound (default: 2)"
+      );
+      ( "--allow-unknown-model",
+        Arg.Unit (fun () -> state.allow_unknown_model <- true),
+        " Do not fail on a memory model name MoRDor does not implement; check \
+         the test under the model already in effect and warn. The verdict is \
+         then that model's, not the named one's"
       );
     ]
 
@@ -942,4 +952,12 @@ let main () =
 
     Runs the main function in the Lwt runtime. All async operations are handled
     by Lwt's cooperative threading. *)
-let () = Lwt_main.run (main ())
+let () =
+  try Lwt_main.run (main ()) with
+  | Failure msg ->
+      (* [Failure] is how the pipeline reports a litmus test it will not run:
+         an unknown memory model, a thread spawn under a loop, more than one
+         assertion. These are the user's problem, not a crash, so print the
+         message rather than a backtrace. *)
+      Printf.eprintf "Error: %s\n" msg;
+      exit 1

@@ -14,14 +14,10 @@ Zoo — <https://rmm-zoo.kissig.org> — from its `strictly-weaker/SRA-vs-RA/`,
 `model_options_table` in `src/context.ml` maps litmus-test model names onto
 those. `RA` and `SRA` appear in neither.
 
-An unrecognised name is not an error today: `apply_model_options` logs
-
-```
-Unknown memory model "RA"; no coherence model applied
-```
-
-and leaves the coherence model at the `smrd` default, so these files do produce a
-verdict — sMRD's, not RA's. Note this is about the *model annotation*, not about
+An unrecognised name used to warn and leave the coherence model at the `smrd`
+default, so these files produced a verdict — sMRD's, not RA's. Since #86 it is a
+hard error, and the `sMRD fallback` column below is measured by passing
+`--allow-unknown-model`. Note this is about the *model annotation*, not about
 release and acquire access modes: those are part of the language MoRDor parses
 and are used by every model it implements. What is missing is a coherence model
 whose axioms are RA's.

@@ -14,18 +14,25 @@ Model Zoo — <https://rmm-zoo.kissig.org> — mostly from its
 `model_options_table` in `src/context.ml` maps the model names a litmus test may
 name onto those. `C11`, `C17` and `C20` appear in neither.
 
-An unrecognised name is not an error today: `apply_model_options` logs
+An unrecognised name used to warn and carry on, leaving the coherence model at
+whatever it already was — the `smrd` default. Running one of these files did
+produce a verdict, but it was **sMRD's verdict, not C11's**, and comparing it
+against a `[C11]` expectation compares two different models. That is what kept
+these tests in the scanned suite: while `forbid` assertions were passing without
+being checked at all, the mismatch was invisible.
+
+Since #86 it is a hard error:
 
 ```
-Unknown memory model "C11"; no coherence model applied
+$ mordor run --single models/cpp-release-sequences/mp-rs-strel.lit
+Error: Unknown memory model "c11". MoRDor implements imm, rc11, rc11c and smrd,
+and maps a further set of names onto those; this one is in neither, so no
+coherence model can be applied. Re-run with --allow-unknown-model to check the
+test under the model already in effect instead -- the verdict is then that
+model's, not "c11"'s.
 ```
 
-and leaves the coherence model at whatever it already was — the `smrd` default.
-So running one of these files does produce a verdict, but it is **sMRD's
-verdict, not C11's**, and comparing it against a `[C11]` expectation compares two
-different models. That is what kept these tests in the scanned suite: while
-`forbid` assertions were passing without being checked at all, the mismatch was
-invisible.
+The `sMRD fallback` column below is measured with `--allow-unknown-model`.
 
 `RC11` *is* implemented (`rc11`, and `rc11c` with consume), and RC11 is the
 repaired C11 of Lahav et al. (PLDI 2017). It is close to but not the same as any

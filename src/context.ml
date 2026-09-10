@@ -119,6 +119,11 @@ type options = {
   mutable loop_semantics : loop_semantics;  (** Loop interpretation mode *)
   mutable step_counter : int;
       (** Number of loop iterations for bounded analysis *)
+  mutable allow_unknown_model : bool;
+      (** Accept a memory model name {!model_options_table} does not know,
+          falling back to the coherence model already in effect instead of
+          failing. Off by default: the fallback answers a different question
+          from the one the litmus test asks. *)
 }
 [@@deriving show]
 
@@ -141,6 +146,7 @@ let default_options =
     loop_semantics = StepCounterPerLoop;
     step_counter = 2;
     ubopt = false;
+    allow_unknown_model = false;
   }
 
 (** {1 Types for Checked Executions} *)
@@ -485,6 +491,16 @@ let model_options_table : (string, model_options) Hashtbl.t =
     Hashtbl.add tbl "smrd" { coherent = Some "smrd"; ubopt = false };
     Hashtbl.add tbl "ub11" { coherent = None; ubopt = true };
     Hashtbl.add tbl "_" { coherent = None; ubopt = false };
+    (* [default_options.model] is ["undefined"], the pipeline's name for "no
+       annotation given", and [make_context_with_model] applies it. It is a
+       known name, not an unknown one, so it belongs here -- without the entry
+       every caller that does not override the model would fail the #86 check.
+       [coherent = None] keeps the coherence model where it already is, which is
+       what "no annotation" has always meant. Note [ModelRegistry] separately
+       registers an ["undefined"] *coherence* model (rmw atomicity only, no
+       thin-air check); selecting that is a different thing from this, and no
+       litmus test names it. *)
+    Hashtbl.add tbl "undefined" { coherent = None; ubopt = false };
     tbl
 
 (** Look up model options by name.
@@ -505,24 +521,37 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
   ctx.options.model <- model;
   Logs_safe.info (fun m -> m "applying model options for model %s" model);
   match Hashtbl.find_opt model_options_table (String.lowercase_ascii model) with
-  | None when String.lowercase_ascii model = "promising" ->
-      (* Promising semantics is not implemented by MoRDor (it is an operational
-         model requiring promise/certification machinery that the axiomatic
-         coherence checker cannot express). Surface this at error level so it is
-         not mistaken for a supported model. The coherence model is left
-         untouched. *)
-      Logs_safe.err (fun m ->
-          m
-            "Promising semantics is not implemented by MoRDor; model %S is \
-             unsupported and no coherence model was applied"
-            model
-      )
   | None ->
-      (* Unknown model name. Leave the coherence model untouched and warn rather
-         than silently degrading to whatever was set before. *)
-      Logs_safe.warn (fun m ->
-          m "Unknown memory model %S; no coherence model applied" model
-      )
+      (* The name is not in the table at all, so there is no coherence model to
+         apply and the one already in effect -- the [smrd] default, normally --
+         would answer a different question from the one the litmus test asks.
+         Table entries whose [coherent] is [None] are the other case: those are
+         deliberate mappings onto the default and fall through to [Some] below.
+
+         This is fatal unless the caller opted in. The reference directories
+         [litmus-tests-cpp/], [litmus-tests-promising/] and [litmus-tests-ra/]
+         exist because 43 files had to be moved out of the scanned suite by hand
+         once the mismatch was noticed; failing here is what stops the next one
+         being added unnoticed. Pass [--allow-unknown-model] to measure them. *)
+      let detail =
+        if String.lowercase_ascii model = "promising" then
+          " Promising semantics is operational -- it needs promise sets, \
+           certification and per-thread views, which the axiomatic coherence \
+           checker has no place for."
+        else ""
+      in
+      let msg =
+        Printf.sprintf
+          "Unknown memory model %S. MoRDor implements imm, rc11, rc11c and \
+           smrd, and maps a further set of names onto those; this one is in \
+           neither, so no coherence model can be applied.%s Re-run with \
+           --allow-unknown-model to check the test under the model already in \
+           effect instead -- the verdict is then that model's, not %S's."
+          model detail model
+      in
+        if ctx.options.allow_unknown_model then
+          Logs_safe.warn (fun m -> m "%s" msg)
+        else failwith msg
   | Some options ->
       Option.iter
         (fun coherent ->

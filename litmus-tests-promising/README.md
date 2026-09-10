@@ -24,9 +24,17 @@ promises.
 
 A registry entry once aliased the model name `"promising"` to the IMM checker.
 That was misleading — running these tests under that alias verified them under
-**IMM, not promising** — so the alias has been removed. A `[Promising]`
-annotation is now reported as an unknown model with a warning, and no coherence
-model is applied.
+**IMM, not promising** — so the alias has been removed. Since #86 a
+`[Promising]` annotation is a hard error naming why:
+
+```
+Error: Unknown memory model "promising". [...] Promising semantics is
+operational -- it needs promise sets, certification and per-thread views, which
+the axiomatic coherence checker has no place for. [...]
+```
+
+`--allow-unknown-model` restores the old warn-and-continue behaviour for
+measurement.
 
 These files are therefore kept here **as reference only**. They are *not* scanned
 by the integration suite (which scans `litmus-tests/`). To verify them under

@@ -66,7 +66,17 @@ let golden_path lit_file = Filename.concat goldens_root (lit_file ^ ".golden")
    summary: verdict + canonicalized execution set. A fresh context per call
    (the steps mutate it). *)
 let render (program : string) : string =
-  let options = { Context.default_options with dependencies = true } in
+  (* [litmus-tests-promising/] is one of the corpora below and every file in it
+     names [Promising], which MoRDor does not implement. Since #86 that is fatal
+     unless the caller opts in; a golden is a record of what the pipeline does
+     today, so opt in and let the fallback verdict be recorded as before. *)
+  let options =
+    {
+      Context.default_options with
+      dependencies = true;
+      allow_unknown_model = true;
+    }
+  in
   let ctx = Context.make_context_with_model options () in
     ctx.litmus_name <- "golden";
     ctx.litmus <- Some program;
