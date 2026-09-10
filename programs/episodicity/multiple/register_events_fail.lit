@@ -1,10 +1,13 @@
 rC := malloc 1;
+rD := malloc 1;
 *rC := 0;
-do
-{
+*rD := 0;
+rc := 0;
+rd := 0;
+do {
   rx := ry + 1;
   ry := 2;
-  rz := *rC;
-  *rC := rx;
+  rc := *rC;
+  rd := *rD;
 }
-while (rx < 5)
+while (rc = rd)

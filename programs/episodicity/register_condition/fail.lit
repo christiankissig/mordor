@@ -2,7 +2,7 @@ rC := malloc 1;
 ri := 0;
 do
 {
-ri := ri + 1;
-*rC := ri;
+  ri := ri + 1;
+  *rC := ri;
 }
 while (ri < 5)

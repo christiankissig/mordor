@@ -517,16 +517,33 @@ let test_specifications =
     single_episodic "programs/episodicity/events_condition/cas_inc_loop.lit"
       "Valid episodic loop with RMW events - should be episodic with no \
        failing conditions";
-    (* Multiple violations, though not the two the file is named for: the
-       trivial bisection fails the register and write conditions, and moving
-       the boundary to [6] | [7] trades the write violation for a second
-       register one. Condition 4 holds under both, so nothing here exercises
-       the events condition -- that fixture is still missing. *)
-    single_failing "programs/episodicity/multiple/register_events_fail.lit"
+    (* Conditions 1 and 2. It was called register_events_fail and failed the
+       write condition rather than the events one, so it now carries the name
+       of the pair it delivers: the trivial bisection fails the register and
+       write conditions, and moving the boundary to [6] | [7] trades the write
+       violation for a second register one. Condition 4 holds under both. *)
+    single_failing "programs/episodicity/multiple/register_write_fail.lit"
       [ 1; 2 ]
       "Register and write condition failures - a register is read before it is \
        written within the iteration, and a read may take its value from the \
        loop's own write";
+    (* Conditions 1 and 4, the pair nothing exercised until this fixture. It is
+       two_reads_fail with a register dependency in front of the two loads:
+       [rx := ry + 1] reads ry before the iteration writes it, and [ry := 2]
+       then writes it, which is Condition 1; the loads are at two allocations
+       and nothing orders them across the boundary, which is Condition 4.
+
+       Both violations survive the rotation. The only boundary the bisection
+       can move to falls between the two loads, leaving [rx := ry + 1] still
+       ⊑-before [ry := 2], so the reported pair does not depend on which
+       bisection the search keeps. The register conditions are pure register
+       traffic and add no events, so Condition 4 sees the same two reads
+       two_reads_fail does, unordered in both directions. *)
+    single_failing "programs/episodicity/multiple/register_events_fail.lit"
+      [ 1; 4 ]
+      "Register and events condition failures - a register is read before it \
+       is written within the iteration, and two reads of distinct allocations \
+       are unordered across the loop boundary";
     (* valid cases *)
     single_episodic "programs/episodicity/valid/read.lit"
       "Valid episodic loop - should be episodic with no failing conditions";
