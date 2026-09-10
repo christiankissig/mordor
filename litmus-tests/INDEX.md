@@ -1,12 +1,13 @@
 # Litmus Tests Index
 
-Total tests: 289
+Total tests: 272
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
 > scanned: `litmus-tests-promising/` (`[Promising]`), `litmus-tests-cpp/`
-> (`[C11]`, `[C17]`, `[C20]`) and `litmus-tests-ra/` (`[RA]`, `[SRA]`). Each has
+> (`[C11]`, `[C17]`, `[C20]`), `litmus-tests-ra/` (`[RA]`, `[SRA]`) and
+> `litmus-tests-jmm/` (`[JMM]`, the JSR-133 Java Causality Test Cases). Each has
 > a README with the reference verdicts. Tests whose assertion MoRDor does not
 > validate are parked in `litmus-tests-review/`, also unscanned.
 
@@ -70,23 +71,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - fowm2024/nullptr - use.lit
 - imm/FADD RMW Atomicity.lit
 - imm/LB+falsedep+Fsc.lit
-- jctc/JCTC1.lit
-- jctc/JCTC10.lit
-- jctc/JCTC11.lit
-- jctc/JCTC13.lit
-- jctc/JCTC14.lit
-- jctc/JCTC15.lit
-- jctc/JCTC16.lit
-- jctc/JCTC17-left.lit
-- jctc/JCTC17-smaller.lit
-- jctc/JCTC17.lit
-- jctc/JCTC18.lit
-- jctc/JCTC4.lit
-- jctc/JCTC5.lit
-- jctc/JCTC7.lit
-- jctc/JCTC8.lit
-- jctc/JCTC8b.lit
-- jctc/JCTC9.lit
 - on_thin_air_reads19/P1.lit
 - on_thin_air_reads19/P2.lit
 - on_thin_air_reads19/P3.lit

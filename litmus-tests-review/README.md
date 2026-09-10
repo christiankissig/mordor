@@ -18,27 +18,24 @@ the one the literature records.
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
 Every file here has an issue in the #36, #41-#65 range. Each records the symptom, the model actually in
-effect, where the test comes from and what to look at next. Seventeen files
-remain; #41, #42, #44, #45, #47, #55, #56, #57 and #59 have been fixed and
+effect, where the test comes from and what to look at next. Ten files
+remain, the seven `jctc/` ones having moved to `litmus-tests-jmm/`; #41, #42, #44, #45, #47, #55, #56, #57 and #59 have been fixed and
 their files returned to `litmus-tests/`.
 
 The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
-models. Ten tests are checked under one of those, so a divergence is a defect and the issue is labelled
-`bug`. The other ten name a model that is not — `[Problem]`, `[JR]`, `[Bubbly]` and `[Sevcik]` have a
+models. Three tests are checked under one of those, so a divergence is a defect and the issue is labelled
+`bug`. The rest name a model that is not — `[Problem]`, `[JR]`, `[Bubbly]` and `[Sevcik]` have a
 `model_options_table` entry with `coherent = None` and so fall through to the `smrd` default, while
 `[Bridging]`, `[Grounding]`, `[Power]` and `[IMM]` map to `imm`. Those are labelled `smrd-unsupported` and
 carry no `bug` label: they compare one model's expectation against another model's verdict, and the two are
 not claimed to agree, so a divergence there may be entirely correct. Each needs triaging as "does sMRD agree
 with the reference on this shape?" before it is treated as a defect.
 
-**The `jctc/` group has since been triaged that way, and six of its seven moved.** Their verdicts are Java
-Memory Model judgments (Pugh's Causality Test Cases, the JSR-133 battery), decided here under the `smrd`
-default because the files name no model. The sMRD paper says its assertions record the expectation *for C++*,
-and that the model gives the desired behaviour everywhere "except where open questions of thread inlining and
-optimisations using global analysis leave the desired behaviour ambiguous" — which is exactly the six: JCTC2,
-JCTC3, JCTC6 and JCTC9b rest on global analysis, JCTC19 and JCTC20 on thread inlining. They are now
-`smrd-unsupported`. `JCTC12` (#48) keeps `bug`: it is Example 2.4 of that paper, worked through there and
-forbidden by the model. See [`litmus-tests/jctc/README.md`](../litmus-tests/jctc/README.md).
+**The `jctc/` group has since been triaged that way, and has left this directory entirely.** Their verdicts
+are Java Memory Model judgments (Pugh's Causality Test Cases, the JSR-133 battery), and they named no model,
+so they were being decided under the `smrd` default. All twenty-four now live in
+[`litmus-tests-jmm/jctc/`](../litmus-tests-jmm/jctc/README.md) annotated `[JMM]`, which MoRDor does not
+implement — the same treatment as `[C11]`, `[RA]` and `[Promising]`. Their issues are `smrd-unsupported`.
 
 ## How these were found
 

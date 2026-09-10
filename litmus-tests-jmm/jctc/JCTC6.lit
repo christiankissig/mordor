@@ -15,4 +15,4 @@ B := 0;
   } else { skip }
 }
 %%
-allow (r1 = 1 && r2 = 1) [] "Allowed. Intrathread analysis could determine that thread 2 always writes 1 to A and hoist the write to the beginning of thread 2."
+allow (r1 = 1 && r2 = 1) [JMM] "Allowed. Intrathread analysis could determine that thread 2 always writes 1 to A and hoist the write to the beginning of thread 2."

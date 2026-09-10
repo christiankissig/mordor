@@ -1,4 +1,4 @@
-// JCTC20 is JCTC18 with thread 1 split into two threads, so the three threads
+// JCTC19 is JCTC17 with thread 1 split into two threads, so the three threads
 // are concurrent. Until this was corrected the file put the second half of
 // thread 1 after the parallel block as a join continuation, with an empty
 // `||| { skip }` where the third thread should be. That was written when
@@ -12,7 +12,7 @@ y := 0;
 {
   // Thread 1a
   r3 := x;
-  if (r3 = 0) {
+  if (r3 != 42) {
     x := 42
   } else { skip }
 } ||| {
@@ -25,4 +25,4 @@ y := 0;
   x := r2
 }
 %%
-allow (r1 = 42 && r2 = 42 && r3 = 42) [] "Allowed. This is the same as test case 18, except that thread 1 has been split into two threads."
+allow (r1 = 42 && r2 = 42 && r3 = 42) [JMM] "Allowed. This is the same as test case 17, except that thread 1 has been split into two threads."

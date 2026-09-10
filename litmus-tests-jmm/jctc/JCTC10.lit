@@ -21,4 +21,4 @@ z := 0;
   } else { skip }
 } }
 %%
-forbid (r1 = 1 && r2 = 1 && r3 = 0) [] "Forbidden. This is the same as test case 5, except using control dependences rather than data dependences."
+forbid (r1 = 1 && r2 = 1 && r3 = 0) [JMM] "Forbidden. This is the same as test case 5, except using control dependences rather than data dependences."
