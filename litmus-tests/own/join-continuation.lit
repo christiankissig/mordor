@@ -1,0 +1,21 @@
+// A parallel block followed by more statements -- the join.
+//
+// MoRDor's own test, for #81. Everything after the block used to be discarded:
+// interpret_statements_open's Threads branch returned the cross product of the
+// thread structures and never recursed into the rest of the list, so `r1 := x`
+// and `y := r1` below produced no event and bound no register. An assertion
+// naming r1 was then decided against a free variable, which is why this file's
+// forbid is the assertion it is -- allow (r1 = 0) passed either way.
+//
+// 999 is never written to x, so no execution can end with r1 holding it. Fails
+// outright if the continuation goes back to being dropped.
+x := 0;
+y := 0;
+{
+  r2 := y
+} ||| {
+  r3 := x
+};
+r1 := x;
+y := r1;
+%% forbid (r1 = 999) []

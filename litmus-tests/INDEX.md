@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 277
+Total tests: 278
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -120,6 +120,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - own/ctrl_subsumed_by_data.lit
 - own/elideanddontobserve.lit
 - own/expressionPreservingSubstitution.lit
+- own/join-continuation.lit
 - own/paper108.lit
 - own/paper109.lit
 - own/paper112F.lit

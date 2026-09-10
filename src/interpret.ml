@@ -236,30 +236,6 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
       let structure =
         match stmt with
         | Threads { threads } ->
-            (* [rest] is dropped, and nothing downstream can tell.  Every other
-               branch here composes with [recurse rest ...]; this one returns
-               the cross product and stops, so a statement after a parallel
-               block contributes no event, binds no register, and the analysis
-               proceeds as if it were not written.  An assertion over one of its
-               registers is then decided against a free variable.
-
-               Joining is the missing piece: the continuation has to be ordered
-               after the block it follows, and [structure.fj] -- the fork-join
-               relation [Assertion]'s rhb and [Elaborations] already read, and
-               the visualiser already draws -- is created empty and never
-               written to.  There is no structure-level sequential composition
-               to build it with either; [dot] prefixes a single event, [cross]
-               is parallel and [plus] is branching.
-
-               Warn rather than drop in silence until that exists.  See #81;
-               jctc/JCTC19.lit and jctc/JCTC20.lit are the tests that want it
-               (#49, #51), and they are the only files in the corpus with the
-               shape. *)
-            if rest <> [] then
-              Logs_safe.warn (fun m ->
-                  m "Dropping %d statement(s) after a parallel block"
-                    (List.length rest)
-              );
             let interpret_threads ts =
               List.fold_left
                 (fun acc t ->
@@ -270,7 +246,26 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 (SymbolicEventStructure.create ())
                 ts
             in
-              interpret_threads threads
+            let threads_structure = interpret_threads threads in
+              (* The continuation is the join.  Every other branch here composes
+                 with [recurse rest ...]; this one used to return the cross
+                 product and stop, so a statement after a parallel block
+                 contributed no event, bound no register, and an assertion over
+                 one of its registers was decided against a free variable (#81).
+
+                 [seq] orders the whole block before the continuation and records
+                 the pairs in [fj], which is what [Assertion]'s rhb and
+                 [Elaborations] have always read and nothing has ever written.
+
+                 [env] rather than anything the threads produced: a register
+                 assigned inside a thread is thread-local, and [update_env]
+                 copies, so the threads cannot have changed this one.  The
+                 continuation sees the environment the block was entered with,
+                 which is what a join gives it. *)
+              if rest = [] then threads_structure
+              else
+                let cont = recurse rest env phi events in
+                  SymbolicEventStructure.seq threads_structure cont
         | RegisterStore { register; expr } ->
             let expr_value =
               Expr.evaluate ~env:(Hashtbl.find_opt env) expr

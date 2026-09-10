@@ -203,6 +203,33 @@ module SymbolicEventStructure = struct
      back as [8; 9; 12] against an [e] of twelve events holding neither 9 nor
      12, so episodicity bisected over two events that did not exist and the
      events condition reported six violations that no [ppo] could ever order. *)
+
+  (* [seq a b] is [a] followed by [b]: everything in [a] is po-before everything
+     in [b], and the same pairs are recorded in [fj].
+
+     This is the join.  It is [dot] generalised from one event to a whole
+     structure -- [dot] prefixes an event by adding [{event} x structure.e] to
+     po, and this adds [a.e x b.e] -- and it is what a parallel block composed
+     with its continuation needs, since the continuation may not begin until
+     every thread has finished.
+
+     [fj] gets the same pairs because it is the fork-join relation:
+     [Assertion]'s rhb reads it as [(ppo u fj u dp u rf)+] and [Elaborations]
+     subtracts it from [ppo_loc].  Until now nothing wrote to it, so both read
+     an empty relation.
+
+     [a]'s terminal events stay terminal.  They are still the ends of their own
+     threads, and [compute_ppo_init] only ever filters po, so the join cannot
+     put a continuation event before one of them. *)
+  let seq (a : t) (b : t) : t =
+    let joined = URelation.cross a.e b.e in
+    let c = cross a b in
+      {
+        c with
+        po = USet.union c.po joined;
+        fj = USet.union c.fj joined;
+      }
+
   let events_in_loop (structure : t) loop_id =
     Hashtbl.fold
       (fun event loop_indices acc ->

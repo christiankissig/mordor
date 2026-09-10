@@ -21,6 +21,11 @@ module SymbolicEventStructure : sig
       composition. *)
   val cross : t -> t -> t
 
+  (** [seq a b] is [a] followed by [b]: every event of [a] is po-before every
+      event of [b], and the same pairs join [fj]. Intended for the join of a
+      parallel block with the statements that follow it. *)
+  val seq : t -> t -> t
+
   (** The events of one loop: those of [e] that [loop_indices] records as
       enclosed by [loop_id]. Nested loops are enclosed by their parents, so an
       inner loop's events are also the outer loop's. *)
