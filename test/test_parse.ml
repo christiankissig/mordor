@@ -44,10 +44,14 @@ let test_parse_global_expr () =
   let expr = parse_expr "x" in
     check_global_expr "parsed x" "x" expr
 
+(* The name excludes the sigil, as it already did for [.myset] below.  It used
+   to be "@x", which never matched the memory state Assertion builds under the
+   bare location name, so every @ assertion was decided against a free variable
+   (github #84). *)
 let test_parse_atloc_expr () =
   let expr = parse_expr "@x" in
     match expr with
-    | EAtLoc l -> Alcotest.(check string) "parsed @x" "@x" l
+    | EAtLoc l -> Alcotest.(check string) "parsed @x" "x" l
     | _ -> Alcotest.fail "Expected EAtLoc"
 
 let test_parse_aset_expr () =

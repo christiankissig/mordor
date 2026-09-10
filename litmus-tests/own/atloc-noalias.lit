@@ -1,0 +1,16 @@
+// The control for atloc-alias.lit: the published address is H's, so the write
+// through the pointer never lands on G and G keeps its initial value.
+//
+// Without it, atloc-alias.lit alone would also pass if the aliasing test were
+// dropped altogether and every write counted for every location.
+A := 0;
+G := 0;
+H := 0;
+{
+  rq := &H;
+  A := rq
+} ||| {
+  rp := A;
+  *rp := 7
+}
+%% forbid (@G = 7) []

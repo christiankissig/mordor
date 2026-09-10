@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 272
+Total tests: 277
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -24,6 +24,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - atomics/mp-atomic.lit
 - atomics/mp-atomic2.lit
 - avoidoota/additional_inventintload.lit
+- avoidoota/additional_nonlb.lit
 - avoidoota/additional_twosource.lit
 - avoidoota/listing1.lit
 - avoidoota/listing11.lit
@@ -111,6 +112,10 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - own/ORI.lit
 - own/ORI2.lit
 - own/VRA-JCTC1.lit
+- own/atloc-alias.lit
+- own/atloc-final-value.lit
+- own/atloc-noalias.lit
+- own/atloc-unwritten.lit
 - own/coproductReorder.lit
 - own/ctrl_subsumed_by_data.lit
 - own/elideanddontobserve.lit

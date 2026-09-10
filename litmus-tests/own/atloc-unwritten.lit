@@ -1,0 +1,6 @@
+// The negative half of atloc-final-value.lit: 999 is never written to x, so no
+// execution ends with it there. Fails outright if @x goes back to being a free
+// variable (#84) -- that is what this file is for.
+x := 0;
+x := 7;
+%% forbid (@x = 999) []

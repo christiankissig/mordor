@@ -1,0 +1,27 @@
+// The final value at a location written through a pointer.
+//
+// MoRDor's own test, for github #5, "Test memory state in assertions".
+//
+// Thread 1 publishes the address of G through A; thread 2 reads it back and
+// writes 7 through it. The write event is `W α 7` -- its location is the symbol
+// read from A, not a location name -- so it lands on G only in the executions
+// whose predicates pin α to G.
+//
+// The memory state the assertion is evaluated against used to be built by
+// matching `Some (EVar var)` on the write's location and dropping everything
+// else, so a write through a pointer had no entry at all and this outcome was
+// unwitnessable. It now asks Solver.exeq whether the write's location must
+// equal the one being asserted about, under the execution's own predicates.
+//
+// exeq and not expoteq: an execution that leaves the aliasing open is genuinely
+// both cases and contributes nothing. atloc-noalias.lit is the control.
+A := 0;
+G := 0;
+{
+  rq := &G;
+  A := rq
+} ||| {
+  rp := A;
+  *rp := 7
+}
+%% allow (@G = 7) []

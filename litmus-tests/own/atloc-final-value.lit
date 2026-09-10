@@ -1,0 +1,15 @@
+// @x in an assertion is the final value at location x, not the location.
+//
+// MoRDor's own test. The pair with atloc-unwritten.lit is the point: one file
+// asserts the value that is written and the other forbids one that is not, so
+// a regression that makes @x a free variable again fails the second even though
+// the first still passes.
+//
+// It did make it a free variable: the lexer bound '@x' including the '@', while
+// the memory state Assertion.ConditionChecker builds is keyed by the bare
+// location name, so the substitution silently missed and every @ assertion was
+// decided against an unconstrained symbol (#84). allow (@x = 999999) was true
+// on a program that never writes it.
+x := 0;
+x := 7;
+%% allow (@x = 7) []

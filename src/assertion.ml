@@ -656,34 +656,56 @@ module ConditionChecker = struct
 
     let writes = Execution.get_writes_in_rhb_order structure execution in
 
-    (* Instantiate condition expression with final register environment *)
+    (* Registers first, so what is left naming a location really is one. *)
+    let cond_after_registers =
+      List.map (Expr.evaluate ~env:(Hashtbl.find_opt execution.final_env))
+        cond_expr
+    in
+
+    (* The locations this condition asks about.  Every [EVar] the register
+       substitution did not consume is one: [@x] is [EVar "x"] by the time it
+       reaches here, and so is a bare global. *)
+    let asked_locations =
+      List.concat_map Expr.extract_variables cond_after_registers
+      |> List.filter (fun v -> not (String.length v > 0 && v.[0] = '.'))
+      |> List.sort_uniq String.compare
+    in
+
+    (* The memory state this execution ends in, for the locations asked about.
+
+       [writes] is in rhb order, so replacing as we go leaves the last write to
+       each location.  A write counts for a location when its own location
+       expression *must* equal it under the execution's path predicates --
+       [Solver.exeq], not [expoteq].  That is what carries aliasing: a write
+       through a pointer has a symbolic location, and it lands on [x] exactly in
+       those executions whose predicates pin the pointer to [x].  An execution
+       that leaves the aliasing open is genuinely both cases and contributes
+       nothing, which is the conservative answer.
+
+       Before this, the match was [Some (EVar var)] and everything else was
+       dropped, so a region reached through a pointer had no entry at all
+       (github #5). *)
     let last_writes_to_variables = Hashtbl.create (List.length writes) in
-      (* NOTE this is tightly coupled to uniqueness of global variable addresses
-  and the syntax of .lit files - i.e. explicit global variable stores. *)
       List.iter
         (fun w ->
           let event = Hashtbl.find structure.events w in
-            match event.loc with
-            | Some (EVar var) -> (
-                match event.wval with
-                | Some wval -> Hashtbl.replace last_writes_to_variables var wval
-                | None -> ()
-              )
+            match (event.loc, event.wval) with
+            | Some (EVar var), Some wval ->
+                Hashtbl.replace last_writes_to_variables var wval
+            | Some loc, Some wval ->
+                List.iter
+                  (fun var ->
+                    if Solver.exeq ~state:execution.ex_p loc (EVar var) then
+                      Hashtbl.replace last_writes_to_variables var wval
+                  )
+                  asked_locations
             | _ -> ()
         )
         writes;
       let inst_cond_expr =
         List.map
-          (Expr.evaluate ~env:(Hashtbl.find_opt execution.final_env))
-          cond_expr
-        (* Tracked as github #5, "Test memory state in assertions", which
-           carries the same caveat as the note above and adds aliasing:
-           last_writes_to_variables is keyed by variable name, so two names
-           for one region are two entries and a region reached through a
-           pointer has none. What is wanted is a memory state the assertion
-           can evaluate symbolic expressions over. *)
-        |> List.map
-             (Expr.evaluate ~env:(Hashtbl.find_opt last_writes_to_variables))
+          (Expr.evaluate ~env:(Hashtbl.find_opt last_writes_to_variables))
+          cond_after_registers
       in
       (* The execution's own path predicates have to hold alongside the
          condition.  Asking the solver about the condition and the rf equalities

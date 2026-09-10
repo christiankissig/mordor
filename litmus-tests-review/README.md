@@ -18,9 +18,9 @@ the one the literature records.
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
 Every file here has an issue in the #36, #41-#65 range. Each records the symptom, the model actually in
-effect, where the test comes from and what to look at next. Nineteen files
-remain; #44, #45, #47, #55, #56, #57 and #59 have been fixed and their files
-returned to `litmus-tests/`.
+effect, where the test comes from and what to look at next. Eighteen files
+remain; #41, #44, #45, #47, #55, #56, #57 and #59 have been fixed and their
+files returned to `litmus-tests/`.
 
 The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
 models. Ten tests are checked under one of those, so a divergence is a defect and the issue is labelled
@@ -63,7 +63,6 @@ the first honest reading.
 
 | Test | Assertion | Model |
 |---|---|---|
-| [`avoidoota/additional_nonlb.lit`](avoidoota/additional_nonlb.lit) #41 | forbid `@x=42 ∧ @y=42 ∧ @z=42` | sMRD |
 | [`avoidoota/listing16.lit`](avoidoota/listing16.lit) #43 | forbid `r1=17 ∧ r2=17 ∧ r3=17` | sMRD |
 | [`jctc/JCTC12.lit`](jctc/JCTC12.lit) #48 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
 | [`on_thin_air_reads19/P5.lit`](on_thin_air_reads19/P5.lit) #54 | forbid `r1=1` | `[JR]` → sMRD |
@@ -76,6 +75,13 @@ Most of this group is out-of-thin-air: the `avoidoota` listings, `JCTC12`, `P5`
 and the load-buffering shapes are all asking that a value not be justified by a
 cycle through its own dependencies. `no_oota` is the property MRD exists to
 deliver, so these are the load-bearing ones.
+
+**Seven have left this table.** `avoidoota/additional_nonlb.lit` #41 was never
+an out-of-thin-air finding at all: `@x` was the *location* variable rather than
+the final value at it, because the lexer bound `@x` with the `@` still attached
+and it never matched the key the memory state is built under. The three
+locations were free symbols the solver could set to 42, so the `forbid` failed
+however the analysis behaved (#84, #5).
 
 **Six have left this table.** `avoidoota/listing27_forbid.lit` #45 went for a
 different reason from the other five: it is `listing27_allow.lit` under a model

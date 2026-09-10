@@ -124,8 +124,11 @@ rule token = parse
   (* Registers *)
   | 'r' alnum+ as reg     { Parser.REGISTER reg }
 
-  (* AtLoc variables *)
-  | '@' alnum+ as loc     { Parser.ATLOC loc }
+  (* AtLoc variables.  The binding excludes the '@': the name has to be the
+     bare location name, because that is the key the memory state built in
+     Assertion.ConditionChecker is under.  With '@x' as the name the
+     substitution silently missed and @x stayed a free variable. *)
+  | '@' (alnum+ as loc)   { Parser.ATLOC loc }
 
   (* Strings *)
   | '"' ([^ '"']* as str) '"' { Parser.STRING str }
