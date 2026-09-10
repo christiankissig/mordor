@@ -957,6 +957,45 @@ let step_send_event_structure_graph ~(send_data : string -> unit Lwt.t)
       );
       Lwt.return ctx
 
+(** The program's overall justification set, sent once per run.
+
+    Distinct from the per-execution list on a [graph_message]: this is what the
+    elaborations produced for the program, independent of any one execution,
+    with the step that derived each (github #80). *)
+module JustificationSet = struct
+  type entry = { justification : string; derivation : string }
+  [@@deriving yojson]
+
+  type message = {
+    type_ : string; [@key "type"]
+    justifications : entry list;
+  }
+  [@@deriving yojson]
+end
+
+(** [step_send_justification_set lwt_ctx ~send_data] sends the overall set. *)
+let step_send_justification_set (lwt_ctx : mordor_ctx Lwt.t)
+    ~(send_data : string -> unit Lwt.t) : mordor_ctx Lwt.t =
+  let* ctx = lwt_ctx in
+  let entries =
+    Option.value ctx.justification_derivations ~default:[]
+    |> List.map (fun (justification, derivation) ->
+        JustificationSet.{ justification; derivation }
+    )
+  in
+  let* () =
+    send_data
+      (Yojson.Safe.to_string
+         (JustificationSet.message_to_yojson
+            { type_ = "justification_set"; justifications = entries }
+         )
+      )
+  in
+    Logs_safe.info (fun m ->
+        m "Justification set sent (%d)" (List.length entries)
+    );
+    Lwt.return ctx
+
 (** [send_single_execution_graph ~send_data ~build_exec_graph checked_executions
      i exec] sends a single execution graph as a JSON message.
 

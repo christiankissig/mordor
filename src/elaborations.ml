@@ -1556,18 +1556,26 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
 
     let just_cache = JustificationCache.create 1024 in
       let* final_justs = fixed_point [] pre_justs just_cache in
-        let* just_str =
-          Lwt_list.map_s
+        (* The derivation of each justification, kept rather than dropped with
+           the elaboration context: it is the part that explains a surprising
+           result, and it reached exactly one debug line (github #80). *)
+        let derivations =
+          List.map
             (fun just ->
-              let op_trace = OpTrace.find_opt elab_ctx.op_trace just in
-              let s =
-                Printf.sprintf "\t%s - %s"
-                  (Justification.to_string just)
-                  (Option.map op_to_string op_trace |> Option.value ~default:"")
-              in
-                Lwt.return s
+              ( Justification.to_string just,
+                OpTrace.find_opt elab_ctx.op_trace just
+                |> Option.map op_to_string
+                |> Option.value ~default:"PreJustification" )
             )
             final_justs
+          |> List.sort_uniq compare
+        in
+        let* just_str =
+          Lwt_list.map_s
+            (fun (rendered, derivation) ->
+              Lwt.return (Printf.sprintf "\t%s - %s" rendered derivation)
+            )
+            derivations
         in
 
         Logs_safe.debug (fun m ->
@@ -1578,7 +1586,7 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
 
         Option.iter Lwt_domain.teardown_pool pool;
         Landmark.exit landmark;
-        Lwt.return final_justs
+        Lwt.return (final_justs, derivations)
 
 (** [generate_justifications structure init_ppo] generates justifications.
 
@@ -1635,7 +1643,7 @@ let step_generate_justifications ?(collapse_forwarding = false)
                   Lwt.return fwd_es_ctx
         in
         let init_ppo = Eventstructures.init_ppo structure in
-          let* final_justs =
+          let* final_justs, derivations =
             generate_justifications ~num_threads:ctx.num_threads
               ~collapse_forwarding structure fwd_es_ctx init_ppo
           in
@@ -1643,6 +1651,7 @@ let step_generate_justifications ?(collapse_forwarding = false)
                 m "Generated %d justifications." (List.length final_justs)
             );
             ctx.justifications <- Some final_justs;
+            ctx.justification_derivations <- Some derivations;
             Lwt.return ctx
     | None ->
         Logs_safe.err (fun m -> m "No event structure found in context.");

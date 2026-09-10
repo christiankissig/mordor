@@ -50,6 +50,9 @@ module Config = struct
     | Executions
         (** Export all executions with events and relations (po, dp, ppo, rf,
             rmw) in the configured output format (default JSON). *)
+    | Justifications
+        (** Dump the program's overall justification set with the elaboration
+            step that derived each one. *)
   [@@deriving show]
 
   (** Complete configuration for a Mordor run.
@@ -565,6 +568,65 @@ module Pipeline = struct
       |> Executions_export.step_export_executions
       |> Display.print_results
 
+  (** {2 Justifications Command} *)
+
+  (** Dump the program's justification set and how each was derived.
+
+      The set is on the context as soon as elaboration has run, and the
+      derivation with it (see [Context.justification_derivations]); until
+      github #80 neither reached any output, so the only way to see them was a
+      debug log.
+
+      @param name Program name
+      @param program Program source
+      @param config Configuration
+      @return Unit wrapped in Lwt *)
+  let export_justifications name program config =
+    Logs.info (fun m -> m "Generating justifications for program %s." name);
+    let context = make_program_context name program config in
+    let* ctx =
+      Lwt.return context
+      |> Parse.step_parse_litmus
+      |> Interpret.step_interpret
+      |> Elaborations.step_generate_justifications
+    in
+    let derivations =
+      Option.value ctx.justification_derivations ~default:[]
+    in
+      ( match config.Config.output_mode with
+      | Some Json ->
+          let json =
+            `Assoc
+              [
+                ("program", `String ctx.litmus_name);
+                ( "justifications",
+                  `List
+                    (List.map
+                       (fun (justification, derivation) ->
+                         `Assoc
+                           [
+                             ("justification", `String justification);
+                             ("derivation", `String derivation);
+                           ]
+                       )
+                       derivations
+                    )
+                );
+              ]
+          in
+            print_string (Yojson.Safe.pretty_to_string json)
+      | _ ->
+          Printf.printf "=== Justifications for %s (%d) ===\n" ctx.litmus_name
+            (List.length derivations);
+          List.iter
+            (fun (justification, derivation) ->
+              Printf.printf "%s\n    <- %s\n" justification derivation
+            )
+            derivations
+      );
+      print_newline ();
+      Lwt.return_unit
+
   (** {2 Dependencies Command} *)
 
   (** Report the dependency relations of a single program.
@@ -653,6 +715,13 @@ module Pipeline = struct
             "Dependencies command with --output-mode json requires exactly one \
              input program (use --single)";
         dependencies_tests tests config
+    | Config.Justifications ->
+        if List.length tests <> 1 then
+          failwith
+            "Justifications command requires exactly one input program (use \
+             --single)";
+        let name, program = List.hd tests in
+          export_justifications name program config
     | Config.Executions ->
         if List.length tests <> 1 then
           failwith
@@ -863,12 +932,13 @@ module CLI = struct
         | "visual-es" -> state.command <- Some Config.VisualEs
         | "futures" -> state.command <- Some Config.Futures
         | "executions" -> state.command <- Some Config.Executions
+        | "justifications" -> state.command <- Some Config.Justifications
         | "dependencies" -> state.command <- Some Config.Dependencies
         | cmd ->
             Printf.eprintf "Error: Unknown command '%s'\n" cmd;
             Printf.eprintf
               "Valid commands: run, parse, interpret, episodicity, visual-es, \
-               futures, executions, dependencies\n";
+               futures, executions, justifications, dependencies\n";
             exit 1
       )
 

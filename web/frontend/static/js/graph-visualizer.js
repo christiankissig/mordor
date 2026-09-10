@@ -1403,6 +1403,31 @@ class GraphVisualizer {
         }
     }
 
+    // The program's overall justification set. A derivation names its parent
+    // justification, so the set reads as a derivation chain; LiftElab names two,
+    // which is why it is a DAG rather than a tree.
+    renderJustificationSet() {
+        const panel = document.getElementById('justification-set');
+        const count = document.getElementById('justification-set-count');
+        if (!panel || !count) return;
+        const entries = this.justificationSet || [];
+        count.textContent = String(entries.length);
+        panel.replaceChildren();
+        for (const entry of entries) {
+            const item = document.createElement('div');
+            item.style.marginBottom = '0.35rem';
+            const head = document.createElement('div');
+            head.textContent = entry.justification;
+            const derivation = document.createElement('div');
+            derivation.textContent = '\u2190 ' + entry.derivation;
+            derivation.style.opacity = '0.75';
+            derivation.style.paddingLeft = '1.2rem';
+            item.appendChild(head);
+            item.appendChild(derivation);
+            panel.appendChild(item);
+        }
+    }
+
     // The justifications the execution was frozen from. They used to be dropped
     // at the freeze/dedup boundary (github #3), so an execution could not say
     // what justified it; the button reports how many there are and toggles the
@@ -1652,6 +1677,14 @@ class GraphVisualizer {
                     instances: data.instances || []
                 };
                 this.renderAssertions();
+            } else if (data.type === 'justification_set') {
+                // The program's whole justification set, independent of any one
+                // execution, with the elaboration step that derived each. It was
+                // computed and kept on the context all along and surfaced
+                // nowhere (github #80).
+                this.justificationSet = data.justifications || [];
+                this.renderJustificationSet();
+                this.log(`Received justification set (${this.justificationSet.length})`);
             } else if (data.type === 'event_structure') {
                 this.log('Received event structure');
                 this.graphs.push(data.graph);

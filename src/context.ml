@@ -382,6 +382,15 @@ type mordor_ctx = {
   mutable source_spans : event_source_code_span option;
       (** Source code locations for events *)
   (* Justifications *)
+  mutable justification_derivations : (string * string) list option;
+      (** Each justification, rendered, paired with the elaboration step that
+          produced it -- [PreJustification], [Forwarding ...], [LiftElab ...].
+
+          [Elaborations] records this in [elab_ctx.op_trace] and used to drop it
+          with the elaboration context, so the derivation reached exactly one
+          debug line and nothing else (github #80). Rendered rather than kept
+          structurally because [op] lives in [Elaborations], which is compiled
+          after this. *)
   mutable justifications : justification list option;
       (** Justification relations (for RC11/MRD dependency tracking) *)
   (* Executions *)
@@ -436,6 +445,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     structure = None;
     fwd_es_ctx = None;
     source_spans = None;
+    justification_derivations = None;
     justifications = None;
     executions = None;
     futures = None;

@@ -58,8 +58,25 @@ type json_execution = {
 }
 [@@deriving yojson]
 
-(** Top-level document: program name and an array of executions. *)
-type json_executions = { program : string; executions : json_execution list }
+(** One justification of the program's overall set, with how it was derived. *)
+type json_justification = {
+  justification : string;  (** The justification, rendered *)
+  derivation : string;
+      (** The elaboration step that produced it: [PreJustification],
+          [Forwarding ...], [LiftElab ... and ...], ... *)
+}
+[@@deriving yojson]
+
+(** Top-level document: program name, the overall justification set, and an
+    array of executions. *)
+type json_executions = {
+  program : string;
+  justifications : json_justification list; [@default []]
+      (** Every justification the elaborations produced for the program,
+          independent of any one execution, each with its derivation. Held on
+          the context all along and surfaced by nothing (github #80). *)
+  executions : json_execution list;
+}
 [@@deriving yojson]
 
 let mode_to_string (m : mode) : string =
@@ -131,7 +148,19 @@ let build_executions_document (ctx : mordor_ctx) : json_executions option =
   | Some structure, Some executions ->
       let exec_list = USet.values executions in
       let exec_jsons = List.map (execution_to_json structure) exec_list in
-        Some { program = ctx.litmus_name; executions = exec_jsons }
+        let justifications =
+          ctx.justification_derivations
+          |> Option.value ~default:[]
+          |> List.map (fun (justification, derivation) ->
+              { justification; derivation }
+          )
+        in
+          Some
+            {
+              program = ctx.litmus_name;
+              justifications;
+              executions = exec_jsons;
+            }
   | _ -> None
 
 (** Serialise the executions document to a JSON string.

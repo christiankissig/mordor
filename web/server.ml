@@ -161,6 +161,7 @@ let visualize_to_stream program options step_counter stream =
       |> Episodicity.step_test_episodicity
            ~on_loop_result:(Episodicity.send_loop_episodicity_result send_data)
       |> Elaborations.step_generate_justifications
+      |> Eventstructureviz.step_send_justification_set ~send_data
       |> Executions.step_calculate_dependencies
       |> Assertion.step_check_assertions
       |> Assertion.step_send_assertion_results ~send_data
@@ -271,6 +272,7 @@ let visualize_test_assertions_to_stream program options step_counter stream =
       |> Episodicity.step_test_episodicity
            ~on_loop_result:(Episodicity.send_loop_episodicity_result send_data)
       |> Elaborations.step_generate_justifications
+      |> Eventstructureviz.step_send_justification_set ~send_data
       |> Executions.step_calculate_dependencies
       |> Assertion.step_check_assertions
       |> Assertion.step_send_assertion_results ~send_data
