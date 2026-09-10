@@ -1,20 +1,28 @@
+// JCTC20 is JCTC18 with thread 1 split into two threads, so the three threads
+// are concurrent. Until this was corrected the file put the second half of
+// thread 1 after the parallel block as a join continuation, with an empty
+// `||| { skip }` where the third thread should be. That was written when
+// statements following a parallel block were silently dropped (#81), which left
+// r1 unassigned and the assertion free to be satisfied by the then-vacuous
+// solver query. With the join honoured the encoding is provably unwitnessable:
+// `r2 := y` sits inside the block and `y := r1` after it, so r2 can never see 42
+// however thread 3 is justified.
 x := 0;
 y := 0;
 {
-  // Thread 2
-  r2 := y;
-  x := r2
-} ||| {
-  // Thread 3
+  // Thread 1a
   r3 := x;
   if (r3 = 0) {
     x := 42
   } else { skip }
 } ||| {
-  skip
-};
-// Join thread 3
-r1 := x;
-y := r1;
+  // Thread 1b
+  r1 := x;
+  y := r1
+} ||| {
+  // Thread 2
+  r2 := y;
+  x := r2
+}
 %%
 allow (r1 = 42 && r2 = 42 && r3 = 42) [] "Allowed. This is the same as test case 18, except that thread 1 has been split into two threads."
