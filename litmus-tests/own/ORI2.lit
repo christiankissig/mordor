@@ -1,0 +1,31 @@
+// Out-of-thin-air through a guarded write of a read value -- ORI.lit renamed,
+// with a flag write added in the then branch.
+//
+// MoRDor's own test, not vendored. Same shape and same cause as ORI.lit: the
+// write `Z := ra` is reached only under `ra = 1`, so the guard pins its value
+// and the write depends on the read of X. See ORI.lit for the cycle.
+//
+// This forbid had a witness (#56) until ValueAssignElab stopped discharging the
+// conjuncts that pin a write's own value. 52 executions became 48.
+flag := 0; X := 0; Y := 0; Z := 0; K := 0;
+{
+	rd := Z;
+	X := rd
+}|||{
+	Y := 1;
+	K.store(42, release)
+}|||{
+	rk := K.load(acquire);
+	if (rk = 42) {
+		ra := X;
+		if (ra = 1) {
+			Z := ra;
+			flag := 1
+		} else {
+			rb := Y;
+			Z := rb
+		}
+	}
+}
+%%
+forbid (rk = 42 && ra = 1) []

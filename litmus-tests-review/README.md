@@ -17,11 +17,12 @@ the one the literature records.
 
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
-Every file here has an issue: #36 and #41-#65. Each records the symptom, the model actually in effect, where
-the test comes from and what to look at next.
+Every file here has an issue in the #36, #41-#65 range. Each records the symptom, the model actually in
+effect, where the test comes from and what to look at next. Twenty files remain; #44, #47, #55, #56, #57 and
+#59 have been fixed and their files returned to `litmus-tests/`.
 
 The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
-models. Fifteen tests are checked under one of those, so a divergence is a defect and the issue is labelled
+models. Ten tests are checked under one of those, so a divergence is a defect and the issue is labelled
 `bug`. The other ten name a model that is not — `[Problem]`, `[JR]`, `[Bubbly]` and `[Sevcik]` have a
 `model_options_table` entry with `coherent = None` and so fall through to the `smrd` default, while
 `[Bridging]`, `[Grounding]`, `[Power]` and `[IMM]` map to `imm`. Those are labelled `smrd-unsupported` and
@@ -63,23 +64,29 @@ the first honest reading.
 |---|---|---|
 | [`avoidoota/additional_nonlb.lit`](avoidoota/additional_nonlb.lit) #41 | forbid `@x=42 ∧ @y=42 ∧ @z=42` | sMRD |
 | [`avoidoota/listing16.lit`](avoidoota/listing16.lit) #43 | forbid `r1=17 ∧ r2=17 ∧ r3=17` | sMRD |
-| [`avoidoota/listing19.lit`](avoidoota/listing19.lit) #44 | forbid `r1=17 ∧ r3=17 ∧ r5=17` | sMRD |
 | [`avoidoota/listing27_forbid.lit`](avoidoota/listing27_forbid.lit) #45 | forbid `r1=1 ∧ r2=1` | sMRD |
 | [`jctc/JCTC12.lit`](jctc/JCTC12.lit) #48 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
-| [`own/ORI.lit`](own/ORI.lit) #55 | forbid `r3=42 ∧ r1=1` | sMRD |
-| [`own/ORI2.lit`](own/ORI2.lit) #56 | forbid `rk=42 ∧ ra=1` | sMRD |
 | [`on_thin_air_reads19/P5.lit`](on_thin_air_reads19/P5.lit) #54 | forbid `r1=1` | `[JR]` → sMRD |
-| [`esop_problem/lb+ctrldat+ctrl-single.lit`](esop_problem/lb+ctrldat+ctrl-single.lit) #47 | forbid `r1=42 ∧ r2=42` | `[Problem]` → sMRD |
-| [`popl_bubbly/LB+deps.lit`](popl_bubbly/LB+deps.lit) #59 | forbid `r1=42 ∧ r2=42` | `[Bubbly]` → sMRD |
 | [`popl_bridging/Preserving detour.lit`](popl_bridging/Preserving detour.lit) #58 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | `[Bridging]` → IMM |
 | [`sevcik_thesis/Skip/LB+locks.lit`](sevcik_thesis/Skip/LB+locks.lit) #64 | forbid `r1=1 ∧ r2=1` | `[Sevcik]` → sMRD |
 | [`popl_promising/Page 7 Column 1b.lit`](popl_promising/Page 7 Column 1b.lit) #61 | forbid `r2=3 ∧ r3=0` | `[IMM]` |
 | [`rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit`](rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit) #63 | forbid `r1=1 ∧ r2=0` | `[Power]` → IMM |
 
-Most of this group is out-of-thin-air: the `avoidoota` listings, `JCTC12`, `P5`,
-`ORI`/`ORI2` and the load-buffering shapes are all asking that a value not be
-justified by a cycle through its own dependencies. `no_oota` is the property MRD
-exists to deliver, so these are the load-bearing ones.
+Most of this group is out-of-thin-air: the `avoidoota` listings, `JCTC12`, `P5`
+and the load-buffering shapes are all asking that a value not be justified by a
+cycle through its own dependencies. `no_oota` is the property MRD exists to
+deliver, so these are the load-bearing ones.
+
+**Five have left this table.** `own/ORI.lit` #55, `own/ORI2.lit` #56,
+`avoidoota/listing19.lit` #44, `esop_problem/lb+ctrldat+ctrl-single.lit` #47 and
+`popl_bubbly/LB+deps.lit` #59 are back in `litmus-tests/`. They shared one cause:
+`ValueAssignElab` concretised a write value using a model of the path predicate
+and discharged the whole predicate in the same step, so a guard that pinned the
+value pinned it and then vanished, and `d` — rebuilt from what was left — no
+longer held the read the value came from. MoRDor allowed `LB+deps` under sMRD,
+MRD's headline no-thin-air example, on exactly that. Conjuncts that constrain the
+write's own value are now retained. What remains in this table did not move, so
+whatever those need, it is not this.
 
 `MP+fence+addr.lit` is different in kind and is the sharpest single case:
 message passing with a fence on the writer and an address dependency on the

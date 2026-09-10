@@ -1,0 +1,33 @@
+// Load buffering with a dependency on both sides, under sMRD.
+//
+// MRD's headline no-thin-air result: the write of y is reached only when r1 is
+// positive and writes r1's own value, so it depends on the read of x, and
+// symmetrically on the other side. The outcome needs each read to be justified
+// by a cycle through its own dependency, which is thin air.
+//
+// pldi_repairing/LB+deps.lit is the same program asked of RC11, which forbids
+// it for a blunter reason -- acyclic(sb u rf) forbids every load-buffering
+// shape, dependency or not (see pldi_repairing/LB.lit). This file is the one
+// that exercises sMRD's own dependency reasoning, and it is what MRD exists to
+// deliver.
+//
+// It was allowed until ValueAssignElab stopped discharging the conjuncts that
+// pin a write's own value: a model of `r1 > 0` concretised `W y r1` to `W y 1`
+// and dropped `r1 > 0` in the same step, so the write depended on nothing.
+// 5 executions became 1. The constant-valued variant next door was forbidden
+// throughout, which is what made the mechanism visible.
+x := 0;
+y := 0;
+{
+  r1 := x;
+  if (r1 > 0) {
+    y := r1
+  }
+} ||| {
+  r2 := y;
+  if (r2 > 0) {
+    x := r2
+  }
+}
+%%
+forbid (r1 = 1 && r2 = 1) []

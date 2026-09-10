@@ -1,0 +1,33 @@
+// Out-of-thin-air through a guarded write of a read value.
+//
+// MoRDor's own test, not vendored. Thread 3 reaches `z := r1` only under
+// `r1 = 1`, so the write's value is pinned by the guard and the write depends on
+// the read of x that produced it. The cycle it would close is
+// r1 := x -> z := r1 -> r0 := z -> x := r0 -> r1 := x, which is thin air.
+//
+// This forbid had a witness (#55) until ValueAssignElab stopped discharging the
+// conjuncts that pin a write's own value: it concretised `W z r1` to `W z 1`
+// using a model of `r1 = 1` and dropped `r1 = 1` in the same step, leaving the
+// write justified by nothing. 52 executions became 48.
+x := 0; z := 0; y := 0; k := 0;
+{
+  r0 := z;
+  x := r0
+} ||| {
+  y.store(1, nonatomic);
+  k.store(42, release)
+} ||| {
+  r3 := k.load(acquire);
+  if (r3 = 42) {
+    r1 := x;
+    if (r1 = 1) {
+      z := r1;
+      //print ("boom")
+    } else {
+      r2 := y.load(nonatomic);
+      z := r2
+    }
+  }
+}
+%%
+forbid (r3 = 42 && r1 = 1) []

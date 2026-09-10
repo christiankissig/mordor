@@ -1,0 +1,22 @@
+// Load buffering with a dependency on both sides, writing a constant.
+//
+// The companion to LB+deps-smrd.lit: same shape, but each guarded write stores
+// the literal 1 rather than the register the guard tested. sMRD forbids both,
+// and forbade this one throughout -- ValueAssignElab returns nothing when the
+// write value is already the constant, so the guard was never discharged here.
+// Keeping the pair adjacent is what makes the asymmetry visible if it returns.
+x := 0;
+y := 0;
+{
+  r1 := x;
+  if (r1 > 0) {
+    y := 1
+  }
+} ||| {
+  r2 := y;
+  if (r2 > 0) {
+    x := 1
+  }
+}
+%%
+forbid (r1 = 1 && r2 = 1) []

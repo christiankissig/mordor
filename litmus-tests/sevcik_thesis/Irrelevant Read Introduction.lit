@@ -1,3 +1,24 @@
+// Irrelevant read introduction -- the b-variant next door is the same program
+// with the introduced read commented out.
+//
+// Source: Sevcik, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008). Introducing a read whose value is immediately
+//         overwritten is a transformation any model ought to validate; a model
+//         whose verdict moves when you add one is broken, and exhibiting that
+//         is what the pair is for.
+//
+// The two files now agree: both forbid r1 = 1 && r2 = 1, and both produce 36
+// executions. The outcome is out of thin air either way -- r1 = 1 needs z = 1,
+// which needs r2 = 1, which needs y = 1, which in the else branch is y := r1
+// again.
+//
+// This file asserted `allow` until the value-assignment elaboration stopped
+// discharging the conjuncts that pin a write's own value. Under `y := r1`
+// guarded by `r1 != 0`, the elaboration used to concretise the write to 1 and
+// drop the guard in the same step, leaving the write justified by nothing --
+// so the introduced read did move the verdict, and this file recorded that it
+// had. With the guard retained the read is genuinely irrelevant: 44 executions
+// became 36, which is exactly the b-variant's count.
 x := 0;
 y := 0;
 z := 0;
@@ -19,4 +40,4 @@ z := 0;
   z := r2
 }
 %%
-allow (r1 = 1 && r2 = 1) [Sevcik]
+forbid (r1 = 1 && r2 = 1) [Sevcik]

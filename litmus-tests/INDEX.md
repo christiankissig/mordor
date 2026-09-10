@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 264
+Total tests: 271
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -33,6 +33,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - avoidoota/listing15.lit
 - avoidoota/listing17.lit
 - avoidoota/listing18.lit
+- avoidoota/listing19.lit
 - avoidoota/listing20.lit
 - avoidoota/listing21.lit
 - avoidoota/listing22.lit
@@ -50,6 +51,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - basic/rw.lit
 - c20/rs-example.lit
 - esop_problem/cse.lit
+- esop_problem/lb+ctrldat+ctrl-single.lit
 - esop_problem/lb+ctrldata+ctrl-double.lit
 - esop_problem/lb+ctrldata+po.lit
 - esop_problem/lb+datas.lit
@@ -101,8 +103,12 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - own/FreeRace.lit
 - own/FreeRace2.lit
 - own/JCTC12.lit
+- own/LB+deps+const-smrd.lit
+- own/LB+deps-smrd.lit
 - own/LF.lit
 - own/OOTA7.lit
+- own/ORI.lit
+- own/ORI2.lit
 - own/VRA-JCTC1.lit
 - own/coproductReorder.lit
 - own/ctrl_subsumed_by_data.lit
@@ -136,6 +142,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - popl_bridging/PSC.lit
 - popl_bridging/RMW Atomicity.lit
 - popl_bridging/rfi is not always preserved.lit
+- popl_bubbly/LB+deps.lit
 - popl_bubbly/LB+false-deps.lit
 - popl_bubbly/LB.lit
 - popl_grounding/Coh-CYC (Soham).lit
