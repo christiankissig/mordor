@@ -39,35 +39,44 @@ different question from the one the file asks.
 | Test | Asserts | Reference verdict | sMRD fallback |
 |---|---|---|---|
 | `models/ra-sra-wra/2+2W+rel+acq.lit` | allow `r0=1 ∧ r1=1` | RA/WRA allow; SRA/SC forbid | allows ✓ |
-| `models/ra-sra-wra/MP+rel+acq.lit` | forbid `r0=1 ∧ r1=0` | all forbid (negative control) | **allows ✗** |
 | `models/ra-sra-wra/Oscillating.lit` | forbid `r0=1 ∧ r1=2 ∧ r2=1` | WRA allows; RA/SRA/C11/SC forbid | forbids ✓ |
 | `models/ra-sra-wra/SF.lit` | forbid `r0=2 ∧ r1=1` | WRA allows; RA/SRA/C11/SC forbid | forbids ✓ |
 | `models/ra-sra-wra/WW.lit` | forbid `r0=2 ∧ r1=1` | WRA allows; RA/SRA/C11/SC forbid | forbids ✓ |
 | `properties/atomicity-mca/IRIW+rel+acq.lit` | allow `r1=1 ∧ r2=0 ∧ r3=1 ∧ r4=0` | WRA/RA/SRA/C11 allow; SC forbids | allows ✓ |
-| `properties/atomicity-mca/WRC+rel+acq.lit` | forbid `r1=1 ∧ r2=1 ∧ r3=0` | all forbid (negative control) | **allows ✗** |
 
-## The two negative controls do not hold — #67, #68
+The two negative controls that used to sit in this table — `MP+rel+acq.lit` and
+`WRC+rel+acq.lit` — have left it; see below.
+
+## The two negative controls now hold — #67, #68 (fixed)
 
 `MP+rel+acq` and `WRC+rel+acq` are message passing over a release write and an
 acquire read. **Every** model in the zoo's RA family forbids them, sMRD included
 — they are in the set precisely as controls, to show a witness set is not
-vacuous. MoRDor reports a witnessing execution for both.
+vacuous. MoRDor used to report a witnessing execution for both.
 
-This is not the missing-model problem. It is what the sMRD checker does with
-release-acquire synchronisation, and it wants investigating on its own.
+That was never the missing-model problem: RC11 and IMM forbid both, in one
+execution fewer each, so there was no model disagreement to hide behind. The
+cause was in `src/coherence.ml`'s `SMRD.build_cache`, which built
+`hb = (ppo ∪ dp)⁺`. `rf` was not in it, so a release write read by an acquire
+read created no synchronises-with edge and the coherence axiom could not see the
+message-passing chain at all.
 
-Measured since: RC11 and IMM both forbid these two, in one execution fewer each.
-The root cause is in `src/coherence.ml`'s `SMRD.build_cache`, which builds
-`hb = (ppo ∪ dp)⁺` — `rf` is not in it, so a release write read by an acquire
-read creates no synchronises-with edge and the coherence axiom cannot see the
-message-passing chain. #67 and #68 carry the detail.
+`hb` is now `(ppo ∪ dp ∪ sw)⁺` with `sw = [W_rel];rf;[R_acq]`. The two po legs of
+the shape were already there — `Forwarding.compute_ppo_sync` orders every event
+into a release write and out of an acquire read — so the closure now derives
+`hb` from the release write's po-predecessors to the acquire read's
+po-successors, and chains two such steps for WRC. Both files forbid their outcome
+and land on the same execution counts as RC11 and IMM (5 and 11). Note the fix is
+deliberately *not* `hb ∪ rf`, which would order relaxed accesses too.
 
-It was previously invisible, and `litmus-tests/rmm-zoo/README.md` still records
-both as `forbids ✓` in its `properties/atomicity-mca/` table. That reading was
-taken from a build in which `forbid` assertions short-circuited to valid without
-being checked (`src/assertion.ml`, fixed in "Check the executions a forbid
-assertion is given"), so every `forbid` in the repository reported `✓`. The three
-rows in this file's table that still say `forbids ✓` have been re-measured since.
+Both files have moved back under `litmus-tests/rmm-zoo/` and are reannotated
+`[SMRD]`, since they are checked under sMRD and are not asking an RA-specific
+question. Fences are not covered: a relaxed write po-after a release fence still
+does not synchronise, which is `MP+fence+addr.lit` and #63.
+
+The `forbids ✓` rows in this file's table were re-measured after `forbid`
+assertions stopped short-circuiting to valid (`src/assertion.ml`, fixed in "Check
+the executions a forbid assertion is given").
 
 ## See also
 

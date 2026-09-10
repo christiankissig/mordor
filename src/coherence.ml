@@ -696,8 +696,36 @@ module SMRD : MEMORY_MODEL = struct
     let dp = USet.clone execution.dp in
     let ppo = USet.clone execution.ppo in
 
-    (* hb = ppo ∪ dp *)
-    let hb = USet.union ppo dp |> URelation.transitive_closure in
+    (* sw = [W_rel];rf;[R_acq]
+
+       Synchronizes-with. Without it [hb] carries no cross-thread edge at all,
+       so a release/acquire pair is invisible to the coherence axiom and MP over
+       release/acquire comes out allowed. The two po legs of the message-passing
+       shape are already in [ppo]: [Forwarding.compute_ppo_sync] orders every
+       event into a release write and out of an acquire read, so composing this
+       relation with [ppo] under the closure below yields the ordering from the
+       release write's po-predecessors to the acquire read's po-successors.
+
+       [rf] is deliberately *not* unioned in wholesale: that would order relaxed
+       accesses too, which sMRD does not. Only the release-to-acquire edges join
+       [hb]. Fences are not covered here -- a relaxed write po-after a release
+       fence does not yet synchronize (see issue #63). *)
+    let sw =
+      let events = structure.events in
+      let e = execution.e in
+      let w_rel =
+        ModelUtils.match_events events e Write (Some Release) (Some ">") None
+      in
+      let r_acq =
+        ModelUtils.match_events events e Read (Some Acquire) (Some ">") None
+      in
+        URelation.compose [ w_rel; rf; r_acq ]
+    in
+
+    (* hb = (ppo ∪ dp ∪ sw)⁺ *)
+    let hb =
+      USet.union ppo dp |> USet.inplace_union sw |> URelation.transitive_closure
+    in
 
     { rf; rfi; hb; rmw }
 

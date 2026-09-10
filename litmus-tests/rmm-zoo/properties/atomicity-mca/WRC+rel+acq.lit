@@ -10,6 +10,11 @@
 // about ordering by dependency, not about ordering as such.
 //
 // Reference verdicts: WRA, RA, SRA, C11, RC11, SC all FORBID.
+//
+// Annotated [SMRD] rather than [RA] because sMRD is what MoRDor runs it under
+// and sMRD forbids it too: two synchronises-with edges chained through po by
+// hb's transitive closure (#68). It allowed the outcome until sMRD's hb gained
+// those edges, which is why the file sat outside the suite.
 x := 0;
 y := 0;
 {
@@ -22,4 +27,4 @@ y := 0;
   r3 := x.load(acq)
 }
 %%
-forbid (r1 = 1 && r2 = 1 && r3 = 0) [RA]
+forbid (r1 = 1 && r2 = 1 && r3 = 0) [SMRD]

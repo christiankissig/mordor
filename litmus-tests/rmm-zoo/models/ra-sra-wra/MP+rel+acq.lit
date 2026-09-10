@@ -12,6 +12,11 @@
 // the 2+2W split above would be meaningless.
 //
 // Reference verdicts: WRA, RA, SRA, C11, RC11 and SC all FORBID.
+//
+// Annotated [SMRD] rather than [RA] because sMRD is what MoRDor runs it under
+// and sMRD forbids it for the reason above: the release/acquire pair is a
+// synchronises-with edge in sMRD's hb (#67). It allowed the outcome until that
+// edge was added, which is why the file sat outside the suite.
 x := 0;
 f := 0;
 {
@@ -22,4 +27,4 @@ f := 0;
   r1 := x.load(acq)
 }
 %%
-forbid (r0 = 1 && r1 = 0) [RA]
+forbid (r0 = 1 && r1 = 0) [SMRD]

@@ -1,7 +1,7 @@
 # Litmus Tests Index
 
-Total tests: 261
-Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
+Total tests: 263
+Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
@@ -256,14 +256,18 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-06
 > (`properties/`). See [`rmm-zoo/README.md`](rmm-zoo/README.md) for the coverage
 > analysis and the reference-verdict tables. The `models/` families moved to
 > `litmus-tests-cpp/` and `litmus-tests-ra/`, along with the `properties/` files
-> carrying their annotations.
+> carrying their annotations. `models/ra-sra-wra/MP+rel+acq.lit` and
+> `properties/atomicity-mca/WRC+rel+acq.lit` came back when sMRD's `hb` gained
+> synchronises-with (#67, #68) and are annotated `[SMRD]`.
 
+- rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit
 - rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit
 - rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit
 - rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit
+- rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit
 - rmm-zoo/properties/atomicity-mca/WRC+rlx.lit
 - rmm-zoo/properties/elimination/load-store/opt.lit
 - rmm-zoo/properties/elimination/load-store/src.lit

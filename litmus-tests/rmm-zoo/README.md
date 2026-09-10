@@ -108,7 +108,7 @@ own model is characterised by.
 
 | Key | Column | MoRDor coverage |
 |---|---|---|
-| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (7 tests here; 3 more carry `[C11]`/`[RA]`/`[SRA]` and moved to `litmus-tests-cpp/` and `litmus-tests-ra/`; `MP+fence+addr.lit` is parked in `litmus-tests-review/`) |
+| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (8 tests here; 2 more carry `[C11]`/`[SRA]` and moved to `litmus-tests-cpp/` and `litmus-tests-ra/`; `MP+fence+addr.lit` is parked in `litmus-tests-review/`) |
 
 This was the gap. The zoo has an `mca` cell for 63 models (31 true, 32 false) and
 **none for MRD or sMRD**.
@@ -134,6 +134,7 @@ single write is left as an explanation.
 | `WRC+data+addr.lit` | POWER/ARMv7 allow; **ARMv8/RVWMO/SC forbid** | allows |
 | `RWC+addr+fence.lit` | POWER/ARMv7 allow; SC/x86-TSO forbid | allows |
 | `ISA2+data+addrs.lit` | POWER/ARMv7/ARMv8 allow (P0 unfenced); SC forbids | allows |
+| `WRC+rel+acq.lit` | WRA/RA/SRA/C11/RC11/SC forbid (negative control) | forbids ✓ |
 | `MP+fence+addr.lit` (now in `litmus-tests-review/`) | POWER/ARM/ARMv8/SC forbid; bare Coherence allows (positive control) | **allows ✗** |
 
 Reading the table: **sMRD as MoRDor implements it is not multicopy atomic**, and
@@ -150,27 +151,42 @@ the point of keeping `IRIW+rlx` and `IRIW+addrs` side by side.
 
 The controls are a different matter. `MP+fence+addr` is a *positive* control —
 every model with fence ordering forbids it, and only a bare coherence checker
-allows it — and MoRDor allows it under `[Power]`, i.e. under IMM. The two
-release-acquire controls now in `litmus-tests-ra/` behave the same way. That
-points at fence and release-acquire ordering in the checker rather than at
-multicopy atomicity, and wants investigating on its own.
+allows it — and MoRDor allows it under `[Power]`, i.e. under IMM. That points at
+fence ordering in the checker rather than at multicopy atomicity, and is still
+open as #63.
+
+The two release-acquire controls used to behave the same way, and no longer do.
+sMRD's `hb` was `(ppo ∪ dp)⁺`, with no `rf` in it, so a release write read by an
+acquire read produced no synchronises-with edge and the message-passing chain was
+invisible to the coherence axiom (#67, #68). `hb` is now `(ppo ∪ dp ∪ sw)⁺` with
+`sw = [W_rel];rf;[R_acq]`, which forbids both controls and rules out exactly the
+one execution RC11 and IMM already ruled out. `WRC+rel+acq.lit` is back in the
+table above and `MP+rel+acq.lit` in `models/ra-sra-wra/`, both reannotated
+`[SMRD]`. Note this is *not* fence ordering: a relaxed write po-after a release
+fence still does not synchronise, which is why `MP+fence+addr` has not moved.
 
 An earlier revision of this table recorded `MP+fence+addr` and `WRC+rel+acq` as
 `forbids ✓`. Those readings came from a build in which `forbid` assertions
 short-circuited to valid without any execution being checked (`src/assertion.ml`;
 see the commit "Check the executions a forbid assertion is given"), so every
 `forbid` in the repository reported `✓`. Every row above has been re-measured
-since.
+since — including `WRC+rel+acq`, whose `forbids ✓` is now earned rather than
+vacuous.
 
 `IRIW+scfences` is a second finding worth flagging: MoRDor allows it, matching
 C11/C++17 and the known SC-fence defect that P0668 repaired, not RC11/C++20.
 
-## `models/ra-sra-wra/` — moved
+## `models/ra-sra-wra/`
 
 The release-acquire family (WRA ⊂ RA ⊂ SRA) is annotated `[RA]` / `[SRA]`, which
 `ModelRegistry` has no entry for, so the suite was checking it under the `smrd`
-fallback. It now lives in `litmus-tests-ra/`, with the reference verdicts and the
-per-test analysis in `litmus-tests-ra/README.md`.
+fallback. Four of the five live in `litmus-tests-ra/`, with the reference
+verdicts and the per-test analysis in `litmus-tests-ra/README.md`.
+
+`MP+rel+acq.lit` is the exception and is back here. It is the family's negative
+control — every model in the zoo forbids it — so it is not asking an RA-specific
+question, and sMRD forbids it once `sw` is in `hb` (#67). It is annotated
+`[SMRD]`, since that is the model it is checked under.
 
 ## `models/cpp-release-sequences/` — moved
 
