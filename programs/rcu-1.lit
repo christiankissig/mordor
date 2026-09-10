@@ -13,16 +13,16 @@ rdet := malloc rN;
 // inc
 rtid := 0;
 rn := malloc 1;
-*(rrcu+rtid) := 1;
+*(rrcu+rtid) :v= 1;
 do {
-  *(rrcu+rtid) := 0;
-  *(rrcu+rtid) := 1;
+  *(rrcu+rtid) :v= 0;
+  *(rrcu+rtid) :v= 1;
   rs := fadd(acquire,release,rC,0);
   rv := *rs;
   *rn := rv+1;
   rsucc := cas(acquire,release,rC,rs,rn);
 } while (rsucc = 0);
-*(rrcu + rtid) := 0;
+*(rrcu+rtid) :v= 0;
 
 // reclaim
 *(rdet + rtid) := rs;
