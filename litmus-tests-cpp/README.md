@@ -56,7 +56,7 @@ and two more differ only in which disjunct they ask about
 | Test | Asserts | C++11 | C++17 | C++20 | sMRD fallback |
 |---|---|---|---|---|---|
 | `mp-rs.lit` | allow `r1=2 ∧ r2=0` | forbid | allow* | allow* | allows |
-| `mp-rs-strel.lit` | forbid `r1=2 ∧ r2=0` | forbid | forbid | forbid | allows |
+| `mp-rs-strel.lit` | forbid `r1=2 ∧ r2=0` | forbid | forbid | forbid | **forbids** |
 | `mp-rs-add.lit` | forbid `r1=2 ∧ r2=0` | forbid | forbid | forbid | allows |
 | `mp-rs-eadd.lit` | forbid `r1=2 ∧ r2=0` | forbid | forbid | forbid | allows |
 | `mp-rs-est.lit` | allow `r1=2 ∧ r2=0` | allow* | allow* | allow* | allows |
@@ -73,7 +73,16 @@ and two more differ only in which disjunct they ask about
 `*` = the allowing model reports the execution as a data race.
 
 The four `forbid` rows are the discriminating ones: a model without
-release-sequence semantics allows all of them, and sMRD does.
+release-sequence semantics allows all of them.
+
+sMRD allowed all four when this table was first measured. It now forbids
+`mp-rs-strel`, where both flag stores are releases: `4432a08` gave sMRD's `hb` a
+synchronises-with edge, `sw = [W_rel];rf;[R_acq]`, so the acquire load of the
+second release store is now ordered after the non-atomic write it publishes.
+That is the one row where sMRD and the C++ reference agree, and it is the row
+that does not need release *sequences* to decide -- a release store heads its own
+sequence. The other three turn on what a *relaxed* store does to a sequence it is
+appended to, which sMRD still has nothing to say about.
 
 ### Elsewhere in the zoo
 
