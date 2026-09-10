@@ -31,6 +31,15 @@ carry no `bug` label: they compare one model's expectation against another model
 not claimed to agree, so a divergence there may be entirely correct. Each needs triaging as "does sMRD agree
 with the reference on this shape?" before it is treated as a defect.
 
+**The `jctc/` group has since been triaged that way, and six of its seven moved.** Their verdicts are Java
+Memory Model judgments (Pugh's Causality Test Cases, the JSR-133 battery), decided here under the `smrd`
+default because the files name no model. The sMRD paper says its assertions record the expectation *for C++*,
+and that the model gives the desired behaviour everywhere "except where open questions of thread inlining and
+optimisations using global analysis leave the desired behaviour ambiguous" — which is exactly the six: JCTC2,
+JCTC3, JCTC6 and JCTC9b rest on global analysis, JCTC19 and JCTC20 on thread inlining. They are now
+`smrd-unsupported`. `JCTC12` (#48) keeps `bug`: it is Example 2.4 of that paper, worked through there and
+forbidden by the model. See [`litmus-tests/jctc/README.md`](../litmus-tests/jctc/README.md).
+
 ## How these were found
 
 Until 2026-09-06 the suite was green on every one of these. Three
