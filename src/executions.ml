@@ -1228,21 +1228,44 @@ module Freeze = struct
     in
     let delta = USet.union fwd we in
 
+    (* Create forwarding context *)
+    let fwd_ctx = ForwardingContext.create fwd_es_ctx ~fwd ~we () in
+
     (* Compute dependency relation *)
     let unelided_justs =
       USet.filter (fun j -> not (USet.mem elided j.w.label)) justs
     in
 
-    let dp = USet.map (freeze_dp structure) unelided_justs |> USet.flatten in
+    let dp =
+      USet.map (freeze_dp structure) unelided_justs
+      |> USet.flatten
+      (* Through the forwarding context, not straight to the intersection with
+         [e_squared] below.
+
+         [freeze_dp] names the origin of each symbol a justification depends on,
+         and the origin of a forwarded read is the read itself -- which [delta]
+         has elided, so the edge points outside the execution and the
+         intersection drops it.  The dependency has not gone anywhere: the value
+         now comes from the write it was forwarded from, so the edge belongs on
+         that write.  [remap] follows the chain to it and drops the self-edges
+         that result.
+
+         Without this, forwarding launders a dependency cycle.  In
+         avoidoota/listing16.lit thread 2 is
+
+           r2 := y; z := r2; r3 := z; x := r3
+
+         and [R z] is forwarded from [W z r2], so [W x r3] recorded no
+         dependency at all and the out-of-thin-air chain
+         x -> r1 -> y -> r2 -> z -> r3 -> x was broken at that step. *)
+      |> ForwardingContext.remap_rel fwd_ctx
+    in
 
     Logs_safe.debug (fun m ->
         m "[freeze] Computed dependency relation dp with %d edges:\n %s"
           (USet.size dp)
           (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) dp)
     );
-
-    (* Create forwarding context *)
-    let fwd_ctx = ForwardingContext.create fwd_es_ctx ~fwd ~we () in
 
     (* Combine predicates *)
     let p_combined =
