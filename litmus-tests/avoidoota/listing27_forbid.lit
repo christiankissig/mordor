@@ -1,0 +1,25 @@
+// Load buffering where one write's value comes from a division that is
+// undefined unless the read returned 0 -- the model-dependent half of the pair.
+//
+// Source: the MRD line's numbered out-of-thin-air listings.
+//
+// listing27_allow.lit is the same program annotated [UB11] and asserts the
+// opposite. Both are right: a model that exploits undefined behaviour may
+// assume r2 = 0 (else 1 / !r2 divides by zero), fold the write to y := 1 and
+// break the dependency, so the outcome is allowed; a model that does not keeps
+// the dependency on r2 and the outcome is out of thin air.
+//
+// This file names no model, so it is checked under smrd, whose ubopt is false.
+// It had a witness (#45) because Interpret applied the fold unconditionally --
+// options.ubopt was in the table, set by no one and read by no one, so [UB11]
+// and no annotation were indistinguishable and the pair could not both hold.
+// 31 executions became 27.
+x := 0; y := 0;
+{
+  r1 := y;
+  x := r1
+}|||{
+  r2 := x;
+  y := 1 / !r2
+}
+%% forbid (r1 = 1 && r2 = 1) []

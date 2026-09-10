@@ -529,7 +529,12 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
           Logs_safe.debug (fun m -> m "setting coherent %s" coherent);
           ctx.options.coherent <- coherent
         )
-        options.coherent
+        options.coherent;
+      (* The table has carried [ubopt] since it was written and nothing ever
+         read it, so [UB11] and no annotation at all behaved identically.
+         [Interpret] now gates the [e / !r -> e] rewrite on it. *)
+      Logs_safe.debug (fun m -> m "setting ubopt %b" options.ubopt);
+      ctx.options.ubopt <- options.ubopt
 
 (** Create a new pipeline context and immediately apply model-specific options.
 

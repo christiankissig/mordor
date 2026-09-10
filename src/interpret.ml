@@ -89,14 +89,18 @@ type events_t = {
   source_spans : (int, source_span) Hashtbl.t;
       (** Mapping from event labels to source code spans. *)
   globals : string USet.t;  (** Set of global variable names. *)
+  ubopt : bool;
+      (** Whether the model exploits undefined behaviour. Gates the rewrite in
+          {!apply_ub_constraints}. *)
   mutable label : int;  (** Counter for generating unique event labels. *)
 }
 
 (** Create a new empty events structure.
     @return A fresh events_t with empty tables and zero label counter. *)
-let create_events defacto =
+let create_events ?(ubopt = false) defacto =
   {
     defacto;
+    ubopt;
     events = Hashtbl.create 256;
     origin = Hashtbl.create 256;
     env_by_evt = Hashtbl.create 256;
@@ -107,6 +111,22 @@ let create_events defacto =
     globals = USet.create ();
     label = 0;
   }
+
+(** [apply_ub_constraints events e] folds [lhs / !r] to [lhs] when the model
+    exploits undefined behaviour, and leaves [e] alone otherwise.
+
+    Division by zero is undefined, so under a UB-exploiting model an
+    implementation may assume [!r <> 0] -- that is, [r = 0] -- and fold
+    [1 / !r] to [1]. The fold is what breaks the dependency of the written value
+    on the read, and it is the whole content of the [LB+UB+data] family.
+
+    It used to be applied unconditionally, which made [UB11] and no annotation
+    indistinguishable and left [avoidoota/listing27_allow.lit] and
+    [listing27_forbid.lit] -- the same program, asserting opposite outcomes
+    under different models -- with the same verdict. [options.ubopt] has always
+    said which models exploit UB; nothing read it. *)
+let apply_ub_constraints events e =
+  if events.ubopt then Expr.apply_constraints e else e
 
 (** Add an event to the global events structure.
 
@@ -254,7 +274,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
         | RegisterStore { register; expr } ->
             let expr_value =
               Expr.evaluate ~env:(Hashtbl.find_opt env) expr
-              |> Expr.apply_constraints
+              |> apply_ub_constraints events
             in
             let env' = update_env env register expr_value in
             let cont = recurse rest env' phi events in
@@ -266,7 +286,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
         | GlobalStore { global; expr; assign } ->
             let wval =
               Expr.evaluate ~env:(Hashtbl.find_opt env) expr
-              |> Expr.apply_constraints
+              |> apply_ub_constraints events
             in
             let evt =
               {
@@ -291,7 +311,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
             let wval =
               Expr.evaluate ~env:(Hashtbl.find_opt env) expr
-              |> Expr.apply_constraints
+              |> apply_ub_constraints events
             in
             let evt =
               {
@@ -382,7 +402,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let result_expr =
                 Expr.evaluate ~env:(Hashtbl.find_opt env)
                   (Expr.binop loaded_expr "+" operand)
-                |> Expr.apply_constraints
+                |> apply_ub_constraints events
               in
               (* if the operand evaluates to zero, this is a read-don't
                    modify-write *)
@@ -450,7 +470,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let base_evt_store : event = Event.create Write 0 () in
               let wval =
                 Expr.evaluate ~env:(Hashtbl.find_opt env) desired
-                |> Expr.apply_constraints
+                |> apply_ub_constraints events
               in
               let evt_store =
                 {
@@ -496,7 +516,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             (* TODO prune semantically impossible branches against phi *)
             let cond_val =
               Expr.evaluate ~env:(Hashtbl.find_opt env) condition
-              |> Expr.apply_constraints
+              |> apply_ub_constraints events
             in
             let new_then_phi =
               if cond_val = EBoolean true then phi else cond_val :: phi
@@ -787,9 +807,10 @@ let rec interpret_statements stmts env phi events =
     @return
       A tuple of (symbolic event structure, events table, source spans table).
 *)
-let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
+let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
+    stmts =
   (* Events context *)
-  let events = create_events defacto in
+  let events = create_events ~ubopt defacto in
   (* Register environment *)
   let env = Hashtbl.create 32 in
 
@@ -834,10 +855,10 @@ let interpret_generic ~stmt_semantics ~defacto ~constraints stmts =
     @return
       A tuple of (symbolic event structure, events table, source spans table).
 *)
-let interpret ?(defacto = None) ?(constraints = None) stmts =
+let interpret ?(ubopt = false) ?(defacto = None) ?(constraints = None) stmts =
   let defacto = defacto |> Option.value ~default:[] in
-    interpret_generic ~stmt_semantics:interpret_statements ~defacto ~constraints
-      stmts
+    interpret_generic ~ubopt ~stmt_semantics:interpret_statements ~defacto
+      ~constraints stmts
 
 (** {1 Pipeline Integration} *)
 
@@ -854,7 +875,8 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
         let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
         let constraints = ctx.litmus_constraints |> Option.value ~default:[] in
         let structure, source_spans =
-          interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+          interpret_generic ~ubopt:ctx.options.ubopt ~stmt_semantics ~defacto
+            ~constraints stmts
         in
           Logs_safe.debug (fun m ->
               m "Completed program interpretation: \n%s\nand events\n%s"
@@ -1064,7 +1086,8 @@ end = struct
           let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
           let constraints = ctx.litmus_constraints in
           let structure, source_spans =
-            interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+            interpret_generic ~ubopt:ctx.options.ubopt ~stmt_semantics ~defacto
+            ~constraints stmts
           in
             (structure, source_spans)
       | _ -> failwith "No program statements or constraints for interpretation."
@@ -1288,7 +1311,7 @@ end = struct
        executions. *)
     let cond_val =
       Expr.evaluate ~env:(fun v -> Hashtbl.find_opt env v) condition
-      |> Expr.apply_constraints
+      |> apply_ub_constraints events
     in
     let enter_phi = if cond_val = EBoolean true then phi else cond_val :: phi in
     let enter_phi_sat = Solver.is_sat_cached enter_phi in
@@ -1320,7 +1343,7 @@ end = struct
       let continue_after_body ~add_event env phi events =
         let guard =
           Expr.evaluate ~env:(Hashtbl.find_opt env) condition
-          |> Expr.apply_constraints
+          |> apply_ub_constraints events
         in
           (* Conjoined with the path condition reached at the end of the body,
              so the guard says "the loop continues after this iteration, along
@@ -1332,7 +1355,7 @@ end = struct
                (fun conjunction p -> Expr.binop conjunction "&&" p)
                guard phi
             |> Expr.evaluate
-            |> Expr.apply_constraints
+            |> apply_ub_constraints events
             );
           interpret_statements_symbolic_loop ~final_structure ~add_event rest
             env phi events
@@ -1388,7 +1411,8 @@ end = struct
         let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
         let constraints = ctx.litmus_constraints in
         let structure, source_spans =
-          interpret_generic ~stmt_semantics ~defacto ~constraints stmts
+          interpret_generic ~ubopt:ctx.options.ubopt ~stmt_semantics ~defacto
+            ~constraints stmts
         in
         let structure =
           { structure with po_iter = generate_po_iter structure }
