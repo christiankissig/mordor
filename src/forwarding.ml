@@ -495,20 +495,21 @@ module EventStructureContext = struct
     let r_acq = filter_order structure r Acquire in
     let r_sc = filter_order structure r SC in
     let f_rel =
-      filter_order structure f Release
-      |> USet.inplace_union (filter_order structure f ReleaseAcquire)
+      USet.inplace_union
+        ~into:(filter_order structure f Release)
+        (filter_order structure f ReleaseAcquire)
     in
     let f_acq =
-      filter_order structure f Acquire
-      |> USet.inplace_union (filter_order structure f ReleaseAcquire)
+      USet.inplace_union
+        ~into:(filter_order structure f Acquire)
+        (filter_order structure f ReleaseAcquire)
     in
     let f_sc = filter_order structure f SC in
 
     let e_acq = USet.union r_acq f_sc |> USet.union f_acq |> USet.union f_sc in
     let e_rel = USet.union w_rel w_sc |> USet.union f_rel |> USet.union f_sc in
 
-    URelation.cross e_acq e
-    |> USet.inplace_union (URelation.cross e e_rel)
+    USet.inplace_union ~into:(URelation.cross e_acq e) (URelation.cross e e_rel)
     |> USet.intersection po
 
   (** [compute_ppo_loc ~same ?iter structure po] restricts [po] to the pairs
@@ -607,17 +608,17 @@ module EventStructureContext = struct
 
     (* PPO from initial events and to terminal events *)
     USet.clear es_ctx.ppo.ppo_init |> ignore;
-    USet.inplace_union es_ctx.ppo.ppo_init (compute_ppo_init structure)
+    USet.inplace_union ~into:es_ctx.ppo.ppo_init (compute_ppo_init structure)
     |> ignore;
 
     (* PPO based on memory order *)
     USet.clear es_ctx.ppo.ppo_sync |> ignore;
-    USet.inplace_union es_ctx.ppo.ppo_sync
+    USet.inplace_union ~into:es_ctx.ppo.ppo_sync
       (compute_ppo_sync es_ctx.structure e po)
     |> ignore;
 
     USet.clear es_ctx.ppo.ppo_iter_sync |> ignore;
-    USet.inplace_union es_ctx.ppo.ppo_iter_sync
+    USet.inplace_union ~into:es_ctx.ppo.ppo_iter_sync
       (compute_ppo_sync es_ctx.structure e po_iter)
     |> ignore;
 
@@ -636,8 +637,8 @@ module EventStructureContext = struct
     (* ppo_loc_base is the complement of ppo_loc_eq, and ppo_alias is
        computed in that complement for each execution later on. *)
     USet.clear es_ctx.ppo.ppo_loc_base |> ignore;
-    USet.set_minus po ppo_loc_eq
-    |> USet.inplace_union es_ctx.ppo.ppo_loc_base
+    USet.inplace_union ~into:es_ctx.ppo.ppo_loc_base
+      (USet.set_minus po ppo_loc_eq)
     |> ignore;
 
     (* The iteration-crossing half, the same complement taken in po_iter.
@@ -657,20 +658,18 @@ module EventStructureContext = struct
        44 on rcu-1 and 1004 on hp-1's outer loop, and reproduces every verdict
        on record. *)
     USet.clear es_ctx.ppo.ppo_iter_loc_base |> ignore;
-    USet.set_minus po_iter ppo_iter_loc_eq
-    |> USet.inplace_union es_ctx.ppo.ppo_iter_loc_base
+    USet.inplace_union ~into:es_ctx.ppo.ppo_iter_loc_base
+      (USet.set_minus po_iter ppo_iter_loc_eq)
     |> ignore;
 
     USet.clear es_ctx.ppo.ppo_base |> ignore;
-    es_ctx.ppo.ppo_sync
-    |> USet.union ppo_loc_eq
-    |> USet.inplace_union es_ctx.ppo.ppo_base
+    USet.inplace_union ~into:es_ctx.ppo.ppo_base
+      (USet.union ppo_loc_eq es_ctx.ppo.ppo_sync)
     |> ignore;
 
     USet.clear es_ctx.ppo.ppo_iter_base |> ignore;
-    es_ctx.ppo.ppo_iter_sync
-    |> USet.union ppo_iter_loc_eq
-    |> USet.inplace_union es_ctx.ppo.ppo_iter_base
+    USet.inplace_union ~into:es_ctx.ppo.ppo_iter_base
+      (USet.union ppo_iter_loc_eq es_ctx.ppo.ppo_iter_sync)
     |> ignore;
 
     clear_caches es_ctx;
@@ -889,8 +888,8 @@ module ForwardingContext = struct
 
           (* RMW ppo - add read-modify-write orderings *)
           let rmw_ppo = compute_ppo_rmw es_ctx predicates in
-          let result = USet.inplace_union result rmw_ppo in
-          let result = USet.inplace_union result es_ctx.ppo.ppo_base in
+          let result = USet.inplace_union ~into:result rmw_ppo in
+          let result = USet.inplace_union ~into:result es_ctx.ppo.ppo_base in
 
           let remapped = remap_rel ctx result in
             cache_set_ppo ctx p remapped |> ignore;

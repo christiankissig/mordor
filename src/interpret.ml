@@ -1166,9 +1166,12 @@ end = struct
       );
       Hashtbl.iter
         (fun _ events ->
-          URelation.identity events
-          |> USet.set_minus (URelation.cross events events)
-          |> USet.inplace_union po_iter
+          (* [po_iter] is the accumulator: each loop's non-identity pairs
+             are folded into it and it is returned below. *)
+          USet.inplace_union ~into:po_iter
+            (URelation.identity events
+            |> USet.set_minus (URelation.cross events events)
+            )
           |> ignore
         )
         events_by_loop;

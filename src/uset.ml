@@ -157,12 +157,19 @@ module USet : sig
 
   (** [inplace_union s1 s2] computes union in-place.
 
-      Adds all elements from [s2] to [s1], mutating [s1].
+      Adds all elements of [s2] to [into], mutating [into].
 
-      @param s1 Set to modify.
+      [into] is labelled deliberately. Unlabelled, the pipeline form
+      [x |> inplace_union y] passed [y] as the set to mutate, so the
+      accumulator read like the thing being built up while being the thing
+      consumed -- which folded eco into a shared cache field in IMM's coherence
+      check and made the search order-dependent (github #88). With the label
+      that form does not typecheck and the mutated set is named at the call.
+
+      @param into Set to modify.
       @param s2 Set to add from.
-      @return The modified [s1]. *)
-  val inplace_union : 'a t -> 'a t -> 'a t
+      @return The modified [into]. *)
+  val inplace_union : into:'a t -> 'a t -> 'a t
 
   (** [intersection s1 s2] computes intersection.
 
@@ -407,9 +414,17 @@ end = struct
       );
       result
 
-  let inplace_union s1 s2 =
-    Hash_set.iter s2 ~f:(fun x -> Hash_set.add s1 x);
-    s1
+  (* [~into] is labelled because the unlabelled form was a trap. Written in
+     pipeline position, [x |> inplace_union y] passes [y] as the mutated set,
+     and the accumulator reads like the thing being built up while being the
+     thing consumed. That folded eco into a shared cache field in IMM's
+     coherence check and made the search order-dependent (github #88); the same
+     shape had already been found and fixed once in RC11's psc_base. With the
+     label, the pipeline form does not typecheck and the mutated set is named
+     at every call. *)
+  let inplace_union ~into s2 =
+    Hash_set.iter s2 ~f:(fun x -> Hash_set.add into x);
+    into
 
   let intersection s1 s2 = Hash_set.inter s1 s2
   let set_minus s1 s2 = Hash_set.diff s1 s2

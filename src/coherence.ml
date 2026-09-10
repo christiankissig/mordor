@@ -167,7 +167,7 @@ module CoherenceChecks = struct
     in
       (* Coherence: hb;eco ∪ hb is irreflexive *)
       URelation.is_irreflexive
-        (USet.inplace_union (URelation.compose [ hb; eco ]) hb)
+        (USet.inplace_union ~into:(URelation.compose [ hb; eco ]) hb)
 end
 
 (** {1 Memory Model Implementations} *)
@@ -220,7 +220,7 @@ module IMM : MEMORY_MODEL = struct
             w; URelation.reflexive_closure e (URelation.transitive_closure inner);
           ]
       in
-        USet.inplace_union part1 part2
+        USet.inplace_union ~into:part1 part2
     in
 
     (* release = ([W_rel] ∪ [F_rel];po);rs *)
@@ -236,7 +236,7 @@ module IMM : MEMORY_MODEL = struct
             po;
           ]
       in
-        URelation.compose [ USet.inplace_union w_rel f_rel_po; rs ]
+        URelation.compose [ USet.inplace_union ~into:w_rel f_rel_po; rs ]
     in
 
     (* sw = release;(rf ∩ ¬po ∪ [po ∩ loc]?;(rf \ po));([R_acq] ∪ po;[F_acq]) *)
@@ -293,10 +293,10 @@ module IMM : MEMORY_MODEL = struct
             ModelUtils.match_events events e Write None None None;
           ]
       in
-        USet.union p1 p2
-        |> USet.inplace_union p3
-        |> USet.inplace_union p4
-        |> USet.inplace_union p5
+        let acc = USet.union p1 p2 in
+        let acc = USet.inplace_union ~into:acc p3 in
+        let acc = USet.inplace_union ~into:acc p4 in
+          USet.inplace_union ~into:acc p5
     in
 
     let deps = execution.dp in
@@ -307,7 +307,7 @@ module IMM : MEMORY_MODEL = struct
       let w = ModelUtils.match_events events e Write None None None in
       let middle =
         URelation.transitive_closure
-          (USet.inplace_union (thread_internal_restriction rf) deps)
+          (USet.inplace_union ~into:(thread_internal_restriction rf) deps)
       in
         URelation.compose [ r; middle; w ]
     in
@@ -328,9 +328,9 @@ module IMM : MEMORY_MODEL = struct
        folds into [bob], [ppo] and [strong_] instead. *)
     let ar_ =
       let acc = thread_external_restriction rf in
-      let acc = USet.inplace_union acc bob in
-      let acc = USet.inplace_union acc ppo in
-        USet.inplace_union acc strong_
+      let acc = USet.inplace_union ~into:acc bob in
+      let acc = USet.inplace_union ~into:acc ppo in
+        USet.inplace_union ~into:acc strong_
     in
 
     (* psc_a = [F_sc];hb *)
@@ -367,23 +367,23 @@ module IMM : MEMORY_MODEL = struct
 
       (* eco = rf ∪ co;rf ∪ co ∪ fr;rf ∪ fr
 
-         [USet.inplace_union a b] mutates [a], and [x |> USet.inplace_union y]
-         passes [y] as [a] -- so written as a pipeline this folded eco into
-         [rf] and then into [co] rather than into the accumulator.  [rf] is a
-         cache field shared by every candidate coherence order, so the first
-         candidate checked left it holding eco and every later candidate was
-         checked against a corrupted [rf]; and [co] itself came out of the line
-         holding eco, which is what [coe] and [detour] below then read.  The
-         search's answer depended on the order candidates were tried in, which
-         for an exhaustive search it cannot.
+         Written as a pipeline against the old unlabelled [inplace_union],
+         this folded eco into [rf] and then into [co] rather than into the
+         accumulator.  [rf] is a cache field shared by every candidate coherence
+         order, so the first candidate checked left it holding eco and every
+         later candidate was checked against a corrupted [rf]; and [co] itself
+         came out of the line holding eco, which is what [coe] and [detour]
+         below then read.  The search's answer depended on the order candidates
+         were tried in, which for an exhaustive search it cannot.
 
-         Only the freshly composed accumulator is mutated now. *)
+         [~into] now names the mutated set at every call, and the pipeline form
+         that caused this does not typecheck (github #88). *)
       let eco =
         let acc = URelation.compose [ co; rf ] in
-        let acc = USet.inplace_union acc rf in
-        let acc = USet.inplace_union acc co in
-        let acc = USet.inplace_union acc (URelation.compose [ fr; rf ]) in
-          USet.inplace_union acc fr
+        let acc = USet.inplace_union ~into:acc rf in
+        let acc = USet.inplace_union ~into:acc co in
+        let acc = USet.inplace_union ~into:acc (URelation.compose [ fr; rf ]) in
+          USet.inplace_union ~into:acc fr
       in
 
       let eco_adj_map = URelation.adjacency_map eco in
@@ -392,7 +392,8 @@ module IMM : MEMORY_MODEL = struct
       (* Coherence: hb;eco ∪ hb is irreflexive *)
       let hb_eco_hb =
         USet.inplace_union
-          (URelation.compose_adj_map [ (hb, hb_adj_map); (eco, eco_adj_map) ])
+          ~into:
+            (URelation.compose_adj_map [ (hb, hb_adj_map); (eco, eco_adj_map) ])
           hb
       in
       let hb_eco_hb_irreflexive = URelation.is_irreflexive hb_eco_hb in
@@ -414,7 +415,7 @@ module IMM : MEMORY_MODEL = struct
               (psc_a, dummy_adj_map); (eco, eco_adj_map); (psc_b, psc_b_adj_map);
             ]
         in
-        let ar = USet.union ar_ psc |> USet.inplace_union detour in
+        let ar = USet.inplace_union ~into:(USet.union ar_ psc) detour in
 
         let*? () = (URelation.acyclic ar, "ar is acyclic") in
 
@@ -490,12 +491,11 @@ module IMM : MEMORY_MODEL = struct
 
     (* data ∪ ctrl ∪ addr;po? ∪ addr ∪ casdep ∪ [Rex];po *)
     let result =
-      data
-      |> USet.inplace_union ctrl
-      |> USet.inplace_union (URelation.compose [ addr; po ])
-      |> USet.inplace_union addr
-      |> USet.inplace_union casdep
-      |> USet.inplace_union (URelation.compose [ rex; po ])
+      let acc = USet.inplace_union ~into:data ctrl in
+      let acc = USet.inplace_union ~into:acc (URelation.compose [ addr; po ]) in
+      let acc = USet.inplace_union ~into:acc addr in
+      let acc = USet.inplace_union ~into:acc casdep in
+        USet.inplace_union ~into:acc (URelation.compose [ rex; po ])
     in
 
     result
@@ -566,10 +566,9 @@ end) : MEMORY_MODEL = struct
         USet.union
           (ModelUtils.match_events events e Read (Some Release) (Some ">") None)
           (ModelUtils.match_events events e Write (Some Release) (Some ">") None)
-        |> USet.inplace_union
-             (ModelUtils.match_events events e Fence (Some Release) (Some ">")
-                None
-             )
+        |> fun acc ->
+        USet.inplace_union ~into:acc
+          (ModelUtils.match_events events e Fence (Some Release) (Some ">") None)
       in
       let fence_sb =
         URelation.reflexive_closure e
@@ -590,16 +589,15 @@ end) : MEMORY_MODEL = struct
         USet.union
           (ModelUtils.match_events events e Read (Some Acquire) (Some ">") None)
           (ModelUtils.match_events events e Write (Some Acquire) (Some ">") None)
-        |> USet.inplace_union
-             (ModelUtils.match_events events e Fence (Some Acquire) (Some ">")
-                None
-             )
+        |> fun acc ->
+        USet.inplace_union ~into:acc
+          (ModelUtils.match_events events e Fence (Some Acquire) (Some ">") None)
       in
         URelation.compose [ rel; fence_sb; rs; rf; r_rlx; sb_fence; acq ]
     in
 
     (* hb = (sw ∪ sb)⁺ *)
-    let hb = URelation.transitive_closure (USet.inplace_union sw sb) in
+    let hb = URelation.transitive_closure (USet.inplace_union ~into:sw sb) in
 
     { sb; hb; rfi = URelation.inverse rf; rf; e; events; rmw; loc_restrict }
 
@@ -612,7 +610,7 @@ end) : MEMORY_MODEL = struct
 
     (* eco = (rf ∪ co ∪ rb)⁺ *)
     let eco =
-      URelation.transitive_closure (USet.union rf co |> USet.inplace_union rb)
+      URelation.transitive_closure (USet.inplace_union ~into:(USet.union rf co) rb)
     in
 
     (* SC consistency: psc is acyclic.
@@ -636,8 +634,8 @@ end) : MEMORY_MODEL = struct
 
       (* psc_base = [E_sc U (F_sc;hb?)] ; scb ; [E_sc U (hb?;F_sc)]
 
-         Both unions have to copy. USet.inplace_union mutates its first
-         argument, so building these two with it left sc_events holding
+         Both unions have to copy. [USet.inplace_union] mutates [~into], so
+         building these two with it left sc_events holding
          E_sc U (F_sc;hb?) U (hb?;F_sc) and both ends of the composition
          pointing at that one set -- each end carrying the other's term. Which
          of the two got there first was not even determined: OCaml does not
@@ -657,7 +655,7 @@ end) : MEMORY_MODEL = struct
         URelation.compose
           [
             f_sc;
-            USet.inplace_union (URelation.compose [ hb; eco; hb ]) hb;
+            USet.inplace_union ~into:(URelation.compose [ hb; eco; hb ]) hb;
             f_sc;
           ]
       in
@@ -739,7 +737,7 @@ module SMRD : MEMORY_MODEL = struct
 
     (* hb = (ppo ∪ dp ∪ sw)⁺ *)
     let hb =
-      USet.union ppo dp |> USet.inplace_union sw |> URelation.transitive_closure
+      USet.inplace_union ~into:(USet.union ppo dp) sw |> URelation.transitive_closure
     in
 
     { rf; rfi; hb; rmw }
@@ -1037,7 +1035,7 @@ let check_for_coherence structure execution restrictions =
               |> USet.filter (fun (a, b) -> a <= b)
               )
         in
-        let eqlocs = USet.inplace_union eqlocs (URelation.inverse eqlocs) in
+        let eqlocs = USet.inplace_union ~into:eqlocs (URelation.inverse eqlocs) in
 
         (* Build location restriction once *)
         let loc_restrict =

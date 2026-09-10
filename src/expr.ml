@@ -833,9 +833,10 @@ end = struct
         compl_exprs2
     in
       (* final disjunction in conjunctive normal form *)
-      USet.inplace_union common_exprs cross_exprs
-      |> USet.inplace_union compl1_only2
-      |> USet.inplace_union only1_compl2
+      USet.inplace_union ~into:common_exprs cross_exprs
+      |> fun acc ->
+      USet.inplace_union ~into:acc compl1_only2 |> fun acc ->
+      USet.inplace_union ~into:acc only1_compl2
       |> USet.to_list
       |> List.sort_uniq compare
       |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))

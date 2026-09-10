@@ -209,19 +209,19 @@ end = struct
     let symbols = USet.create () in
       ( match e.loc with
       | Some v ->
-          USet.inplace_union symbols (Expr.get_symbols v |> USet.of_list)
+          USet.inplace_union ~into:symbols (Expr.get_symbols v |> USet.of_list)
           |> ignore
       | None -> ()
       );
       ( match e.rval with
       | Some v ->
-          USet.inplace_union symbols (Value.get_symbols v |> USet.of_list)
+          USet.inplace_union ~into:symbols (Value.get_symbols v |> USet.of_list)
           |> ignore
       | None -> ()
       );
       ( match e.wval with
       | Some v ->
-          USet.inplace_union symbols (Expr.get_symbols v |> USet.of_list)
+          USet.inplace_union ~into:symbols (Expr.get_symbols v |> USet.of_list)
           |> ignore
       | None -> ()
       );

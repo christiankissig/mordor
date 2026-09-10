@@ -1703,8 +1703,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             (fun (fr : FreezeResult.t) ->
               match FreezeResultCache.find_opt seen fr with
               | Some (kept : FreezeResult.t) ->
-                  ignore (USet.inplace_union kept.fwd fr.fwd);
-                  ignore (USet.inplace_union kept.we fr.we);
+                  ignore (USet.inplace_union ~into:kept.fwd fr.fwd);
+                  ignore (USet.inplace_union ~into:kept.we fr.we);
                   FreezeResult.merge_justs kept fr;
                   None
               | None ->
@@ -1764,8 +1764,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
         (fun (ex : symbolic_execution) ->
           match ExecutionCache.find_opt seen ex with
           | Some (kept : symbolic_execution) ->
-              ignore (USet.inplace_union kept.fwd ex.fwd);
-              ignore (USet.inplace_union kept.we ex.we);
+              ignore (USet.inplace_union ~into:kept.fwd ex.fwd);
+              ignore (USet.inplace_union ~into:kept.we ex.we);
               (* Same reason the forwarding contexts are merged: the duplicate
                  is this execution reached from a different justification
                  combination, and keeping only the survivor's would under-report

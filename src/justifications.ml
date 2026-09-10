@@ -136,13 +136,11 @@ end = struct
 
   let get_symbols (just : justification) : string uset =
     let symbols = USet.create () in
-      USet.inplace_union symbols just.d |> ignore;
-      List.map Expr.get_symbols just.p
-      |> List.flatten
-      |> USet.of_list
-      |> USet.inplace_union symbols
+      USet.inplace_union ~into:symbols just.d |> ignore;
+      USet.inplace_union ~into:symbols
+        (List.map Expr.get_symbols just.p |> List.flatten |> USet.of_list)
       |> ignore;
-      USet.inplace_union symbols (Event.get_symbols just.w) |> ignore;
+      USet.inplace_union ~into:symbols (Event.get_symbols just.w) |> ignore;
       symbols
 
   let relabel ~(relab : string -> string option) (just : justification) :

@@ -134,8 +134,8 @@ module SymbolicEventStructure = struct
           constraints = a.constraints @ b.constraints;
           conflict =
             USet.union a.conflict b.conflict
-            |> USet.inplace_union (URelation.cross a.e b.e)
-            |> USet.inplace_union (URelation.cross b.e a.e);
+            |> (fun acc -> USet.inplace_union ~into:acc (URelation.cross a.e b.e))
+            |> (fun acc -> USet.inplace_union ~into:acc (URelation.cross b.e a.e));
           (* a and b share the same origin table *)
           origin = a.origin;
           loop_indices = a.loop_indices;

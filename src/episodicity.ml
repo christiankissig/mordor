@@ -1263,7 +1263,7 @@ module EventsCondition = struct
       let dp =
         List.fold_left
           (fun acc just ->
-            Freeze.freeze_dp structure just |> USet.inplace_union acc
+            USet.inplace_union ~into:acc (Freeze.freeze_dp structure just)
           )
           (USet.create ()) justifications
       in
