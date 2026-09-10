@@ -12,6 +12,12 @@
 //
 // Volatile now keeps its accesses out of the elided position of both `fwd` and
 // `we` in Elaborations.ForwardElab. This file goes from 8 executions to 1.
+//
+// Non-elision is ALL volatile means here. It derives no ppo, dp, hb or sw edge,
+// no model reads the flag, and a volatile access takes part in co and rf just
+// as the relaxed one would -- so it still admits every relaxed outcome. This is
+// neither Java's volatile (sequentially consistent) nor C/C++'s (a constraint
+// on the abstract machine). Ordering is what rel/acq/sc are for.
 y :v= 0;
 x :v= 0;
 r1 :v= y;
