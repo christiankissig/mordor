@@ -24,7 +24,8 @@ let default_dirs =
   [
     "litmus-tests";
     "litmus-tests-promising";
-    "litmus-tests-refinement";
+    (* litmus-tests-refinement/ is gone: with refinement chains decided (#85,
+       #87) all six of its files are in litmus-tests/. *)
     "litmus-tests-review";
   ]
 

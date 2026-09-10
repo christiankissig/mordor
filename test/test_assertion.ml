@@ -828,6 +828,24 @@ let refinement_invented_write outcome =
 let refinement_unrelated =
   "x := 0;\n   { x := 1 }|||{ r1 := x }\n   %% ~~> [_=allow] %%\n   y := 0;\n   { y := 99 }|||{ r9 := y }\n"
 
+(* A register that ends up holding an allocation's address. Comparing the
+   address's integer value is meaningless -- the allocator picks it, and nothing
+   bounds it but distinctness -- so the observation records which allocation it
+   is. Before that, enumerating this program's behaviours did not terminate and
+   the chain came out undecided (github #87). *)
+let refinement_pointer_valued outcome =
+  Printf.sprintf
+    "rglob := malloc 2;\n\
+     *rglob := 0; *(rglob + 1) := 0;\n\
+     { rfp := *rglob; ra := *(rfp + 0) }\n\
+     |||{ rfp2 := malloc 2; *(rfp2 + 0) := 1; *rglob := rfp2 }\n\
+     %%%% ~~> [_=%s] %%%%\n\
+     rglob := malloc 2;\n\
+     *rglob := 0; *(rglob + 1) := 0;\n\
+     { rfp := *rglob; ra := *(rfp + 0) }\n\
+     |||{ rfp2 := malloc 2; *(rfp2 + 0) := 1; *rglob := rfp2 }\n"
+    outcome
+
 let refinement_tests =
   [
     Alcotest.test_case "refinement: a program refines itself" `Quick
@@ -848,6 +866,13 @@ let refinement_tests =
     Alcotest.test_case "refinement: unrelated programs do not refine" `Quick
       (check_refinement_verdict "no shared observables is not vacuous"
          refinement_unrelated false
+      );
+    Alcotest.test_case
+      "refinement: a pointer-valued observable is decided, not enumerated"
+      `Quick
+      (check_refinement_verdict "identity holds with an address observable"
+         (refinement_pointer_valued "allow")
+         true
       );
   ]
 

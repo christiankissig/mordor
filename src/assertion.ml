@@ -856,6 +856,25 @@ module Refinement = struct
             );
             Lwt.return None
 
+  (** [allocations structure] pairs each allocation's address symbol with its
+      index in program order.
+
+      An allocation address is a symbol the model constrains only by
+      distinctness, so its integer value is not observable behaviour and
+      enumerating it does not terminate. What *is* observable is which
+      allocation a register points at, and program order gives the two programs
+      of a chain a correspondence between their allocations. *)
+  let allocations (structure : symbolic_event_structure) =
+    USet.values structure.malloc_events
+    |> List.sort compare
+    |> List.filteri (fun _ _ -> true)
+    |> List.mapi (fun i label ->
+        match Hashtbl.find_opt structure.events label with
+        | Some { rval = Some addr; _ } -> Some (Expr.of_value addr, i)
+        | _ -> None
+    )
+    |> List.filter_map Fun.id
+
   (** [observable_registers run] names the registers a run's executions end
       with.
 
@@ -891,19 +910,34 @@ module Refinement = struct
     let rf_conditions =
       ExecutionAnalysis.build_rf_conditions structure exec
     in
+    let value_of reg =
+      Expr.evaluate ~env:(Hashtbl.find_opt exec.final_env) (EVar reg)
+    in
     let bindings =
-      List.map
+      List.map (fun reg -> (reg, EBinOp (obs_var reg, "=", value_of reg))) regs
+    in
+    let base = exec.ex_p @ rf_conditions @ List.map snd bindings in
+    (* A register this execution pins to an allocation's address is reported by
+       which allocation it is, not by the address's integer value. Both because
+       the integer is not observable -- the allocator picks it -- and because
+       leaving it to the enumeration below would not terminate: nothing bounds
+       an address but distinctness from the other allocations. *)
+    let allocs = allocations structure in
+    let pinned, free =
+      List.partition_map
         (fun reg ->
-          let value =
-            Expr.evaluate ~env:(Hashtbl.find_opt exec.final_env) (EVar reg)
-          in
-            (reg, EBinOp (obs_var reg, "=", value))
+          let value = value_of reg in
+            match
+              List.find_opt
+                (fun (addr, _) -> Solver.exeq ~state:base value addr)
+                allocs
+            with
+            | Some (_, i) -> Left (reg, "@alloc" ^ string_of_int i)
+            | None -> Right reg
         )
         regs
     in
-    let base =
-      exec.ex_p @ rf_conditions @ List.map snd bindings
-    in
+    let regs = free in
     let rec loop acc blocked n =
       if n > observation_cap then (
         Logs_safe.err (fun m ->
@@ -918,6 +952,10 @@ module Refinement = struct
       else
         match Solver.quick_solve (base @ blocked) with
         | None -> Some acc
+        | Some _ when regs = [] ->
+            (* Every observable is pinned to an allocation; that is the single
+               observation, and there is nothing to enumerate. *)
+            Some [ List.sort compare pinned ]
         | Some model ->
             let point =
               List.map
@@ -961,6 +999,8 @@ module Refinement = struct
                       (reg, Expr.to_string (Expr.of_value (Option.get v)))
                     )
                     point
+                  @ pinned
+                  |> List.sort compare
                 in
                   loop (key :: acc) (block :: blocked) (n + 1)
     in

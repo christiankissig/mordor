@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 286
+Total tests: 287
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -8,8 +8,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 > scanned: `litmus-tests-promising/` (`[Promising]`), `litmus-tests-cpp/`
 > (`[C11]`, `[C17]`, `[C20]`) and `litmus-tests-ra/` (`[RA]`, `[SRA]`). Each has
 > a README with the reference verdicts. Tests whose assertion MoRDor does not
-> validate are parked in `litmus-tests-review/`, also unscanned, as is the one
-> refinement chain it cannot yet decide (`litmus-tests-refinement/`, #87).
+> validate are parked in `litmus-tests-review/`, also unscanned.
 
 ## Test Files
 
@@ -51,6 +50,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - avoidoota/listing3.lit
 - avoidoota/listing7.lit
 - avoidoota/listing8.lit
+- avoidoota/listing9.lit
 - basic/coproduct-exns.lit
 - basic/lb.lit
 - basic/par-comp.lit
