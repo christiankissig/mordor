@@ -165,6 +165,10 @@ module EventStructureViz = struct
         (** is_valid Optional validity status *)
     undefined_behaviour : Yojson.Safe.t option; [@default None]
         (** undefined_behaviour Optional undefined behaviour information *)
+    final_env : (string * string) list; [@default []]
+        (** final_env The register environment the execution ends in, sorted by
+            register name. Merged over the terminal events, so it is the
+            program's observable state (github #8). *)
   }
   [@@deriving yojson]
 
@@ -932,6 +936,7 @@ let step_send_event_structure_graph ~(send_data : string -> unit Lwt.t)
             preds = None;
             is_valid = None;
             undefined_behaviour = None;
+                      final_env = [];
           }
       in
       let es_message =
@@ -980,6 +985,47 @@ let send_single_execution_graph ~send_data ~build_exec_graph checked_executions
   let undefined_behaviour =
     Option.map (fun info -> ub_reasons_to_yojson info.ub_reasons) exec_info_opt
   in
+  (* The register environment at the terminal events, resolved as far as this
+     execution determines it: through the rf fixpoint first, and then through
+     the path predicates for any symbol they pin.
+
+     Only a *forced* value is substituted -- [Solver.exeq] against [ex_p], not
+     a model's arbitrary pick -- so a register the execution genuinely leaves
+     open still reads as its symbol rather than as one of the values it might
+     have taken. *)
+  let final_env =
+    let pinned = Hashtbl.create 8 in
+    let resolve_symbol s =
+      match Hashtbl.find_opt pinned s with
+      | Some v -> v
+      | None ->
+          let v =
+            match Solver.quick_solve exec.ex_p with
+            | Some model -> (
+                match Solver.concrete_value model s with
+                | Some value ->
+                    let candidate = Expr.of_value value in
+                      if Solver.exeq ~state:exec.ex_p (ESymbol s) candidate then
+                        Some candidate
+                      else None
+                | None -> None
+              )
+            | None -> None
+          in
+            Hashtbl.replace pinned s v;
+            v
+    in
+      Hashtbl.fold
+        (fun reg expr acc ->
+          let resolved =
+            Expr.evaluate ~env:(Hashtbl.find_opt exec.fix_rf_map) expr
+          in
+          let resolved = Expr.evaluate ~env:resolve_symbol resolved in
+            (reg, Expr.to_string resolved) :: acc
+        )
+        exec.final_env []
+      |> List.sort_uniq compare
+  in
 
   (* Create and send message *)
   let message =
@@ -991,6 +1037,7 @@ let send_single_execution_graph ~send_data ~build_exec_graph checked_executions
         preds = Some exec_preds_string;
         is_valid;
         undefined_behaviour;
+        final_env;
       }
   in
   let exec_message =

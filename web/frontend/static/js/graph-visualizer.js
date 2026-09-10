@@ -1372,6 +1372,7 @@ class GraphVisualizer {
         // Handle case where data might be undefined (event structure)
         if (!data) {
             document.getElementById('predicates').textContent = '⊤';
+            document.getElementById('final-registers').textContent = 'N/A';
             document.getElementById('has-uaf').textContent = 'N/A';
             document.getElementById('has-uaf').style.color = 'var(--text)';
             document.getElementById('has-unbounded-deref').textContent = 'N/A';
@@ -1384,6 +1385,15 @@ class GraphVisualizer {
         // Always update predicates
         const preds = data.preds || "⊤";
         document.getElementById('predicates').textContent = preds;
+
+        // The register state the execution ends in, merged over its terminal
+        // events. An event structure carries none, so the field is absent there
+        // rather than empty, and reads as N/A.
+        const env = data.final_env;
+        document.getElementById('final-registers').textContent =
+            (Array.isArray(env) && env.length > 0)
+                ? env.map(([reg, value]) => `${reg} = ${value}`).join(', ')
+                : (Array.isArray(env) ? '∅' : 'N/A');
 
         // undefined_behaviour is an array, so we need to access the first element
         if (data.undefined_behaviour !== undefined && data.undefined_behaviour.length > 0) {
@@ -1520,6 +1530,7 @@ class GraphVisualizer {
 
         // Clear execution info fields
         document.getElementById('predicates').textContent = '⊤';
+        document.getElementById('final-registers').textContent = 'N/A';
         document.getElementById('has-uaf').textContent = 'N/A';
         document.getElementById('has-uaf').style.color = 'var(--text)';
         document.getElementById('has-unbounded-deref').textContent = 'N/A';
