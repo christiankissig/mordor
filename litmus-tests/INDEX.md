@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 263
+Total tests: 264
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -123,6 +123,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - own/sync/writeElisionRel.lit
 - pldi_repairing/IRIW+acq+sc.lit
 - pldi_repairing/LB+deps.lit
+- pldi_repairing/LB.lit
 - pldi_repairing/RWC+syncs.lit
 - pldi_repairing/W+WRC.lit
 - popl_bridging/ARM FADD.lit

@@ -1,0 +1,34 @@
+// Load buffering, plain relaxed accesses, under RC11.
+//
+// Source: Lahav, Vafeiadis, Kang, Hur & Dreyer, "Repairing Sequential
+//         Consistency in C/C++11" (PLDI 2017).
+//
+// RC11 FORBIDS this. Its no-thin-air axiom is acyclic(sb u rf), and the outcome
+// needs rf edges (7,3) and (4,6) closing a cycle with the sb edges (3,4) and
+// (6,7). Forbidding load buffering outright is the known cost of the repair --
+// there is no dependency here to justify anything, so nothing weaker than
+// syntactic sb u rf acyclicity rules it out. It is the behaviour MRD exists to
+// admit, and LB+deps.lit next door is the case where forbidding it is right.
+//
+// The assertion used to read `allow` and passed vacuously: until ced8378 the
+// solver query was the asserted condition plus the rf equalities and nothing
+// else, so r1 and r2 stayed free and any outcome came back satisfiable. With
+// execution.ex_p in the query (48026cd) it decided false, and the file was
+// parked in litmus-tests-review/ as #57. RC11 was right; the assertion was not.
+//
+// sMRD, IMM, Power, Grounding, Bridging and Sevcik all allow it -- see
+// test6/LB.lit, popl_promising/LB.lit, popl_grounding/LB.lit,
+// popl_bridging/LB.lit and sevcik_thesis/LB.lit, which asserts exactly that.
+// Under [RC11] MoRDor generates 21 executions, 25 with the no-thin-air check
+// stubbed out; the four it removes are the witnesses.
+x := 0;
+y := 0;
+{
+  r1 := x;
+  y := 1
+} ||| {
+  r2 := y;
+  x := 1
+}
+%%
+forbid (r1 = 1 && r2 = 1) [RC11]

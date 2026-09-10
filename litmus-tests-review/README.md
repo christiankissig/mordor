@@ -102,8 +102,12 @@ still synchronises with nothing. Fence ordering in the checker is what is left.
 | [`jctc/JCTC20.lit`](jctc/JCTC20.lit) #51 | allow `r1=42 ∧ r2=42 ∧ r3=42` | sMRD |
 | [`esop_problem/RRE.lit`](esop_problem/RRE.lit) #46 | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[Problem]` → sMRD |
 | [`popl_grounding/FADD.lit`](popl_grounding/FADD.lit) #60 | allow `r1=1 ∧ r3=1` | `[Grounding]` → IMM |
-| [`pldi_repairing/LB.lit`](pldi_repairing/LB.lit) #57 | allow `r1=1 ∧ r2=1` | `[RC11]` |
 | [`popl_promising/Upd-Stuck.lit`](popl_promising/Upd-Stuck.lit) #62 | allow `r1=1 ∧ r2=0` | `[IMM]` |
+
+`pldi_repairing/LB.lit` #57 has left this table. Its assertion was the thing
+that was wrong: RC11's no-thin-air axiom is `acyclic(sb ∪ rf)`, which forbids
+plain load buffering, so `allow` was never RC11's verdict. It now asserts
+`forbid` and is back in `litmus-tests/pldi_repairing/`.
 
 These generate executions — `JCTC19` gets 8, `Upd-Stuck` 248 — but none whose
 path predicates admit the asserted values. Before the path predicates were part
