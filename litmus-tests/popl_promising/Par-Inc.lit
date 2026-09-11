@@ -1,9 +1,11 @@
 // Section 3: Supporting Atomic Updates; Par-Inc
 x := 0;
 {
-  r1 := FADD(rlx, rlx, x, 1)
+  rpx := &x;
+  r1 := FADD(rlx, rlx, rpx, 1)
 } ||| {
-  r2 := FADD(rlx, rlx, x, 1)
+  rpx := &x;
+  r2 := FADD(rlx, rlx, rpx, 1)
 }
 %%
 allow (r1 = 1 || r2 = 1) [IMM]

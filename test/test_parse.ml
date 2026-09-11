@@ -381,14 +381,14 @@ let test_parse_fence_acquire () =
     | _ -> Alcotest.fail "Expected fence(acquire)"
 
 let test_parse_cas () =
-  let src = "%% r0 := cas(sc, sc, x, 0, 1)" in
+  let src = "%% r0 := cas(sc, sc, rx, 0, 1)" in
   let ast = parse_litmus src in
     match List.map get_ast_stmt ast.program with
     | [ SCAS { register = "r0"; load_mode = SC; assign_mode = SC; _ } ] -> ()
     | _ -> Alcotest.fail "Expected CAS operation"
 
 let test_parse_fadd () =
-  let src = "%% r0 := fadd(relaxed, relaxed, x, 1)" in
+  let src = "%% r0 := fadd(relaxed, relaxed, rx, 1)" in
   let ast = parse_litmus src in
     match List.map get_ast_stmt ast.program with
     | [
@@ -435,7 +435,7 @@ let test_parse_free () =
   let src = "%% free(r0)" in
   let ast = parse_litmus src in
     match List.map get_ast_stmt ast.program with
-    | [ SFree { register = "r0" } ] -> ()
+    | [ SFree { pointer = ERegister "r0" } ] -> ()
     | _ -> Alcotest.fail "Expected free(r0)"
 
 let test_parse_labeled_stmt () =
@@ -719,6 +719,92 @@ let test_parse_error_end_of_input () =
     "end of input" "Parse error at line 2, column 1: unexpected end of input"
     (parse_error_message "{ r1 := x\n")
 
+(** {1 A program's expressions range over registers}
+
+    The grammar accepts a global, [@x] or [&] in any expression, since an
+    assertion's are the same language; [parse_and_convert_litmus] refuses them
+    in a program, naming the statement's line and column. *)
+
+let program_error src =
+  match parse_and_convert_litmus ~validate_ast:ignore src with
+  | _ -> Alcotest.fail ("expected a parse error for: " ^ src)
+  | exception Failure msg -> msg
+
+let accepts src =
+  match parse_and_convert_litmus ~validate_ast:ignore src with
+  | _ -> ()
+  | exception Failure msg -> Alcotest.fail msg
+
+let global_in_expression line column g =
+  Printf.sprintf
+    "Parse error at line %d, column %d: global variable %s in an expression; \
+     load it into a register first (r := %s)"
+    line column g g
+
+let test_program_global_in_register_store () =
+  Alcotest.(check string)
+    "register store"
+    (global_in_expression 2 1 "x")
+    (program_error "x := 5;\nr1 := x + 1;")
+
+let test_program_global_in_condition () =
+  Alcotest.(check string)
+    "nested, indented condition"
+    (global_in_expression 4 5 "x")
+    (program_error
+       "x := 1;\n{\n  r0 := x;\n    if (x = 1) { r1 := 1 }\n} ||| { skip }"
+    )
+
+let test_program_global_as_address () =
+  Alcotest.(check string)
+    "store through a global"
+    (global_in_expression 1 10 "p")
+    (program_error "rq := 0; *p := 7");
+  Alcotest.(check string)
+    "cas on a global"
+    (global_in_expression 1 9 "m")
+    (program_error "m := 0; r0 := cas(acq, rel, m, 0, 1)")
+
+let test_program_address_of_in_expression () =
+  Alcotest.(check string)
+    "address-of outside a reference"
+    "Parse error at line 1, column 9: address-of in an expression; take the \
+     address into a register first (r := &x)"
+    (program_error "x := 0; A := &x")
+
+let test_program_location_in_expression () =
+  Alcotest.(check string)
+    "@ location"
+    "Parse error at line 1, column 1: location @x in an expression; a \
+     program's expressions range over registers"
+    (program_error "r1 := @x + 1")
+
+let test_program_free_of_global () =
+  Alcotest.(check string)
+    "free of a global"
+    "Parse error at line 2, column 7: free of global variable p; load the \
+     pointer into a register first (r := p; free(r))"
+    (program_error "p := malloc 1;\nskip; free(p)")
+
+let test_program_labelled_statement_position () =
+  Alcotest.(check string)
+    "labelled statement starts at its label"
+    (global_in_expression 1 17 "x")
+    (program_error "{ skip } ||| {  `l` r1 := x + 1 }")
+
+let test_program_chained_is_checked () =
+  Alcotest.(check string)
+    "chained program"
+    (global_in_expression 3 1 "x")
+    (program_error "r1 := 0;\n%% ~~> [_=forbid] %%\nr1 := x + 0;")
+
+let test_program_over_registers_accepted () =
+  accepts
+    "x := 0; p := malloc 1; rx := &x;\n\
+     { r0 := x; r1 := r0 + 1; *rx := r1; r2 := cas(acq, rel, rx, r1, 2) }\n\
+     ||| { rp := p; *(rp + 1) := 3; free(rp) }\n\
+     %% allow (x = 2 && @x = 2 && r1 = 1) []"
+
 (** Test Suite *)
 
 let suite =
@@ -851,5 +937,24 @@ let suite =
         test_parse_error_bad_character;
       Alcotest.test_case "Parse error end of input" `Quick
         test_parse_error_end_of_input;
+      (* A program's expressions range over registers *)
+      Alcotest.test_case "Program: global in a register store" `Quick
+        test_program_global_in_register_store;
+      Alcotest.test_case "Program: global in a condition" `Quick
+        test_program_global_in_condition;
+      Alcotest.test_case "Program: global as an address" `Quick
+        test_program_global_as_address;
+      Alcotest.test_case "Program: address-of in an expression" `Quick
+        test_program_address_of_in_expression;
+      Alcotest.test_case "Program: @ location in an expression" `Quick
+        test_program_location_in_expression;
+      Alcotest.test_case "Program: free of a global" `Quick
+        test_program_free_of_global;
+      Alcotest.test_case "Program: labelled statement position" `Quick
+        test_program_labelled_statement_position;
+      Alcotest.test_case "Program: chained program is checked" `Quick
+        test_program_chained_is_checked;
+      Alcotest.test_case "Program: expressions over registers accepted" `Quick
+        test_program_over_registers_accepted;
     ]
   )

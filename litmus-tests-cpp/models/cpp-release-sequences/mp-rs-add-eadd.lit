@@ -18,14 +18,16 @@ y := 0;
 {
   y.store(1, na);
   x.store(1, rel);
-  rt := FADD(rlx, rlx, x, 1)
+  rpx := &x;
+  rt := FADD(rlx, rlx, rpx, 1)
 } ||| {
   r1 := x.load(acq);
   if (r1 = 3) {
     r2 := y.load(na)
   } else {skip}
 } ||| {
-  ru := FADD(rlx, rlx, x, 1)
+  rpx := &x;
+  ru := FADD(rlx, rlx, rpx, 1)
 }
 %%
 forbid (r1 = 3 && r2 = 0) [C11]

@@ -528,6 +528,41 @@ let test_loop_conditions_are_recorded_per_occurrence () =
       "only the occurrence that iterates again can continue" 1
       (List.length (List.filter (fun guard -> Solver.is_sat [ guard ]) recorded))
 
+(** {1 Globals and references} *)
+
+(* [x := malloc n] is an allocation followed by a store of its address to x. The
+   store was missing, so x never held the address. *)
+let test_global_malloc_stores_the_address () =
+  let structure = interpret_symbolic "p := malloc 1" in
+  let events =
+    Hashtbl.fold (fun _ (e : event) acc -> e :: acc) structure.events []
+  in
+  let alloc = List.find (fun (e : event) -> e.typ = Malloc) events in
+  let store =
+    List.find_opt
+      (fun (e : event) ->
+        e.typ = Write && e.loc = Some (EVar "p") && e.wval = alloc.loc
+      )
+      events
+  in
+    Alcotest.(check bool) "the address is stored to p" true (store <> None);
+    Alcotest.(check bool)
+      "after the allocation" true
+      (USet.mem structure.po (alloc.label, (Option.get store).label))
+
+(* A global reached only through a reference is as distinct from the others as
+   one named by a load or a store. Forwarding and elaboration read these
+   constraints, and without it a write through the reference could overwrite
+   any global. *)
+let test_referenced_global_is_distinct () =
+  let structure = interpret_symbolic "x := 0; rq := &y; *rq := 1" in
+    Alcotest.(check bool)
+      "x != y" true
+      (List.exists
+         (Expr.equal (EBinOp (EVar "x", "!=", EVar "y")))
+         structure.constraints
+      )
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
@@ -552,6 +587,10 @@ let suite =
         test_loop_condition_is_taken_at_the_end_of_the_body;
       Alcotest.test_case "Loop conditions are recorded per occurrence" `Quick
         test_loop_conditions_are_recorded_per_occurrence;
+      Alcotest.test_case "Global malloc stores the address" `Quick
+        test_global_malloc_stores_the_address;
+      Alcotest.test_case "Referenced global is distinct" `Quick
+        test_referenced_global_is_distinct;
       Alcotest.test_case "Event ID generation" `Quick test_next_event_id;
       Alcotest.test_case "Greek symbol generation" `Quick test_next_greek;
       Alcotest.test_case "Greek symbol overflow" `Quick test_next_greek_overflow;

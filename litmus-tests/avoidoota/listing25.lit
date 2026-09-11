@@ -5,7 +5,8 @@ x := 0; y := 41;
     x := 1
   }
 }|||{
-  ry := FADD(rlx, rlx, y, 1);
-  ry := FADD(rlx, rlx, y, 1);
+  rpy := &y;
+  ry := FADD(rlx, rlx, rpy, 1);
+  ry := FADD(rlx, rlx, rpy, 1);
 }
 %% allow (@x = 1) []

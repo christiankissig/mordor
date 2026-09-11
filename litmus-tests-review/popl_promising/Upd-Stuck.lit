@@ -4,13 +4,15 @@ y := 0;
 z := 0;
 {
   r1 := x; // 1
-  r2 := FADD(rlx, rlx, z, 1); // 0
+  rpz := &z;
+  r2 := FADD(rlx, rlx, rpz, 1); // 0
   y := r2 + 1
 } ||| {
   r3 := y;
   x := r3
 } ||| {
-  r4 := FADD(rlx, rlx, z, 1)
+  rpz := &z;
+  r4 := FADD(rlx, rlx, rpz, 1)
 }
 %%
 allow (r1 = 1 && r2 = 0) [IMM]

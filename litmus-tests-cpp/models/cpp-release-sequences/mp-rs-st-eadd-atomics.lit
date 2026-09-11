@@ -31,7 +31,8 @@ y := 0;
     r2 := y.load(rlx)
   } else {skip}
 } ||| {
-  rt := FADD(rlx, rlx, x, 1)
+  rpx := &x;
+  rt := FADD(rlx, rlx, rpx, 1)
 }
 %%
 allow ((r1 = 2 || r1 = 4) && r2 = 0) [C17]

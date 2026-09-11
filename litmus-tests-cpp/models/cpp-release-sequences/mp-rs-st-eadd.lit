@@ -29,7 +29,8 @@ y := 0;
     r2 := y.load(na)
   } else {skip}
 } ||| {
-  rt := FADD(rlx, rlx, x, 1)
+  rpx := &x;
+  rt := FADD(rlx, rlx, rpx, 1)
 }
 %%
 allow (r1 = 3 && r2 = 0) [C11]

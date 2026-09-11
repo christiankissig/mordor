@@ -146,7 +146,10 @@ statement:
   (* Statement with optional labels *)
 | labels=label_list s=stmt_base {
       inc_pc ();
-      let span = make_source_span $startpos $endpos in
+      (* [$symbolstartpos], not [$startpos]: with no labels [label_list] is
+         empty, and an empty symbol starts where the previous token ended, so a
+         statement on its own line was placed at the end of the line before. *)
+      let span = make_source_span $symbolstartpos $endpos in
       make_ast_node
         ~thread_ctx:(Some (current_thread_ctx()))
         ~src_ctx:(Some (current_src_ctx()))
@@ -403,11 +406,12 @@ stmt_base:
 
   (* Free *)
   | FREE LPAREN reg=REGISTER RPAREN
-    { SFree { register = reg } }
+    { SFree { pointer = ERegister reg } }
 
+  (* Parsed so that validation can say what is wrong with it: the pointer has to
+     be loaded into a register first (see [Parse.validate_program]). *)
   | FREE LPAREN global=GLOBAL RPAREN
-    { (* Generate a load from global then free *)
-      SFree { register = "tmp_" ^ global } }
+    { SFree { pointer = EGlobal global } }
 
   | SKIP { SSkip }
 

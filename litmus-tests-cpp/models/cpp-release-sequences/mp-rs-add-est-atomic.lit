@@ -25,7 +25,8 @@ y := 0;
 {
   y.store(1, rlx);
   x.store(1, rel);
-  rt := FADD(rlx, rlx, x, 1)
+  rpx := &x;
+  rt := FADD(rlx, rlx, rpx, 1)
 } ||| {
   r1 := x.load(acq);
   if (r1 = 3) {

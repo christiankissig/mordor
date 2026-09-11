@@ -19,7 +19,8 @@ y := 0;
 {
   y.store(1, na);
   x.store(1, rel);
-  rt := FADD(rlx, rlx, x, 1);
+  rpx := &x;
+  rt := FADD(rlx, rlx, rpx, 1);
   x.store(3, rlx)
 } ||| {
   r1 := x.load(acq);

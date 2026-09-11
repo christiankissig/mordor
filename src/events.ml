@@ -176,7 +176,7 @@ end = struct
               (Option.fold ~none:"_" ~some:Value.to_string e.rval)
               (Option.fold ~none:"_" ~some:Expr.to_string e.wval)
         | Free ->
-            sprintf "Free %s" (Option.fold ~none:"_" ~some:Value.to_string e.id)
+            sprintf "Free %s" (Option.fold ~none:"_" ~some:Expr.to_string e.loc)
       in
         sprintf "%d: %s%s" e.label volatile_prefix main_str
 

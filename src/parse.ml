@@ -175,7 +175,10 @@ let rec convert_stmt_open ~recurse ~source_span ~thread_ctx ~loop_ctx = function
   | Ast.SFence { mode } -> Fence { mode }
   | Ast.SLock { global } -> Lock { global }
   | Ast.SUnlock { global } -> Unlock { global }
-  | Ast.SFree { register } -> Free { register }
+  | Ast.SFree { pointer = ERegister register } -> Free { register }
+  | Ast.SFree { pointer } ->
+      (* [validate_program] has already refused this. *)
+      invalid_arg ("free of a non-register: " ^ Ast.expr_to_string pointer)
   | Ast.SLabeled { label; stmt } ->
       let ir_stmt =
         convert_stmt_open ~recurse ~source_span ~thread_ctx ~loop_ctx stmt
@@ -285,6 +288,135 @@ and convert_litmus ast_litmus =
   let program = List.map convert_stmt ast_litmus.program in
     { config; assertions; program }
 
+(** {1 Expressions range over registers}
+
+    A program touches a global only through a load or a store statement, each
+    its own event, and takes a global's address only by [r := &x]. Everywhere
+    else an expression is over registers and constants. A pointer held in a
+    global is loaded into a register before it is used.
+
+    The grammar has one expression language for programs and assertions, and an
+    assertion does name globals, so it cannot refuse them there. Accepted in a
+    program, a global stood for its own address rather than its value:
+    [r := x + 1] added one to where [x] lives, [if (x = 1)] compared that, and
+    [*p := v] wrote to [p] itself. [&x] reached the solver, which has no such
+    operator. *)
+
+(** [program_expression_error e] is what is wrong with [e] as an expression in a
+    program, if anything. *)
+let rec program_expression_error : ast_expr -> string option = function
+  | EInt _ | ERegister _ -> None
+  | EGlobal g ->
+      Some
+        (Printf.sprintf
+           "global variable %s in an expression; load it into a register first \
+            (r := %s)"
+           g g
+        )
+  | EAtLoc l ->
+      Some
+        (Printf.sprintf
+           "location @%s in an expression; a program's expressions range over \
+            registers"
+           l
+        )
+  | EASet s ->
+      Some (Printf.sprintf "set .%s in an expression; sets are for assertions" s)
+  | EUnOp ("&", _) ->
+      Some
+        "address-of in an expression; take the address into a register first \
+         (r := &x)"
+  | EUnOp (_, e) -> program_expression_error e
+  | EBinOp (l, _, r) | ETuple (l, r) -> (
+      match program_expression_error l with
+      | None -> program_expression_error r
+      | error -> error
+    )
+
+(** [statement_error stmt] is what is wrong with the expressions [stmt] carries
+    itself, not counting the statements nested in it. *)
+let rec statement_error : ast_stmt -> string option = function
+  | SFree { pointer = EGlobal g } ->
+      Some
+        (Printf.sprintf
+           "free of global variable %s; load the pointer into a register first \
+            (r := %s; free(r))"
+           g g
+        )
+  | SLabeled { stmt; _ } -> statement_error stmt
+  | stmt ->
+      let exprs =
+        match stmt with
+        | SRegisterStore { expr; _ } | SGlobalStore { expr; _ } -> [ expr ]
+        | SLoad { address; _ } -> [ address ]
+        | SStore { address; expr; _ } -> [ address; expr ]
+        | SCAS { address; expected; desired; _ } ->
+            [ address; expected; desired ]
+        | SFADD { address; operand; _ } -> [ address; operand ]
+        | SIf { condition; _ } | SWhile { condition; _ } | SDo { condition; _ }
+          -> [ condition ]
+        | SRegMalloc { size; _ } | SGlobalMalloc { size; _ } -> [ size ]
+        | SFree { pointer } -> [ pointer ]
+        | SThreads _
+        | SRegisterRefAssign _
+        | SGlobalLoad _
+        | SFence _
+        | SLock _
+        | SUnlock _
+        | SLabeled _
+        | SSkip -> []
+      in
+        List.find_map program_expression_error exprs
+
+let rec nested_statements : ast_stmt -> ast_node list = function
+  | SThreads { threads } -> List.concat threads
+  | SIf { then_body; else_body; _ } ->
+      then_body @ Option.value else_body ~default:[]
+  | SWhile { body; _ } | SDo { body; _ } -> body
+  | SLabeled { stmt; _ } -> nested_statements stmt
+  | _ -> []
+
+(** The 1-based column a statement starts at in [src].
+
+    A span's [start_col] is not that. The lexer winds [pos_cnum] back over the
+    blanks before a token, so a statement's span starts where the previous token
+    on its line ended, or at 0 when it is the first on its line. The statement
+    itself is the first non-blank character from there. *)
+let span_column src (span : Types.source_span) =
+  match List.nth_opt (String.split_on_char '\n' src) (span.start_line - 1) with
+  | None -> span.start_col + 1
+  | Some line ->
+      let rec skip_blanks i =
+        if i < String.length line && String.contains " \t\r" line.[i] then
+          skip_blanks (i + 1)
+        else i
+      in
+        skip_blanks span.start_col + 1
+
+(** [validate_program src litmus] fails with a parse error naming the first
+    statement, in this program or a chained one, whose expressions are not over
+    registers. *)
+let rec validate_program src (litmus : ast_litmus) =
+  let rec check (node : ast_node) =
+    ( match statement_error node.stmt with
+    | None -> ()
+    | Some detail -> (
+        match node.source_span with
+        | Some span ->
+            failwith
+              (Printf.sprintf "Parse error at line %d, column %d: %s"
+                 span.start_line (span_column src span) detail
+              )
+        | None -> failwith ("Parse error: " ^ detail)
+      )
+    );
+    List.iter check (nested_statements node.stmt)
+  in
+    List.iter check litmus.program;
+    match litmus.assertion with
+    | Some (AChained { rest; _ }) -> validate_program src rest
+    | _ -> ()
+
 (** Parse litmus to AST and convert from AST to IR *)
 
 let parse_and_convert_litmus ~validate_ast src =
@@ -292,6 +424,7 @@ let parse_and_convert_litmus ~validate_ast src =
 
   try
     let litmus_ast = parse_litmus src in
+      validate_program src litmus_ast;
       validate_ast litmus_ast;
       convert_litmus litmus_ast
   with

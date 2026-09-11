@@ -2,10 +2,11 @@ name=spinlock 1
 %%
 // The lock, a global: 0 = unlocked, 1 = locked
 mutex := 0;
+rpmutex := &mutex;
 
 // --- acquire ---
 do {
-  rold := cas(acquire, relaxed, mutex, 0, 1);
+  rold := cas(acquire, relaxed, rpmutex, 0, 1);
 } while (rold = 0);
 
 // --- critical section ---

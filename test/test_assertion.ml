@@ -879,6 +879,88 @@ let refinement_tests =
   ]
 
 
+(* ------------------------------------------------------------------ *)
+(*  Globals, references and pointers                                   *)
+(* ------------------------------------------------------------------ *)
+
+(* A program reads a global by a load, writes it by a store, and reaches its
+   address only through a reference in a register; a pointer held in a global is
+   loaded before it is used. These run the pipeline and assert on what a user
+   sees: the verdict, and whether undefined behaviour was found. *)
+
+let run_litmus_ctx source =
+  let ctx =
+    Context.make_context
+      { Context.default_options with dependencies = true }
+      ~output_mode:Context.Json ()
+  in
+    ctx.litmus_name <- "pointer-test";
+    ctx.litmus <- Some source;
+    sync
+      (Lwt.return ctx
+      |> Parse.step_parse_litmus
+      |> Interpret.step_interpret
+      |> Elaborations.step_generate_justifications
+      |> Executions.step_calculate_dependencies
+      |> Assertion.step_check_assertions
+      )
+
+let check_ub name source expected () =
+  Alcotest.(check (option bool))
+    name (Some expected) (run_litmus_ctx source).undefined_behaviour
+
+let check_valid name source () =
+  Alcotest.(check (option bool)) name (Some true) (run_litmus_ctx source).valid
+
+let pointer_tests =
+  [
+    (* The free's location is the symbol loaded from p, which reads the
+       allocation only through rf. It was never matched to the allocation, so
+       only a register holding malloc's result directly could be found used
+       after free. *)
+    Alcotest.test_case "uaf: through a pointer loaded from a global" `Quick
+      (check_ub "use after free found"
+         "rm := malloc 1;\n\
+          p := rm;\n\
+          { rq := p; *rq := 1 } ||| { rf := p; free(rf) }"
+         true
+      );
+    Alcotest.test_case "uaf: through a pointer loaded twice" `Quick
+      (check_ub "use after free found"
+         "ra := malloc 1;\n\
+          p := ra;\n\
+          rp := p;\n\
+          q := rp;\n\
+          { rc := q; *rc := 1 } ||| { rf := p; free(rf) }"
+         true
+      );
+    Alcotest.test_case "uaf: none when the use is before the free" `Quick
+      (check_ub "no use after free"
+         "rm := malloc 1;\np := rm;\nrq := p;\n*rq := 1;\nrf := p;\nfree(rf)"
+         false
+      );
+    (* The condition names registers holding the addresses of two distinct
+       globals. Substituting the registers first turned [rp = rq] into
+       [x = y], and the two values, both 0, were equal. *)
+    Alcotest.test_case "assertion: references are addresses, not values" `Quick
+      (check_valid "distinct references differ"
+         "x := 0;\ny := 0;\nrp := &x;\nrq := &y;\n%% forbid (rp = rq) [RC11]"
+      );
+    (* [p := malloc 1] did not store the address to p, so both loads read an
+       unconstrained initial value and the two cells could be one. *)
+    Alcotest.test_case "malloc into a global stores the address" `Quick
+      (check_valid "allocations held in globals are distinct"
+         "p := malloc 1;\n\
+          q := malloc 1;\n\
+          rp := p;\n\
+          rq := q;\n\
+          *rp := 1;\n\
+          *rq := 2;\n\
+          r1 := *rp;\n\
+          %% forbid (r1 = 2) [RC11]"
+      );
+  ]
+
 let suite =
   ( "Test_assertion",
     (* Bug 1: allow (ub) — data-driven over exec counts *)
@@ -1017,4 +1099,6 @@ let suite =
         ub_validity_cases
     (* refinement chains *)
     @ refinement_tests
+    (* globals, references and pointers *)
+    @ pointer_tests
   )

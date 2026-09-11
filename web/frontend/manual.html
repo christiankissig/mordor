@@ -752,9 +752,10 @@ x := 0;
                 <div class="syntax-block">
                     <pre><code>x, y, flag, data, pointer</code></pre>
                 </div>
+                <p>A program touches a global only through a <a href="#memory-ops">load or a store</a>, and each is an event of its own. A global cannot appear in an expression: load it into a register first, as in <code>r0 := x; r1 := r0 + 1</code>, not <code>r1 := x + 1</code>. Its address is taken only by a <a href="#statements">reference</a>, <code>r0 := &amp;x</code>, and a pointer held in a global is loaded into a register before it is used. A program that breaks these rules is refused with a parse error.</p>
 
                 <h3>AtLoc Variables</h3>
-                <p>Special variables prefixed with <code>@</code> for location references:</p>
+                <p>Special variables prefixed with <code>@</code>, used in assertions to name the value at a location:</p>
                 <div class="syntax-block">
                     <pre><code>@x, @thread1, @location</code></pre>
                 </div>
@@ -763,7 +764,7 @@ x := 0;
                 <p>Labels are enclosed in backticks and used to mark statements:</p>
                 <div class="syntax-block">
                     <pre><code>`label1` r0 := x;
-`critical` *ptr := 1;</code></pre>
+`critical` *rp := 1;</code></pre>
                 </div>
             </section>
 
@@ -775,9 +776,13 @@ x := 0;
                     <pre><code><span class="comment">// Register to register</span>
 r0 := r1;
 
-<span class="comment">// Address-of operator</span>
+<span class="comment">// Register from an expression over registers</span>
+r0 := r1 + 1;
+
+<span class="comment">// Reference: the address of global x</span>
 r0 := &amp;x;</code></pre>
                 </div>
+                <p>A reference is the only way to take an address, and it is not an event. Store it, dereference it, or pass it to <code>cas</code> or <code>fadd</code> through the register.</p>
 
                 <h3>Skip Statement</h3>
                 <div class="syntax-block">
@@ -837,6 +842,7 @@ r0 := &amp;x;</code></pre>
                 </table>
 
                 <h4>From Pointers</h4>
+                <p>The address is an expression over registers: a reference, a pointer from <code>malloc</code>, or a pointer loaded from memory, optionally with an offset, as in <code>*(rp + 1)</code>.</p>
                 <table>
                     <thead>
                         <tr>
@@ -846,19 +852,19 @@ r0 := &amp;x;</code></pre>
                     </thead>
                     <tbody>
                         <tr>
-                            <td><code>r0 := *ptr</code></td>
+                            <td><code>r0 := *rp</code></td>
                             <td>Relaxed pointer dereference</td>
                         </tr>
                         <tr>
-                            <td><code>r0 :rlx= *ptr</code></td>
+                            <td><code>r0 :rlx= *rp</code></td>
                             <td>Relaxed pointer load</td>
                         </tr>
                         <tr>
-                            <td><code>r0 :acq= *ptr</code></td>
+                            <td><code>r0 :acq= *rp</code></td>
                             <td>Acquire pointer load</td>
                         </tr>
                         <tr>
-                            <td><code>r0 :v= *ptr</code></td>
+                            <td><code>r0 :v= *rp</code></td>
                             <td>Volatile pointer load</td>
                         </tr>
                     </tbody>
@@ -916,23 +922,48 @@ r0 := &amp;x;</code></pre>
                     </thead>
                     <tbody>
                         <tr>
-                            <td><code>*ptr := 1</code></td>
+                            <td><code>*rp := 1</code></td>
                             <td>Relaxed pointer store</td>
                         </tr>
                         <tr>
-                            <td><code>*ptr :rlx= 1</code></td>
+                            <td><code>*rp :rlx= 1</code></td>
                             <td>Relaxed pointer store</td>
                         </tr>
                         <tr>
-                            <td><code>*ptr :rel= 1</code></td>
+                            <td><code>*rp :rel= 1</code></td>
                             <td>Release pointer store</td>
                         </tr>
                         <tr>
-                            <td><code>*ptr :v= 1</code></td>
+                            <td><code>*rp :v= 1</code></td>
                             <td>Volatile pointer store</td>
                         </tr>
                     </tbody>
                 </table>
+
+                <h3>Allocation</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Syntax</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>r0 := malloc(n)</code></td>
+                            <td>Allocate, and put the address in r0</td>
+                        </tr>
+                        <tr>
+                            <td><code>x := malloc(n)</code></td>
+                            <td>Allocate, then store the address to global x: two events</td>
+                        </tr>
+                        <tr>
+                            <td><code>free(r0)</code></td>
+                            <td>Free the allocation r0 points to</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p>The size is not used, and offsets into an allocation are assumed not to reach another object. <code>free</code> takes a register: to free a pointer held in a global, load it first, <code>r0 := x; free(r0)</code>.</p>
 
                 <h3>Memory Orders</h3>
                 <table>
@@ -982,7 +1013,7 @@ r0 := &amp;x;</code></pre>
                 <h2>Atomic Operations</h2>
                 
                 <h3>Compare-and-Swap (CAS)</h3>
-                <p>Atomically compares the value at an address with an expected value and, if they are equal, stores the desired value. The register is set to <code>1</code> if the swap happened and <code>0</code> if it did not:</p>
+                <p>Atomically compares the value at an address with an expected value and, if they are equal, stores the desired value. The register is set to <code>1</code> if the swap happened and <code>0</code> if it did not. As for every expression in a program, the address, expected and desired values are over registers: to swap a global, pass a <a href="#statements">reference</a> to it.</p>
                 <div class="syntax-block">
                     <div class="title">Syntax:</div>
                     <pre><code>r0 := <span class="keyword">cas</span>(load_order, store_order, address, expected, desired)</code></pre>
@@ -990,18 +1021,19 @@ r0 := &amp;x;</code></pre>
 
                 <div class="example">
                     <div class="example-title">Examples:</div>
-                    <pre><code><span class="comment">// Basic CAS</span>
-r0 := cas(relaxed, relaxed, x, 0, 1);
+                    <pre><code><span class="comment">// Basic CAS on global x</span>
+rx := &amp;x;
+r0 := cas(relaxed, relaxed, rx, 0, 1);
 
-<span class="comment">// With acquire/release</span>
-r1 := cas(acquire, release, ptr, r2, r3);
+<span class="comment">// With acquire/release, through a pointer</span>
+r1 := cas(acquire, release, rp, r2, r3);
 
 <span class="comment">// Sequential consistency</span>
-r0 := cas(sc, sc, lock, 0, 1);</code></pre>
+r0 := cas(sc, sc, rx, 0, 1);</code></pre>
                 </div>
 
                 <h3>Fetch-and-Add (FADD)</h3>
-                <p>Atomically adds the operand to the value at an address. The register is set to the new value:</p>
+                <p>Atomically adds the operand to the value at an address. The register is set to the new value. The address and operand are over registers, as for <code>cas</code>:</p>
                 <div class="syntax-block">
                     <div class="title">Syntax (with RMW mode):</div>
                     <pre><code>r0 := <span class="keyword">fadd</span>(rmw_mode, load_order, store_order, address, operand)</code></pre>
@@ -1011,14 +1043,15 @@ r0 := cas(sc, sc, lock, 0, 1);</code></pre>
 
                 <div class="example">
                     <div class="example-title">Examples:</div>
-                    <pre><code><span class="comment">// Basic FADD</span>
-r0 := fadd(relaxed, relaxed, counter, 1);
+                    <pre><code><span class="comment">// Basic FADD on global counter</span>
+rc := &amp;counter;
+r0 := fadd(relaxed, relaxed, rc, 1);
 
 <span class="comment">// With strong semantics</span>
-r1 := fadd(strong, acquire, release, x, 5);
+r1 := fadd(strong, acquire, release, rc, 5);
 
 <span class="comment">// Normal semantics</span>
-r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
+r2 := fadd(normal, relaxed, relaxed, rc, -1);</code></pre>
                 </div>
 
                 <h3>Fences</h3>
@@ -1069,10 +1102,10 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
                     <pre><code><span class="comment">// Single statement</span>
 <span class="keyword">while</span> (r0 < 10) r0 := r0 + 1;
 
-<span class="comment">// Block</span>
-<span class="keyword">while</span> (flag = 0) {
-    r0 := flag;
-    <span class="keyword">skip</span>
+<span class="comment">// Block: a condition over a global needs a load into a register</span>
+r0 := flag;
+<span class="keyword">while</span> (r0 = 0) {
+    r0 := flag
 }</code></pre>
                 </div>
 
@@ -1091,6 +1124,7 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
 
             <section id="expressions" class="section">
                 <h2>Expressions</h2>
+                <p>In a program, an expression is over registers and constants: a global is <a href="#variables">loaded</a> into a register first, and an address is taken only by <code>r0 := &amp;x</code>. Assertions are not programs, and their expressions may also name globals, <code>@</code> locations and sets.</p>
                 
                 <h3>Arithmetic Operators</h3>
                 <table>
@@ -1213,8 +1247,8 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
                     <tbody>
                         <tr>
                             <td><code>&</code></td>
-                            <td>Bitwise AND / Address-of</td>
-                            <td><code>r0 & 0xFF</code>, <code>&x</code></td>
+                            <td>Bitwise AND</td>
+                            <td><code>r0 & 0xFF</code></td>
                         </tr>
                         <tr>
                             <td><code>|</code></td>
@@ -1401,11 +1435,12 @@ x := 0; y := 0;
 <span class="operator">%%</span>
 
 m := 0;
+rm := &amp;m;
 {
     <span class="comment">// r0 is 1 if this thread's swap happened, 0 if not</span>
-    r0 := <span class="keyword">cas</span>(acquire, release, m, 0, 1)
+    r0 := <span class="keyword">cas</span>(acquire, release, rm, 0, 1)
 } ||| {
-    r1 := <span class="keyword">cas</span>(acquire, release, m, 0, 1)
+    r1 := <span class="keyword">cas</span>(acquire, release, rm, 0, 1)
 }
 
 <span class="operator">%%</span>
@@ -1418,15 +1453,17 @@ m := 0;
 <span class="keyword">model</span> = rc11
 <span class="operator">%%</span>
 
-x := 0;
+x := 0; ptr := 0;
 {
-    ptr := <span class="keyword">malloc</span>(4);
-    *ptr := 42;
+    rp := <span class="keyword">malloc</span>(4);
+    *rp := 42;
+    ptr := rp;
     x := 1
 } ||| {
     r0 := x;
     <span class="keyword">if</span> (r0 = 1) {
-        r1 := *ptr
+        rq := ptr;
+        r1 := *rq
     }
 }
 
@@ -1444,7 +1481,8 @@ flag := 0;
 {
     flag :rel= 1
 } ||| {
-    <span class="keyword">while</span> (flag = 0) {
+    r0 :acq= flag;
+    <span class="keyword">while</span> (r0 = 0) {
         r0 :acq= flag
     };
     r1 := flag
@@ -1527,11 +1565,15 @@ flag := 0;
                         </tr>
                         <tr>
                             <td><strong>Pointer deref</strong></td>
-                            <td><code>*ptr</code></td>
+                            <td><code>*rp</code></td>
                         </tr>
                         <tr>
-                            <td><strong>Address-of</strong></td>
-                            <td><code>&x</code></td>
+                            <td><strong>Reference</strong></td>
+                            <td><code>r0 := &amp;x</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Allocation</strong></td>
+                            <td><code>r0 := malloc(n)</code>, <code>free(r0)</code></td>
                         </tr>
                     </tbody>
                 </table>

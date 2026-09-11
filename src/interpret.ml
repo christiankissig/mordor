@@ -330,6 +330,13 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             let cont = recurse rest env' phi events in
               cont
         | RegisterRefAssign { register; global } ->
+            (* A global whose address is taken is as distinct from the others as
+               one named by a load or a store. Only those used to be recorded,
+               so a global reached only through a reference could share its
+               location with any other, and forwarding and elaboration, which
+               read [constraints], treated a write through it as possibly
+               overwriting every global. *)
+            USet.add events.globals global |> ignore;
             let env' = update_env env register (EVar global) in
             let cont = recurse rest env' phi events in
               cont
@@ -709,6 +716,10 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
 
                 SymbolicEventStructure.dot event' cont phi defacto
         | GlobalMalloc { global; size } ->
+            (* The allocation, then a store of its address to the global: two
+               events, as [r := malloc n; x := r] would be. The store used to be
+               missing, so the global never held the address and a load from it
+               read whatever it held before. *)
             let symbol = next_zh () in
             let rval = VSymbol symbol in
             let loc = ESymbol symbol in
@@ -717,6 +728,17 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             let event' : event = add_event events evt env annotation in
               USet.add events.globals global |> ignore;
               Hashtbl.replace events.origin symbol event'.label;
+              let store =
+                {
+                  (Event.create Write 0 ()) with
+                  id = Some (VVar global);
+                  loc = Some (EVar global);
+                  wval = Some loc;
+                  wmod = Relaxed;
+                  volatile = false;
+                }
+              in
+              let store' : event = add_event events store env annotation in
               let defacto =
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
@@ -724,10 +746,11 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   @ ub_facts env
               in
 
-              let env' = Hashtbl.copy env in
-              let cont = recurse rest env' phi events in
+              let cont = recurse rest env phi events in
 
-              SymbolicEventStructure.dot event' cont phi defacto
+              SymbolicEventStructure.dot event'
+                (SymbolicEventStructure.dot store' cont phi defacto)
+                phi defacto
         | Free { register } ->
             let base_evt : event = Event.create Free 0 () in
             let loc = Hashtbl.find_opt env register in

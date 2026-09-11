@@ -18,7 +18,8 @@ name = "CAS-AcqRel-Failure-Reorder"
 x := 0;
 {
   x :rlx= 1;
-  rexp := CAS(acquire, release, flag, 1, 2);
+  rpflag := &flag;
+  rexp := CAS(acquire, release, rpflag, 1, 2);
   y :rlx= 1
 }
 |||

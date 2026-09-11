@@ -3,7 +3,8 @@ y := 0;
 z := 0;
 {
    r1 := x;
-   r2 := FADD(rlx, rlx, z, r1);
+   rpz := &z;
+   r2 := FADD(rlx, rlx, rpz, r1);
    y := r2 + 1
 } ||| {
   r3 := y;

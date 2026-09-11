@@ -5,7 +5,8 @@ y := 0;
   y := 1;
   x := 1
 } ||| {{
-  r1 := FADD(normal, acq, rel, x, 1);
+  rpx := &x;
+  r1 := FADD(normal, acq, rel, rpx, 1);
   x := 3
 } ||| {
   r2 := x.load(acq);

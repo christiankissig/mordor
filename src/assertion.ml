@@ -282,6 +282,24 @@ end
 
 (** {1 Event Location Helper} *)
 
+(** [resolve_rf fix_rf_map e] is [e] with every symbol an rf edge determines
+    replaced by the value it reads, followed through as many reads as it takes.
+
+    A pointer loaded from memory is a read's symbol, [α], and [fix_rf_map] says
+    [α] reads the allocation [一]. This used to fold [Expr.subst] over the map,
+    which rewrites only variables nested in an operator: a location that {e is}
+    the symbol stayed [α], so a pointer that had passed through a global never
+    matched its allocation and no use-after-free was found through it. A pointer
+    loaded from a cell that was itself loaded, [β -> α -> 一], also depended on
+    the order the table was folded in. *)
+let resolve_rf fix_rf_map e =
+  let env = Hashtbl.find_opt fix_rf_map in
+  let rec go fuel e =
+    let e' = Expr.evaluate ~env e in
+      if fuel = 0 || Expr.equal e e' then e' else go (fuel - 1) e'
+  in
+    go (Hashtbl.length fix_rf_map) e
+
 (** [get_event_location structure execution event_label] extracts location
     symbol.
 
@@ -296,11 +314,7 @@ let get_event_location structure execution event_label =
   match get_loc structure event_label with
   | None -> None
   | Some loc_expr ->
-      let substituted =
-        Hashtbl.fold
-          (fun var value acc -> Expr.subst acc var value)
-          execution.fix_rf_map loc_expr
-      in
+      let substituted = resolve_rf execution.fix_rf_map loc_expr in
       let symbols = Expr.get_symbols substituted in
         if List.length symbols = 1 then Some (List.hd symbols) else None
 
@@ -536,11 +550,7 @@ module ExecutionAnalysis = struct
     let pointer_map = Hashtbl.create (USet.size pointers) in
       USet.iter
         (fun (event_label, loc_value) ->
-          let substituted =
-            Hashtbl.fold
-              (fun var value acc -> Expr.subst acc var value)
-              fix_rf_map (Expr.of_value loc_value)
-          in
+          let substituted = resolve_rf fix_rf_map (Expr.of_value loc_value) in
           (* Extract symbol if it's a single symbol *)
           let symbols = Expr.get_symbols substituted in
             if List.length symbols = 1 then
@@ -667,18 +677,25 @@ module ConditionChecker = struct
 
     let writes = Execution.get_writes_in_rhb_order structure execution in
 
-    (* Registers first, so what is left naming a location really is one. *)
-    let cond_after_registers =
-      List.map (Expr.evaluate ~env:(Hashtbl.find_opt execution.final_env))
-        cond_expr
+    (* A register is [r] and at least one more character, which no global can
+       be; one the execution never assigns is still a register. *)
+    let is_register v =
+      Hashtbl.mem execution.final_env v || (String.length v > 1 && v.[0] = 'r')
     in
 
-    (* The locations this condition asks about.  Every [EVar] the register
-       substitution did not consume is one: [@x] is [EVar "x"] by the time it
-       reaches here, and so is a bare global. *)
+    (* The locations this condition asks about: every variable it names that is
+       not a register. [@x] is [EVar "x"] by the time it reaches here, and so is
+       a bare global.
+
+       Read off the condition as written. They used to be what was left after
+       substituting the registers, but a register holding a reference,
+       [rq := &x], holds [x]'s address, which is [EVar "x"] too: [rp = rq] over
+       [&x] and [&y] became [x = y] and compared the two globals' values. *)
     let asked_locations =
-      List.concat_map Expr.extract_variables cond_after_registers
-      |> List.filter (fun v -> not (String.length v > 0 && v.[0] = '.'))
+      List.concat_map Expr.extract_variables cond_expr
+      |> List.filter (fun v ->
+          not (is_register v || (String.length v > 0 && v.[0] = '.'))
+      )
       |> List.sort_uniq String.compare
     in
 
@@ -713,10 +730,16 @@ module ConditionChecker = struct
             | _ -> ()
         )
         writes;
+      (* One pass, so a register's value is not itself looked up as a
+         location. *)
       let inst_cond_expr =
         List.map
-          (Expr.evaluate ~env:(Hashtbl.find_opt last_writes_to_variables))
-          cond_after_registers
+          (Expr.evaluate ~env:(fun v ->
+               if is_register v then Hashtbl.find_opt execution.final_env v
+               else Hashtbl.find_opt last_writes_to_variables v
+           )
+          )
+          cond_expr
       in
       (* The execution's own path predicates have to hold alongside the
          condition.  Asking the solver about the condition and the rf equalities

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unknown memory model names are an error.** An annotation naming a model MoRDor does not implement, such as `[C11]`, `[RA]`, `[Promising]` or `[JMM]`, used to log a warning and fall back to the default model. It now fails, and `--allow-unknown-model` brings back the old warn-and-continue behaviour ([#86](https://github.com/christiankissig/mordor/issues/86)).
 - **A test that names no model runs under sMRD.** The default used to be `undefined`, which checks RMW atomicity and nothing else, so a test with no annotation got no coherence or thin-air checking at all (`9fd5a15`).
 - **`@x` in an assertion means the final value stored at `x`.** It used to be the location variable, which made every `@` assertion vacuous. It also sees writes that reach `x` through a pointer ([#84](https://github.com/christiankissig/mordor/issues/84), [#5](https://github.com/christiankissig/mordor/issues/5)).
+- **A program's expressions are over registers.** A global, `@x` or `&` in an expression, and `free` of a global, are parse errors naming the statement's line and column. A global is read by a load and written by a store, each its own event, and its address is taken only by `r := &x`. Before, a global in an expression silently meant its address rather than its value: `r := x + 1` added one to where `x` lives, `if (x = 1)` compared that address, `*p := v` wrote to `p` itself, and `A := &x` stopped the run with "Unsupported unary operator &". `cas` and `fadd` on a global now take a reference, `rx := &x; r := cas(…, rx, …)`, and the 24 corpus programs that passed a global directly are rewritten that way.
 - **Statements after a parallel block run.** They used to be silently dropped. They now execute once every thread in the block has finished ([#81](https://github.com/christiankissig/mordor/issues/81)).
 - **Library API:** `USet.inplace_union` takes the set it mutates as `~into` ([#88](https://github.com/christiankissig/mordor/issues/88)). `symbolic_execution` has two new fields, `co` and `justifications`. `Eventstructures.dslwb` takes an optional `?state`.
 - **The Java Causality Test Cases have left the scanned suite.** They are now annotated `[JMM]` and live in `litmus-tests-jmm/`.
@@ -58,10 +59,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Conditions were checked without the execution's own path predicates, so outcomes the execution contradicts still came back satisfiable (`48026cd`).
 - Set-membership tests gave answers about events the execution does not contain (`0bca217`).
 - Refinement verdicts depended only on the `allow`/`forbid` keyword; neither program was ever run ([#85](https://github.com/christiankissig/mordor/issues/85)).
+- Use-after-free and unbounded-dereference detection only found a pointer that was the allocation's own symbol, such as a register assigned by `malloc`. A pointer loaded from memory is a read's symbol, and its rf edge to the allocation was never followed, so a use after free through a pointer held in a global, or in any other cell, went unreported. `symmrd/LB+UB+data+arr.lit` now reports an unbounded dereference: in executions where `r1 = 1`, its read `*(ra + 1)` is past the end of the allocation and takes its value from `x` or `y`, not from any store to the allocation. Those executions exist only because an offset into an allocation may still alias a global.
+- A condition over registers holding references compared the values of the globals they refer to: over `rp := &x; rq := &y`, `forbid (rp = rq)` failed whenever `x` and `y` held the same value.
 
 #### Interpretation
 - Symbolic `while` and `do` loops produced no executions ([#11](https://github.com/christiankissig/mordor/pull/11)).
 - `do { B } while (c)` never reached the loop after its first iteration (`76cc05c`).
+- `x := malloc n` did not store the address to `x`, so a later load from `x` read whatever it held before, and two allocations held in globals could be the same cell. It is now an allocation followed by a store to `x`.
+- `free(x)` of a global freed nothing: the parser turned it into a free of an unbound register, so the deallocation had no location. It is now refused (see Breaking).
+- A global reached only through a reference, `r := &y`, was left out of the constraint that distinct globals are distinct locations. Forwarding and elaboration read that constraint, so a write through the reference was treated as possibly overwriting every other global.
+- `interpret` printed every deallocation as `Free _`.
 - The `e / !r -> e` undefined-behaviour fold was applied under every model. It now applies only when the model allows it, as `[UB11]` does (`365fa76`).
 
 #### Dependencies and elaboration
@@ -86,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Web UI
 - Parse errors are shown instead of breaking the page (`b1cf28e`).
+- A statement at the start of a line was placed at the end of the line before, in the source span that highlights its events in the editor.
 - Errors from the server never reached the log: the page looked for a field the server does not send, so a parse error or an unknown model only turned the status to *Error*. They are now logged. A parse error quotes the offending line with a caret, and the editor marks the token. Its message gives the 1-based column where the token starts and names the token, where it used to give a column past the token's end and say only "Parse error: Parse error at …". The program is sent untrimmed, so line numbers are the editor's.
 - The justification panels are laid out one entry per line, and their Show/Hide button works (`0779cdf`).
 - Every event in a graph was drawn with the ring meant for the initial event, and in the light theme edge labels sat on a dark backing.

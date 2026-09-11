@@ -6,7 +6,8 @@ y := 0;
   y.store(1, rel);
   y := 2
 } ||| {
-  r1 := FADD(rlx, rlx, y, 1)
+  rpy := &y;
+  r1 := FADD(rlx, rlx, rpy, 1)
 } ||| {
   r2 := y.load(acq); // 3
   r3 := x // <> 0
