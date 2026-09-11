@@ -1059,9 +1059,13 @@ let test_ppo_rmw_read_dont_modify () =
          USet.of_list [ (1, 2); (2, 3); (3, 4) ] |> URelation.transitive_closure
        in
 
-       (* Create RMW edge from write 3 to read 2 with predicate true *)
+       (* The RMW of read 2 and write 3 with predicate true, as the interpreter
+          records it: (read, condition, write). This test used to add it the
+          other way round, (3, true, 2), which is what let the old composition
+          -- which ordered (read, write) instead of (write, read) -- reach the
+          two pairs asserted below. *)
        let rmw = USet.create () in
-         ignore (USet.add rmw (3, EBoolean true, 2));
+         ignore (USet.add rmw (2, EBoolean true, 3));
 
          let read_events = USet.of_list [ 1; 2; 4 ] in
          let write_events = USet.of_list [ 3 ] in
@@ -1086,7 +1090,8 @@ let test_ppo_rmw_read_dont_modify () =
 
            let ppo = ForwardingContext.ppo ctx [] in
 
-           (* Verify PPO relations: 1,2 and 3,4 should be in PPO *)
+           (* ppo_rmw orders what precedes the write ahead of the read, (1,2),
+              and the write ahead of what follows the read, (3,4). *)
            let has_1_2 = USet.mem ppo (1, 2) in
            let has_3_4 = USet.mem ppo (3, 4) in
 

@@ -820,14 +820,22 @@ module ForwardingContext = struct
   let cache_set_ppo_loc ctx predicates value =
     PpoCache.set_ppo_loc ctx.es_ctx.ppo_cache (ctx.fwd, ctx.we) predicates value
 
-  (** [compute_ppo_rmw es_ctx] computes RMW-related PPO orderings.
+  (** [compute_ppo_rmw es_ctx predicates] computes RMW-related PPO orderings.
 
-      Computes additional PPO orderings induced by read-modify-write (RMW)
-      pairs. This includes orderings from the read to the write and from the
-      write to the read, filtered by semantic alias analysis to ensure they only
-      include pairs that may access the same location.
+      This is the episodic loops paper's ppo_rmw:
+
+      [ppo_sync ; W ∪ W ; ppo_sync], where
+      [W = {(e_w, e_r) | (e_r, c, e_w) ∈ rmw ∧ c ≡_P ⊤}]
+
+      It orders the events synchronised before an RMW's write ahead of its read,
+      and its write ahead of the events synchronised after its read, which is
+      what makes a CAS or fetch-and-add a synchronisation point. The pair is
+      inverted: rmw holds (read, condition, write), and composing with (read,
+      write) instead, as this did until it was checked against the paper, puts
+      nothing in ppo_sync on either side of it for a real RMW.
 
       @param es_ctx The event structure context.
+      @param predicates The state under which an RMW's condition must hold.
       @return The computed RMW-induced PPO orderings. *)
   let compute_ppo_rmw (es_ctx : EventStructureContext.t) predicates =
     let rmw_filtered =
@@ -837,7 +845,7 @@ module ForwardingContext = struct
         )
         es_ctx.structure.rmw
     in
-    let rmw_inv = USet.map (fun (er, _, ew) -> (er, ew)) rmw_filtered in
+    let rmw_inv = USet.map (fun (er, _, ew) -> (ew, er)) rmw_filtered in
       USet.union
         (URelation.compose [ es_ctx.ppo.ppo_sync; rmw_inv ])
         (URelation.compose [ rmw_inv; es_ctx.ppo.ppo_sync ])

@@ -1200,7 +1200,7 @@ module EventsCondition = struct
     (* Compute (ppo ∪ dp)* for the loop *)
     let delta_loop = URelation.cross events_in_loop events_in_loop in
     (* ppo_rmw was computed here and dropped, ppo_base being unioned twice in
-       its place. It is (ppo_sync ; rmw) U (rmw ; ppo_sync) -- what carries an
+       its place. It is (ppo_sync ; rmw⁻¹) U (rmw⁻¹ ; ppo_sync) -- what carries an
        RMW's synchronisation across its own read/write pair, and so the only
        thing that lets a fetch-and-add's acquire read and release write order
        anything through the RMW. Both loops this condition struggles with are

@@ -67,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forwarding is followed when freezing the dependency relation, so a forwarded read no longer drops a dependency (`f7c45d3`).
 - An elided write could stop a read from reading an earlier write (`15df03a`). `dslwb` now decides shadowing under the same path predicates as the rf edge beside it (`540171f`).
 - Preserved program order kept same-location read pairs, and now orders accesses that *may* alias ([#38](https://github.com/christiankissig/mordor/issues/38)).
+- The RMW part of preserved program order composed `ppo_sync` with each (read, write) pair rather than (write, read), as the episodic loops paper defines it. For a CAS or fetch-and-add that ordered nothing, so neither acted as a synchronisation point, and forwarding could cross one. `popl_bridging/ARM FADD.lit` drops from 93 to 79 executions. No verdict changes.
 
 #### Coherence
 - sMRD's happens-before relation had no synchronises-with edge, so release-acquire chains were invisible to it ([#67](https://github.com/christiankissig/mordor/issues/67), [#68](https://github.com/christiankissig/mordor/issues/68)).
