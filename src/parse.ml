@@ -7,18 +7,39 @@ open Lwt.Syntax
 
 (** Parse a litmus test from a string *)
 
+(* A parse error names the line and the 1-based column where the token it
+   failed on starts, and the token. It used to give the column where the token
+   ended, which points past it, and not say what the token was.
+
+   The column is counted in [src] from the token's offset rather than read off
+   the lexer's positions: the lexer winds [pos_cnum] back over the whitespace it
+   skips, so those positions do not count the whitespace before a token. *)
 let parse prsr src =
   reset_parser_state ();
   let lexbuf = Lexing.from_string src in
+  let error_at detail =
+    let offset = lexbuf.lex_abs_pos + lexbuf.lex_start_pos in
+    let line_start =
+      if offset = 0 then 0
+      else
+        match String.rindex_from_opt src (offset - 1) '\n' with
+        | Some i -> i + 1
+        | None -> 0
+    in
+      failwith
+        (Printf.sprintf "Parse error at line %d, column %d: %s"
+           lexbuf.lex_start_p.pos_lnum
+           (offset - line_start + 1)
+           detail
+        )
+  in
     try prsr Lexer.token lexbuf with
-    | Lexer.Lexer_error msg -> failwith (Printf.sprintf "Lexer error: %s" msg)
-    | Parser.Error ->
-        let pos = lexbuf.lex_curr_p in
-        let msg =
-          Printf.sprintf "Parse error at line %d, column %d" pos.pos_lnum
-            (pos.pos_cnum - pos.pos_bol)
-        in
-          failwith msg
+    | Lexer.Lexer_error msg -> error_at msg
+    | Parser.Error -> (
+        match Lexing.lexeme lexbuf with
+        | "" -> error_at "unexpected end of input"
+        | token -> error_at (Printf.sprintf "unexpected %S" token)
+      )
 
 let parse_litmus = parse Parser.litmus
 let parse_expr = parse Parser.expr_only
@@ -275,8 +296,13 @@ let parse_and_convert_litmus ~validate_ast src =
       convert_litmus litmus_ast
   with
   | Failure msg ->
-      Logs_safe.err (fun m -> m "Parse error: %s" msg);
-      failwith ("Parse error: " ^ msg)
+      (* Errors from [parse] already say they are parse errors. *)
+      let msg =
+        if String.starts_with ~prefix:"Parse error" msg then msg
+        else "Parse error: " ^ msg
+      in
+        Logs_safe.err (fun m -> m "%s" msg);
+        failwith msg
   | e ->
       Logs_safe.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
       failwith ("Unexpected error: " ^ Printexc.to_string e)

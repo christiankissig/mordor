@@ -694,6 +694,31 @@ let test_parse_complex_litmus () =
         Alcotest.(check int) "constraint" 1 (List.length config.constraints)
     | None -> Alcotest.fail "Expected config section"
 
+(** A parse error names the line, the 1-based column where the offending token
+    starts, and the token. Indentation counts towards the column, which the
+    lexer's own positions do not. *)
+let parse_error_message src =
+  match parse_litmus src with
+  | _ -> Alcotest.fail "expected a parse error"
+  | exception Failure msg -> msg
+
+let test_parse_error_names_token () =
+  Alcotest.(check string)
+    "token after indentation"
+    "Parse error at line 3, column 14: unexpected \":=\""
+    (parse_error_message "x := 0;\n{ r1 := x }\n|||   { x := := 1 }\n")
+
+let test_parse_error_bad_character () =
+  Alcotest.(check string)
+    "unexpected character"
+    "Parse error at line 1, column 9: Unexpected character: $"
+    (parse_error_message "{ r1 := $ }")
+
+let test_parse_error_end_of_input () =
+  Alcotest.(check string)
+    "end of input" "Parse error at line 2, column 1: unexpected end of input"
+    (parse_error_message "{ r1 := x\n")
+
 (** Test Suite *)
 
 let suite =
@@ -820,5 +845,11 @@ let suite =
       Alcotest.test_case "Parse single thread" `Quick test_parse_single_thread;
       Alcotest.test_case "Parse with comments" `Quick test_parse_with_comments;
       Alcotest.test_case "Parse complex litmus" `Quick test_parse_complex_litmus;
+      Alcotest.test_case "Parse error names token" `Quick
+        test_parse_error_names_token;
+      Alcotest.test_case "Parse error bad character" `Quick
+        test_parse_error_bad_character;
+      Alcotest.test_case "Parse error end of input" `Quick
+        test_parse_error_end_of_input;
     ]
   )

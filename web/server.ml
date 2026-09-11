@@ -349,6 +349,13 @@ let visualize_test_assertions_to_stream program options step_counter ~models
 
       Lwt.return ctx
 
+(** [error_message exn] is the text to show for [exn]: a [Failure]'s own
+    message, which is how the pipeline reports what went wrong, rather than
+    [Failure("...")] around it. *)
+let error_message = function
+  | Failure msg -> msg
+  | exn -> Printexc.to_string exn
+
 (** [sse_data json_obj] formats a JSON object as an SSE data message.
 
     @param json_obj The JSON object to format
@@ -454,7 +461,7 @@ let make_sse_handler pipeline_fn request =
                 Lwt.return_unit
         )
         (fun exn ->
-          let error_msg = Printexc.to_string exn in
+          let error_msg = error_message exn in
             Printf.printf "❌ Pipeline error: %s\n%!" error_msg;
             let* () =
               Dream.write stream
@@ -561,7 +568,7 @@ let executions_export_handler request =
                 {|{"error": "executions or event structure not available"}|}
       )
       (fun exn ->
-        let error_msg = Printexc.to_string exn in
+        let error_msg = error_message exn in
           Printf.printf "❌ Executions export error: %s\n%!" error_msg;
           let body =
             Yojson.Basic.to_string

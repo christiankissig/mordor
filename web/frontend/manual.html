@@ -476,7 +476,7 @@
                         <tr><td><strong>Assertions</strong></td><td>The same stages as Visualize. The test runner selects it when it loads a litmus test.</td></tr>
                     </tbody>
                 </table>
-                <p>The status next to <strong>📂 Load JSON</strong> reads <em>Processing...</em> while an action runs, then <em>Complete</em>. It reads <em>Error</em> when a run stops before completing, for example because the program does not parse.</p>
+                <p>The status next to <strong>📂 Load JSON</strong> reads <em>Processing...</em> while an action runs, then <em>Complete</em>, or <em>Error</em> if the run fails. The error itself appears in the <a href="#ui-log">log</a> and in the graph panel. For a parse error the log quotes the offending line with a caret under the token, and the editor marks the token in red until you edit the program or run it again.</p>
 
                 <h3 id="ui-editor">The editor</h3>
                 <ul>
@@ -575,7 +575,7 @@
                 <p>The test runner runs each test under the model its assertion names, not the settings.</p>
 
                 <h3 id="ui-log">Log</h3>
-                <p>The log records each step of a run as it arrives: the stages, the executions received, per-model counts when models are compared, settings changes, and errors.</p>
+                <p>The log at the bottom of the page records each step of a run as it arrives: the stages, the executions received, per-model counts when models are compared, and settings changes. Errors are shown in red: a program that does not parse, a model name MoRDor does not know, a failure anywhere in the pipeline, or a run that ended without completing.</p>
             </section>
 
             <section id="workflows" class="section">

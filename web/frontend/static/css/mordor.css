@@ -568,6 +568,7 @@ pre.line-numbers > code {
 #log { background: var(--bg-elev); border-top: 1px solid var(--border); height: 150px; overflow-y: auto; padding: 0.5rem 1rem; font-family: 'Consolas', monospace; font-size: 0.85rem; }
 .log-entry { padding: 0.25rem 0; }
 .log-time { color: var(--text-muted); margin-right: 0.5rem; }
+.log-detail { white-space: pre; overflow-x: auto; margin: 0.2rem 0 0.1rem 0; font-family: monospace; }
 .error { color: var(--red); }
 .success { color: var(--green); }
 .info { color: var(--teal); }

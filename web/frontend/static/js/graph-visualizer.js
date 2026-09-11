@@ -825,8 +825,12 @@ class GraphVisualizer {
                 `translate(-${textarea.scrollLeft}px, -${textarea.scrollTop}px)`;
         });
         
-        // Update highlighting on input
-        textarea.addEventListener('input', updateHighlight);
+        // Update highlighting on input. Editing moves the text under any error
+        // mark, so the mark goes.
+        textarea.addEventListener('input', () => {
+            updateHighlight();
+            this.clearSourceHighlight();
+        });
         
         this.loadExampleLibrary();
         this.setupJustificationsToggle();
@@ -848,8 +852,10 @@ class GraphVisualizer {
         
         // Main action button - executes the current action
         actionBtn.addEventListener('click', () => {
-            const program = textarea.value.trim();
-            if (!program) {
+            // Sent as it stands, not trimmed, so the line and column of a
+            // parse error are the editor's.
+            const program = textarea.value;
+            if (!program.trim()) {
                 this.log('Please enter a litmus test', 'error');
                 return;
             }
@@ -1838,6 +1844,7 @@ class GraphVisualizer {
 
         // Store program for regeneration
         this.lastProgram = program;
+        this.clearSourceHighlight();
         
         // Reset state
         this.graphs = [];
@@ -1898,7 +1905,15 @@ class GraphVisualizer {
         const abortController = new AbortController();
 
         const handleMessage = (data) => {
-            if (data.status === 'interpreting') {
+            if (data.type === 'error' || data.error || data.status === 'error') {
+                // The server reports a failed run as {type: "error", message},
+                // parse errors included. This branch used to look only for
+                // data.error, which the server never sends, so the message was
+                // dropped and only the status said anything had gone wrong.
+                this.reportError(data.message || data.error || 'Unknown error');
+                abortController.abort();
+                document.getElementById('action-btn').disabled = false;
+            } else if (data.status === 'interpreting') {
                 this.log('Interpreting program...');
             } else if (data.status === 'visualizing') {
                 this.log('Generating visualizations...');
@@ -1977,12 +1992,6 @@ class GraphVisualizer {
                 }
                 abortController.abort();
                 document.getElementById('action-btn').disabled = false;
-            } else if (data.error || data.status === 'error') {
-                const msg = data.error || data.message || 'Unknown error';
-                this.log('Error: ' + msg, 'error');
-                this.showError(msg);
-                abortController.abort();
-                document.getElementById('action-btn').disabled = false;
             }
         };
 
@@ -2031,6 +2040,7 @@ class GraphVisualizer {
             document.getElementById('action-btn').disabled = false;
             if (document.getElementById('status').textContent === 'Processing...') {
                 document.getElementById('status').textContent = 'Error';
+                this.log('The run ended before it completed, without reporting an error. The server log may say why.', 'error');
             }
         }).catch((err) => {
             if (err.name === 'AbortError') return; // clean close, not an error
@@ -2160,7 +2170,7 @@ class GraphVisualizer {
     showError(message) {
         document.getElementById('empty-state').innerHTML = 
             `<div style="color: var(--red); padding: 2rem; text-align: center;">
-                <p>${message}</p>
+                <p>${this.escapeHtml(message)}</p>
                 <p style="margin-top: 1rem; font-size: 0.9rem;">Check the log below for details</p>
             </div>`;
         document.getElementById('empty-state').style.display = 'flex';
@@ -2220,15 +2230,59 @@ class GraphVisualizer {
         return layout;
     }
 
-    log(message, type = 'info') {
+    // [detail], when given, is shown under the message as preformatted text.
+    // Messages are text, not markup: an error can quote the program, and the
+    // program is full of < and &.
+    log(message, type = 'info', detail = null) {
         const logDiv = document.getElementById('log');
         const entry = document.createElement('div');
         entry.className = 'log-entry ' + type;
-        
-        const time = new Date().toLocaleTimeString();
-        entry.innerHTML = `<span class="log-time">${time}</span> ${message}`;
-        
+
+        const time = document.createElement('span');
+        time.className = 'log-time';
+        time.textContent = new Date().toLocaleTimeString();
+        entry.appendChild(time);
+        entry.appendChild(document.createTextNode(' ' + message));
+
+        if (detail) {
+            const pre = document.createElement('div');
+            pre.className = 'log-detail';
+            pre.textContent = detail;
+            entry.appendChild(pre);
+        }
+
         logDiv.appendChild(entry);
         logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // An error the server reported for a run. It goes to the log, where it
+    // stays after the next run replaces the graph panel, and to the graph
+    // panel. A parse error names a line and column: the log quotes that line
+    // with a caret under the column, and the editor marks it.
+    reportError(message) {
+        const at = /^Parse error at line (\d+), column (\d+)(?:: (.*))?$/.exec(message);
+        let excerpt = null;
+        if (at && typeof this.lastProgram === 'string') {
+            const line = parseInt(at[1]);
+            const column = parseInt(at[2]);
+            const token = at[3] && /^unexpected "(.*)"$/.exec(at[3]);
+            const width = token ? Math.max(1, token[1].length) : 1;
+            const lines = this.lastProgram.split('\n');
+            if (line >= 1 && line <= lines.length) {
+                const gutter = `${line} | `;
+                excerpt = gutter + lines[line - 1] + '\n' +
+                    ' '.repeat(gutter.length + column - 1) + '^'.repeat(width);
+                this.markParseError(line, column, width);
+            }
+        }
+        this.log('Error: ' + message, 'error', excerpt);
+        this.showError(message);
+    }
+
+    // Mark a parse error in the editor. The program is sent untrimmed, so its
+    // lines and columns are the editor's.
+    markParseError(line, column, width) {
+        this.highlightSourceSpan(line, column - 1, line, column - 1 + width,
+            'rgba(244, 71, 71, 0.25)', 'rgba(244, 71, 71, 0.7)');
     }
 }

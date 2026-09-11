@@ -86,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Web UI
 - Parse errors are shown instead of breaking the page (`b1cf28e`).
+- Errors from the server never reached the log: the page looked for a field the server does not send, so a parse error or an unknown model only turned the status to *Error*. They are now logged. A parse error quotes the offending line with a caret, and the editor marks the token. Its message gives the 1-based column where the token starts and names the token, where it used to give a column past the token's end and say only "Parse error: Parse error at …". The program is sent untrimmed, so line numbers are the editor's.
 - The justification panels are laid out one entry per line, and their Show/Hide button works (`0779cdf`).
 - The language reference's examples: the CAS example did not parse and read a failed swap as success, the store-buffering example was not store buffering, the load-buffering example allowed an outcome only thin air produces, and all of them used `[x = 0]`, a de facto guarantee, as if it initialised memory. `cas` and `fadd` now say what they put in the register, and the model names `c11` and `sc`, which MoRDor rejects, are gone.
 
