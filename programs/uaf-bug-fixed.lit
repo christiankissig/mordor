@@ -14,3 +14,5 @@ fence(relacq);
   rv := *rC;
   *rcu :rel= 0;
 }
+%%
+forbid (ub) [smrd]
