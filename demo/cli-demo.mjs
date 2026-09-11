@@ -479,11 +479,13 @@ const SCENES = [
     title: 'the fix',
     async run(d) {
       await d.clear();
-      await d.say('The flag is written with a <b>relaxed</b> store. One character changes that.', 1500);
+      await d.say('The flag is written with a <b>relaxed</b> store. Making it a <b>release</b> fixes that.', 1500);
       // Shown as a real diff rather than described: the changed line is the
       // whole point, and it is exactly what the program echo elides away.
       await d.shell('diff', ['-u', 'programs/uaf-bug.lit', 'programs/uaf-bug-fixed.lit'], {
-        expect: [':rel='],
+        // The fixed program also asserts that it has no undefined behaviour, so
+        // the diff shows that too, and the caption after it says so.
+        expect: [':rel=', 'forbid (ub)'],
         allowExit: [0, 1],
         maxLines: 14,
         // the ---/+++ header is absolute paths and mtimes: noise here, and
@@ -491,7 +493,7 @@ const SCENES = [
         filter: (l) => !/^(---|\+\+\+) /.test(l),
       });
       await d.beat(1800);
-      await d.say('A <b>release</b> store. Same program otherwise.', 1200);
+      await d.say('A <b>release</b> store, and an assertion that no undefined behaviour remains.', 1400);
       await d.command(['run', '--single', 'programs/uaf-bug-fixed.lit'], {
         expect: ['Undefined Behavior: false'],
         maxLines: 18,
