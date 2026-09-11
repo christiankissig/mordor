@@ -13,7 +13,7 @@
     (default) golden_diff update [DIR ...] (re)generate goldens golden_diff
     verify [DIR ...] run each test twice, assert determinism
 
-    DIR defaults to the four litmus corpora. Goldens live under
+    DIR defaults to the litmus corpora in [default_dirs]. Goldens live under
     [test/goldens/<litmus-path>.golden]. `check` exits non-zero on any mismatch
     or missing golden. *)
 
