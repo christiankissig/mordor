@@ -1,0 +1,23 @@
+// A nonatomic store does not take part in RC11's synchronises-with.
+//
+// MoRDor's own test. RC11's sw runs from a release through a write of mode
+// relaxed or stronger, `rs`, to a read of mode relaxed or stronger and on to an
+// acquire. Here the only write between the two fences is nonatomic, so there is
+// no sw edge, nothing orders `y := 1` before `r2 := y`, and r2 may still read 0.
+//
+// Mode matching asked all three mode fields of an event, and a store's unused
+// read and fence modes default to relaxed, so the nonatomic store matched and
+// the fences synchronised. That forbade this outcome.
+// nonatomic-store-no-sync-relaxed.lit is the control.
+x := 0; y := 0;
+{
+  y := 1;
+  fence(release);
+  x.store(1, nonatomic)
+} ||| {
+  r1 := x.load(relaxed);
+  fence(acquire);
+  r2 := y
+}
+%%
+allow (r1 = 1 && r2 = 0) [RC11]

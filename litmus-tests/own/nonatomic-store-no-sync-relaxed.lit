@@ -1,0 +1,18 @@
+// The control for nonatomic-store-no-sync.lit: with the store relaxed, the
+// fences synchronise through it, `y := 1` happens before `r2 := y`, and r2
+// cannot read 0.
+//
+// Without it, nonatomic-store-no-sync.lit would also pass if fences never
+// synchronised at all.
+x := 0; y := 0;
+{
+  y := 1;
+  fence(release);
+  x.store(1, relaxed)
+} ||| {
+  r1 := x.load(relaxed);
+  fence(acquire);
+  r2 := y
+}
+%%
+forbid (r1 = 1 && r2 = 0) [RC11]

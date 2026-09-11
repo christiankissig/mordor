@@ -101,19 +101,29 @@ module ModelUtils = struct
             let mode_match =
               match mode_opt with
               | None -> true
-              | Some m ->
+              | Some m -> (
                   (* [op_opt = Some ">"] means "[m] or stronger" per the access
                      mode lattice; anything else means exact mode equality.
-                     [type_match] already restricts to the relevant event type,
-                     and the irrelevant mode fields default to [Relaxed] (the
-                     weakest atomic mode), so OR-ing the test across the three
-                     fields cannot over-match for thresholds above [Relaxed]. *)
+
+                     Only the mode field of the event's own type is asked. The
+                     test used to be OR-ed across all three, on the argument
+                     that the fields a type does not use default to [Relaxed]
+                     and so cannot over-match a threshold above it. RC11 asks
+                     for thresholds at [Relaxed] -- the [W]s of [rs] and the [R]
+                     of [sw] -- and there the defaults matched every read and
+                     write, so a nonatomic store synchronised as if it were
+                     relaxed. *)
                   let cmp ev_mode =
                     match op_opt with
                     | Some ">" -> mode_at_least ev_mode m
                     | _ -> ev_mode = m
                   in
-                    cmp event.rmod || cmp event.wmod || cmp event.fmod
+                    match event.typ with
+                    | Read -> cmp event.rmod
+                    | Write -> cmp event.wmod
+                    | Fence -> cmp event.fmod
+                    | _ -> false
+                )
             in
             let second_mode_match =
               match second_mode_opt with

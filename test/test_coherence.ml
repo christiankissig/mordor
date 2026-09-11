@@ -118,6 +118,32 @@ let test_em_with_mode () =
     check bool "contains (1,1)" true (USet.mem result (1, 1));
     ()
 
+(** A "relaxed or stronger" match asks only the mode of the event's own type.
+    A nonatomic read leaves its write and fence modes at their [Relaxed]
+    default, and matching used to accept it on those. *)
+let test_em_relaxed_threshold_own_mode () =
+  let events =
+    make_events_table
+      [
+        (1, make_event 1 Read (Some Nonatomic) None None None None None None);
+        (2, make_event 2 Read (Some Relaxed) None None None None None None);
+        (3, make_event 3 Write None (Some Nonatomic) None None None None None);
+        (4, make_event 4 Write None (Some SC) None None None None None);
+      ]
+  in
+  let e = uset_of_list [ 1; 2; 3; 4 ] in
+  let reads =
+    ModelUtils.match_events events e Read (Some Relaxed) (Some ">") None
+  in
+  let writes =
+    ModelUtils.match_events events e Write (Some Relaxed) (Some ">") None
+  in
+    check bool "nonatomic read excluded" false (USet.mem reads (1, 1));
+    check bool "relaxed read included" true (USet.mem reads (2, 2));
+    check bool "nonatomic write excluded" false (USet.mem writes (3, 3));
+    check bool "sc write included" true (USet.mem writes (4, 4));
+    ()
+
 (** Test ModelUtils.match_events with fence events *)
 let test_em_fence_events () =
   let events =
@@ -489,6 +515,8 @@ let suite =
     [
       test_case "em write events" `Quick test_em_write_events;
       test_case "em with mode" `Quick test_em_with_mode;
+      test_case "em relaxed threshold asks own mode" `Quick
+        test_em_relaxed_threshold_own_mode;
       test_case "em fence events" `Quick test_em_fence_events;
       test_case "em strong mode" `Quick test_em_strong_mode;
       test_case "imm_deps data" `Quick test_imm_deps_data;
