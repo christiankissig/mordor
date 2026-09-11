@@ -182,7 +182,8 @@ module ValueAssignElab = struct
       Hashtbl.find_opt elab_ctx.structure.defacto just.w.label
       |> Option.value ~default:[]
     in
-    let solver = Solver.create (just.p @ fwd_ctx.psi @ defacto) in
+    let context = just.p @ fwd_ctx.psi @ defacto in
+    let solver = Solver.create context in
     let model = Solver.solve solver in
       match model with
       | Some bindings ->
@@ -190,12 +191,31 @@ module ValueAssignElab = struct
             (* Free or allocation event *)
             []
           else
-            let wval =
-              Option.get just.w.wval
-              |> Expr.evaluate ~env:(fun s ->
-                  Solver.concrete_value bindings s |> Option.map Expr.of_value
-              )
+            (* A symbol is concretised only where the context *entails* its
+               value, not merely where a model happens to pick one.
+
+               The model is one satisfying assignment among many, so reading a
+               value straight out of it assumes what it was supposed to
+               establish: with [p = {}] the solver picks [γ = 0] and [W x γ]
+               becomes [W x 0], justified by nothing, though γ was free. That is
+               what let avoidoota/listing16.lit read 17 out of a value nothing
+               wrote (github #43), and #65 is the same rule seen from the other
+               side -- there [α = 0] really is entailed, by the de facto
+               constraint a UB fold left behind, so the narrowing is licensed
+               and `W z α` and `W z 0` both stand.
+
+               The model still supplies the candidate; [Solver.exeq] decides
+               whether the context forces it. *)
+            let entailed s =
+              match Solver.concrete_value bindings s with
+              | None -> None
+              | Some value ->
+                  let candidate = Expr.of_value value in
+                    if Solver.exeq ~state:context (ESymbol s) candidate then
+                      Some candidate
+                    else None
             in
+            let wval = Option.get just.w.wval |> Expr.evaluate ~env:entailed in
               if Expr.equal (Option.get just.w.wval) wval then []
               else
                 (* Only the conjuncts that do not constrain the write's own

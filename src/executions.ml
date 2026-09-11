@@ -416,7 +416,14 @@ module ReadFromValidation = struct
              244 -> 232, avoidoota/listing26 59 -> 51, fwd/rlx/lift_F1r 28 ->
              24, own/FWD-STRENGTHEN-LIFT 68 -> 52 -- and flips jctc/JCTC18 from
              allowed to forbidden, which is the causality case the model exists
-             to admit. The structure's value is the right one to read here. *)
+             to admit.
+
+             Still true with value assignment made entailment-only: measured
+             again after that change, reading the licensed value here loses the
+             LB+UB+data+z refinement chain. rf is the wrong lever -- it pins
+             which write a read takes its value from, where what github #65
+             needs is the value that write puts in the execution's value map.
+             That is fix_rf_map, below. *)
           let w_val = vale structure w r in
             match get_val structure r with
             | Some r_val -> Some (Expr.evaluate (Expr.binop w_val "=" r_val))
@@ -1304,43 +1311,10 @@ module Freeze = struct
           (USet.to_string (fun (a, b) -> Printf.sprintf "(%d,%d)" a b) dp)
     );
 
-    (* The value a justification licenses, tied to the event that runs.
-
-       A justification carries the write value it justifies, and elaboration may
-       narrow it: [ValueAssignElab] turns [W x γ] justified by a read into
-       [W x 0] justified by nothing, which is sound on its own terms -- a write
-       of a constant needs no dependency. What was missing is the other half.
-       The frozen execution takes its event values from the structure, so the
-       event went on writing the symbolic γ while the justification licensing it
-       only ever licensed 0, and the two came apart: the assertion was then free
-       to read any γ at all out of it.
-
-       In avoidoota/listing16.lit that is the whole out-of-thin-air witness.
-       Thread 2 is [r2 := y; z := r2; r3 := z; x := r3], and the execution that
-       contradicts the forbid justifies [W x γ] with [W x 0] -- no dependency,
-       so no dp edge into it and no cycle -- while recording γ = α = β and
-       letting the assertion read 17 out of all three (github #43).
-
-       Equating the two closes it. Only unelided justifications take part: an
-       elided write does not run, so nothing constrains it. *)
-    let value_constraints =
-      USet.fold
-        (fun acc j ->
-          match (j.w.wval, Events.wval structure j.w.label) with
-          | Some justified, Some in_structure
-            when not (Expr.equal justified in_structure) ->
-              USet.add acc
-                (Expr.evaluate (EBinOp (in_structure, "=", justified)))
-          | _ -> acc
-        )
-        unelided_justs (USet.create ())
-    in
-
     (* Combine predicates *)
     let p_combined =
       USet.map (fun j -> USet.of_list j.p) justs
       |> USet.flatten
-      |> USet.union value_constraints
       |> USet.union (USet.of_list fwd_ctx.psi)
       |> USet.union (USet.of_list path.p)
       |> USet.union (USet.of_list statex)
