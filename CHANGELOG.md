@@ -7,11 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- Fixed three correctness bugs in the IMM/RC11 coherence models that made them over-permissive ([#9](https://github.com/christiankissig/mordor/pull/9)): honour the mode lattice so `SC`/`ReleaseAcquire` accesses count toward release/acquire synchronization, always run the coherence/thin-air axioms for programs with fewer than two writes, and keep the init write co-minimal instead of permuting it.
+### Breaking
 
-### Removed
-- Removed the `promising` memory model, which was a misleading alias to IMM — promising semantics is operational and cannot be expressed by the axiomatic coherence checker. Selecting it now emits an error-level log. The promising-paper litmus tests are preserved as reference under `litmus-tests-promising/`, with runnable `[IMM]` copies in `litmus-tests/popl_promising/` ([#9](https://github.com/christiankissig/mordor/pull/9)).
+- **Unknown memory model names are an error.** An annotation naming a model MoRDor does not implement, such as `[C11]`, `[RA]`, `[Promising]` or `[JMM]`, used to log a warning and fall back to the default model. It now fails, and `--allow-unknown-model` brings back the old warn-and-continue behaviour ([#86](https://github.com/christiankissig/mordor/issues/86)).
+- **A test that names no model runs under sMRD.** The default used to be `undefined`, which checks RMW atomicity and nothing else, so a test with no annotation got no coherence or thin-air checking at all (`9fd5a15`).
+- **`@x` in an assertion means the final value stored at `x`.** It used to be the location variable, which made every `@` assertion vacuous. It also sees writes that reach `x` through a pointer ([#84](https://github.com/christiankissig/mordor/issues/84), [#5](https://github.com/christiankissig/mordor/issues/5)).
+- **Statements after a parallel block run.** They used to be silently dropped. They now execute once every thread in the block has finished ([#81](https://github.com/christiankissig/mordor/issues/81)).
+- **Library API:** `USet.inplace_union` takes the set it mutates as `~into` ([#88](https://github.com/christiankissig/mordor/issues/88)). `symbolic_execution` has two new fields, `co` and `justifications`. `Eventstructures.dslwb` takes an optional `?state`.
+- **The Java Causality Test Cases have left the scanned suite.** They are now annotated `[JMM]` and live in `litmus-tests-jmm/`.
+- Removed the `promising` memory model, which was a misleading alias to IMM: promising semantics is operational and cannot be expressed by the axiomatic coherence checker. The promising-paper litmus tests are kept for reference under `litmus-tests-promising/`, with runnable `[IMM]` copies in `litmus-tests/popl_promising/` ([#9](https://github.com/christiankissig/mordor/pull/9)).
+
+### Added
+
+#### Command line
+- `executions` command, and `POST /api/executions`, for exporting executions with their events and relations (`6db5120`).
+- `justifications` command, which lists the program's justification set and the elaboration step behind each justification, as text or with `--output-mode json` ([#80](https://github.com/christiankissig/mordor/issues/80)).
+- `dependencies` command. It used to print a TODO and exit 0 (`3d3a934`).
+- `--output-mode isa`, an Isabelle interchange export ([#10](https://github.com/christiankissig/mordor/pull/10)).
+- `--allow-unknown-model` ([#86](https://github.com/christiankissig/mordor/issues/86)).
+
+#### Assertions and semantics
+- Refinement chains (`~~>`) are now decided. The checker compares the programs' observable register states, and a register that holds a pointer is compared by which allocation it points to ([#85](https://github.com/christiankissig/mordor/issues/85), [#87](https://github.com/christiankissig/mordor/issues/87)).
+- `.co`, the coherence order an execution was admitted under, can be used in assertions. It is also exported, as the canonically least order that admits the execution ([#66](https://github.com/christiankissig/mordor/issues/66)).
+- `[_]` is accepted as a model annotation meaning "any model".
+- A `volatile` load or store is never elided by forwarding. That is all `volatile` means ([#83](https://github.com/christiankissig/mordor/issues/83)).
+- A UB assumption from folding `1 / !r` to `1` now reaches elaboration as a de facto constraint, so the narrowed write and the original write are both justified (partial fix for [#65](https://github.com/christiankissig/mordor/issues/65)).
+
+#### Web UI
+- The final register state of each execution ([#8](https://github.com/christiankissig/mordor/issues/8)).
+- The justifications each execution was frozen from, and the program's whole justification set with the elaboration step behind each justification ([#3](https://github.com/christiankissig/mordor/issues/3), [#80](https://github.com/christiankissig/mordor/issues/80)).
+- TikZ export that keeps the on-screen layout ([#77](https://github.com/christiankissig/mordor/issues/77)), and DOT export with node positions (`2b70ef4`).
+- The example dropdown is served from the test corpus and grouped by family ([#76](https://github.com/christiankissig/mordor/issues/76)).
+- Forwarding and write-elision edges in the execution graph (`4e42074`).
+- A light/dark theme switch ([#35](https://github.com/christiankissig/mordor/pull/35)).
+- Episodicity verdicts appear loop by loop as each one finishes (`045b6f9`).
+
+#### Testing
+- A golden-diff suite, a canonicalizer and stage counters ([#34](https://github.com/christiankissig/mordor/pull/34)).
+- An episodicity integration suite with a per-test deadline (`8a47197`).
+- RMM Zoo property and model litmus tests ([#40](https://github.com/christiankissig/mordor/pull/40)).
+- Reference directories for tests MoRDor cannot decide: `litmus-tests-cpp/`, `litmus-tests-ra/`, `litmus-tests-promising/` and `litmus-tests-jmm/` for models it does not implement, and `litmus-tests-review/` for tests whose outcome it disagrees with. Each has a README.
+
+### Fixed
+
+#### Assertion checking
+- `forbid` assertions reported valid without looking at a single execution (`4998e70`).
+- Conditions were checked without the execution's own path predicates, so outcomes the execution contradicts still came back satisfiable (`48026cd`).
+- Set-membership tests gave answers about events the execution does not contain (`0bca217`).
+- Refinement verdicts depended only on the `allow`/`forbid` keyword; neither program was ever run ([#85](https://github.com/christiankissig/mordor/issues/85)).
+
+#### Interpretation
+- Symbolic `while` and `do` loops produced no executions ([#11](https://github.com/christiankissig/mordor/pull/11)).
+- `do { B } while (c)` never reached the loop after its first iteration (`76cc05c`).
+- The `e / !r -> e` undefined-behaviour fold was applied under every model. It now applies only when the model allows it, as `[UB11]` does (`365fa76`).
+
+#### Dependencies and elaboration
+- Value assignment took a value from whichever model the solver returned. It now fills in a value only when the justification's predicates force it. This closes an out-of-thin-air witness in `avoidoota/listing16.lit` ([#43](https://github.com/christiankissig/mordor/issues/43), `ae177d0`).
+- Value assignment dropped the guard that fixed a write's value, and fired even when it left the write unchanged (`71ba377`, `bf93af4`).
+- Forwarding is followed when freezing the dependency relation, so a forwarded read no longer drops a dependency (`f7c45d3`).
+- An elided write could stop a read from reading an earlier write (`15df03a`). `dslwb` now decides shadowing under the same path predicates as the rf edge beside it (`540171f`).
+- Preserved program order kept same-location read pairs, and now orders accesses that *may* alias ([#38](https://github.com/christiankissig/mordor/issues/38)).
+
+#### Coherence
+- sMRD's happens-before relation had no synchronises-with edge, so release-acquire chains were invisible to it ([#67](https://github.com/christiankissig/mordor/issues/67), [#68](https://github.com/christiankissig/mordor/issues/68)).
+- IMM's coherence check overwrote a set it shared across every candidate coherence order, so the search's answer depended on the order candidates were tried ([#88](https://github.com/christiankissig/mordor/issues/88)).
+- RC11 applied the full coherence check only to executions without RMWs (`27271c9`), and built both ends of `psc_base` from one shared set (`cbb4b3a`).
+- IMM and RC11 were over-permissive ([#9](https://github.com/christiankissig/mordor/pull/9)): release/acquire synchronisation ignored the mode lattice, the coherence axioms were skipped for programs with fewer than two writes, and the init write could be permuted out of first place.
+
+#### Episodicity
+- Many fixes to the write and events conditions and to loop handling: loop conditions and guards recorded per path and per occurrence, allocation interiors kept apart from other allocations, reads no longer reported against writes they conflict with, and RMW preserved program order used in the events condition. `hp-1` and `rcu-1` are back in the suite and reported episodic.
+
+#### Web UI
+- Parse errors are shown instead of breaking the page (`b1cf28e`).
+- The justification panels are laid out one entry per line, and their Show/Hide button works (`0779cdf`).
+
+### Changed
+- Litmus corpus: tests MoRDor's verdict disagrees with are parked in `litmus-tests-review/`, each linked to an issue. Tests since decided correctly have returned to the suite.
+- The RCU read-side critical-section markers in `programs/` are `volatile`.
 
 ## [0.1.0] — 2026-04-23
 
