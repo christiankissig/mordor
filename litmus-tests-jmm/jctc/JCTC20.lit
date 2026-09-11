@@ -1,28 +1,42 @@
-// JCTC20 is JCTC18 with thread 1 split into two threads, so the three threads
-// are concurrent. Until this was corrected the file put the second half of
-// thread 1 after the parallel block as a join continuation, with an empty
-// `||| { skip }` where the third thread should be. That was written when
-// statements following a parallel block were silently dropped (#81), which left
-// r1 unassigned and the assertion free to be satisfied by the then-vacuous
-// solver query. With the join honoured the encoding is provably unwitnessable:
-// `r2 := y` sits inside the block and `y := r1` after it, so r2 can never see 42
-// however thread 3 is justified.
+// JCTC20, transcribed from Pugh's Causality Test Cases:
+//
+//   Thread 1:          Thread 2:        Thread 3:
+//   join thread 3      r2 = y           r3 = x
+//   r1 = x             x = r2           if (r3 = 0)
+//   y = r1                                x = 42
+//
+// Thread 1 waits for thread 3 to finish before it reads x, and runs at the same
+// time as thread 2. Pugh: "the same as test case 18, except that thread 1 has
+// been split into two threads" -- thread 3 is the first half of test 18's
+// thread 1, moved onto a thread of its own, and the join puts thread 1's second
+// half back after it.
+//
+// MoRDor has no join statement, but a parallel block followed by statements is
+// joined (#81). So thread 3 is a parallel block inside thread 1's branch, with
+// `{ skip }` as its other thread, and thread 1's body follows the block. Thread 2
+// stays outside it, concurrent with both.
+//
+// Two earlier encodings got the join wrong in opposite directions, and are
+// recorded on #49 and #51. The original put thread 1's body after a block
+// holding threads 2 and 3, so thread 1 also waited for thread 2. 31e57c9 made all
+// three threads concurrent, which dropped the join altogether.
 x := 0;
 y := 0;
 {
-  // Thread 1a
-  r3 := x;
-  if (r3 = 0) {
-    x := 42
-  } else { skip }
-} ||| {
-  // Thread 1b
-  r1 := x;
-  y := r1
-} ||| {
   // Thread 2
   r2 := y;
   x := r2
+} ||| {
+  {
+    // Thread 3
+    r3 := x;
+    if (r3 = 0) { x := 42 } else { skip }
+  } ||| {
+    skip
+  };
+  // Thread 1, after joining thread 3
+  r1 := x;
+  y := r1
 }
 %%
 allow (r1 = 42 && r2 = 42 && r3 = 42) [JMM] "Allowed. This is the same as test case 18, except that thread 1 has been split into two threads."

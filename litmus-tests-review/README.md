@@ -35,7 +35,7 @@ with the reference on this shape?" before it is treated as a defect.
 **The `jctc/` group has since been triaged that way, and has left this directory entirely.** Their verdicts
 are Java Memory Model judgments (Pugh's Causality Test Cases, the JSR-133 battery), and they named no model,
 so they were being decided under the `smrd` default. All twenty-four now live in
-[`litmus-tests-jmm/jctc/`](../litmus-tests-jmm/jctc/README.md) annotated `[JMM]`, which MoRDor does not
+[`litmus-tests-jmm/jctc/`](../litmus-tests-jmm/README.md) annotated `[JMM]`, which MoRDor does not
 implement — the same treatment as `[C11]`, `[RA]` and `[Promising]`. Their issues are `smrd-unsupported`.
 
 ## How these were found
