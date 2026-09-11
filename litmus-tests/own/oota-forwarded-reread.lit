@@ -1,0 +1,26 @@
+// The out-of-thin-air shape that value narrowing used to launder.
+//
+// MoRDor's own test, for #43. Thread 2 re-reads z after writing it, so `R z` is
+// forwarded from `W z r2` and elided. The write of x that follows is then
+// justified by ValueAssignElab as `W x 0` -- a constant, needing no dependency
+// -- while the execution went on recording the symbolic value the read had.
+// With no dp edge into that write the cycle
+//
+//     x -> r1 -> y -> r2 -> z -> r3 -> x
+//
+// was broken at its last step and the forbidden outcome had a witness.
+//
+// The execution now carries the value its justification licensed, so the two
+// cannot come apart. avoidoota/listing16.lit is the same shape from the MRD
+// listings; this one states the isolation directly.
+x := 0; y := 0; z := 0;
+{
+  r1 := x;
+  y := r1
+}|||{
+  r2 := y;
+  z := r2;
+  r3 := z;
+  x := r3
+}
+%% forbid (r1 = 17 && r2 = 17 && r3 = 17) []

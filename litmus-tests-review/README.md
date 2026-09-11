@@ -18,8 +18,9 @@ the one the literature records.
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
 Every file here has an issue in the #36, #41-#65 range. Each records the symptom, the model actually in
-effect, where the test comes from and what to look at next. Ten files
-remain, the seven `jctc/` ones having moved to `litmus-tests-jmm/`; #41, #42, #44, #45, #47, #55, #56, #57 and #59 have been fixed and
+effect, where the test comes from and what to look at next. Nine files
+remain, the seven `jctc/` ones having moved to `litmus-tests-jmm/` and
+`avoidoota/listing16.lit` having returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57 and #59 have been fixed and
 their files returned to `litmus-tests/`.
 
 The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
@@ -79,7 +80,6 @@ written to disagree.
 
 | Test | Assertion | Model |
 |---|---|---|
-| [`avoidoota/listing16.lit`](avoidoota/listing16.lit) #43 | forbid `r1=17 ∧ r2=17 ∧ r3=17` | sMRD |
 | [`jctc/JCTC12.lit`](jctc/JCTC12.lit) #48 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
 | [`on_thin_air_reads19/P5.lit`](on_thin_air_reads19/P5.lit) #54 | forbid `r1=1` | `[JR]` → sMRD |
 | [`popl_bridging/Preserving detour.lit`](popl_bridging/Preserving detour.lit) #58 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | `[Bridging]` → IMM |

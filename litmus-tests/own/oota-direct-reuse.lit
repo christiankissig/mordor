@@ -1,0 +1,16 @@
+// The control for oota-forwarded-reread.lit: the same three-location chain
+// without the re-read, so nothing is forwarded and nothing is narrowed.
+//
+// It was already forbidden before #43 was fixed, which is what located the bug
+// -- the leak needed a read of the writing thread's own po-earlier write, not
+// the extra location.
+x := 0; y := 0; z := 0;
+{
+  r1 := x;
+  y := r1
+}|||{
+  r2 := y;
+  z := r2;
+  x := r2
+}
+%% forbid (r1 = 17 && r2 = 17) []

@@ -327,3 +327,14 @@ let is_volatile structure e =
   match Hashtbl.find_opt structure.events e with
   | Some event -> event.volatile
   | None -> false
+
+(** [wval structure e] is the value event [e] writes in the structure, if [e] is
+    a write the structure knows.
+
+    This is the value the frozen execution records. A justification's own
+    [w.wval] may have narrowed it -- [ValueAssignElab] turns [W x γ] into
+    [W x 0] -- and the two coming apart is github #43. *)
+let wval structure e =
+  match Hashtbl.find_opt structure.events e with
+  | Some event -> event.wval
+  | None -> None

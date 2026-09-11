@@ -96,7 +96,14 @@ cases with a verdict. They were passing the suite vacuously, since a file with n
 assertion is valid by default.
 
 Reference verdicts are Pugh's; the `sMRD fallback` column is what MoRDor reports
-through `--allow-unknown-model`, measured at `2761ec5`.
+through `--allow-unknown-model`.
+
+`JCTC18` joined the disagreeing set when #43 was fixed: tying an execution's
+write value to the value its justification licensed removes the witness its
+`allow` had. Its JMM justification -- "a compiler could determine that the only
+legal values for x are 0 and 42" -- is global analysis, so it sits inside the
+carve-out above, and the change is what closed a genuine out-of-thin-air hole.
+`JCTC17`, whose justification does not need that step, still agrees.
 
 | Test | Asserts | JMM | sMRD fallback |
 |---|---|---|---|
@@ -115,5 +122,6 @@ through `--allow-unknown-model`, measured at `2761ec5`.
 | `JCTC12` | forbid | forbid | **allows** ✗ |
 | `JCTC13`, `JCTC14`, `JCTC15` | forbid | forbid | forbids ✓ |
 | `JCTC16` | allow | allow | allows ✓ |
-| `JCTC17`, `JCTC18` | allow | allow | allows ✓ |
+| `JCTC17` | allow | allow | allows ✓ |
+| `JCTC18` | allow | allow | **forbids** ✗ |
 | `JCTC19`, `JCTC20` | allow | allow | **forbids** ✗ |
