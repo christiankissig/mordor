@@ -778,9 +778,6 @@ module Freeze = struct
               if condition then f () else false
             in
             let w, r = rf_edge in
-            let r_restrict =
-              Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
-            in
             (* Check that loc(w) = loc(r) is satisfiable *)
             let loc_eq =
               if w = 0 then
@@ -793,8 +790,9 @@ module Freeze = struct
                 | _ -> false
             in
               let*? () = (loc_eq, "RF locs not equal") in
-              (* Check that writes are not shadowed for read-from *)
-              let has_dslwb = dslwb ~exclude:elided structure w r in
+              (* Check that writes are not shadowed for read-from, under the
+                 same predicates the location test above just used. *)
+              let has_dslwb = dslwb ~exclude:elided ~state:preds structure w r in
                 let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
 
                 true

@@ -396,15 +396,34 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
    filter it is not.  Without it the freezing pass loses executions on
    write-before-lift, RREWA, Redundant Write after Read Elimination,
    PPO000-019, listing20 and listing21. *)
+(* [state] is the solver state the shadowing test is decided under.  The rf
+   edge being tested has its location checked under the path predicates, and
+   the shadow test on the same edge used to run under r's branch conditions
+   alone.  Callers now pass the predicates their own location test uses, so
+   both tests on the edge see the same assumptions; with no [state], r's branch
+   conditions remain the default.
+
+   In practice the two decide the same way, which is worth knowing before
+   expecting this to prune anything.  The interpreter continues a program
+   after an [if] inside each branch, so [restrict r] already carries every
+   branch condition on r's path.  What the path predicates add on top is the
+   pairwise disjointness of static and allocated locations -- disequalities,
+   which cannot make a location equality provable -- and the litmus [[...]]
+   constraints, which no test uses.  Measured on 2026-09-11 over litmus-tests/
+   and litmus-tests-review/: no rf edge in 284 files is shadowed under one
+   state and not the other, and neither execution counts, verdicts nor run
+   time move. *)
 (* TODO optimize; pregenerate *)
-let dslwb ?(exclude = USet.create ()) structure w r =
+let dslwb ?(exclude = USet.create ()) ?state structure w r =
   let write_events =
     structure.write_events
     |> USet.union structure.malloc_events
     |> USet.union structure.free_events
   in
   let r_restrict =
-    Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
+    match state with
+    | Some state -> state
+    | None -> Hashtbl.find_opt structure.restrict r |> Option.value ~default:[]
   in
   let result =
     USet.exists

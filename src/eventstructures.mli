@@ -81,12 +81,24 @@ val generate_max_conflictfree_sets : symbolic_event_structure -> path_info list
     write it has elided cannot shadow anything. It defaults to empty, which
     reads the condition off the structure alone.
 
+    [state] is the solver state location equality is decided under. It
+    defaults to the branch conditions guarding the read; a caller that has
+    already checked the rf edge's own location under stronger predicates
+    should pass those, so both tests on the edge see the same assumptions.
+
     @param exclude Events the execution does not contain
+    @param state Predicates to decide location equality under
     @param structure The symbolic event structure
     @param write The write event label
     @param read The read event label
     @return [true] if condition holds, [false] otherwise *)
-val dslwb : ?exclude:int uset -> symbolic_event_structure -> int -> int -> bool
+val dslwb :
+  ?exclude:int uset ->
+  ?state:expr list ->
+  symbolic_event_structure ->
+  int ->
+  int ->
+  bool
 
 (** [structure] Get PPO relation from initial events and to terminal events.
 
