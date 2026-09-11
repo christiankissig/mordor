@@ -108,6 +108,7 @@ and Expr : sig
   val simplify_disjunction : t list -> t list -> t list
   val extract_constraints : t -> t list
   val apply_constraints : t -> t
+  val apply_constraints_ub : t -> t * string list
   val extract_variables : t -> string list
 end = struct
   type t = expr
@@ -874,6 +875,32 @@ end = struct
       | _ -> e
     in
       aux expr
+
+  (** [apply_constraints_ub expr] folds as {!apply_constraints} does, and also
+      returns the symbols the fold assumed to be zero.
+
+      Folding [1 / !r] to [1] is sound only because an implementation may assume
+      [r = 0] -- otherwise the division is by zero and the behaviour undefined.
+      {!apply_constraints} discharges the fold and drops the assumption, so it
+      reaches nothing past the statement it fired on. Returning it lets the
+      caller record it as a fact about the events that follow (github #65). *)
+  let apply_constraints_ub expr =
+    let assumed = ref [] in
+    let rec aux e =
+      match e with
+      | EBinOp (lhs, "/", EUnOp ("!", rhs)) ->
+          ( match rhs with
+          | ESymbol s | EVar s -> assumed := s :: !assumed
+          | _ -> ()
+          );
+          aux lhs
+      | EBinOp (lhs, op, rhs) -> EBinOp (aux lhs, op, aux rhs)
+      | EUnOp (op, rhs) -> EUnOp (op, aux rhs)
+      | EOr clauses -> EOr (List.map aux clauses)
+      | _ -> e
+    in
+    let folded = aux expr in
+      (folded, List.sort_uniq String.compare !assumed)
 
   let extract_variables expr =
     let rec aux e =

@@ -1681,7 +1681,14 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                     |> Option.value ~default:(Hashtbl.create 0)
                   in
                     Hashtbl.iter
-                      (fun reg expr -> Hashtbl.add final_env reg expr)
+                      (fun reg expr ->
+                        (* The register environment also carries the path's UB
+                           assumptions, keyed by a prefix no register can have
+                           (see [Interpret.ub_fact_prefix]). They are facts for
+                           elaboration, not part of the observable state. *)
+                        if not (String.starts_with ~prefix:"%ub:" reg) then
+                          Hashtbl.add final_env reg expr
+                      )
                       reg_env
             )
             freeze_res.e;

@@ -128,6 +128,64 @@ let create_events ?(ubopt = false) defacto =
 let apply_ub_constraints events e =
   if events.ubopt then Expr.apply_constraints e else e
 
+(** The prefix under which a UB assumption is recorded in the register
+    environment.
+
+    [env] is a name-to-expression table that {!update_env} copies on every
+    write, so it is already threaded through the interpretation and already
+    local to a path -- which is what a UB assumption needs, since the fold that
+    licensed it fired on one branch and not the other. A key carrying this
+    prefix is not a register: no register can be named with it, and
+    {!Executions} keeps such keys out of an execution's final environment. *)
+let ub_fact_prefix = "%ub:"
+
+(** [ub_facts env] is every UB assumption recorded on this path, as facts.
+
+    Each is [sym = 0]: the symbol a [1 / !sym] fold assumed away. They are
+    handed to elaboration as de facto constraints on the events that follow,
+    and not added to the path predicates -- a UB assumption is a permission to
+    rewrite, not a claim that the value really is zero, so the unexploited
+    behaviour has to stay. Elaboration already treats de facto constraints that
+    way: [ValueAssignElab] solves with them and offers the narrowed write as an
+    extra justification, leaving the original in the set. *)
+let ub_facts env =
+  Hashtbl.fold
+    (fun k v acc ->
+      if String.starts_with ~prefix:ub_fact_prefix k then v :: acc else acc
+    )
+    env []
+
+(** [ub_assume events env e] folds [e] as {!apply_ub_constraints} does, and
+    returns an environment recording what the fold assumed.
+
+    The fold of [1 / !r] to [1] is sound only because an implementation may
+    assume [r = 0]. Dropping the assumption leaves every later use of [r]
+    reading its real value, so the transformation is invisible past the
+    statement it fired on -- which is what left [symmrd/LB+UB+data+z.lit]'s
+    [allow (r1 != rz)] without a witness (github #65).
+
+    The assumption is on the read's *symbol*, not on the register: [r1] keeps
+    its real value in the final state, and it is the later *uses* elaboration
+    may rewrite. *)
+let ub_assume events env e =
+  if not events.ubopt then (Expr.evaluate ~env:(Hashtbl.find_opt env) e, env)
+  else
+    (* [Expr.evaluate] substitutes one level and stops -- a register maps to its
+       read's symbol, and the symbol is returned as it is rather than looked up
+       again -- so the fold has to be shown the symbol, not the register. *)
+    let e = Expr.evaluate ~env:(Hashtbl.find_opt env) e in
+    let folded, assumed = Expr.apply_constraints_ub e in
+      if assumed = [] then (folded, env)
+      else
+        let env' = Hashtbl.copy env in
+          List.iter
+            (fun sym ->
+              Hashtbl.replace env' (ub_fact_prefix ^ sym)
+                (EBinOp (ESymbol sym, "=", ENum Z.zero))
+            )
+            assumed;
+          (folded, env')
+
 (** Add an event to the global events structure.
 
     @param events The global events structure to add to.
@@ -267,10 +325,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let cont = recurse rest env phi events in
                   SymbolicEventStructure.seq threads_structure cont
         | RegisterStore { register; expr } ->
-            let expr_value =
-              Expr.evaluate ~env:(Hashtbl.find_opt env) expr
-              |> apply_ub_constraints events
-            in
+            let expr_value, env = ub_assume events env expr in
             let env' = update_env env register expr_value in
             let cont = recurse rest env' phi events in
               cont
@@ -279,10 +334,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             let cont = recurse rest env' phi events in
               cont
         | GlobalStore { global; expr; assign } ->
-            let wval =
-              Expr.evaluate ~env:(Hashtbl.find_opt env) expr
-              |> apply_ub_constraints events
-            in
+            let wval, env = ub_assume events env expr in
             let evt =
               {
                 (Event.create Write 0 ()) with
@@ -299,15 +351,13 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
+                  @ ub_facts env
               in
               let cont = recurse rest env phi events in
                 SymbolicEventStructure.dot event' cont phi defacto
         | DerefStore { address; expr; assign } ->
             let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-            let wval =
-              Expr.evaluate ~env:(Hashtbl.find_opt env) expr
-              |> apply_ub_constraints events
-            in
+            let wval, env = ub_assume events env expr in
             let evt =
               {
                 (Event.create Write 0 ()) with
@@ -322,6 +372,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
+                @ ub_facts env
             in
             let cont = recurse rest env phi events in
               SymbolicEventStructure.dot event' cont phi defacto
@@ -343,6 +394,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
+                  @ ub_facts env
               in
               let env' = Hashtbl.copy env in
                 Hashtbl.replace env' register (Expr.of_value rval);
@@ -368,6 +420,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   List.map
                     (Expr.evaluate ~env:(Hashtbl.find_opt env))
                     events.defacto
+                    @ ub_facts env
                 in
 
                 let env' = Hashtbl.copy env in
@@ -421,6 +474,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
+                  @ ub_facts env
               in
 
               let env' = Hashtbl.copy env in
@@ -485,6 +539,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
+                  @ ub_facts env
               in
 
               let env_succ = Hashtbl.copy env in
@@ -543,6 +598,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
+                @ ub_facts env
             in
             let branch_event =
               { (Event.create Branch 0 ()) with cond = Some cond_val }
@@ -589,6 +645,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
+                @ ub_facts env
             in
 
             let cont = recurse rest env phi events in
@@ -607,6 +664,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
+                @ ub_facts env
             in
 
             let cont = recurse rest env phi events in
@@ -625,6 +683,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
+                @ ub_facts env
             in
 
             let cont = recurse rest env phi events in
@@ -641,6 +700,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
+                  @ ub_facts env
               in
 
               let env' = Hashtbl.copy env in
@@ -661,6 +721,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
+                  @ ub_facts env
               in
 
               let env' = Hashtbl.copy env in
@@ -676,6 +737,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
+                @ ub_facts env
             in
 
             let cont = recurse rest env phi events in
@@ -770,6 +832,7 @@ let make_generic_terminal_structure ~add_event env phi events =
   in
   let defacto =
     List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
+    @ ub_facts env
   in
 
   SymbolicEventStructure.dot terminal_evt cont phi defacto
@@ -824,6 +887,7 @@ let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
   (* Prefix with initial event *)
   let defacto =
     List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
+    @ ub_facts env
   in
   let structure = SymbolicEventStructure.dot init_event' structure [] defacto in
 
@@ -1326,6 +1390,7 @@ end = struct
     in
     let defacto =
       List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
+      @ ub_facts env
     in
     (* Continue branch: run the body once, then the continuation.
 
