@@ -1,0 +1,22 @@
+// A write through a pointer overwrites the location it points at.
+//
+// MoRDor's own test. Thread 2 reads back the address of G that thread 1
+// published through A, writes 7 through it, and then reads G. In RC11 that read
+// happens after the write through the pointer, which lands on G, so it cannot
+// see G's initial 0.
+//
+// Coherence grouped writes by location without the execution's predicates, so
+// `*rp := 7`, whose location is the symbol read from A, never shared a location
+// with `G := 0`. co never ordered the two, and the read of the overwritten 0
+// was coherent.
+G := 0;
+{
+  rq := &G;
+  A := rq
+} ||| {
+  rp := A;
+  *rp := 7;
+  r1 := G
+}
+%%
+forbid (r1 = 0) [RC11]

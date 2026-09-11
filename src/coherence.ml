@@ -1054,8 +1054,13 @@ let check_for_coherence structure execution restrictions =
                     let ev_b = Hashtbl.find structure.events b in
                       match (ev_a.loc, ev_b.loc) with
                       | Some loc_a, Some loc_b ->
-                          (* Use solver to check semantic equality *)
-                          exeq loc_a loc_b
+                          (* Equal under the execution's own predicates. Asked
+                             without them, a write through a pointer never
+                             shared a location with a write to the location it
+                             points at, so co never ordered the two and a read
+                             could take the value the pointer write had
+                             overwritten. *)
+                          exeq ~state:execution.ex_p loc_a loc_b
                       | _ -> false
                   with Not_found -> false
               )
