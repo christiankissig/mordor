@@ -396,6 +396,15 @@ type mordor_ctx = {
   (* Executions *)
   mutable executions : symbolic_execution USet.t option;
       (** Set of possible executions *)
+  mutable compare_models : string list;
+      (** Coherence models every execution is also checked against, besides
+          [options.coherent]. Empty unless {!select_models} was given some;
+          [executions] stays the set [options.coherent] admits either way. *)
+  mutable model_admissions : (int, string list) Hashtbl.t option;
+      (** For each execution that reached the coherence stage, by id, the models
+          of [compare_models] that admit it. That includes executions
+          [options.coherent] rejects, so it also gives each model's own count.
+          [None] when [compare_models] is empty. *)
   (* Futures *)
   mutable futures : future USet.t option;
       (** Future states in symbolic execution *)
@@ -448,6 +457,8 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     justification_derivations = None;
     justifications = None;
     executions = None;
+    compare_models = [];
+    model_admissions = None;
     futures = None;
     output = None;
     output_mode;
@@ -602,3 +613,47 @@ let make_context_with_model options ?(output_mode = Json)
     if options.model <> "undefined" && options.model <> "" then
       apply_model_options ctx options.model;
     ctx
+
+(** [select_models ctx ~primary ~others] chooses the model executions are
+    enumerated under and the models each is also checked against.
+
+    Either may be ["default"], which is the model the litmus test states, or
+    sMRD when it states none. That is whatever parsing left in
+    [ctx.options.coherent], so this has to run after parsing, and on a context
+    no model was applied to beforehand: {!make_context_with_model} with
+    [options.model = "undefined"].
+
+    A [primary] other than ["default"] is applied as the test's own annotation
+    would be, and so replaces it. [others] are resolved to coherence models; the
+    primary and duplicates are dropped, since they say nothing new.
+
+    @raise Failure if a name in [others] names no coherence model. *)
+let select_models (ctx : mordor_ctx) ~primary ~others =
+  let stated = ctx.options.coherent in
+    if primary <> "default" then apply_model_options ctx primary;
+    let coherence_model = function
+      | "default" -> stated
+      | name -> (
+          match get_model_options name with
+          | Some { coherent = Some coherent; _ } -> coherent
+          | _ ->
+              failwith
+                (Printf.sprintf "%S does not name a coherence model to compare"
+                   name
+                )
+        )
+    in
+      ctx.compare_models <-
+        List.map coherence_model others
+        |> List.sort_uniq String.compare
+        |> List.filter (fun m -> m <> ctx.options.coherent)
+
+(** [step_select_models ~primary ~others lwt_ctx] is {!select_models} as a
+    pipeline step, to follow [Parse.step_parse_litmus]. *)
+let step_select_models ~primary ~others (lwt_ctx : mordor_ctx Lwt.t) =
+  Lwt.map
+    (fun ctx ->
+      select_models ctx ~primary ~others;
+      ctx
+    )
+    lwt_ctx

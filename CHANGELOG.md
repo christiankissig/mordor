@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A UB assumption from folding `1 / !r` to `1` now reaches elaboration as a de facto constraint, so the narrowed write and the original write are both justified (partial fix for [#65](https://github.com/christiankissig/mordor/issues/65)).
 
 #### Web UI
+- The settings choose a primary memory model, or the test's own, and further models to compare. Each compared model checks every execution, the log gives each model's count, and an execution shows which other models also allow it. The same comes through `compare_models` on the stream API ([#82](https://github.com/christiankissig/mordor/issues/82)).
+- `MORDOR_WEB_PORT` sets the web server's port, which is still 8080 by default.
 - The final register state of each execution ([#8](https://github.com/christiankissig/mordor/issues/8)).
 - The justifications each execution was frozen from, and the program's whole justification set with the elaboration step behind each justification ([#3](https://github.com/christiankissig/mordor/issues/3), [#80](https://github.com/christiankissig/mordor/issues/80)).
 - TikZ export that keeps the on-screen layout ([#77](https://github.com/christiankissig/mordor/issues/77)), and DOT export with node positions (`2b70ef4`).

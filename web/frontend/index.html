@@ -119,6 +119,8 @@
                   <div><strong>Predicates:</strong> <span id="predicates">⊤</span></div>
                   <div><strong>Final registers:</strong> <span
                       id="final-registers">N/A</span></div>
+                  <div id="other-models-row" hidden><strong>Also allowed by:</strong> <span
+                      id="other-models"></span></div>
                   <div><strong>Justifications:</strong>
                     <button id="justifications-btn" class="btn-secondary"
                         title="Show the justifications this execution was frozen from"
@@ -253,12 +255,23 @@
                     <h3 style="color: var(--text-strong); font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Memory Model</h3>
                     <div class="setting-item">
                         <label style="display: flex; align-items: center; gap: 0.5rem;">
-                            <span>Weak memory model:</span>
-                            <select id="memory-model" style="padding: 0.4rem; background: var(--control-bg); border: 1px solid var(--border-strong); color: var(--text); border-radius: 4px; font-size: 0.9rem;">
+                            <span>Primary model:</span>
+                            <select id="memory-model" title="Executions are shown for this model" style="padding: 0.4rem; background: var(--control-bg); border: 1px solid var(--border-strong); color: var(--text); border-radius: 4px; font-size: 0.9rem;">
+                                <option value="default" selected>Default (the test's model, or sMRD)</option>
+                                <option value="smrd">sMRD</option>
                                 <option value="rc11">RC11</option>
-                                <option value="smrd" selected>SMRD</option>
                             </select>
                         </label>
+                    </div>
+                    <div class="setting-item" style="margin-top: 0.75rem;">
+                        <span>Also compute executions under:</span>
+                        <div id="compare-models" style="display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0.4rem 0 0 1.5rem;">
+                            <label><input type="checkbox" value="smrd" /> sMRD</label>
+                            <label><input type="checkbox" value="rc11" /> RC11</label>
+                        </div>
+                        <p style="margin: 0.4rem 0 0 1.5rem; font-size: 0.8rem; color: var(--text-muted);">
+                            Each execution shows which of these also allow it. Executions are enumerated once and each model checks them, so the UB fold follows the primary model.
+                        </p>
                     </div>
                 </div>
 

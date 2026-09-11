@@ -57,9 +57,28 @@ request body is JSON:
   "program":        "<litmus test source>",
   "loop_semantics": "symbolic" | "step-counter",
   "steps":          "<integer>",
-  "memory_model":   "smrd" | "rc11" | "rc11c" | "rc11ub" | "ub11" | "undefined"
+  "memory_model":   "default" | "smrd" | "rc11",
+  "compare_models": ["smrd" | "rc11", ...]
 }
 ```
+
+`memory_model` is the primary model: executions are enumerated and shown under
+it, and the assertion is checked against it. `"default"`, or any other value, is
+the model the litmus test's annotation names, which may be one not offered here
+such as IMM, or sMRD if it names none; a named model replaces the annotation.
+
+`compare_models` (optional) are further models every execution is checked
+against. The primary and duplicates are dropped, and other names are ignored. When any remain, `/api/visualize/stream` and `/api/assertions/stream`
+send a count of the executions each model allows,
+
+```json
+{"type": "model_counts", "primary": "rc11",
+ "counts": [{"model": "rc11", "executions": 21}, {"model": "smrd", "executions": 25}]}
+```
+
+and each `execution` message carries `other_models`, the compared models that
+also allow it. The primary's count is the number of executions sent; a compared
+model's also counts executions the primary rejects.
 
 Each endpoint runs a prefix of the full pipeline and streams intermediate status 
 messages followed by graph/assertion data, ending with a completion message:
@@ -83,7 +102,7 @@ messages followed by graph/assertion data, ending with a completion message:
 | `POST` | `/api/executions` | Run parse → interpret → justifications → dependencies and return all executions as a single JSON document |
 
 Request body matches the SSE endpoints (`program`, `loop_semantics`, `steps`,
-`memory_model`). The response is `application/json` with the following shape:
+`memory_model`; `compare_models` is ignored). The response is `application/json` with the following shape:
 
 ```json
 {

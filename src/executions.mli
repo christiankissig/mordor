@@ -206,10 +206,19 @@ end
     @param restrictions
       Coherence model restrictions specifying the memory model (e.g., SC, TSO,
       ARM, POWER)
+    @param compare_models
+      Further coherence models to check every execution against. They filter
+      nothing.
+    @param admissions
+      Filled with, for each execution reaching the coherence stage, the models
+      of [compare_models] that admit it, including executions [restrictions]
+      rejects
     @return Lwt promise resolving to a list of valid symbolic executions *)
 val generate_executions :
   ?include_rf:bool ->
   ?compute:compute_fn ->
+  ?compare_models:string list ->
+  ?admissions:(int, string list) Hashtbl.t ->
   symbolic_event_structure ->
   Forwarding.event_structure_context ->
   justification list ->
@@ -246,6 +255,8 @@ val generate_executions :
 val calculate_dependencies :
   ?include_rf:bool ->
   ?num_threads:int ->
+  ?compare_models:string list ->
+  ?admissions:(int, string list) Hashtbl.t ->
   symbolic_event_structure ->
   justification list ->
   Forwarding.event_structure_context ->

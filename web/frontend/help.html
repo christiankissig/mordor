@@ -953,6 +953,10 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
 <span class="operator">%%</span>
 [sc]</code></pre>
                 </div>
+
+                <div class="note">
+                    <strong>Memory models in the web UI:</strong> the settings choose a <em>primary model</em>, whose executions are shown and against which the assertion is checked. <em>Default</em> is the model the test's annotation names, or sMRD if it names none; any other choice replaces the annotation. Models ticked under <em>Also compute executions under</em> check the same executions: the log lists how many each allows, and an execution another model also allows says so under <em>Also allowed by</em>. Executions are enumerated once, so interpretation, including the UB fold of <code>[rc11ub]</code>, follows the primary model.
+                </div>
             </section>
 
             <section id="examples" class="section">

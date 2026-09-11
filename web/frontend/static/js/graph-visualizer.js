@@ -106,7 +106,10 @@ class GraphVisualizer {
             showUnboundedDeref: false,
             loopSemantics: 'step-counter',  // 'step-counter' or 'symbolic'
             stepCounter: 2,
-            memoryModel: 'smrd'
+            // 'default' is the model the litmus test states, or sMRD.
+            memoryModel: 'default',
+            // Further models each execution is checked against.
+            compareModels: []
         };
 
         this.cy = cytoscape({
@@ -745,8 +748,11 @@ class GraphVisualizer {
         }
         document.getElementById('step-counter').value = this.settings.stepCounter;
         
-        // Populate memory model setting
+        // Populate memory model settings
         document.getElementById('memory-model').value = this.settings.memoryModel;
+        document.querySelectorAll('#compare-models input[type="checkbox"]').forEach(box => {
+            box.checked = this.settings.compareModels.includes(box.value);
+        });
         
         // Enable/disable step counter input based on selection
         this.updateStepCounterState();
@@ -771,13 +777,20 @@ class GraphVisualizer {
             this.settings.loopSemantics = 'symbolic';
         }
         
-        // Read memory model setting
+        // Read memory model settings
         this.settings.memoryModel = document.getElementById('memory-model').value;
+        this.settings.compareModels = Array.from(
+            document.querySelectorAll('#compare-models input[type="checkbox"]:checked'),
+            box => box.value
+        );
         
         this.closeSettingsModal();
         this.log('Settings updated: ' + this.settings.loopSemantics + 
                  (this.settings.loopSemantics === 'step-counter' ? ' (' + this.settings.stepCounter + ' steps)' : '') +
-                 ', model: ' + this.settings.memoryModel, 
+                 ', model: ' + GraphVisualizer.modelLabel(this.settings.memoryModel) +
+                 (this.settings.compareModels.length > 0
+                     ? ', also: ' + this.settings.compareModels.map(GraphVisualizer.modelLabel).join(', ')
+                     : ''), 
                  'success');
         
         // Regenerate if we have a program
@@ -1669,11 +1682,29 @@ class GraphVisualizer {
         });
     }
 
+    // Display name for a model as the backend and the settings dialog name it.
+    static modelLabel(model) {
+        const labels = { default: 'Default', smrd: 'sMRD', rc11: 'RC11', rc11c: 'RC11c', imm: 'IMM' };
+        return labels[model] || model;
+    }
+
+    // The compared models that also allow the execution on screen. The row is
+    // only there when at least one does.
+    renderOtherModels(models) {
+        const row = document.getElementById('other-models-row');
+        if (!row) return;
+        const list = Array.isArray(models) ? models : [];
+        row.hidden = list.length === 0;
+        document.getElementById('other-models').textContent =
+            list.map(GraphVisualizer.modelLabel).join(', ');
+    }
+
     updateExecutionInfo(data) {
         // Handle case where data might be undefined (event structure)
         if (!data) {
             document.getElementById('predicates').textContent = '⊤';
             document.getElementById('final-registers').textContent = 'N/A';
+            this.renderOtherModels(null);
             this.renderJustifications(null);
             document.getElementById('has-uaf').textContent = 'N/A';
             document.getElementById('has-uaf').style.color = 'var(--text)';
@@ -1698,6 +1729,8 @@ class GraphVisualizer {
             (Array.isArray(env) && env.length > 0)
                 ? env.map(([reg, value]) => `${reg} = ${value}`).join(', ')
                 : (Array.isArray(env) ? '∅' : 'N/A');
+
+        this.renderOtherModels(data.other_models);
 
         // undefined_behaviour is an array, so we need to access the first element
         if (data.undefined_behaviour !== undefined && data.undefined_behaviour.length > 0) {
@@ -1858,6 +1891,7 @@ class GraphVisualizer {
             allow_uaf: this.settings.showUAF.toString(),
             allow_unbounded_deref: this.settings.showUnboundedDeref.toString(),
             memory_model: this.settings.memoryModel,
+            compare_models: this.settings.compareModels,
         };
 
         // Use fetch POST to avoid URL length limits, then read SSE stream manually
@@ -1895,6 +1929,14 @@ class GraphVisualizer {
                 this.justificationSet = data.justifications || [];
                 this.renderJustificationSet();
                 this.log(`Received justification set (${this.justificationSet.length})`);
+            } else if (data.type === 'model_counts') {
+                // How many executions each model allows. The primary's are the
+                // ones shown; a compared model's may include executions the
+                // primary rejects.
+                const counts = (data.counts || [])
+                    .map(c => `${GraphVisualizer.modelLabel(c.model)}${c.model === data.primary ? ' (shown)' : ''}: ${c.executions}`)
+                    .join(', ');
+                this.log('Executions per model: ' + counts);
             } else if (data.type === 'event_structure') {
                 this.log('Received event structure');
                 this.graphs.push(data.graph);

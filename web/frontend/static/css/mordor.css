@@ -404,6 +404,10 @@ pre.line-numbers > code {
     gap: 1rem;
 }
 
+.execution-info div[hidden] {
+    display: none;
+}
+
 .execution-info strong {
     color: var(--text-strong);
 }

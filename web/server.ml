@@ -114,6 +114,58 @@ let examples_handler _request =
   in
     Dream.json (Yojson.Safe.to_string (`List entries))
 
+(** {2 Model Selection} *)
+
+(** The models the settings dialog offers to compare, by the names the model
+    table uses. *)
+let comparable_models = [ "smrd"; "rc11" ]
+
+(** The primary models it offers: those, or ["default"], the model the litmus
+    test states or sMRD, which can be one not offered here. *)
+let selectable_models = "default" :: comparable_models
+
+(** A request's choice of models: the primary executions are enumerated under,
+    and the others each is checked against. *)
+type model_selection = { primary : string; others : string list }
+
+(** [model_selection_of_json json] reads [memory_model] and [compare_models].
+
+    A primary outside {!selectable_models}, or none, is ["default"]: until the
+    dialog offered a default, the litmus test's annotation overrode whatever was
+    sent anyway, so that is what an old client gets. Unknown compared names are
+    dropped. *)
+let model_selection_of_json json =
+  let field key =
+    match json with
+    | `Assoc fields -> List.assoc_opt key fields
+    | _ -> None
+  in
+  let selectable m = List.mem (String.lowercase_ascii m) selectable_models in
+  let primary =
+    match field "memory_model" with
+    | Some (`String m) when selectable m -> String.lowercase_ascii m
+    | _ -> "default"
+  in
+  let others =
+    match field "compare_models" with
+    | Some (`List ms) ->
+        List.filter_map
+          (function
+            | `String m
+              when List.mem (String.lowercase_ascii m) comparable_models ->
+                Some (String.lowercase_ascii m)
+            | _ -> None
+            )
+          ms
+    | _ -> []
+  in
+    { primary; others }
+
+(** [select_models selection] is {!Context.step_select_models} for a request. It
+    follows parsing, which is what resolves ["default"]. *)
+let select_models { primary; others } =
+  Context.step_select_models ~primary ~others
+
 (** {2 Visualization Functions} *)
 
 (** [visualize_to_stream program options step_counter stream] processes a litmus
@@ -136,7 +188,7 @@ let examples_handler _request =
     - Calculates dependencies
     - Checks assertions
     - Sends execution graphs *)
-let visualize_to_stream program options step_counter stream =
+let visualize_to_stream program options step_counter ~models stream =
   let context =
     make_context_with_model options ~output_mode:Json ~step_counter ()
   in
@@ -155,6 +207,7 @@ let visualize_to_stream program options step_counter stream =
     let* ctx =
       Lwt.return context
       |> Parse.step_parse_litmus
+      |> select_models models
       |> LoopInformation.send_loop_information send_data
       |> Interpret.step_interpret
       |> Eventstructureviz.step_send_event_structure_graph ~send_data
@@ -163,6 +216,7 @@ let visualize_to_stream program options step_counter stream =
       |> Elaborations.step_generate_justifications
       |> Eventstructureviz.step_send_justification_set ~send_data
       |> Executions.step_calculate_dependencies
+      |> Eventstructureviz.step_send_model_counts ~send_data
       |> Assertion.step_check_assertions
       |> Assertion.step_send_assertion_results ~send_data
       |> Eventstructureviz.step_send_execution_graphs ~send_data
@@ -179,7 +233,7 @@ let visualize_to_stream program options step_counter stream =
 
       Lwt.return ctx
 
-let visualize_parse_to_stream program options step_counter stream =
+let visualize_parse_to_stream program options step_counter ~models stream =
   let context =
     make_context_with_model options ~output_mode:Json ~step_counter ()
   in
@@ -194,6 +248,7 @@ let visualize_parse_to_stream program options step_counter stream =
     let* ctx =
       Lwt.return context
       |> Parse.step_parse_litmus
+      |> select_models models
       |> LoopInformation.send_loop_information send_data
     in
 
@@ -201,7 +256,7 @@ let visualize_parse_to_stream program options step_counter stream =
 
     Lwt.return ctx
 
-let visualize_interpret_to_stream program options step_counter stream =
+let visualize_interpret_to_stream program options step_counter ~models stream =
   let context =
     make_context_with_model options ~output_mode:Json ~step_counter ()
   in
@@ -216,6 +271,7 @@ let visualize_interpret_to_stream program options step_counter stream =
     let* ctx =
       Lwt.return context
       |> Parse.step_parse_litmus
+      |> select_models models
       |> LoopInformation.send_loop_information send_data
       |> Interpret.step_interpret
       |> Eventstructureviz.step_send_event_structure_graph ~send_data
@@ -225,7 +281,8 @@ let visualize_interpret_to_stream program options step_counter stream =
 
     Lwt.return ctx
 
-let visualize_test_episodicity_to_stream program options step_counter stream =
+let visualize_test_episodicity_to_stream program options step_counter ~models
+    stream =
   let context =
     make_context_with_model options ~output_mode:Json ~step_counter ()
   in
@@ -240,6 +297,7 @@ let visualize_test_episodicity_to_stream program options step_counter stream =
     let* ctx =
       Lwt.return context
       |> Parse.step_parse_litmus
+      |> select_models models
       |> LoopInformation.send_loop_information send_data
       |> Interpret.step_interpret
       |> Eventstructureviz.step_send_event_structure_graph ~send_data
@@ -251,7 +309,8 @@ let visualize_test_episodicity_to_stream program options step_counter stream =
 
     Lwt.return ctx
 
-let visualize_test_assertions_to_stream program options step_counter stream =
+let visualize_test_assertions_to_stream program options step_counter ~models
+    stream =
   let context =
     make_context_with_model options ~output_mode:Json ~step_counter ()
   in
@@ -266,6 +325,7 @@ let visualize_test_assertions_to_stream program options step_counter stream =
     let* ctx =
       Lwt.return context
       |> Parse.step_parse_litmus
+      |> select_models models
       |> LoopInformation.send_loop_information send_data
       |> Interpret.step_interpret
       |> Eventstructureviz.step_send_event_structure_graph ~send_data
@@ -274,6 +334,7 @@ let visualize_test_assertions_to_stream program options step_counter stream =
       |> Elaborations.step_generate_justifications
       |> Eventstructureviz.step_send_justification_set ~send_data
       |> Executions.step_calculate_dependencies
+      |> Eventstructureviz.step_send_model_counts ~send_data
       |> Assertion.step_check_assertions
       |> Assertion.step_send_assertion_results ~send_data
       |> Eventstructureviz.step_send_execution_graphs ~send_data
@@ -339,15 +400,12 @@ let make_sse_handler pipeline_fn request =
       )
   in
 
-  let memory_model =
-    let m = String.lowercase_ascii (get_field "memory_model") in
-      match m with
-      | "rc11" | "rc11c" | "rc11ub" | "smrd" | "ub11" | "undefined" -> m
-      | _ -> "smrd"
-  in
+  let models = model_selection_of_json json in
 
-  Printf.printf "📥 SSE request: %d chars, %d steps, model: %s\n%!"
-    (String.length program) step_counter memory_model;
+  Printf.printf
+    "📥 SSE request: %d chars, %d steps, model: %s, compared: [%s]\n%!"
+    (String.length program) step_counter models.primary
+    (String.concat ", " models.others);
 
   Dream.stream
     ~headers:
@@ -366,13 +424,10 @@ let make_sse_handler pipeline_fn request =
           in
             let* () = Dream.flush stream in
 
+            (* No model is applied before parsing: [select_models] needs
+               to see what the test itself states. *)
             let options =
-              {
-                default_options with
-                loop_semantics;
-                step_counter;
-                model = memory_model;
-              }
+              { default_options with loop_semantics; step_counter }
             in
 
             Logs.info (fun m ->
@@ -392,7 +447,9 @@ let make_sse_handler pipeline_fn request =
               in
                 let* () = Dream.flush stream in
 
-                let* _ctx = pipeline_fn program options step_counter stream in
+                let* _ctx =
+                  pipeline_fn program options step_counter ~models stream
+                in
 
                 Lwt.return_unit
         )
@@ -474,16 +531,9 @@ let executions_export_handler request =
       )
   in
 
-  let memory_model =
-    let m = String.lowercase_ascii (get_field "memory_model") in
-      match m with
-      | "rc11" | "rc11c" | "rc11ub" | "smrd" | "ub11" | "undefined" -> m
-      | _ -> "smrd"
-  in
+  let models = { (model_selection_of_json json) with others = [] } in
 
-  let options =
-    { default_options with loop_semantics; step_counter; model = memory_model }
-  in
+  let options = { default_options with loop_semantics; step_counter } in
 
   let context =
     make_context_with_model options ~output_mode:Json ~step_counter ()
@@ -495,6 +545,7 @@ let executions_export_handler request =
         let* ctx =
           Lwt.return context
           |> Parse.step_parse_litmus
+          |> select_models models
           |> Interpret.step_interpret
           |> Elaborations.step_generate_justifications
           |> Executions.step_calculate_dependencies
@@ -548,6 +599,11 @@ let setup_logs () =
     Logs.set_reporter reporter;
     Logs.set_level (Some Logs.Debug)
 
+(** The port to listen on: [MORDOR_WEB_PORT], or 8080. *)
+let port =
+  Option.bind (Sys.getenv_opt "MORDOR_WEB_PORT") int_of_string_opt
+  |> Option.value ~default:8080
+
 (** {2 Main Server Entry Point}
 
     Starts the Mordor web server with the following endpoints:
@@ -575,14 +631,14 @@ let setup_logs () =
     - [POST /api/tests/run] - Run a specific test
     - [GET /api/tests/source] - Get source code of a test
 
-    The server listens on port 8080 on all interfaces (0.0.0.0). *)
+    The server listens on all interfaces (0.0.0.0), on {!port}. *)
 let () =
   setup_logs ();
   Printexc.record_backtrace true;
   Printf.printf "Mordor Web - Graph Visualization & Test Runner\n";
-  Printf.printf "🌐 http://localhost:8080\n\n";
+  Printf.printf "🌐 http://localhost:%d\n\n" port;
 
-  Dream.run ~interface:"0.0.0.0" ~port:8080
+  Dream.run ~interface:"0.0.0.0" ~port
   @@ Dream.logger
   @@ Dream.router
        ([

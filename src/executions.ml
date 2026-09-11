@@ -1491,9 +1491,16 @@ let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
     @param justs Set of justifications from elaboration.
     @param statex Static constraints.
     @param restrictions Coherence restrictions to check.
+    @param compare_models
+      Further coherence models to check every execution against (default: none).
+      They do not filter anything.
+    @param admissions
+      Filled with, for each execution reaching the coherence stage, the models
+      of [compare_models] that admit it -- executions [restrictions] rejects
+      included.
     @return Promise of list of valid coherent executions. *)
 let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
-    (structure : symbolic_event_structure)
+    ?(compare_models = []) ?admissions (structure : symbolic_event_structure)
     (fwd_es_ctx : Forwarding.event_structure_context)
     (justs : justification list) statex ~restrictions =
   (* let* _ = Lwt.return_unit in *)
@@ -1809,17 +1816,38 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
 
     let stream_filter_coherent_executions input_stream =
       let* input_stream = input_stream in
+      (* Every execution is checked against the compared models too, whether or
+         not the primary admits it. Enumeration up to here does not depend on
+         the coherence model, so this is each model's own execution set -- as
+         long as the models agree on everything decided before coherence, which
+         for the UB fold they need not (see [Context.select_models]). *)
       let check_exec exec =
-        match check_for_coherence structure exec restrictions with
-        | Some co ->
-            (* Keep the order that admitted it, so the export and any [.co]
-               assertion can be read against the same witness. *)
-            exec.co <- Some co;
-            Some exec
-        | None -> None
+        let admitted_by =
+          List.filter
+            (fun coherent ->
+              Option.is_some
+                (check_for_coherence structure exec { Coherence.coherent })
+            )
+            compare_models
+        in
+          (exec, check_for_coherence structure exec restrictions, admitted_by)
       in
         let* results = compute.run check_exec input_stream in
-          List.filter_map Fun.id results |> Lwt.return
+          List.filter_map
+            (fun (exec, co, admitted_by) ->
+              Option.iter
+                (fun tbl -> Hashtbl.replace tbl exec.id admitted_by)
+                admissions;
+              match co with
+              | Some co ->
+                  (* Keep the order that admitted it, so the export and any
+                     [.co] assertion can be read against the same witness. *)
+                  exec.co <- Some co;
+                  Some exec
+              | None -> None
+            )
+            results
+          |> Lwt.return
     in
 
     (* Build justcombos for all paths *)
@@ -1866,7 +1894,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
 let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
-    (structure : symbolic_event_structure) (final_justs : justification list)
+    ?compare_models ?admissions (structure : symbolic_event_structure)
+    (final_justs : justification list)
     (fwd_es_ctx : Forwarding.event_structure_context) ~(exhaustive : bool)
     ~(restrictions : Coherence.restrictions) : symbolic_execution list Lwt.t =
   Logs_safe.debug (fun m -> m "Generating executions...");
@@ -1923,8 +1952,8 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
 
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions ~include_rf ~compute structure fwd_es_ctx final_justs
-      statex ~restrictions
+    generate_executions ~include_rf ~compute ?compare_models ?admissions
+      structure fwd_es_ctx final_justs statex ~restrictions
   in
 
   ( match pool with
@@ -1963,12 +1992,20 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
                 let* () = Forwarding.EventStructureContext.init fwd_es_ctx in
                   Lwt.return fwd_es_ctx
         in
+        let admissions =
+          match ctx.compare_models with
+          | [] -> None
+          | _ -> Some (Hashtbl.create 64)
+        in
           let* executions =
-            calculate_dependencies ~num_threads structure final_justs fwd_es_ctx
+            calculate_dependencies ~num_threads
+              ~compare_models:ctx.compare_models ?admissions structure
+              final_justs fwd_es_ctx
               ~exhaustive:(ctx.options.exhaustive || false)
               ~restrictions:coherence_restrictions
           in
             ctx.executions <- Some (USet.of_list executions);
+            ctx.model_admissions <- admissions;
             Lwt.return ctx
     | _ ->
         Logs_safe.err (fun m ->

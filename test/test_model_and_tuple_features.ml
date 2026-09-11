@@ -411,6 +411,101 @@ module TestContextModelOptions = struct
     check bool "unknown models are fatal by default" false
       default_options.allow_unknown_model
 
+  (* [select_models] runs after parsing, so ["default"] is whatever the test's
+     annotation left in [coherent] -- simulated here by applying it first. *)
+  let selected ?stated ~primary ~others () =
+    let ctx = make_context { default_options with exhaustive = false } () in
+      Option.iter (apply_model_options ctx) stated;
+      select_models ctx ~primary ~others;
+      ctx
+
+  let test_select_default_is_stated_model () =
+    let ctx = selected ~stated:"rc11" ~primary:"default" ~others:[] () in
+      check string "primary is the test's model" "rc11" ctx.options.coherent;
+      let ctx = selected ~primary:"default" ~others:[] () in
+        check string "or sMRD when it states none" "smrd" ctx.options.coherent
+
+  (* An explicit primary replaces the annotation, and "default" among the
+     others still means the annotation. *)
+  let test_select_primary_overrides_stated () =
+    let ctx =
+      selected ~stated:"rc11" ~primary:"imm" ~others:[ "default"; "smrd" ] ()
+    in
+      check string "primary applied" "imm" ctx.options.coherent;
+      check (list string) "default resolves to the stated model"
+        [ "rc11"; "smrd" ] ctx.compare_models
+
+  (* Names are resolved to coherence models before duplicates and the primary
+     are dropped: [power] is IMM, and [default] here is sMRD. *)
+  let test_select_others_resolved_and_deduplicated () =
+    let ctx =
+      selected ~primary:"default"
+        ~others:[ "imm"; "power"; "default"; "smrd"; "rc11" ]
+        ()
+    in
+      check (list string) "imm once, primary dropped" [ "imm"; "rc11" ]
+        ctx.compare_models
+
+  let test_select_other_without_coherence_model_fails () =
+    match selected ~primary:"default" ~others:[ "sevcik" ] () with
+    | _ -> fail "a name with no coherence model was compared"
+    | exception Failure msg ->
+        check bool "names the model" true (contains msg "\"sevcik\"")
+
+  let lb_source =
+    {|x := 0;
+y := 0;
+{
+  r1 := x;
+  y := 1
+} ||| {
+  r2 := y;
+  x := 1
+}
+%%
+forbid (r1 = 1 && r2 = 1) []|}
+
+  let run_models ~primary ~others =
+    let ctx =
+      make_context
+        { default_options with exhaustive = false }
+        ~output_mode:Json ()
+    in
+      ctx.litmus <- Some lb_source;
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> step_select_models ~primary ~others
+        |> Interpret.step_interpret
+        |> Elaborations.step_generate_justifications
+        |> Executions.step_calculate_dependencies
+        )
+
+  let execution_ids ctx =
+    Option.fold ~none:[] ~some:USet.values ctx.executions
+    |> List.map (fun (e : symbolic_execution) -> e.id)
+    |> List.sort compare
+
+  (* A compared model admits exactly the executions it keeps when it is the
+     primary. Load buffering tells them apart: RC11 rejects the witnesses that
+     sMRD keeps. *)
+  let test_compared_model_matches_own_run () =
+    let compared = run_models ~primary:"smrd" ~others:[ "rc11" ] in
+    let rc11 = run_models ~primary:"rc11" ~others:[] in
+    let admissions = Option.get compared.model_admissions in
+    let admitted_by_rc11 =
+      Hashtbl.fold
+        (fun id models acc -> if List.mem "rc11" models then id :: acc else acc)
+        admissions []
+      |> List.sort compare
+    in
+      check (list int) "rc11 admits what its own run keeps" (execution_ids rc11)
+        admitted_by_rc11;
+      check bool "and sMRD keeps more" true
+        (List.length (execution_ids compared) > List.length admitted_by_rc11);
+      check bool "nothing is compared without models" true
+        (rc11.model_admissions = None)
+
   let suite =
     [
       test_case "default_options_coherent" `Quick test_default_options_coherent;
@@ -429,6 +524,16 @@ module TestContextModelOptions = struct
         test_known_model_mapped_to_default_is_not_unknown;
       test_case "known_model_sets_coherent" `Quick test_known_model_sets_coherent;
       test_case "underscore_model_is_known" `Quick test_underscore_model_is_known;
+      test_case "select_default_is_stated_model" `Quick
+        test_select_default_is_stated_model;
+      test_case "select_primary_overrides_stated" `Quick
+        test_select_primary_overrides_stated;
+      test_case "select_others_resolved_and_deduplicated" `Quick
+        test_select_others_resolved_and_deduplicated;
+      test_case "select_other_without_coherence_model_fails" `Quick
+        test_select_other_without_coherence_model_fails;
+      test_case "compared_model_matches_own_run" `Quick
+        test_compared_model_matches_own_run;
     ]
 end
 

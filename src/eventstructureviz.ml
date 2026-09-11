@@ -172,6 +172,10 @@ module EventStructureViz = struct
         (** final_env The register environment the execution ends in, sorted by
             register name. Merged over the terminal events, so it is the
             program's observable state (github #8). *)
+    other_models : string list; [@default []]
+        (** other_models The compared coherence models that also admit the
+            execution, sorted. Empty when none were compared or none admits it.
+        *)
   }
   [@@deriving yojson]
 
@@ -941,6 +945,7 @@ let step_send_event_structure_graph ~(send_data : string -> unit Lwt.t)
             undefined_behaviour = None;
                       justifications = [];
             final_env = [];
+            other_models = [];
           }
       in
       let es_message =
@@ -996,16 +1001,67 @@ let step_send_justification_set (lwt_ctx : mordor_ctx Lwt.t)
     );
     Lwt.return ctx
 
-(** [send_single_execution_graph ~send_data ~build_exec_graph checked_executions
-     i exec] sends a single execution graph as a JSON message.
+(** How many executions each model admits, sent once per run when models are
+    compared. The primary model's count is the number of executions sent; each
+    compared model's counts every execution that reached coherence, so it can
+    exceed that. *)
+module ModelCounts = struct
+  type count = { model : string; executions : int } [@@deriving yojson]
+
+  type message = {
+    type_ : string; [@key "type"]
+    primary : string;
+    counts : count list;
+  }
+  [@@deriving yojson]
+end
+
+(** [step_send_model_counts lwt_ctx ~send_data] sends {!ModelCounts}, or nothing
+    when no models were compared. *)
+let step_send_model_counts (lwt_ctx : mordor_ctx Lwt.t)
+    ~(send_data : string -> unit Lwt.t) : mordor_ctx Lwt.t =
+  let* ctx = lwt_ctx in
+    match ctx.model_admissions with
+    | None -> Lwt.return ctx
+    | Some admissions ->
+        let admitted model =
+          Hashtbl.fold
+            (fun _ models n -> if List.mem model models then n + 1 else n)
+            admissions 0
+        in
+        let primary = ctx.options.coherent in
+        let counts =
+          ModelCounts.
+            {
+              model = primary;
+              executions = Option.fold ~none:0 ~some:USet.size ctx.executions;
+            }
+          :: List.map
+               (fun model -> ModelCounts.{ model; executions = admitted model })
+               ctx.compare_models
+        in
+          let* () =
+            send_data
+              (Yojson.Safe.to_string
+                 (ModelCounts.message_to_yojson
+                    { type_ = "model_counts"; primary; counts }
+                 )
+              )
+          in
+            Lwt.return ctx
+
+(** [send_single_execution_graph ~send_data ~build_exec_graph ?admissions
+     checked_executions i exec] sends a single execution graph as a JSON
+    message.
 
     @param send_data Function to send JSON data to the client
     @param build_exec_graph Function to build a graph for the given execution
+    @param admissions The compared models admitting each execution, by id
     @param checked_executions Hash table of checked execution info for validity
     @param i Index of the execution (0-based)
     @param exec The symbolic execution to visualize *)
-let send_single_execution_graph ~send_data ~build_exec_graph checked_executions
-    i exec =
+let send_single_execution_graph ~send_data ~build_exec_graph ?admissions
+    checked_executions i exec =
   let exec_graph = build_exec_graph exec in
   let graph_json = EventStructureViz.to_json exec_graph in
   let graph_obj =
@@ -1084,6 +1140,9 @@ let send_single_execution_graph ~send_data ~build_exec_graph checked_executions
           List.map Justifications.Justification.to_string exec.justifications
           |> List.sort_uniq String.compare;
         final_env;
+        other_models =
+          Option.bind admissions (fun tbl -> Hashtbl.find_opt tbl exec.id)
+          |> Option.value ~default:[];
       }
   in
   let exec_message =
@@ -1150,7 +1209,7 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
               (* Send each execution graph *)
               Lwt_list.iteri_s
                 (send_single_execution_graph ~send_data ~build_exec_graph
-                   checked_executions
+                   ?admissions:ctx.model_admissions checked_executions
                 )
                 exec_list
         | None ->
