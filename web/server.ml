@@ -610,7 +610,8 @@ let port =
 
     {b Static Content:}
     - [GET /] - Main application page (index.html)
-    - [GET /help/] - Help documentation (help.html)
+    - [GET /manual/] - The manual (manual.html), which [GET /help/] also serves
+      for links to the page it replaced
     - [GET /static/**] - Static assets (CSS, JS, images)
 
     {b Health Check:}
@@ -643,7 +644,9 @@ let () =
   @@ Dream.router
        ([
           Dream.get "/" (Dream.from_filesystem "web/frontend" "index.html");
-          Dream.get "/help/" (Dream.from_filesystem "web/frontend" "help.html");
+          Dream.get "/manual/"
+            (Dream.from_filesystem "web/frontend" "manual.html");
+          Dream.get "/help/" (Dream.from_filesystem "web/frontend" "manual.html");
           Dream.get "/static/**" (Dream.static "web/frontend/static");
           Dream.get "/health" health_handler;
           (* Visualization API - Pipeline stages *)

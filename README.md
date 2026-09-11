@@ -5,9 +5,13 @@
 
 # MoRDor - Symbolic Modular Relaxed Dependencies (in OCaml)
 
-MoRDor is a static code analysis tool implementing weak memory semantics of
-C-like programs based on a symbolic variant of Modular Relaxed Dependencies
-(MRD).
+MoRDor is a tool for exploring weak memory. Given a concurrent C-like program as
+a litmus test, it computes the program's justified executions: the ways its
+reads and writes can resolve under relaxed memory, each backed by
+justifications of what every write depends on. A memory model then decides
+which executions are coherent. Because every execution carries the
+justifications it was built from, MoRDor shows not only which outcomes a model
+allows but why.
 
 MoRDor is a reference implementation of Symbolic Modular Relaxed Dependencies
 (SMRD)
@@ -30,14 +34,22 @@ the output on screen is captured from `mordor` itself.
 
 ## Overview
 
-MoRDor analyzes weak memory models by calculating symbolic dependencies between
-memory operations.
+MoRDor explores weak memory through justified executions. It interprets a
+program symbolically as an event structure, derives justifications for its
+writes, freezes them into executions with their dependencies, and checks those
+executions against memory models such as sMRD and RC11.
 
-The tool provides a comprehensive command-line interface and web UI for:
+The command-line interface and web UI provide:
 - Parsing and validating programs and litmus tests
+- Computing and visualising event structures, justifications and executions
+- Checking `allow` and `forbid` assertions under a memory model, and comparing
+  models execution by execution
 - Deciding episodicity of unbounded loops
-- Computing and visualising event structures and executions
-- Running symbolic verification
+- Finding use-after-free
+
+The web UI's manual, at `/manual/` on a running server
+([web/frontend/manual.html](web/frontend/manual.html)), explains the concepts,
+the UI and the litmus test language.
 
 ## Project Structure
 

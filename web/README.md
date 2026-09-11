@@ -2,8 +2,9 @@
 
 ## Overview
 
-The web server (`mordor-web`) provides a browser UI for visualizing symbolic
-event structures and running litmus tests. It is built on
+The web server (`mordor-web`) provides a browser UI for exploring a program's
+event structure and justified executions, and for running litmus tests. Its
+manual is served at `/manual/`. It is built on
 [Dream](https://aantron.github.io/dream/) and streams results to the frontend
 via Server-Sent Events (SSE).
 
@@ -14,7 +15,7 @@ via Server-Sent Events (SSE).
 ├── episodicity_runner_api.ml          # REST handlers for episodicity analysis via CLI
 └── frontend/
     ├── index.html                     # Main split-screen editor/visualizer UI
-    ├── help.html                      # Help documentation page
+    ├── manual.html                    # The manual, including the language reference
     └── static/
         ├── css/
         │   ├── mordor.css             # Main application styles
@@ -43,7 +44,8 @@ via Server-Sent Events (SSE).
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Main application page (`index.html`) |
-| `GET` | `/help/` | Help page (`help.html`) |
+| `GET` | `/manual/` | The manual (`manual.html`) |
+| `GET` | `/help/` | The manual, for links to the former help page |
 | `GET` | `/static/**` | CSS, JS, and other static assets |
 | `GET` | `/health` | Health check — returns `{"status": "ok"}` |
 

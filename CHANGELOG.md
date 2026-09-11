@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A UB assumption from folding `1 / !r` to `1` now reaches elaboration as a de facto constraint, so the narrowed write and the original write are both justified (partial fix for [#65](https://github.com/christiankissig/mordor/issues/65)).
 
 #### Web UI
+- A manual, opened from 📖 Manual in the header. It introduces MoRDor as a tool for exploring weak memory through justified executions, explains the concepts, describes every part of the web UI and common tasks, and includes the language reference that was the help page. `/help/` serves it too.
 - The settings choose a primary memory model, or the test's own, and further models to compare. Each compared model checks every execution, the log gives each model's count, and an execution shows which other models also allow it. The same comes through `compare_models` on the stream API ([#82](https://github.com/christiankissig/mordor/issues/82)).
 - `MORDOR_WEB_PORT` sets the web server's port, which is still 8080 by default.
 - The final register state of each execution ([#8](https://github.com/christiankissig/mordor/issues/8)).
@@ -86,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Web UI
 - Parse errors are shown instead of breaking the page (`b1cf28e`).
 - The justification panels are laid out one entry per line, and their Show/Hide button works (`0779cdf`).
+- The language reference's examples: the CAS example did not parse and read a failed swap as success, the store-buffering example was not store buffering, the load-buffering example allowed an outcome only thin air produces, and all of them used `[x = 0]`, a de facto guarantee, as if it initialised memory. `cas` and `fadd` now say what they put in the register, and the model names `c11` and `sc`, which MoRDor rejects, are gone.
 
 ### Changed
 - Litmus corpus: tests MoRDor's verdict disagrees with are parked in `litmus-tests-review/`, each linked to an issue. Tests since decided correctly have returned to the suite.

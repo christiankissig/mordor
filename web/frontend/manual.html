@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MoRDor Syntax Reference</title>
+    <title>MoRDor Manual</title>
     <!-- Apply the saved theme before first paint to avoid a flash -->
     <script>
         (function () {
@@ -250,37 +250,396 @@
         .section { 
             scroll-margin-top: 2rem; 
         }
+        .swatch {
+            display: inline-block;
+            width: 0.8em;
+            height: 0.8em;
+            border-radius: 2px;
+            vertical-align: middle;
+        }
+        .toc ol { margin: 1rem 0 0 1.5rem; }
+        .toc ol ul { list-style: none; margin: 0.25rem 0 0.5rem 1rem; }
+        .toc ol li { margin: 0.35rem 0; }
+        header a, .content a { color: var(--teal); }
+        h3[id], h4[id] { scroll-margin-top: 2rem; }
     </style>
 </head>
 <body>
     <button id="theme-toggle-btn" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">🌙</button>
     <div class="container">
         <header>
-            <h1>🔮 MoRDor Syntax Reference</h1>
-            <p>Weak Memory Semantics - Litmus Test Language</p>
+            <h1>🔮 MoRDor Manual</h1>
+            <p>Exploring weak memory with justified executions · <a href="/">Open MoRDor</a></p>
         </header>
-        
+
         <div class="content">
             <div class="toc">
-                <h3>Table of Contents</h3>
-                <ul>
-                    <li><a href="#overview">Overview</a></li>
-                    <li><a href="#structure">Litmus Test Structure</a></li>
-                    <li><a href="#config">Configuration Section</a></li>
-                    <li><a href="#variables">Variables and Identifiers</a></li>
-                    <li><a href="#statements">Statements</a></li>
-                    <li><a href="#memory-ops">Memory Operations</a></li>
-                    <li><a href="#atomics">Atomic Operations</a></li>
-                    <li><a href="#control-flow">Control Flow</a></li>
-                    <li><a href="#expressions">Expressions</a></li>
-                    <li><a href="#assertions">Assertions</a></li>
-                    <li><a href="#examples">Complete Examples</a></li>
-                </ul>
+                <h3>Contents</h3>
+                <ol>
+                    <li><a href="#introduction">Introduction</a></li>
+                    <li><a href="#concepts">Concepts</a>
+                        <ul>
+                            <li><a href="#concepts-events">Events and event structures</a></li>
+                            <li><a href="#concepts-justifications">Justifications</a></li>
+                            <li><a href="#concepts-executions">Justified executions</a></li>
+                            <li><a href="#concepts-models">Memory models and coherence</a></li>
+                            <li><a href="#concepts-assertions">Assertions</a></li>
+                            <li><a href="#concepts-loops">Loops and episodicity</a></li>
+                            <li><a href="#concepts-uaf">Use-after-free</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#getting-started">Getting started</a></li>
+                    <li><a href="#ui">The web UI</a>
+                        <ul>
+                            <li><a href="#ui-layout">Layout</a></li>
+                            <li><a href="#ui-actions">Actions</a></li>
+                            <li><a href="#ui-editor">The editor</a></li>
+                            <li><a href="#ui-graph">Event structure and executions</a></li>
+                            <li><a href="#ui-execution-info">Execution information</a></li>
+                            <li><a href="#ui-graph-controls">Graph controls and export</a></li>
+                            <li><a href="#ui-analysis">Analysis panels</a></li>
+                            <li><a href="#ui-settings">Settings</a></li>
+                            <li><a href="#ui-tests">Test runner</a></li>
+                            <li><a href="#ui-log">Log</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#workflows">Common tasks</a></li>
+                    <li><a href="#cli">Command line</a></li>
+                    <li><a href="#language">Language reference</a>
+                        <ul>
+                            <li><a href="#overview">Overview</a></li>
+                            <li><a href="#structure">Litmus Test Structure</a></li>
+                            <li><a href="#config">Configuration Section</a></li>
+                            <li><a href="#variables">Variables and Identifiers</a></li>
+                            <li><a href="#statements">Statements</a></li>
+                            <li><a href="#memory-ops">Memory Operations</a></li>
+                            <li><a href="#atomics">Atomic Operations</a></li>
+                            <li><a href="#control-flow">Control Flow</a></li>
+                            <li><a href="#expressions">Expressions</a></li>
+                            <li><a href="#assertions">Assertions</a></li>
+                            <li><a href="#examples">Complete Examples</a></li>
+                            <li><a href="#quick-reference">Quick Reference Card</a></li>
+                        </ul>
+                    </li>
+                </ol>
             </div>
+
+            <section id="introduction" class="section">
+                <h2>1. Introduction</h2>
+                <p>MoRDor is a tool for exploring weak memory. You give it a concurrent program as a litmus test, and it computes the program's <em>justified executions</em>. Each one is a way the program's reads and writes can resolve when memory is relaxed. It is backed by justifications that say what every write in it depends on. A memory model then decides which of these executions are coherent.</p>
+                <p>Every execution carries the justifications it was built from. MoRDor can therefore tell you why an outcome is allowed, not just whether it is: which reads a write really depends on, which accesses a compiler could reorder or forward, and which synchronisation rules out the rest.</p>
+                <p>MoRDor implements Symbolic MRD (<em>Symbolic MRD: Dynamic Memory, Undefined Behaviour, and Extrinsic Choice</em>, Richards, Wright, Cooksey and Batty, OOPSLA 2025). It adds a check for episodic loops and a use-after-free analysis. Values are symbolic, so one execution stands for every run that resolves the same way, whatever the concrete values.</p>
+                <p>This manual covers the concepts behind MoRDor, the web UI, and the litmus test language.</p>
+            </section>
+
+            <section id="concepts" class="section">
+                <h2>2. Concepts</h2>
+
+                <h3 id="concepts-events">Events and event structures</h3>
+                <p>MoRDor interprets a program as an <em>event structure</em>: one event for every memory access and control point the program can perform, however it runs. An event is written <code>label:type location value</code>, as in <code>3:R x α</code> or <code>4:W y 1</code>.</p>
+                <table>
+                    <thead><tr><th>Type</th><th>Event</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>R</code></td><td>Read (load) of a location</td></tr>
+                        <tr><td><code>W</code></td><td>Write (store) to a location</td></tr>
+                        <tr><td><code>A</code></td><td>Allocation (<code>malloc</code>)</td></tr>
+                        <tr><td><code>D</code></td><td>Deallocation (<code>free</code>)</td></tr>
+                        <tr><td><code>L</code>, <code>U</code></td><td>Lock and unlock</td></tr>
+                        <tr><td><code>F</code></td><td>Fence (a synchronisation point)</td></tr>
+                        <tr><td><code>B</code></td><td>Branch on a condition</td></tr>
+                        <tr><td><code>I</code></td><td>The initial event, which gives every location its initial value</td></tr>
+                        <tr><td><code>T</code></td><td>Terminal event, one per thread's end</td></tr>
+                    </tbody>
+                </table>
+                <p>Values are symbolic. A read does not read a number: it reads a fresh symbol, written as a Greek letter (<code>α</code>, <code>β</code>, …). An allocation returns a symbolic address, written as a CJK numeral (<code>一</code>, <code>二</code>, …). Constraints on those symbols decide which values they take.</p>
+                <p>Events are ordered by <em>program order</em> (<code>po</code>), the order the source imposes within a thread. Where a program branches, the events on the two sides are in <em>conflict</em>: no execution contains both.</p>
+
+                <h3 id="concepts-justifications">Justifications</h3>
+                <p>A <em>justification</em> for a write says which reads the write depends on, and under what condition. Initially a write depends on every read its value or location mentions. <em>Elaborations</em> then derive further justifications that depend on less:</p>
+                <ul>
+                    <li><strong>Value assignment</strong> replaces a symbol by the value the condition forces, so the write no longer depends on the read that produced it.</li>
+                    <li><strong>Forwarding</strong> lets a read take its value directly from an earlier write in the same thread, so the read is no longer performed. <strong>Write elision</strong> removes a write that a later write overwrites before anything reads it.</li>
+                    <li><strong>Lifting</strong> merges justifications that hold on both sides of a branch, so the write no longer depends on what the branch tested.</li>
+                    <li><strong>Weakening</strong> drops the parts of a justification's condition that the program's de facto guarantees already imply.</li>
+                </ul>
+                <p>Together these capture what an optimising compiler may do to a program. A dependency that survives every elaboration is a real one, and the <em>justification set</em> is everything the elaborations derive for the program. The web UI shows the set with the elaboration step behind each justification (see <a href="#ui-graph-controls">Graph controls</a>).</p>
+
+                <h3 id="concepts-executions">Justified executions</h3>
+                <p>An <em>execution</em> chooses one side of every branch, one justification for every write, and for every read the write it reads from. It records:</p>
+                <table>
+                    <thead><tr><th>Relation</th><th>Meaning</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>rf</code></td><td><em>Reads-from</em>: which write each read takes its value from</td></tr>
+                        <tr><td><code>dp</code></td><td><em>Dependencies</em>: the reads each write's chosen justification depends on</td></tr>
+                        <tr><td><code>ppo</code></td><td><em>Preserved program order</em>: the part of program order that must hold in any run, such as accesses that may share a location and orders that synchronisation imposes</td></tr>
+                        <tr><td><code>fwd</code>, <code>we</code></td><td>The <em>forwarding context</em>: reads forwarded from a write, and writes elided, in the justifications the execution uses</td></tr>
+                        <tr><td><code>rmw</code></td><td><em>Read-modify-write</em>: the read and write of one <code>cas</code> or <code>fadd</code></td></tr>
+                        <tr><td><code>co</code></td><td><em>Coherence order</em>: the order of writes to each location under which the memory model admitted the execution</td></tr>
+                    </tbody>
+                </table>
+                <p>An execution also carries <em>predicates</em>: the conditions of the branches it takes, and the equalities its <code>rf</code> edges impose on symbols. It must be <em>complete</em>, meaning every read reads from some write, and free of <em>thin air</em>: <code>dp ∪ ppo ∪ rf</code> may not have a cycle. A cycle would mean a value justified only by itself.</p>
+                <div class="note">
+                    <strong>Reads of initial values.</strong> A read takes its value from the initial event only when no write can be a candidate for it. To let a read see an initial value while writes to the same location exist, initialise the location explicitly, as in <code>x := 0;</code> before the threads.
+                </div>
+
+                <h3 id="concepts-models">Memory models and coherence</h3>
+                <p>Justified executions describe what relaxed memory permits. A <em>memory model</em> says which of them a platform or language standard admits. MoRDor admits an execution under a model when some coherence order <code>co</code> satisfies the model's axioms.</p>
+                <table>
+                    <thead><tr><th>Model</th><th>In brief</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>smrd</code></td><td>Symbolic MRD. Only dependencies, preserved program order and release/acquire synchronisation order events. This is the model a test that names none runs under.</td></tr>
+                        <tr><td><code>rc11</code></td><td>Repaired C11 (Lahav et al., PLDI 2017). All of program order counts, and accesses in mode <code>sc</code> are sequentially consistent.</td></tr>
+                        <tr><td><code>imm</code>, <code>rc11c</code></td><td>Further models a test can name in its assertion, but not selectable in the web UI's settings for now.</td></tr>
+                    </tbody>
+                </table>
+                <p>A test names its model in its assertion, as in <code>forbid (…) [RC11]</code>. Some names map onto a model: <code>[Power]</code> onto IMM, and <code>[UB11]</code>, <code>[RC11UB]</code> and <code>[IMMUB]</code> also allow the undefined-behaviour fold <code>e / !r → e</code>. An unknown model name is an error. <code>[_]</code> means any model.</p>
+
+                <h3 id="concepts-assertions">Assertions</h3>
+                <p><code>allow C</code> holds when some admitted execution satisfies <code>C</code>. <code>forbid C</code> holds when none does. Conditions can mention registers, final values of memory (<code>@x</code> is the value finally stored at <code>x</code>), and an execution's relations, as in <code>(3,2) ∈ .co</code> or <code>(1,4) ∈ .rf</code>. A refinement chain <code>~~></code> compares the observable behaviours of two programs.</p>
+                <p>MoRDor reports <em>assertion instances</em> that explain the verdict:</p>
+                <table>
+                    <thead><tr><th>Instance</th><th>Meaning</th></tr></thead>
+                    <tbody>
+                        <tr><td>Witnessed</td><td>An execution that satisfies an <code>allow</code> condition</td></tr>
+                        <tr><td>Contradicted</td><td>An execution that satisfies a <code>forbid</code> condition, and so violates it</td></tr>
+                        <tr><td>Confirmed</td><td>An <code>allow</code> condition that holds for every execution</td></tr>
+                        <tr><td>Refuted</td><td>A <code>forbid</code> condition that no execution satisfies</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 id="concepts-loops">Loops and episodicity</h3>
+                <p>A loop can be explored in two ways. Under <em>step-counter semantics</em> MoRDor unrolls each loop a fixed number of times, and the executions are those of the bounded program. Under <em>symbolic loop semantics</em> one iteration stands for all of them.</p>
+                <p>The <em>episodicity</em> analysis checks whether a loop is <em>episodic</em>: whether each iteration behaves as an independent episode, so that analysing one iteration is enough for any number of them. It checks four conditions, and reports which fail and where:</p>
+                <ol>
+                    <li><strong>Register condition</strong>: how the iteration accesses registers</li>
+                    <li><strong>Write condition</strong>: which writes a read in the loop may read from</li>
+                    <li><strong>Branching condition</strong>: what the loop's branching conditions pin down</li>
+                    <li><strong>Events condition</strong>: how events are ordered across iterations</li>
+                </ol>
+                <p>The analysis always interprets loops symbolically, whichever loop semantics the settings choose.</p>
+
+                <h3 id="concepts-uaf">Use-after-free</h3>
+                <p>An execution exhibits a <em>use-after-free</em> when it accesses a location that a deallocation frees, and nothing orders the access before the deallocation: no chain of <code>dp</code>, <code>ppo</code> and <code>rf</code> edges leads from the access to the free. Program order alone does not count, since relaxed memory does not preserve it. Which executions exist depends on the memory model, so a program can be free of use-after-free under RC11 and exhibit one under sMRD.</p>
+                <p>An <em>unbounded pointer dereference</em> is the counterpart for allocations: an access through a pointer to allocated memory that nothing orders after the allocation.</p>
+            </section>
+
+            <section id="getting-started" class="section">
+                <h2>3. Getting started</h2>
+                <ol>
+                    <li>Pick a program from <strong>-- Select Example --</strong> above the editor, such as <em>Classics › MP</em>, or type your own.</li>
+                    <li>Press <strong>Visualize</strong>. MoRDor parses and interprets the program, derives its justifications, and computes and checks its executions. Results stream in as each stage finishes.</li>
+                    <li>The graph panel first shows the event structure. Step through the executions with <strong>‹</strong> and <strong>›</strong>.</li>
+                    <li>Read the execution's predicates, final registers and justifications in the box at the top left of the graph.</li>
+                    <li>Open <strong>Assertions</strong> in the Analysis sidebar for the verdict, and click an instance to jump to its execution.</li>
+                </ol>
+                <div class="example">
+                    <div class="example-title">A first program</div>
+                    <pre><code>x := 0; y := 0;
+{
+  r1 := x;
+  y := 1
+} ||| {
+  r2 := y;
+  x := 1
+}
+<span class="operator">%%</span>
+<span class="keyword">allow</span> (r1 = 0 &amp;&amp; r2 = 0) [RC11]</code></pre>
+                </div>
+                <p>Two threads each read a variable and then write the other. The assertion asks whether both reads can see the initial <code>0</code>.</p>
+            </section>
+
+            <section id="ui" class="section">
+                <h2>4. The web UI</h2>
+
+                <h3 id="ui-layout">Layout</h3>
+                <table>
+                    <thead><tr><th>Area</th><th>What it holds</th></tr></thead>
+                    <tbody>
+                        <tr><td>Header</td><td>📖 Manual, the theme toggle (🌙/☀️), 🧪 Tests, ⚙️ Settings, and the action button</td></tr>
+                        <tr><td>Litmus Source (left)</td><td>The editor, with Open, Share and the example library</td></tr>
+                        <tr><td>Event Structure &amp; Executions (centre)</td><td>The graph of the event structure or the current execution, its information box, statistics and controls</td></tr>
+                        <tr><td>Analysis (right)</td><td>Episodicity, Assertions and Use-After-Free panels</td></tr>
+                        <tr><td>Log (bottom)</td><td>What the UI and the server have done, newest last</td></tr>
+                    </tbody>
+                </table>
+                <p>Drag the dividers between the three columns to resize them. The theme choice is remembered in the browser.</p>
+
+                <h3 id="ui-actions">Actions</h3>
+                <p>The action button runs the program in the editor. The ▼ beside it chooses which action the button runs:</p>
+                <table>
+                    <thead><tr><th>Action</th><th>Runs</th></tr></thead>
+                    <tbody>
+                        <tr><td><strong>Visualize</strong></td><td>Everything: parsing, interpretation, episodicity, justifications, executions, coherence, assertions and use-after-free</td></tr>
+                        <tr><td><strong>Parse</strong></td><td>Parsing only. The Episodicity panel lists the program's loops.</td></tr>
+                        <tr><td><strong>Interpret</strong></td><td>Parsing and interpretation. The graph shows the event structure.</td></tr>
+                        <tr><td><strong>Episodicity</strong></td><td>Interpretation and the episodicity analysis, without executions</td></tr>
+                        <tr><td><strong>Assertions</strong></td><td>The same stages as Visualize. The test runner selects it when it loads a litmus test.</td></tr>
+                    </tbody>
+                </table>
+                <p>The status next to <strong>📂 Load JSON</strong> reads <em>Processing...</em> while an action runs, then <em>Complete</em>. It reads <em>Error</em> when a run stops before completing, for example because the program does not parse.</p>
+
+                <h3 id="ui-editor">The editor</h3>
+                <ul>
+                    <li><strong>📁 Open</strong> loads a <code>.lit</code> file from your computer.</li>
+                    <li><strong>🔗 Share</strong> copies a link that carries the program and the selected action. Opening the link restores both, but does not run the action. The link does not carry the settings.</li>
+                    <li><strong>-- Select Example --</strong> offers programs from MoRDor's test corpus, grouped by what they illustrate: classic weak-memory tests, coherence, fences and access modes, dependencies and thin air, and programs only MoRDor can express.</li>
+                    <li><strong>[?]</strong> next to the panel title opens this manual at the language reference.</li>
+                </ul>
+                <p>Syntax is highlighted as you type.</p>
+
+                <h3 id="ui-graph">Event structure and executions</h3>
+                <p>The graph panel holds a carousel. Its first graph is the event structure. The graphs after it are the admitted executions, labelled <em>Execution i of n</em> at the top. Move through them with <strong>‹</strong> and <strong>›</strong>.</p>
+                <p>Hover over an event to highlight the source code it came from. The log also names the event. You can drag events to rearrange the graph.</p>
+                <p>The event structure shows program order (<code>po</code>), plus lock order (<code>lo</code>) and fork-join (<code>fj</code>) edges where the program has them. An execution graph shows the execution's events and relations:</p>
+                <table>
+                    <thead><tr><th>Edge</th><th>Colour</th><th>Meaning</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>po</code></td><td><span class="swatch" style="background:#4ec9b0"></span> teal</td><td>Program order, transitively reduced</td></tr>
+                        <tr><td><code>ppo</code></td><td><span class="swatch" style="background:#9370db"></span> purple</td><td>Preserved program order, transitively reduced</td></tr>
+                        <tr><td><code>dp</code></td><td><span class="swatch" style="background:#ffa500"></span> orange</td><td>Dependencies, transitively reduced</td></tr>
+                        <tr><td><code>rf</code></td><td><span class="swatch" style="background:#0e639c"></span> blue</td><td>Reads-from, from the write to the read</td></tr>
+                        <tr><td><code>rmw</code></td><td><span class="swatch" style="background:#f48771"></span> red</td><td>Read-modify-write pairs</td></tr>
+                        <tr><td><code>fwd</code></td><td><span class="swatch" style="background:#00ced1"></span> turquoise</td><td>Forwarding: a read forwarded from a write</td></tr>
+                        <tr><td><code>we</code></td><td><span class="swatch" style="background:#c71585"></span> violet</td><td>Write elision</td></tr>
+                        <tr><td><code>uaf</code></td><td><span class="swatch" style="background:#ff0000"></span> bright red</td><td>A use-after-free, drawn out of the deallocation</td></tr>
+                    </tbody>
+                </table>
+                <p>A <code>fwd</code> or <code>we</code> edge points at an event the execution does not contain: elision is what removed it. That event is drawn with a dashed outline. Fences are not drawn in executions.</p>
+
+                <h3 id="ui-execution-info">Execution information</h3>
+                <p>The box at the top left of the graph describes what is on screen:</p>
+                <table>
+                    <thead><tr><th>Field</th><th>Shows</th></tr></thead>
+                    <tbody>
+                        <tr><td>Predicates</td><td>The execution's predicates: the branch conditions it takes and the value equalities its <code>rf</code> edges impose. <code>⊤</code> for the event structure.</td></tr>
+                        <tr><td>Final registers</td><td>The value each register ends with. A register stays symbolic where the execution does not pin its value.</td></tr>
+                        <tr><td>Also allowed by</td><td>The compared memory models that also admit this execution. Only shown when models are compared and at least one admits it (see <a href="#ui-settings">Settings</a>).</td></tr>
+                        <tr><td>Justifications</td><td>How many justifications the execution was built from. Press the button to list them.</td></tr>
+                        <tr><td>Use-after-free</td><td>The use-after-free pairs in this execution, or <em>No</em></td></tr>
+                        <tr><td>Unbounded Deref</td><td>Whether the execution has an unbounded pointer dereference (see <a href="#concepts-uaf">Use-after-free</a>)</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 id="ui-graph-controls">Graph controls and export</h3>
+                <p>Below the graph:</p>
+                <ul>
+                    <li><strong>Layout</strong> arranges the graph: <em>Hierarchical</em> (the default), <em>fCoSE</em> (fast, force-directed), <em>COSE</em> (slower, often tidier) or <em>Circle</em>.</li>
+                    <li><strong>Relations</strong> chooses which kinds of edge to draw, with <em>All</em> and <em>None</em> shortcuts. The choice carries over from one execution to the next.</li>
+                    <li><strong>Fit</strong> zooms the whole graph into view.</li>
+                    <li><strong>Export</strong> saves the graph as you see it: the current layout, including events you dragged, and only the relations you chose to draw.
+                        <ul>
+                            <li><em>PNG</em>: an image at twice screen resolution.</li>
+                            <li><em>DOT</em>: Graphviz with node positions. <code>neato -n -Tpdf graph.dot -o graph.pdf</code> reproduces the layout.</li>
+                            <li><em>TikZ</em>: a <code>tikzpicture</code> for LaTeX, with Greek letters in math mode. The file's header lists the packages it needs. Labels with allocation names need <code>xelatex</code> or <code>lualatex</code>.</li>
+                        </ul>
+                    </li>
+                    <li><strong>💾 Save JSON</strong> saves the whole run: the program, every graph, and the analysis results. <strong>📂 Load JSON</strong> (above the graph) restores a saved run without contacting the server, at the execution that was on screen.</li>
+                </ul>
+                <p>At the bottom right, the statistics box counts the nodes and edges on screen and the executions of the run. Expand <strong>Justification set</strong> there for the program's whole justification set, each with the elaboration step that derived it.</p>
+
+                <h3 id="ui-analysis">Analysis panels</h3>
+                <h4>Episodicity</h4>
+                <p>One entry per loop, with its source range and a verdict: <em>✓ Episodic</em>, <em>✗ Non-episodic</em>, <em>⋯ checking</em> while the analysis runs, or <em>— not analysed</em> when the analysis could not evaluate the loop's conditions. Verdicts appear loop by loop as each finishes. Expand a loop to see its four conditions, and expand a failed condition for the violations and where in the source they occur. Hovering over a loop highlights it in the editor.</p>
+                <h4>Assertions</h4>
+                <p>The overall verdict (<em>Valid</em> or <em>Invalid</em>), then the assertion instances behind it, each with its execution, the instantiated condition, its result and any set-membership tests it made. Click an instance to show its execution.</p>
+                <h4>Use-After-Free</h4>
+                <p>Every execution with a use-after-free, and the pairs of events that make it one. Click an entry to show its execution, where the pairs are drawn as <code>uaf</code> edges.</p>
+
+                <h3 id="ui-settings">Settings</h3>
+                <p>⚙️ opens the settings. <strong>Apply &amp; Regenerate</strong> applies them and reruns the last program you ran.</p>
+                <h4>Loop Semantics</h4>
+                <ul>
+                    <li><strong>Step-counter semantics</strong> unrolls every loop <strong>Loop unravellings</strong> times (2 by default).</li>
+                    <li><strong>Symbolic loop semantics</strong> interprets loops symbolically.</li>
+                </ul>
+                <h4>Memory Model</h4>
+                <ul>
+                    <li><strong>Primary model</strong> is the model executions are shown for, and the model the assertion is checked under. <em>Default</em> is the model the test's assertion names, or sMRD if it names none. Choosing sMRD or RC11 replaces the test's own model.</li>
+                    <li><strong>Also compute executions under</strong> checks every execution against further models, sMRD and RC11 for now. The log reports how many executions each model admits. The information box lists, for the execution on screen, the compared models that also admit it.</li>
+                </ul>
+                <div class="note">
+                    <strong>How comparison works.</strong> MoRDor enumerates executions once, and each model checks them. Nothing before the coherence check depends on the model, so a compared model admits exactly the executions it would keep as the primary. Interpretation is the exception: the undefined-behaviour fold of <code>[RC11UB]</code>, for example, happens before any model is consulted, so it follows the primary model.
+                </div>
+                <h4>Execution Filtering</h4>
+                <p><strong>Show executions with use-after-free</strong> and <strong>Show executions with unbounded pointer dereference</strong> are sent with each request, but the server does not act on them yet. Every admitted execution is shown whichever way they are set.</p>
+
+                <h3 id="ui-tests">Test runner</h3>
+                <p>🧪 Tests opens the test runner over MoRDor's corpus. Tests are listed in three trees: <em>Litmus Tests</em> (<code>litmus-tests/</code>), <em>Episodicity Tests</em> (<code>programs/episodicity/</code>) and <em>Programs</em> (<code>programs/</code>).</p>
+                <ul>
+                    <li><strong>Filter tests…</strong> narrows the trees by path.</li>
+                    <li><strong>▶</strong> next to a test runs it. <strong>▶ Run All Tests</strong> runs every litmus and episodicity test in turn.</li>
+                    <li>A litmus test's result shows whether its assertion is valid, how many executions it has, and whether it has undefined behaviour. An episodicity test's shows how many loops were analysed and whether all are episodic. A directory is marked ✓ when every result in it passed.</li>
+                    <li>Click a test for its output and source, each with 📋 Copy. <strong>📝 Load in Editor</strong> puts the source in the editor and selects the matching action.</li>
+                    <li><strong>🔄 Refresh</strong> reloads the lists, <strong>🗑️ Clear Results</strong> forgets results, and <strong>📊 View Summary</strong> returns to the overview of results.</li>
+                </ul>
+                <p>The test runner runs each test under the model its assertion names, not the settings.</p>
+
+                <h3 id="ui-log">Log</h3>
+                <p>The log records each step of a run as it arrives: the stages, the executions received, per-model counts when models are compared, settings changes, and errors.</p>
+            </section>
+
+            <section id="workflows" class="section">
+                <h2>5. Common tasks</h2>
+
+                <h3>Is an outcome allowed?</h3>
+                <p>Write the outcome as an assertion: <code>allow (r1 = 1 &amp;&amp; r2 = 0) [RC11]</code>. Run <strong>Visualize</strong> and open <strong>Assertions</strong>. For <code>allow</code>, a <em>Witnessed</em> instance is an execution that produces the outcome. For <code>forbid</code>, a <em>Contradicted</em> instance is one that should not exist. Click it to see the execution.</p>
+
+                <h3>Why is an execution allowed?</h3>
+                <p>Show the execution, then:</p>
+                <ol>
+                    <li>Read its <strong>Predicates</strong> and <strong>Final registers</strong> to see which outcome it is.</li>
+                    <li>Use <strong>Relations</strong> to draw only <code>rf</code>, <code>dp</code> and <code>ppo</code>. A read that sees an old value is one whose <code>rf</code> edge crosses a later write that nothing in <code>dp</code> or <code>ppo</code> orders before it.</li>
+                    <li>Press the <strong>Justifications</strong> button for what each write depends on. A write with fewer dependencies than its source suggests got them removed by an elaboration. The <strong>Justification set</strong> in the statistics box names the step.</li>
+                    <li>Turn on <code>fwd</code> and <code>we</code> to see reads that were forwarded and writes that were elided.</li>
+                </ol>
+
+                <h3>Which models allow an execution?</h3>
+                <p>In ⚙️ Settings, choose a primary model and tick the models to compare. Executions of the primary model the others also admit say so under <strong>Also allowed by</strong>. An execution that lists no other model is one only the primary admits: on load buffering with sMRD as primary and RC11 compared, those are exactly the load-buffering witnesses RC11 rules out.</p>
+
+                <h3>Is a loop episodic?</h3>
+                <p>Choose the <strong>Episodicity</strong> action, or run <strong>Visualize</strong>, and open <strong>Episodicity</strong>. A failed condition lists its violations with source positions. Hover over the loop to find it in the editor.</p>
+
+                <h3>Does a program use memory after freeing it?</h3>
+                <p>Run <strong>Visualize</strong> and open <strong>Use-After-Free</strong>. Each entry is an execution and its offending pairs. In the graph they are <code>uaf</code> edges. An access that synchronisation should order before the free, but does not, typically lacks a release or acquire annotation. Compare <em>MoRDor only › Use after free</em> with <em>Use after free (fixed)</em> in the examples.</p>
+
+                <h3>A figure for a paper</h3>
+                <p>Show the execution, choose a layout, drag events where you want them, and use <strong>Relations</strong> to draw only what the figure needs. Then <strong>Export › TikZ</strong>. The figure keeps the positions and relations on screen.</p>
+
+                <h3>Keeping a result</h3>
+                <p><strong>🔗 Share</strong> gives a link to the program, to rerun later. <strong>💾 Save JSON</strong> keeps the computed run itself, which <strong>📂 Load JSON</strong> reopens without recomputing.</p>
+            </section>
+
+            <section id="cli" class="section">
+                <h2>6. Command line</h2>
+                <p>The pipeline behind the web UI is also available from the <code>mordor</code> command. <code>mordor --help</code> lists its commands and options.</p>
+                <table>
+                    <thead><tr><th>Command</th><th>Does</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>run</code></td><td>Runs the whole pipeline and reports whether the assertion holds</td></tr>
+                        <tr><td><code>parse</code></td><td>Parses a test, optionally as JSON or for Isabelle (<code>--output-mode json|isa</code>)</td></tr>
+                        <tr><td><code>interpret</code></td><td>Builds the event structure</td></tr>
+                        <tr><td><code>justifications</code></td><td>Lists the justification set and the elaboration behind each justification</td></tr>
+                        <tr><td><code>executions</code></td><td>Exports the executions with their events and relations as JSON</td></tr>
+                        <tr><td><code>dependencies</code></td><td>Reports <code>po</code>, <code>dp</code> and <code>ppo</code> for each execution</td></tr>
+                        <tr><td><code>visual-es</code></td><td>Draws the event structure as DOT, JSON or HTML</td></tr>
+                        <tr><td><code>episodicity</code></td><td>Checks the program's loops for episodicity</td></tr>
+                        <tr><td><code>futures</code></td><td>Computes the program's futures</td></tr>
+                    </tbody>
+                </table>
+                <pre><code>mordor run --single test.lit
+mordor run --all-litmus-tests litmus-tests -r</code></pre>
+                <p>The web server's HTTP API is described in <code>web/README.md</code> in the MoRDor repository.</p>
+            </section>
+
+            <section id="language" class="section">
+                <h2>7. Language reference</h2>
+                <p>The rest of this manual describes the litmus test language.</p>
+            </section>
+
 
             <section id="overview" class="section">
                 <h2>Overview</h2>
-                <p>MoRDor is a language for specifying litmus tests to explore weak memory semantics. A litmus test consists of concurrent threads performing memory operations, followed by assertions about the possible outcomes.</p>
+                <p>A litmus test states a concurrent program, whose justified executions MoRDor explores, and an assertion about the outcomes it may have. The program consists of threads performing memory operations.</p>
                 
                 <div class="note">
                     <strong>Note:</strong> Comments are supported using C++-style <code>//</code> syntax. Comments extend from <code>//</code> to the end of the line.
@@ -297,11 +656,12 @@
 <span class="keyword">name</span> = TestName
 <span class="keyword">model</span> = rc11
 <span class="keyword">values</span> = {0, 1, 2}
-[initial conditions]
+[de facto guarantees]
 [[constraints]]
 <span class="operator">%%</span>
 
-<span class="comment">// Program (required)</span>
+<span class="comment">// Program (required), optionally initialising memory first</span>
+x := 0;
 { thread1_statements } ||| { thread2_statements }
 
 <span class="comment">// Optional assertion</span>
@@ -323,8 +683,8 @@
                 <h3>Model Selection</h3>
                 <div class="syntax-block">
                     <pre><code><span class="keyword">model</span> = rc11
-<span class="keyword">model</span> = c11
-<span class="keyword">model</span> = sc</code></pre>
+<span class="keyword">model</span> = smrd
+<span class="keyword">model</span> = imm</code></pre>
                 </div>
 
                 <h3>Values Domain</h3>
@@ -334,8 +694,8 @@
 <span class="keyword">values</span> = {0x0, 0x10, 0xFF}</code></pre>
                 </div>
 
-                <h3>Initial Conditions (De Facto)</h3>
-                <p>Specify initial variable values using square brackets:</p>
+                <h3>De Facto Guarantees</h3>
+                <p>Facts that hold in every run of the program, as expressions in square brackets. Weakening may drop the part of a justification's condition these imply. They do not initialise memory: to give a location an initial value, write it before the threads, as in <code>x := 0;</code>.</p>
                 <div class="syntax-block">
                     <pre><code>[x = 0]
 [y = 0]
@@ -594,7 +954,7 @@ r0 := &amp;x;</code></pre>
                 <h2>Atomic Operations</h2>
                 
                 <h3>Compare-and-Swap (CAS)</h3>
-                <p>Atomically compares a value at an address and swaps if equal:</p>
+                <p>Atomically compares the value at an address with an expected value and, if they are equal, stores the desired value. The register is set to <code>1</code> if the swap happened and <code>0</code> if it did not:</p>
                 <div class="syntax-block">
                     <div class="title">Syntax:</div>
                     <pre><code>r0 := <span class="keyword">cas</span>(load_order, store_order, address, expected, desired)</code></pre>
@@ -613,7 +973,7 @@ r0 := cas(sc, sc, lock, 0, 1);</code></pre>
                 </div>
 
                 <h3>Fetch-and-Add (FADD)</h3>
-                <p>Atomically adds to a value and returns the old value:</p>
+                <p>Atomically adds the operand to the value at an address. The register is set to the new value:</p>
                 <div class="syntax-block">
                     <div class="title">Syntax (with RMW mode):</div>
                     <pre><code>r0 := <span class="keyword">fadd</span>(rmw_mode, load_order, store_order, address, operand)</code></pre>
@@ -697,7 +1057,7 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
                 </div>
 
                 <div class="note">
-                    <strong>Loop Semantics:</strong> MoRDor supports both step-counter semantics (unraveling loops a fixed number of times) and symbolic loop semantics. Configure this in the settings.
+                    <strong>Loop Semantics:</strong> MoRDor supports both step-counter semantics (unraveling loops a fixed number of times) and symbolic loop semantics. Configure this in the <a href="#ui-settings">settings</a>.
                 </div>
             </section>
 
@@ -934,7 +1294,7 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
 <span class="keyword">allow</span> r0 = 0 && r1 = 0 [rc11]
 
 <span class="operator">%%</span>
-<span class="keyword">forbid</span> r0 = 1 && r1 = 1 [sc]</code></pre>
+<span class="keyword">forbid</span> r0 = 1 && r1 = 1 [smrd]</code></pre>
                 </div>
 
                 <h3>Chained Assertions</h3>
@@ -951,12 +1311,10 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
 [rc11]
 
 <span class="operator">%%</span>
-[sc]</code></pre>
+[smrd]</code></pre>
                 </div>
 
-                <div class="note">
-                    <strong>Memory models in the web UI:</strong> the settings choose a <em>primary model</em>, whose executions are shown and against which the assertion is checked. <em>Default</em> is the model the test's annotation names, or sMRD if it names none; any other choice replaces the annotation. Models ticked under <em>Also compute executions under</em> check the same executions: the log lists how many each allows, and an execution another model also allows says so under <em>Also allowed by</em>. Executions are enumerated once, so interpretation, including the UB fold of <code>[rc11ub]</code>, follows the primary model.
-                </div>
+                <p>Which model an assertion is checked under in the web UI, and how to compare models, is described under <a href="#ui-settings">Settings</a>.</p>
             </section>
 
             <section id="examples" class="section">
@@ -966,10 +1324,10 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
                 <div class="example">
                     <pre><code><span class="keyword">name</span> = SB
 <span class="keyword">model</span> = rc11
-[x = 0] [y = 0]
 <span class="operator">%%</span>
 
-{ r0 := x; y := 1 } ||| { r1 := y; x := 1 }
+x := 0; y := 0;
+{ x := 1; r0 := y } ||| { y := 1; r1 := x }
 
 <span class="operator">%%</span>
 <span class="keyword">allow</span> r0 = 0 && r1 = 0</code></pre>
@@ -979,9 +1337,9 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
                 <div class="example">
                     <pre><code><span class="keyword">name</span> = MP
 <span class="keyword">model</span> = rc11
-[data = 0] [flag = 0]
 <span class="operator">%%</span>
 
+data := 0; flag := 0;
 {
     data := 1;
     flag :rel= 1
@@ -998,47 +1356,41 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
                 <div class="example">
                     <pre><code><span class="keyword">name</span> = LB
 <span class="keyword">model</span> = rc11
-[x = 0] [y = 0]
 <span class="operator">%%</span>
 
-{ r0 := x; y := r0 } ||| { r1 := y; x := r1 }
+<span class="comment">// RC11 forbids load buffering; under model = smrd it is allowed</span>
+x := 0; y := 0;
+{ r0 := x; y := 1 } ||| { r1 := y; x := 1 }
 
 <span class="operator">%%</span>
-<span class="keyword">allow</span> r0 = 1 && r1 = 1</code></pre>
+<span class="keyword">forbid</span> r0 = 1 && r1 = 1</code></pre>
                 </div>
 
                 <h3>CAS Example</h3>
                 <div class="example">
                     <pre><code><span class="keyword">name</span> = CAS_Test
 <span class="keyword">model</span> = rc11
-[lock = 0]
 <span class="operator">%%</span>
 
+m := 0;
 {
-    r0 := cas(acquire, release, lock, 0, 1);
-    <span class="keyword">if</span> (r0 = 0) {
-        <span class="comment">// Critical section</span>
-        lock :rel= 0
-    }
+    <span class="comment">// r0 is 1 if this thread's swap happened, 0 if not</span>
+    r0 := <span class="keyword">cas</span>(acquire, release, m, 0, 1)
 } ||| {
-    r1 := cas(acquire, release, lock, 0, 1);
-    <span class="keyword">if</span> (r1 = 0) {
-        <span class="comment">// Critical section</span>
-        lock :rel= 0
-    }
+    r1 := <span class="keyword">cas</span>(acquire, release, m, 0, 1)
 }
 
 <span class="operator">%%</span>
-<span class="keyword">forbid</span> r0 = 0 && r1 = 0</code></pre>
+<span class="keyword">forbid</span> r0 = 1 && r1 = 1</code></pre>
                 </div>
 
                 <h3>Pointer Operations</h3>
                 <div class="example">
                     <pre><code><span class="keyword">name</span> = PointerTest
 <span class="keyword">model</span> = rc11
-[ptr = 0] [x = 0]
 <span class="operator">%%</span>
 
+x := 0;
 {
     ptr := <span class="keyword">malloc</span>(4);
     *ptr := 42;
@@ -1058,9 +1410,9 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
                 <div class="example">
                     <pre><code><span class="keyword">name</span> = SpinLock
 <span class="keyword">model</span> = rc11
-[flag = 0]
 <span class="operator">%%</span>
 
+flag := 0;
 {
     flag :rel= 1
 } ||| {
@@ -1075,7 +1427,7 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
                 </div>
             </section>
 
-            <section class="section">
+            <section id="quick-reference" class="section">
                 <h2>Quick Reference Card</h2>
                 <table>
                     <thead>
@@ -1106,7 +1458,11 @@ r2 := fadd(normal, relaxed, relaxed, y, -1);</code></pre>
                             <td><code>{ ... }</code></td>
                         </tr>
                         <tr>
-                            <td><strong>Initial condition</strong></td>
+                            <td><strong>Initialisation</strong></td>
+                            <td><code>x := 0;</code> before the threads</td>
+                        </tr>
+                        <tr>
+                            <td><strong>De facto guarantee</strong></td>
                             <td><code>[x = 0]</code></td>
                         </tr>
                         <tr>

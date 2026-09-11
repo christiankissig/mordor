@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MoRDor - Weak Memory Semantics</title>
+    <title>MoRDor - Weak Memory Exploration</title>
     <!-- Apply the saved theme before first paint to avoid a flash -->
     <script>
         (function () {
@@ -41,8 +41,9 @@
 <body>
     <div class="container">
         <header>
-            <h1>MoRDor - Weak Memory Semantics</h1>
+            <h1 title="Exploring weak memory with justified executions">MoRDor - Weak Memory Exploration</h1>
             <div class="header-controls">
+                <a id="manual-btn" class="btn-secondary" href="/manual/" target="_blank" title="Open the manual" style="text-decoration:none; border-radius:4px;">📖 Manual</a>
                 <button id="theme-toggle-btn" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">🌙</button>
                 <button id="test-runner-btn" class="btn-secondary" title="Test Runner">🧪 Tests</button>
                 <button id="settings-btn" class="settings-icon" title="Settings">⚙️</button>
@@ -64,7 +65,7 @@
                 <div class="panel-header">
                     <h2>
                       Litmus Source
-                      [<a href="/help/" target="_blank">?</a>]
+                      [<a href="/manual/#language" target="_blank" title="Language reference">?</a>]
                     </h2>
                     <div class="panel-header-controls">
                         <div class="file-input-wrapper">
