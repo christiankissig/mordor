@@ -1,0 +1,19 @@
+// Store buffering over sc stores and loads is not RC11.
+//
+// MoRDor's own test. Neither thread's load reads the other's store, so hb has no
+// edge between the threads and the coherence axiom allows both loads to see 0.
+// What forbids it is psc: over sc accesses, x.store sb r1 rb y.store sb r2 rb
+// x.store is a cycle.
+//
+// psc_base took its sc accesses from the Init events in mode sc, of which there
+// are none, so only sc fences reached psc and this outcome was allowed.
+x := 0; y := 0;
+{
+  x.store(1, sc);
+  r1 := y.load(sc)
+} ||| {
+  y.store(1, sc);
+  r2 := x.load(sc)
+}
+%%
+forbid (r1 = 0 && r2 = 0) [RC11]

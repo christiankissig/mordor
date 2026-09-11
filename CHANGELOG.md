@@ -73,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - sMRD's happens-before relation had no synchronises-with edge, so release-acquire chains were invisible to it ([#67](https://github.com/christiankissig/mordor/issues/67), [#68](https://github.com/christiankissig/mordor/issues/68)).
 - IMM's coherence check overwrote a set it shared across every candidate coherence order, so the search's answer depended on the order candidates were tried ([#88](https://github.com/christiankissig/mordor/issues/88)).
 - A nonatomic store or load matched RC11's "relaxed or stronger" tests, because matching also asked the mode fields an event's type does not use, and those default to relaxed. A nonatomic store could then synchronise two fences (`own/nonatomic-store-no-sync.lit`).
+- RC11's SC check ignored sc stores and loads: it collected sc accesses from `Init` events, of which there are none, so only `fence(sc)` took part. Store buffering over sc accesses came out allowed (`own/SB+sc.lit`). Its `scb` also had `sbl;hb` where RC11 has `sbl;hb;sbl`.
 - RC11 applied the full coherence check only to executions without RMWs (`27271c9`), and built both ends of `psc_base` from one shared set (`cbb4b3a`).
 - IMM and RC11 were over-permissive ([#9](https://github.com/christiankissig/mordor/pull/9)): release/acquire synchronisation ignored the mode lattice, the coherence axioms were skipped for programs with fewer than two writes, and the init write could be permuted out of first place.
 

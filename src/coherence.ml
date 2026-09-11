@@ -630,15 +630,33 @@ end) : MEMORY_MODEL = struct
        the RMW split below carried its own copy of this. *)
     let sc_consistent () =
       let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
+      (* scb = sb ∪ sbl;hb;sbl ∪ hbl ∪ co ∪ rb, with sbl = sb \ loc and
+         hbl = hb ∩ loc, as in herd's rc11.cat.
+
+         The middle term was sbl;hb, which contains sbl;hb;sbl and more: it
+         let an event reach any hb-later one at another location, where RC11
+         asks for an sb step at another location on both sides. At a fence end
+         of psc_base the hb? there absorbs the difference; at an SC access it
+         does not, and those ends were missing until the fix below. *)
       let scb =
-        USet.union sb (URelation.compose [ sb_non_loc; hb ])
+        USet.union sb (URelation.compose [ sb_non_loc; hb; sb_non_loc ])
         |> USet.union (loc_restrict hb)
         |> USet.union co
         |> USet.union rb
       in
 
+      (* E_sc, every access in mode sc: RC11's [SC], of any event type.
+
+         This asked for [Init] events in mode sc, which never exist, so E_sc
+         was empty and psc_base reduced to its fence terms. Store buffering
+         over sc stores and loads came out allowed: psc is the only axiom that
+         forbids it, and without the accesses it had nothing to order. *)
       let sc_events =
-        ModelUtils.match_events events e Init (Some SC) None None
+        USet.union
+          (ModelUtils.match_events events e Read (Some SC) None None)
+          (ModelUtils.match_events events e Write (Some SC) None None)
+        |> USet.union
+             (ModelUtils.match_events events e Fence (Some SC) None None)
       in
       let f_sc = ModelUtils.match_events events e Fence (Some SC) None None in
 
