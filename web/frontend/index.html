@@ -24,7 +24,12 @@
     <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
     <script src="https://unpkg.com/cytoscape-cose-bilkent@4.1.0/cytoscape-cose-bilkent.js"></script>
     <script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
-    
+
+    <!-- Fonts; the system stacks in mordor.css stand in when they cannot load -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+
     <!-- PrismJS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
@@ -32,7 +37,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
-    
+
     <!-- Mordor CSS -->
     <link rel="stylesheet" href="static/css/mordor.css">
     <!-- Test Runner CSS -->
@@ -40,48 +45,84 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1 title="Exploring weak memory with justified executions">MoRDor - Weak Memory Exploration</h1>
-            <div class="header-controls">
-                <a id="manual-btn" class="btn-secondary" href="/manual/" target="_blank" title="Open the manual" style="text-decoration:none; border-radius:4px;">📖 Manual</a>
-                <button id="theme-toggle-btn" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">🌙</button>
-                <button id="test-runner-btn" class="btn-secondary" title="Test Runner">🧪 Tests</button>
-                <button id="settings-btn" class="settings-icon" title="Settings">⚙️</button>
-                <div class="split-button">
-                    <button id="action-btn" class="btn-primary split-button-action">Visualize</button>
-                    <button id="dropdown-toggle" class="btn-primary split-button-toggle">▼</button>
-                    <div class="dropdown-content">
-                        <button data-action="visualize" data-endpoint="/api/visualize/stream">Visualize</button>
-                        <button data-action="parse" data-endpoint="/api/parse/stream">Parse</button>
-                        <button data-action="interpret" data-endpoint="/api/interpret/stream">Interpret</button>
-                        <button data-action="episodicity" data-endpoint="/api/episodicity/stream">Episodicity</button>
-                        <button data-action="assertions" data-endpoint="/api/assertions/stream">Assertions</button>
-                    </div>
+        <!-- The top bar runs left to right in the order you work: what the
+             tool is, running the program and how it is run, then sharing and
+             testing, then help and appearance. -->
+        <header class="topbar">
+            <div class="brand" title="Exploring weak memory with justified executions">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M12 4 5 12l7 8 7-8z" fill="none"/><circle cx="12" cy="4" r="2.4"/><circle cx="5" cy="12" r="2.4"/><circle cx="19" cy="12" r="2.4"/><circle cx="12" cy="20" r="2.4"/></svg>
+                </span>
+                <div class="brand-text">
+                    <h1>MoRDor</h1>
+                    <span class="brand-tagline">Weak memory exploration</span>
                 </div>
             </div>
+
+            <div class="topbar-section topbar-run">
+                <div class="split-button">
+                    <button id="action-btn" class="btn btn-primary split-button-action" title="Run the program in the editor">Visualize</button>
+                    <button id="dropdown-toggle" class="btn btn-primary split-button-toggle" title="Choose what to run" aria-label="Choose what to run">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="dropdown-content" role="menu">
+                        <button data-action="visualize" data-endpoint="/api/visualize/stream"><span class="menu-label">Visualize</span><span class="menu-hint">Every stage, with executions and analyses</span></button>
+                        <button data-action="parse" data-endpoint="/api/parse/stream"><span class="menu-label">Parse</span><span class="menu-hint">Parsing only, and the program's loops</span></button>
+                        <button data-action="interpret" data-endpoint="/api/interpret/stream"><span class="menu-label">Interpret</span><span class="menu-hint">Parsing and the event structure</span></button>
+                        <button data-action="episodicity" data-endpoint="/api/episodicity/stream"><span class="menu-label">Episodicity</span><span class="menu-hint">The loop analysis, without executions</span></button>
+                        <button data-action="assertions" data-endpoint="/api/assertions/stream"><span class="menu-label">Assertions</span><span class="menu-hint">Every stage, as the test runner runs it</span></button>
+                    </div>
+                </div>
+                <button id="settings-btn" class="btn btn-ghost" title="Settings: loop semantics and memory models">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></svg>
+                    <span class="btn-label">Settings</span>
+                    <span id="settings-summary" class="chip"></span>
+                </button>
+                <div class="status" id="status" role="status" aria-live="polite">Ready</div>
+            </div>
+
+            <div class="topbar-section topbar-end">
+                <button id="share-btn" class="btn btn-ghost" title="Copy a link to the program and the selected action">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    <span class="btn-label">Share</span>
+                </button>
+                <button id="test-runner-btn" class="btn btn-ghost" title="Run MoRDor's test corpus">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M10 2v7.53a2 2 0 0 1-.21.9L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.07-10.12a2 2 0 0 1-.21-.9V2M8.5 2h7M7 16h10"/></svg>
+                    <span class="btn-label">Tests</span>
+                </button>
+                <span class="topbar-divider" aria-hidden="true"></span>
+                <a id="manual-btn" class="btn btn-ghost" href="/manual/" target="_blank" title="Open the manual">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    <span class="btn-label">Manual</span>
+                </a>
+                <button id="theme-toggle-btn" class="btn btn-ghost btn-icon theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">
+                    <svg class="icon icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                    <svg class="icon icon-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                </button>
+            </div>
         </header>
+
         <div class="main-content">
             <div class="panel" id="left-panel">
                 <div class="panel-header">
-                    <h2>
-                      Litmus Source
-                      [<a href="/manual/#language" target="_blank" title="Language reference">?</a>]
-                    </h2>
+                    <div class="panel-title">
+                        <h2>Litmus Source</h2>
+                        <a class="help-link" href="/manual/#language" target="_blank" title="Language reference" aria-label="Language reference">
+                            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+                        </a>
+                    </div>
                     <div class="panel-header-controls">
+                        <select id="examples" class="select" title="Load an example program">
+                            <option value="">Examples…</option>
+                        </select>
                         <div class="file-input-wrapper">
                             <input type="file" id="file-input" accept=".lit" />
-                            <label for="file-input" class="file-input-label" title="Open litmus file">
-                                📁 Open
+                            <label for="file-input" class="btn btn-ghost btn-sm file-input-label" title="Open a .lit file">
+                                <svg class="icon" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
+                                <span class="btn-label">Open</span>
                             </label>
                         </div>
-                        <button id="share-btn" class="btn-secondary" title="Generate shareable URL" style="padding:0.3rem 0.6rem; background:var(--control-bg); border:1px solid var(--border-strong); color:var(--text); border-radius:4px; cursor:pointer; margin-right:0.5rem;">
-                            🔗 Share
-                        </button>
-                        <select id="examples" style="padding:0.3rem; background:var(--control-bg); border:1px solid var(--border-strong); color:var(--text); border-radius:4px;">
-                            <option value="">-- Select Example --</option>
-                        </select>
                     </div>
-
                 </div>
                 <div class="editor-container">
                     <div class="editor-wrapper">
@@ -93,27 +134,39 @@
             <div class="resizer" id="resizer"></div>
             <div class="panel" id="right-panel">
                 <div class="panel-header">
-                    <h2>Event Structure & Executions</h2>
-                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <div class="panel-title">
+                        <h2>Event Structure &amp; Executions</h2>
+                    </div>
+                    <div class="panel-header-controls">
                         <div class="file-input-wrapper">
                             <input type="file" id="json-file-input" accept=".json" />
-                            <label for="json-file-input" class="file-input-label" title="Open execution JSON">📂 Load JSON</label>
+                            <label for="json-file-input" class="btn btn-ghost btn-sm file-input-label" title="Open a run saved as JSON">
+                                <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                                <span class="btn-label">Load JSON</span>
+                            </label>
                         </div>
-                        <div class="status" id="status">Ready</div>
                     </div>
                 </div>
-                
+
                 <div class="carousel-container" id="carousel-container">
                     <div id="cy"></div>
                     <div class="carousel-controls">
-                        <button class="carousel-btn" id="prev-btn" disabled>‹</button>
-                        <button class="carousel-btn" id="next-btn" disabled>›</button>
+                        <button class="carousel-btn" id="prev-btn" disabled aria-label="Previous graph">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+                        </button>
+                        <button class="carousel-btn" id="next-btn" disabled aria-label="Next graph">
+                            <svg class="icon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
                     </div>
                     <div class="carousel-indicator" id="carousel-indicator">Event Structure</div>
                 </div>
-                
+
                 <div id="empty-state" class="empty-state">
-                    <p>Enter litmus source and select an action from the dropdown</p>
+                    <div class="empty-state-inner">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24"><path d="M12 4 5 12l7 8 7-8z" fill="none"/><circle cx="12" cy="4" r="2.4"/><circle cx="5" cy="12" r="2.4"/><circle cx="19" cy="12" r="2.4"/><circle cx="12" cy="20" r="2.4"/></svg>
+                        <p class="empty-state-title">Nothing to show yet</p>
+                        <p>Pick one of the examples or write a litmus test, then press <strong>Visualize</strong>.</p>
+                    </div>
                 </div>
 
                 <div class="execution-info" id="execution-info">
@@ -123,19 +176,17 @@
                   <div id="other-models-row" hidden><strong>Also allowed by:</strong> <span
                       id="other-models"></span></div>
                   <div><strong>Justifications:</strong>
-                    <button id="justifications-btn" class="btn-secondary"
-                        title="Show the justifications this execution was frozen from"
-                        style="padding:0.1rem 0.4rem; background:var(--control-bg); border:1px solid var(--border-strong); color:var(--text); border-radius:4px; cursor:pointer;">
+                    <button id="justifications-btn" class="btn btn-xs"
+                        title="Show the justifications this execution was frozen from">
                       0 — show</button>
-                    <div id="justifications-overlay" hidden
-                        style="margin-top:0.4rem; max-height:14rem; overflow:auto; padding:0.4rem; background:var(--control-bg); border:1px solid var(--border-strong); border-radius:4px; font-family:monospace; font-size:0.8rem; white-space:pre-wrap;"></div>
+                    <div id="justifications-overlay" hidden></div>
                   </div>
                   <div><strong>Use-after-free:</strong> <span
                       id="has-uaf">N/A</span></div>
                   <div><strong>Unbounded Deref:</strong> <span
                       id="has-unbounded-deref">N/A</span></div>
                 </div>
-                
+
                 <div class="graph-controls" id="graph-controls">
                     <div class="layout-dropdown" id="layout-dropdown-wrapper">
                         <button id="layout-dropdown-btn" class="layout-btn">Hierarchical ▲</button>
@@ -160,6 +211,7 @@
                         </div>
                     </div>
                     <button id="fit-btn">Fit</button>
+                    <span class="toolbar-divider" aria-hidden="true"></span>
                     <div class="export-dropdown" id="export-dropdown-wrapper">
                         <button id="export-dropdown-btn" class="export-btn">Export ▲</button>
                         <div class="export-dropdown-content" id="export-dropdown-content">
@@ -168,18 +220,17 @@
                             <div class="export-option" data-value="tikz">Export TikZ</div>
                         </div>
                     </div>
-                    <button id="save-json-btn">💾 Save JSON</button>
+                    <button id="save-json-btn">Save JSON</button>
                 </div>
-                
+
                 <div class="graph-stats" id="graph-stats">
                     <div><strong>Nodes:</strong> <span id="node-count">0</span></div>
                     <div><strong>Edges:</strong> <span id="edge-count">0</span></div>
                     <div><strong>Executions:</strong> <span id="execution-count">0</span></div>
-                    <details style="margin-top:0.4rem;">
-                      <summary style="cursor:pointer;"><strong>Justification set</strong>
+                    <details class="justification-set-details">
+                      <summary><strong>Justification set</strong>
                         (<span id="justification-set-count">0</span>)</summary>
-                      <div id="justification-set"
-                          style="margin-top:0.3rem; max-height:16rem; overflow:auto; font-family:monospace; font-size:0.75rem; white-space:pre-wrap;"></div>
+                      <div id="justification-set"></div>
                     </details>
                 </div>
             </div>
@@ -192,7 +243,7 @@
                     <div class="accordion-item">
                         <button class="accordion-header" data-target="loops-content">
                             <span>Episodicity</span>
-                            <span class="accordion-icon">▼</span>
+                            <svg class="icon accordion-icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
                         </button>
                         <div class="accordion-content" id="loops-content">
                             <p>Episodicity results will appear here.</p>
@@ -201,7 +252,7 @@
                     <div class="accordion-item">
                         <button class="accordion-header" data-target="assertions-content">
                             <span>Assertions</span>
-                            <span class="accordion-icon">▼</span>
+                            <svg class="icon accordion-icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
                         </button>
                         <div class="accordion-content" id="assertions-content">
                             <p>Assertion results will appear here.</p>
@@ -210,7 +261,7 @@
                     <div class="accordion-item">
                         <button class="accordion-header" data-target="uaf-content">
                             <span>Use-After-Free</span>
-                            <span class="accordion-icon">▼</span>
+                            <svg class="icon accordion-icon" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
                         </button>
                         <div class="accordion-content" id="uaf-content">
                             <p>Use-after-free analysis will appear here.</p>
@@ -219,65 +270,73 @@
                 </div>
             </div>
         </div>
-        <div id="log"></div>
+        <div class="console">
+            <div class="console-header">
+                <span>Log</span>
+                <button id="log-clear-btn" class="btn btn-ghost btn-xs" title="Clear the log">Clear</button>
+            </div>
+            <div id="log"></div>
+        </div>
     </div>
 
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" role="dialog" aria-labelledby="settings-title">
             <div class="modal-header">
-                <h2>Settings</h2>
-                <button class="modal-close" id="close-modal">&times;</button>
+                <h2 id="settings-title">Settings</h2>
+                <button class="modal-close" id="close-modal" aria-label="Close">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
             </div>
             <div class="modal-body">
                 <div class="setting-group">
-                    <h3 style="color: var(--text-strong); font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Loop Semantics</h3>
+                    <h3>Loop Semantics</h3>
                     <div class="setting-item">
                         <label>
                             <input type="radio" name="loop-semantics" id="step-counter-semantics" value="step-counter" checked />
                             Step-counter semantics
                         </label>
                     </div>
-                    <div class="setting-item" style="margin-left: 1.5rem; margin-top: 0.5rem;">
-                        <label style="display: flex; align-items: center; gap: 0.5rem;">
-                            <span>Loop unravellings:</span>
-                            <input type="number" id="step-counter" value="2" min="1" max="100" style="width: 70px; padding: 0.4rem; background: var(--control-bg); border: 1px solid var(--border-strong); color: var(--text); border-radius: 4px; font-size: 0.9rem;" />
+                    <div class="setting-item setting-indent">
+                        <label>
+                            <span>Loop unravellings</span>
+                            <input type="number" id="step-counter" class="input input-number" value="2" min="1" max="100" />
                         </label>
                     </div>
-                    <div class="setting-item" style="margin-top: 0.75rem;">
+                    <div class="setting-item">
                         <label>
                             <input type="radio" name="loop-semantics" id="symbolic-semantics" value="symbolic" />
                             Symbolic loop semantics
                         </label>
                     </div>
                 </div>
-                
-                <div class="setting-group" style="margin-top: 1.5rem;">
-                    <h3 style="color: var(--text-strong); font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Memory Model</h3>
+
+                <div class="setting-group">
+                    <h3>Memory Model</h3>
                     <div class="setting-item">
-                        <label style="display: flex; align-items: center; gap: 0.5rem;">
-                            <span>Primary model:</span>
-                            <select id="memory-model" title="Executions are shown for this model" style="padding: 0.4rem; background: var(--control-bg); border: 1px solid var(--border-strong); color: var(--text); border-radius: 4px; font-size: 0.9rem;">
+                        <label>
+                            <span>Primary model</span>
+                            <select id="memory-model" class="select" title="Executions are shown for this model">
                                 <option value="default" selected>Default (the test's model, or sMRD)</option>
                                 <option value="smrd">sMRD</option>
                                 <option value="rc11">RC11</option>
                             </select>
                         </label>
                     </div>
-                    <div class="setting-item" style="margin-top: 0.75rem;">
-                        <span>Also compute executions under:</span>
-                        <div id="compare-models" style="display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0.4rem 0 0 1.5rem;">
+                    <div class="setting-item">
+                        <span>Also compute executions under</span>
+                        <div id="compare-models" class="setting-options">
                             <label><input type="checkbox" value="smrd" /> sMRD</label>
                             <label><input type="checkbox" value="rc11" /> RC11</label>
                         </div>
-                        <p style="margin: 0.4rem 0 0 1.5rem; font-size: 0.8rem; color: var(--text-muted);">
+                        <p class="setting-note">
                             Each execution shows which of these also allow it. Executions are enumerated once and each model checks them, so the UB fold follows the primary model.
                         </p>
                     </div>
                 </div>
 
-                <div class="setting-group" style="margin-top: 1.5rem;">
-                    <h3 style="color: var(--text-strong); font-size: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Execution Filtering</h3>
+                <div class="setting-group">
+                    <h3>Execution Filtering</h3>
                     <div class="setting-item">
                         <label>
                             <input type="checkbox" id="show-uaf" />
@@ -293,47 +352,51 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button id="apply-settings" class="btn-primary">Apply & Regenerate</button>
-                <button id="cancel-settings" class="btn-secondary">Cancel</button>
+                <button id="cancel-settings" class="btn btn-secondary">Cancel</button>
+                <button id="apply-settings" class="btn btn-primary">Apply &amp; Regenerate</button>
             </div>
         </div>
     </div>
 
     <!-- Load Prism language definition for sMRD -->
     <script src="/static/js/prism-smrd.js"></script>
-    
+
     <!-- Load Test Runner -->
     <script src="/static/js/test-runner.js"></script>
-    
+
     <!-- Load Graph Visualizer -->
     <script src="/static/js/graph-visualizer.js"></script>
-    
+
     <!-- Initialize the application -->
     <script>
         window._graphVisualizer = new GraphVisualizer();
+        const log = (message, type) => window._graphVisualizer.log(message, type);
 
         // Initialize Test Runner
         const testRunner = new TestRunner();
 
-        // Light/dark theme toggle
+        // Light/dark theme toggle. The stylesheet shows the icon for the theme
+        // you would switch to.
         (function () {
             const btn = document.getElementById('theme-toggle-btn');
             const root = document.documentElement;
-            const syncIcon = () => {
+            const syncTitle = () => {
                 const isLight = root.getAttribute('data-theme') === 'light';
-                // show the icon for the theme you'd switch *to*
-                btn.textContent = isLight ? '🌙' : '☀️';
                 btn.title = isLight ? 'Switch to dark theme' : 'Switch to light theme';
             };
-            syncIcon();
+            syncTitle();
             btn.addEventListener('click', () => {
                 const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
                 root.setAttribute('data-theme', next);
                 try { localStorage.setItem('mordor-theme', next); } catch (e) {}
-                syncIcon();
+                syncTitle();
             });
         })();
-        
+
+        document.getElementById('log-clear-btn').addEventListener('click', () => {
+            document.getElementById('log').replaceChildren();
+        });
+
         // Load program from URL hash if present (e.g. #program=...)
         const hashParams = new URLSearchParams(window.location.hash.slice(1));
         const programParam = hashParams.get('program');
@@ -341,7 +404,7 @@
             try {
                 const textarea = document.getElementById('litmus-input');
                 textarea.value = programParam;
-                
+
                 // Trigger input event to update syntax highlighting
                 textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
@@ -355,163 +418,147 @@
                         dropdownBtn.click();
                     }
                 }
-                
-                // Log the URL load
-                const logDiv = document.getElementById('log');
-                const timestamp = new Date().toLocaleTimeString();
-                logDiv.innerHTML = `<div class="log-entry success"><span class="log-time">${timestamp}</span>Loaded program from URL</div>` + logDiv.innerHTML;
+
+                log('Loaded program from URL', 'success');
             } catch (error) {
                 console.error('Error loading program from URL:', error);
-                const logDiv = document.getElementById('log');
-                const timestamp = new Date().toLocaleTimeString();
-                logDiv.innerHTML = `<div class="log-entry error"><span class="log-time">${timestamp}</span>Error loading program from URL: ${error.message}</div>` + logDiv.innerHTML;
+                log('Error loading program from URL: ' + error.message, 'error');
             }
         }
-        
+
         // Share button handler
         document.getElementById('share-btn').addEventListener('click', () => {
             const textarea = document.getElementById('litmus-input');
             const program = textarea.value.trim();
-            
+
             if (!program) {
-                const logDiv = document.getElementById('log');
-                const timestamp = new Date().toLocaleTimeString();
-                logDiv.innerHTML = `<div class="log-entry error"><span class="log-time">${timestamp}</span>No program to share. Please enter a program first.</div>` + logDiv.innerHTML;
+                log('No program to share. Please enter a program first.', 'error');
                 return;
             }
-            
+
             // Create URL with program and action in hash (no server-side length limit)
             const encodedProgram = encodeURIComponent(program);
             const baseUrl = window.location.origin + window.location.pathname;
             const actionBtn = document.getElementById('action-btn');
             const action = actionBtn.dataset.action || 'visualize';
             const shareUrl = `${baseUrl}#program=${encodedProgram}&action=${encodeURIComponent(action)}`;
-            
+
             // Copy to clipboard
             navigator.clipboard.writeText(shareUrl).then(() => {
-                const logDiv = document.getElementById('log');
-                const timestamp = new Date().toLocaleTimeString();
-                logDiv.innerHTML = `<div class="log-entry success"><span class="log-time">${timestamp}</span>Shareable URL copied to clipboard!</div>` + logDiv.innerHTML;
+                log('Shareable URL copied to clipboard!', 'success');
             }).catch(err => {
                 console.error('Failed to copy URL:', err);
                 // Fallback: show URL in log
-                const logDiv = document.getElementById('log');
-                const timestamp = new Date().toLocaleTimeString();
-                logDiv.innerHTML = `<div class="log-entry"><span class="log-time">${timestamp}</span>Shareable URL: <a href="${shareUrl}" style="color:#4ec9b0; word-break:break-all;">${shareUrl}</a></div>` + logDiv.innerHTML;
+                log('Shareable URL: ' + shareUrl);
             });
         });
-        
+
         // File input handler
         document.getElementById('file-input').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
-            
+
             const reader = new FileReader();
             reader.onload = function(event) {
                 const content = event.target.result;
                 const textarea = document.getElementById('litmus-input');
                 textarea.value = content;
-                
+
                 // Trigger input event to update syntax highlighting
                 const inputEvent = new Event('input', { bubbles: true });
                 textarea.dispatchEvent(inputEvent);
-                
-                // Log the file load
-                const logDiv = document.getElementById('log');
-                const timestamp = new Date().toLocaleTimeString();
-                logDiv.innerHTML = `<div class="log-entry success"><span class="log-time">${timestamp}</span>Loaded file: ${file.name}</div>` + logDiv.innerHTML;
+
+                log('Loaded file: ' + file.name, 'success');
             };
             reader.onerror = function() {
-                const logDiv = document.getElementById('log');
-                const timestamp = new Date().toLocaleTimeString();
-                logDiv.innerHTML = `<div class="log-entry error"><span class="log-time">${timestamp}</span>Error reading file: ${file.name}</div>` + logDiv.innerHTML;
+                log('Error reading file: ' + file.name, 'error');
             };
             reader.readAsText(file);
-            
+
             // Reset the input so the same file can be loaded again
             e.target.value = '';
         });
-        
+
         // Test Runner button handler
         document.getElementById('test-runner-btn').addEventListener('click', () => {
             testRunner.toggle();
         });
-        
+
         // Accordion functionality
         document.querySelectorAll('.accordion-header').forEach(header => {
             header.addEventListener('click', function() {
                 const targetId = this.getAttribute('data-target');
                 const content = document.getElementById(targetId);
-                
+
                 // Toggle active state
                 this.classList.toggle('active');
                 content.classList.toggle('active');
             });
         });
-        
+
         // Left resizer functionality (existing)
         const resizer = document.getElementById('resizer');
         const leftPanel = document.getElementById('left-panel');
         const rightPanel = document.getElementById('right-panel');
-        
+
         let isResizing = false;
         let startX = 0;
-        
+
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
             startX = e.clientX;
             document.body.style.cursor = 'col-resize';
             e.preventDefault();
         });
-        
+
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            
+
             const container = document.querySelector('.main-content');
             const containerRect = container.getBoundingClientRect();
             const newLeftWidth = e.clientX - containerRect.left;
             const totalWidth = containerRect.width;
-            
+
             if (newLeftWidth >= 200 && (totalWidth - newLeftWidth) >= 400) { // Ensure right side has room for both panels
                 const leftPercent = (newLeftWidth / totalWidth) * 100;
                 leftPanel.style.flex = `0 0 ${leftPercent}%`;
             }
         });
-        
+
         document.addEventListener('mouseup', () => {
             if (isResizing) {
                 isResizing = false;
                 document.body.style.cursor = '';
             }
         });
-        
+
         // Right resizer functionality
         const resizerRight = document.getElementById('resizer-right');
         const sidebar = document.getElementById('sidebar');
-        
+
         let isResizingRight = false;
-        
+
         resizerRight.addEventListener('mousedown', (e) => {
             isResizingRight = true;
             startX = e.clientX;
             document.body.style.cursor = 'col-resize';
             e.preventDefault();
         });
-        
+
         document.addEventListener('mousemove', (e) => {
             if (!isResizingRight) return;
-            
+
             const container = document.querySelector('.main-content');
             const containerRect = container.getBoundingClientRect();
             const sidebarStart = sidebar.getBoundingClientRect().left - containerRect.left;
             const newSidebarWidth = containerRect.width - (e.clientX - containerRect.left);
-            
+
             if (newSidebarWidth >= 200 && (e.clientX - containerRect.left - leftPanel.offsetWidth) >= 200) {
                 const sidebarPercent = (newSidebarWidth / containerRect.width) * 100;
                 sidebar.style.flex = `0 0 ${sidebarPercent}%`;
             }
         });
-        
+
         document.addEventListener('mouseup', () => {
             if (isResizingRight) {
                 isResizingRight = false;

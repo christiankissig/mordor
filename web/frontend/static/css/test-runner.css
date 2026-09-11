@@ -7,7 +7,9 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background: var(--scrim);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
     z-index: 2000;
     align-items: center;
     justify-content: center;
@@ -20,13 +22,14 @@
 .test-modal {
     background: var(--bg-elev);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     width: 90%;
     max-width: 1200px;
     height: 85%;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
     animation: modalSlideIn 0.3s ease-out;
 }
 
@@ -45,13 +48,14 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 1.5rem;
+    padding: 0.9rem 1rem 0.9rem 1.5rem;
     border-bottom: 1px solid var(--border);
-    background: var(--bg-elev2);
+    background: var(--bg-elev);
 }
 
 .test-header h2 {
-    font-size: 1.3rem;
+    font-size: 16px;
+    font-weight: 600;
     color: var(--text-strong);
     margin: 0;
 }
@@ -59,8 +63,8 @@
 .test-close {
     background: none;
     border: none;
-    color: var(--text-strong);
-    font-size: 2rem;
+    color: var(--text-muted);
+    font-size: 1.6rem;
     cursor: pointer;
     line-height: 1;
     padding: 0;
@@ -69,12 +73,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     transition: background 0.2s;
 }
 
 .test-close:hover {
-    background: var(--border);
+    background: var(--bg-hover);
+    color: var(--text-strong);
 }
 
 .test-toolbar {
@@ -130,17 +135,19 @@
 
 .test-search input {
     width: 100%;
-    padding: 0.5rem;
+    height: 32px;
+    padding: 0 0.65rem;
     background: var(--control-bg);
     border: 1px solid var(--border-strong);
     color: var(--text);
-    border-radius: 4px;
-    font-size: 0.9rem;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
 }
 
 .test-search input:focus {
     outline: none;
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .test-list {
@@ -354,10 +361,12 @@
     background: var(--control-bg);
     color: var(--text-strong);
     border: 1px solid var(--border-strong);
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
+    height: 34px;
+    padding: 0 0.85rem;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 13px;
+    font-weight: 500;
 }
 
 .btn-back:hover {
@@ -404,10 +413,10 @@
     background: var(--control-bg);
     border: 1px solid var(--border-strong);
     color: var(--text-strong);
-    padding: 0.4rem 0.75rem;
-    border-radius: 4px;
+    padding: 0.35rem 0.7rem;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 12.5px;
     display: flex;
     align-items: center;
     gap: 0.4rem;
@@ -434,10 +443,10 @@
     flex: 1;
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: 1rem;
     color: var(--text);
-    font-family: 'Consolas', 'Courier New', monospace;
+    font-family: var(--font-mono);
     font-size: 0.9rem;
     line-height: 1.5;
     overflow: auto;
@@ -486,7 +495,7 @@
 .summary-stat {
     background: var(--bg-elev);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius);
     padding: 1.5rem;
     text-align: center;
 }
@@ -530,7 +539,7 @@
 .result-item {
     background: var(--bg-elev);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: 0.75rem 1rem;
     display: flex;
     align-items: center;

@@ -36,6 +36,16 @@ const ELIDED_NODE_COLORS = {
     light: { background: '#cfe8ff', border: '#2a7fc0', text: '#14395c' }
 };
 
+// Event nodes and edge labels. The fill carries over between canvases; what
+// sits against the canvas -- the root's ring, an edge label and its backing --
+// follows the theme, so it stays readable on both.
+const GRAPH_COLORS = {
+    dark:  { node: '#3b5bdb', root: '#4c6ef5', rootBorder: '#dbe4ff', edgeText: '#c3c9d4', edgeTextBg: '#12151b' },
+    light: { node: '#3b5bdb', root: '#364fc7', rootBorder: '#1e2a78', edgeText: '#3f4654', edgeTextBg: '#ffffff' }
+};
+
+const GRAPH_FONT = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+
 // Line style and weight per relation, mirroring the DOT writer in
 // src/eventstructureviz.ml so an exported file reads like one from
 // `mordor visual-es --output-mode dot`. The colours stay the UI's, since the
@@ -138,17 +148,19 @@ class GraphVisualizer {
      *  toggle, so repeated toggles cannot pile up overriding rules. */
     static stylesheet(theme) {
         const elided = ELIDED_NODE_COLORS[theme] || ELIDED_NODE_COLORS.dark;
+        const colors = GRAPH_COLORS[theme] || GRAPH_COLORS.dark;
         return [
             {
                 selector: 'node',
                 style: {
-                    'background-color': '#0e639c',
+                    'background-color': colors.node,
                     'label': 'data(label)',
                     'color': '#ffffff',
+                    'font-family': GRAPH_FONT,
                     'text-valign': 'center',
                     'text-halign': 'center',
                     'font-size': '11px',
-                    'font-weight': 'bold',
+                    'font-weight': '600',
                     'shape': 'roundrectangle',
                     'width': 'label',
                     'min-width': '30px',
@@ -159,11 +171,13 @@ class GraphVisualizer {
                 }
             },
             {
-                selector: 'node[isRoot]',
+                // isRoot is on every node, true only for Init; [isRoot] would
+                // match them all.
+                selector: 'node[?isRoot]',
                 style: {
-                    'background-color': '#1177bb',
+                    'background-color': colors.root,
                     'border-width': '3px',
-                    'border-color': '#ffffff'
+                    'border-color': colors.rootBorder
                 }
             },
             {
@@ -189,10 +203,12 @@ class GraphVisualizer {
                     'arrow-scale': 1.2,
                     'label': 'data(type)',
                     'font-size': '9px',
-                    'color': '#cccccc',
-                    'text-background-color': '#1e1e1e',
-                    'text-background-opacity': 0.8,
-                    'text-background-padding': '2px'
+                    'font-family': GRAPH_FONT,
+                    'color': colors.edgeText,
+                    'text-background-color': colors.edgeTextBg,
+                    'text-background-opacity': 0.85,
+                    'text-background-padding': '2px',
+                    'text-background-shape': 'roundrectangle'
                 }
             }
         ];
@@ -735,6 +751,18 @@ class GraphVisualizer {
         });
     }
 
+    // What the next run will use, on the Settings button in the top bar.
+    renderSettingsSummary() {
+        const summary = document.getElementById('settings-summary');
+        if (!summary) return;
+        const s = this.settings;
+        const models = [s.memoryModel, ...s.compareModels].map(GraphVisualizer.modelLabel).join(' + ');
+        const loops = s.loopSemantics === 'step-counter'
+            ? `${s.stepCounter} unravelling${s.stepCounter === 1 ? '' : 's'}`
+            : 'symbolic loops';
+        summary.textContent = `${models} · ${loops}`;
+    }
+
     openSettingsModal() {
         // Populate current settings
         document.getElementById('show-uaf').checked = this.settings.showUAF;
@@ -785,6 +813,7 @@ class GraphVisualizer {
         );
         
         this.closeSettingsModal();
+        this.renderSettingsSummary();
         this.log('Settings updated: ' + this.settings.loopSemantics + 
                  (this.settings.loopSemantics === 'step-counter' ? ' (' + this.settings.stepCounter + ' steps)' : '') +
                  ', model: ' + GraphVisualizer.modelLabel(this.settings.memoryModel) +
@@ -834,6 +863,7 @@ class GraphVisualizer {
         
         this.loadExampleLibrary();
         this.setupJustificationsToggle();
+        this.renderSettingsSummary();
 
         document.getElementById('examples').addEventListener('change', (e) => {
             const example = EXAMPLES[e.target.value];
@@ -862,9 +892,13 @@ class GraphVisualizer {
             this.visualize(program);
         });
         
-        // Toggle button - shows/hides dropdown
+        // Toggle button - shows/hides dropdown, marking the action the button
+        // runs (the test runner can change it too)
         dropdownToggle.addEventListener('click', (e) => {
             e.stopPropagation();
+            const current = actionBtn.dataset.action || 'visualize';
+            dropdownItems.forEach(item =>
+                item.classList.toggle('selected', item.dataset.action === current));
             splitButton.classList.toggle('active');
         });
         
@@ -881,7 +915,8 @@ class GraphVisualizer {
                 const endpoint = item.getAttribute('data-endpoint');
                 
                 // Update button text and store current endpoint
-                actionBtn.textContent = item.textContent;
+                const label = item.querySelector('.menu-label');
+                actionBtn.textContent = (label || item).textContent;
                 actionBtn.dataset.action = action;
                 actionBtn.dataset.endpoint = endpoint;
                 this.currentEndpoint = endpoint;
@@ -1864,7 +1899,7 @@ class GraphVisualizer {
         document.getElementById('uaf-content').innerHTML = '<p>Use-after-free analysis will appear here.</p>';
 
         // Update UI
-        document.getElementById('status').textContent = 'Processing...';
+        this.setStatus('Processing...', 'running');
         document.getElementById('action-btn').disabled = true;
         document.getElementById('empty-state').style.display = 'none';
         document.getElementById('carousel-container').style.display = 'none';
@@ -1982,7 +2017,7 @@ class GraphVisualizer {
                 document.getElementById('execution-count').textContent = this.executionCount;
                 this.log(this.currentAction.charAt(0).toUpperCase() + this.currentAction.slice(1) + ' complete: ' + this.executionCount + ' executions', 'success');
                 this.updateCarouselUI();
-                document.getElementById('status').textContent = 'Complete';
+                this.setStatus('Complete', 'success');
                 // Any loop still without a result has one no longer coming.
                 this.episodicityPending = false;
                 this.renderLoops();
@@ -2039,12 +2074,13 @@ class GraphVisualizer {
             this.renderLoops();
             document.getElementById('action-btn').disabled = false;
             if (document.getElementById('status').textContent === 'Processing...') {
-                document.getElementById('status').textContent = 'Error';
+                this.setStatus('Error', 'error');
                 this.log('The run ended before it completed, without reporting an error. The server log may say why.', 'error');
             }
         }).catch((err) => {
             if (err.name === 'AbortError') return; // clean close, not an error
             this.log('Connection error: ' + err.message, 'error');
+            this.setStatus('Error', 'error');
             this.episodicityPending = false;
             this.renderLoops();
             document.getElementById('action-btn').disabled = false;
@@ -2175,7 +2211,14 @@ class GraphVisualizer {
             </div>`;
         document.getElementById('empty-state').style.display = 'flex';
         document.getElementById('carousel-container').style.display = 'none';
-        document.getElementById('status').textContent = 'Error';
+        this.setStatus('Error', 'error');
+    }
+
+    // The run's status in the top bar; the state colours its dot.
+    setStatus(text, state = '') {
+        const status = document.getElementById('status');
+        status.textContent = text;
+        status.className = state ? 'status ' + state : 'status';
     }
 
     applyLayout(layoutName) {

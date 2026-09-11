@@ -19,65 +19,89 @@
             }
         })();
     </script>
+    <!-- Fonts; the system stacks below stand in when they cannot load -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
     <style>
+        /* The app's palette (static/css/mordor.css), so the two pages match */
         :root {
-            --bg: #1e1e1e;
-            --bg-elev: #252526;
-            --bg-elev2: #2d2d30;
-            --bg-hover: #323233;
-            --border: #3e3e42;
-            --text: #d4d4d4;
-            --text-strong: #cccccc;
-            --text-muted: #6a6a6a;
-            --accent: #0e639c;
-            --teal: #4ec9b0;
-            --yellow: #dcdcaa;
+            --canvas: #0b0d11;
+            --bg: #12151b;
+            --bg-elev: #171a21;
+            --bg-elev2: #1e222a;
+            --bg-hover: #232833;
+            --border: #252a33;
+            --text: #d5d9e0;
+            --text-strong: #eef0f4;
+            --text-muted: #8a91a0;
+            --accent: #4c6ef5;
+            --teal: #4fd1b5;
+            --yellow: #e5d38f;
             --syn-string: #ce9178;
-            --syn-keyword: #569cd6;
+            --syn-keyword: #7aa7ff;
             --syn-number: #b5cea8;
             --syn-comment: #6a9955;
             --syn-variable: #9cdcfe;
-            --note-bg: #3c3c1e;
-            --example-bg: #1e1e2e;
+            --note-bg: #25231a;
+            --example-bg: #161b29;
+            --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
         }
         :root[data-theme="light"] {
-            --bg: #ffffff;
-            --bg-elev: #f3f3f3;
-            --bg-elev2: #e8e8ea;
-            --bg-hover: #e6e6e8;
-            --border: #d0d0d4;
-            --text: #2b2b2b;
-            --text-strong: #1a1a1a;
-            --text-muted: #6a6a6a;
-            --accent: #0e639c;
-            --teal: #128071;
+            --canvas: #eceef3;
+            --bg: #f6f7fa;
+            --bg-elev: #ffffff;
+            --bg-elev2: #f3f4f7;
+            --bg-hover: #eceef3;
+            --border: #e2e5eb;
+            --text: #2a2f3a;
+            --text-strong: #111827;
+            --text-muted: #6b7280;
+            --accent: #3b5bdb;
+            --teal: #0f7f6e;
             --yellow: #8a6d00;
             --syn-string: #a31515;
-            --syn-keyword: #0000ff;
+            --syn-keyword: #2745c2;
             --syn-number: #098658;
-            --syn-comment: #008000;
+            --syn-comment: #3f8a3f;
             --syn-variable: #0451a5;
-            --note-bg: #fbf6d8;
-            --example-bg: #eef4fb;
+            --note-bg: #fbf6e0;
+            --example-bg: #eef2fc;
         }
         .theme-toggle {
             position: fixed;
             top: 1rem;
             right: 1rem;
+            display: grid;
+            place-items: center;
+            width: 36px;
+            height: 36px;
             background: var(--bg-elev);
             border: 1px solid var(--border);
             color: var(--text-strong);
-            font-size: 1.1rem;
             cursor: pointer;
-            padding: 0.5rem 0.6rem;
-            border-radius: 6px;
+            border-radius: 8px;
             z-index: 100;
         }
         .theme-toggle:hover { background: var(--bg-elev2); }
+        .theme-toggle svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        /* Show the icon for the theme you would switch to */
+        .theme-toggle .icon-sun { display: none; }
+        :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
+        :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: block; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
+            font-family: var(--font-sans);
+            background: var(--canvas);
             color: var(--text); 
             line-height: 1.6;
             padding: 2rem;
@@ -87,11 +111,12 @@
             margin: 0 auto; 
             background: var(--bg-elev);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 14px;
+            overflow: hidden;
         }
         header { 
             background: var(--bg-elev); 
-            border-bottom: 2px solid var(--accent); 
+            border-bottom: 1px solid var(--border); 
             padding: 2rem; 
         }
         header h1 { 
@@ -132,7 +157,7 @@
             color: var(--syn-string); 
             padding: 0.2rem 0.4rem; 
             border-radius: 3px; 
-            font-family: 'Consolas', 'Courier New', monospace;
+            font-family: var(--font-mono);
             font-size: 0.9em;
         }
         pre { 
@@ -142,7 +167,7 @@
             padding: 1rem; 
             overflow-x: auto; 
             margin: 1rem 0;
-            font-family: 'Consolas', 'Courier New', monospace;
+            font-family: var(--font-mono);
             font-size: 0.9rem;
             line-height: 1.5;
         }
@@ -265,10 +290,13 @@
     </style>
 </head>
 <body>
-    <button id="theme-toggle-btn" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">🌙</button>
+    <button id="theme-toggle-btn" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">
+        <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+    </button>
     <div class="container">
         <header>
-            <h1>🔮 MoRDor Manual</h1>
+            <h1>MoRDor Manual</h1>
             <p>Exploring weak memory with justified executions · <a href="/">Open MoRDor</a></p>
         </header>
 
@@ -426,7 +454,7 @@
             <section id="getting-started" class="section">
                 <h2>3. Getting started</h2>
                 <ol>
-                    <li>Pick a program from <strong>-- Select Example --</strong> above the editor, such as <em>Classics › MP</em>, or type your own.</li>
+                    <li>Pick a program from <strong>Examples…</strong> above the editor, such as <em>Classics › MP</em>, or type your own.</li>
                     <li>Press <strong>Visualize</strong>. MoRDor parses and interprets the program, derives its justifications, and computes and checks its executions. Results stream in as each stage finishes.</li>
                     <li>The graph panel first shows the event structure. Step through the executions with <strong>‹</strong> and <strong>›</strong>.</li>
                     <li>Read the execution's predicates, final registers and justifications in the box at the top left of the graph.</li>
@@ -455,17 +483,17 @@
                 <table>
                     <thead><tr><th>Area</th><th>What it holds</th></tr></thead>
                     <tbody>
-                        <tr><td>Header</td><td>📖 Manual, the theme toggle (🌙/☀️), 🧪 Tests, ⚙️ Settings, and the action button</td></tr>
-                        <tr><td>Litmus Source (left)</td><td>The editor, with Open, Share and the example library</td></tr>
+                        <tr><td>Top bar</td><td>From left to right: the action button, <strong>Settings</strong> with a summary of what the next run uses, and the run's status; then <strong>Share</strong> and <strong>Tests</strong>; then <strong>Manual</strong> and the theme toggle</td></tr>
+                        <tr><td>Litmus Source (left)</td><td>The editor, with the example library and Open</td></tr>
                         <tr><td>Event Structure &amp; Executions (centre)</td><td>The graph of the event structure or the current execution, its information box, statistics and controls</td></tr>
                         <tr><td>Analysis (right)</td><td>Episodicity, Assertions and Use-After-Free panels</td></tr>
-                        <tr><td>Log (bottom)</td><td>What the UI and the server have done, newest last</td></tr>
+                        <tr><td>Log (bottom)</td><td>What the UI and the server have done, newest last. <strong>Clear</strong> empties it.</td></tr>
                     </tbody>
                 </table>
-                <p>Drag the dividers between the three columns to resize them. The theme choice is remembered in the browser.</p>
+                <p>Drag the gaps between the three columns to resize them. The theme choice is remembered in the browser.</p>
 
                 <h3 id="ui-actions">Actions</h3>
-                <p>The action button runs the program in the editor. The ▼ beside it chooses which action the button runs:</p>
+                <p>The action button runs the program in the editor. The arrow beside it chooses which action the button runs, and marks the current one:</p>
                 <table>
                     <thead><tr><th>Action</th><th>Runs</th></tr></thead>
                     <tbody>
@@ -476,15 +504,15 @@
                         <tr><td><strong>Assertions</strong></td><td>The same stages as Visualize. The test runner selects it when it loads a litmus test.</td></tr>
                     </tbody>
                 </table>
-                <p>The status next to <strong>📂 Load JSON</strong> reads <em>Processing...</em> while an action runs, then <em>Complete</em>, or <em>Error</em> if the run fails. The error itself appears in the <a href="#ui-log">log</a> and in the graph panel. For a parse error the log quotes the offending line with a caret under the token, and the editor marks the token in red until you edit the program or run it again.</p>
+                <p>The status in the top bar reads <em>Processing...</em> while an action runs, then <em>Complete</em>, or <em>Error</em> if the run fails. The error itself appears in the <a href="#ui-log">log</a> and in the graph panel. For a parse error the log quotes the offending line with a caret under the token, and the editor marks the token in red until you edit the program or run it again.</p>
 
                 <h3 id="ui-editor">The editor</h3>
                 <ul>
-                    <li><strong>📁 Open</strong> loads a <code>.lit</code> file from your computer.</li>
-                    <li><strong>🔗 Share</strong> copies a link that carries the program and the selected action. Opening the link restores both, but does not run the action. The link does not carry the settings.</li>
-                    <li><strong>-- Select Example --</strong> offers programs from MoRDor's test corpus, grouped by what they illustrate: classic weak-memory tests, coherence, fences and access modes, dependencies and thin air, and programs only MoRDor can express.</li>
-                    <li><strong>[?]</strong> next to the panel title opens this manual at the language reference.</li>
+                    <li><strong>Examples…</strong> offers programs from MoRDor's test corpus, grouped by what they illustrate: classic weak-memory tests, coherence, fences and access modes, dependencies and thin air, and programs only MoRDor can express.</li>
+                    <li><strong>Open</strong> loads a <code>.lit</code> file from your computer.</li>
+                    <li><strong>?</strong> next to the panel title opens this manual at the language reference.</li>
                 </ul>
+                <p><strong>Share</strong>, in the top bar, copies a link that carries the program and the selected action. Opening the link restores both, but does not run the action. The link does not carry the settings.</p>
                 <p>Syntax is highlighted as you type.</p>
 
                 <h3 id="ui-graph">Event structure and executions</h3>
@@ -533,7 +561,7 @@
                             <li><em>TikZ</em>: a <code>tikzpicture</code> for LaTeX, with Greek letters in math mode. The file's header lists the packages it needs. Labels with allocation names need <code>xelatex</code> or <code>lualatex</code>.</li>
                         </ul>
                     </li>
-                    <li><strong>💾 Save JSON</strong> saves the whole run: the program, every graph, and the analysis results. <strong>📂 Load JSON</strong> (above the graph) restores a saved run without contacting the server, at the execution that was on screen.</li>
+                    <li><strong>Save JSON</strong> saves the whole run: the program, every graph, and the analysis results. <strong>Load JSON</strong> (above the graph) restores a saved run without contacting the server, at the execution that was on screen.</li>
                 </ul>
                 <p>At the bottom right, the statistics box counts the nodes and edges on screen and the executions of the run. Expand <strong>Justification set</strong> there for the program's whole justification set, each with the elaboration step that derived it.</p>
 
@@ -546,7 +574,7 @@
                 <p>Every execution with a use-after-free, and the pairs of events that make it one. Click an entry to show its execution, where the pairs are drawn as <code>uaf</code> edges.</p>
 
                 <h3 id="ui-settings">Settings</h3>
-                <p>⚙️ opens the settings. <strong>Apply &amp; Regenerate</strong> applies them and reruns the last program you ran.</p>
+                <p><strong>Settings</strong> in the top bar opens the settings; beside it, a summary names the models and loop semantics the next run uses. <strong>Apply &amp; Regenerate</strong> applies them and reruns the last program you ran.</p>
                 <h4>Loop Semantics</h4>
                 <ul>
                     <li><strong>Step-counter semantics</strong> unrolls every loop <strong>Loop unravellings</strong> times (2 by default).</li>
@@ -564,7 +592,7 @@
                 <p><strong>Show executions with use-after-free</strong> and <strong>Show executions with unbounded pointer dereference</strong> are sent with each request, but the server does not act on them yet. Every admitted execution is shown whichever way they are set.</p>
 
                 <h3 id="ui-tests">Test runner</h3>
-                <p>🧪 Tests opens the test runner over MoRDor's corpus. Tests are listed in three trees: <em>Litmus Tests</em> (<code>litmus-tests/</code>), <em>Episodicity Tests</em> (<code>programs/episodicity/</code>) and <em>Programs</em> (<code>programs/</code>).</p>
+                <p><strong>Tests</strong> opens the test runner over MoRDor's corpus. Tests are listed in three trees: <em>Litmus Tests</em> (<code>litmus-tests/</code>), <em>Episodicity Tests</em> (<code>programs/episodicity/</code>) and <em>Programs</em> (<code>programs/</code>).</p>
                 <ul>
                     <li><strong>Filter tests…</strong> narrows the trees by path.</li>
                     <li><strong>▶</strong> next to a test runs it. <strong>▶ Run All Tests</strong> runs every litmus and episodicity test in turn.</li>
@@ -594,7 +622,7 @@
                 </ol>
 
                 <h3>Which models allow an execution?</h3>
-                <p>In ⚙️ Settings, choose a primary model and tick the models to compare. Executions of the primary model the others also admit say so under <strong>Also allowed by</strong>. An execution that lists no other model is one only the primary admits: on load buffering with sMRD as primary and RC11 compared, those are exactly the load-buffering witnesses RC11 rules out.</p>
+                <p>In <strong>Settings</strong>, choose a primary model and tick the models to compare. Executions of the primary model the others also admit say so under <strong>Also allowed by</strong>. An execution that lists no other model is one only the primary admits: on load buffering with sMRD as primary and RC11 compared, those are exactly the load-buffering witnesses RC11 rules out.</p>
 
                 <h3>Is a loop episodic?</h3>
                 <p>Choose the <strong>Episodicity</strong> action, or run <strong>Visualize</strong>, and open <strong>Episodicity</strong>. A failed condition lists its violations with source positions. Hover over the loop to find it in the editor.</p>
@@ -606,7 +634,7 @@
                 <p>Show the execution, choose a layout, drag events where you want them, and use <strong>Relations</strong> to draw only what the figure needs. Then <strong>Export › TikZ</strong>. The figure keeps the positions and relations on screen.</p>
 
                 <h3>Keeping a result</h3>
-                <p><strong>🔗 Share</strong> gives a link to the program, to rerun later. <strong>💾 Save JSON</strong> keeps the computed run itself, which <strong>📂 Load JSON</strong> reopens without recomputing.</p>
+                <p><strong>Share</strong> gives a link to the program, to rerun later. <strong>Save JSON</strong> keeps the computed run itself, which <strong>Load JSON</strong> reopens without recomputing.</p>
             </section>
 
             <section id="cli" class="section">
@@ -1526,7 +1554,6 @@ flag := 0;
             const root = document.documentElement;
             const syncIcon = () => {
                 const isLight = root.getAttribute('data-theme') === 'light';
-                btn.textContent = isLight ? '🌙' : '☀️';
                 btn.title = isLight ? 'Switch to dark theme' : 'Switch to light theme';
             };
             syncIcon();

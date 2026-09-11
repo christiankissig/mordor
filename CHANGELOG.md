@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A UB assumption from folding `1 / !r` to `1` now reaches elaboration as a de facto constraint, so the narrowed write and the original write are both justified (partial fix for [#65](https://github.com/christiankissig/mordor/issues/65)).
 
 #### Web UI
-- A manual, opened from 📖 Manual in the header. It introduces MoRDor as a tool for exploring weak memory through justified executions, explains the concepts, describes every part of the web UI and common tasks, and includes the language reference that was the help page. `/help/` serves it too.
+- A manual, opened from Manual in the top bar. It introduces MoRDor as a tool for exploring weak memory through justified executions, explains the concepts, describes every part of the web UI and common tasks, and includes the language reference that was the help page. `/help/` serves it too.
 - The settings choose a primary memory model, or the test's own, and further models to compare. Each compared model checks every execution, the log gives each model's count, and an execution shows which other models also allow it. The same comes through `compare_models` on the stream API ([#82](https://github.com/christiankissig/mordor/issues/82)).
 - `MORDOR_WEB_PORT` sets the web server's port, which is still 8080 by default.
 - The final register state of each execution ([#8](https://github.com/christiankissig/mordor/issues/8)).
@@ -88,9 +88,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parse errors are shown instead of breaking the page (`b1cf28e`).
 - Errors from the server never reached the log: the page looked for a field the server does not send, so a parse error or an unknown model only turned the status to *Error*. They are now logged. A parse error quotes the offending line with a caret, and the editor marks the token. Its message gives the 1-based column where the token starts and names the token, where it used to give a column past the token's end and say only "Parse error: Parse error at …". The program is sent untrimmed, so line numbers are the editor's.
 - The justification panels are laid out one entry per line, and their Show/Hide button works (`0779cdf`).
+- Every event in a graph was drawn with the ring meant for the initial event, and in the light theme edge labels sat on a dark backing.
+- Messages about loading a file, loading a program from a link and sharing were put at the top of the log, above older entries.
 - The language reference's examples: the CAS example did not parse and read a failed swap as success, the store-buffering example was not store buffering, the load-buffering example allowed an outcome only thin air produces, and all of them used `[x = 0]`, a de facto guarantee, as if it initialised memory. `cas` and `fadd` now say what they put in the register, and the model names `c11` and `sc`, which MoRDor rejects, are gone.
 
 ### Changed
+- The web UI has a new look: panels as cards, one set of line icons in place of emoji, and matching Inter and JetBrains Mono type in the app and the manual. The top bar runs in the order you work: the action button, whose menu says what each action runs; Settings, with a summary of the models and loop semantics the next run uses; the run's status; Share, moved up from the editor; Tests; then Manual and the theme toggle. The log has a Clear button.
 - Litmus corpus: tests MoRDor's verdict disagrees with are parked in `litmus-tests-review/`, each linked to an issue. Tests since decided correctly have returned to the suite.
 - The RCU read-side critical-section markers in `programs/` are `volatile`.
 
