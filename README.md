@@ -19,7 +19,10 @@ MoRDor is a reference implementation of Symbolic Modular Relaxed Dependencies
 
 **Caveat** Do not use until version 1.
 
-![MoRDor finding a use-after-free and verifying the fix](demo/out/mordor-demo.gif)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="demo/out/mordor-demo-light.gif">
+  <img alt="MoRDor finding a use-after-free and verifying the fix" src="demo/out/mordor-demo-dark.gif">
+</picture>
 
 The web UI above finds a use-after-free reachable when the flag is written with
 a relaxed store, then confirms it is gone once the store is made releasing.

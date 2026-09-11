@@ -4,7 +4,7 @@ Two recorders, one story, told on the two surfaces MoRDor has:
 
 | script | surface | outputs |
 |---|---|---|
-| `demo.mjs`     | the web UI  | `out/mordor-demo.gif` / `.mp4` |
+| `demo.mjs`     | the web UI  | `out/mordor-demo-{dark,light}.gif` / `.mp4` |
 | `cli-demo.mjs` | the CLI     | `out/mordor-cli-demo.gif` / `.mp4` |
 
 Both drive Playwright, record a `.webm`, and hand it to the shared encoder in
@@ -51,8 +51,9 @@ From the repository root:
 
 ```bash
 node demo/demo.mjs            # build + start mordor-web, record, encode
+node demo/demo.mjs --theme light   # the same in the light theme
 node demo/cli-demo.mjs        # build cli/main.exe, record, encode
-make demo                     # the web one
+make demo                     # the web one, in both themes
 make demo-cli                 # the CLI one
 ```
 
@@ -60,8 +61,10 @@ Outputs land in `demo/out/`:
 
 | file                    | what for                                  |
 |-------------------------|-------------------------------------------|
-| `mordor-demo.gif`       | 800px wide, ~5 MB — README / docs         |
-| `mordor-demo.mp4`       | h264, ~1 MB — website, slides             |
+| `mordor-demo-dark.gif`  | 800px wide, ~4.5 MB — README / docs       |
+| `mordor-demo-dark.mp4`  | h264, ~1.5 MB — website, slides           |
+| `mordor-demo-light.gif` | 800px wide, ~4 MB — README / docs         |
+| `mordor-demo-light.mp4` | h264, ~1.5 MB — website, slides           |
 | `mordor-cli-demo.gif`   | 800px wide, ~3 MB — README / docs         |
 | `mordor-cli-demo.mp4`   | h264, ~1 MB — website, slides             |
 
@@ -83,17 +86,23 @@ node demo/cli-demo.mjs --help        # everything else
 
 ## Using the output
 
-GitHub README:
+GitHub README, showing the recording in the reader's theme:
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="demo/out/mordor-demo-light.gif">
+  <img alt="MoRDor finding a use-after-free and verifying the fix" src="demo/out/mordor-demo-dark.gif">
+</picture>
+```
 
 ```markdown
-![MoRDor finding a use-after-free and verifying the fix](demo/out/mordor-demo.gif)
 ![The same, from the command line](demo/out/mordor-cli-demo.gif)
 ```
 
 Website (`christian-kissig-org`, projects page bundle):
 
 ```bash
-cp demo/out/mordor-demo.gif ~/workspace/christian-kissig-org/content/projects/mordor-demo.gif
+cp demo/out/mordor-demo-dark.gif ~/workspace/christian-kissig-org/content/projects/mordor-demo.gif
 ```
 
 ## Editing the demos

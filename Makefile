@@ -14,7 +14,7 @@ help:
 	@echo "  make health    - Check health endpoint"
 	@echo "  make test      - Run a quick test"
 	@echo "  make clean     - Remove container and image"
-	@echo "  make demo      - Record the web-UI demo (GIF + MP4)"
+	@echo "  make demo      - Record the web-UI demo, dark and light (GIF + MP4)"
 	@echo "  make demo-cli  - Record the CLI demo (GIF + MP4)"
 	@echo ""
 	@echo "Docker Compose Commands:"
@@ -96,10 +96,11 @@ dev-build:
 	@echo "🔨 Building locally..."
 	dune build
 
-# Record the web-UI demo (GIF + MP4 in demo/out/); see demo/README.md
+# Record the web-UI demo in both themes (GIF + MP4 in demo/out/); see demo/README.md
 demo:
 	@test -d demo/node_modules || (cd demo && npm install)
-	node demo/demo.mjs
+	node demo/demo.mjs --theme dark
+	node demo/demo.mjs --theme light
 
 # Record the CLI demo (GIF + MP4 in demo/out/); see demo/README.md
 demo-cli:

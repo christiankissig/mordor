@@ -6,6 +6,7 @@
  * into a GIF (for the GitHub README) and an MP4 (for the website).
  *
  *   node demo/demo.mjs                 # build+start server, record, write demo/out/
+ *   node demo/demo.mjs --theme light   # the same in the light theme
  *   node demo/demo.mjs --headed        # watch it happen
  *   node demo/demo.mjs --no-server     # reuse a server already on :8080
  *
@@ -34,7 +35,7 @@ const DEFAULTS = {
   server: true, // start the server ourselves if it is not already up
   serverTimeout: 600, // seconds to wait for `dune exec` to build + listen
   out: path.join(HERE, 'out'),
-  name: 'mordor-demo',
+  name: null, // mordor-demo-<theme>, so the two themes' recordings sit side by side
   width: 1440,
   height: 810,
   theme: 'dark',
@@ -85,6 +86,7 @@ function parseArgs(argv) {
         process.exit(2);
     }
   }
+  o.name ??= `mordor-demo-${o.theme}`;
   return o;
 }
 
@@ -98,7 +100,7 @@ usage: node demo/demo.mjs [flags]
   --no-server            never start a server; fail if --url is not reachable
   --server-timeout <s>   wait this long for the build+boot (${DEFAULTS.serverTimeout})
   --out <dir>            output directory          (demo/out)
-  --name <base>          output basename           (${DEFAULTS.name})
+  --name <base>          output basename           (mordor-demo-<theme>)
   --width/--height <px>  recording size            (${DEFAULTS.width}x${DEFAULTS.height})
   --theme dark|light     UI theme                  (${DEFAULTS.theme})
   --headed               run the browser visibly
