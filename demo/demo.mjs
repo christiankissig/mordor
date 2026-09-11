@@ -445,7 +445,7 @@ const SCENES = [
   {
     title: 'open',
     async run(d) {
-      await d.card('MoRDor', 'Symbolic weak-memory analysis, in the browser', 1500);
+      await d.card('MoRDor', 'Weak memory exploration with justified executions', 1500);
       await d.say('A litmus test in — event structures and executions out.', 900);
     },
   },

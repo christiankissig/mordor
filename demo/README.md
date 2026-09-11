@@ -60,7 +60,7 @@ Outputs land in `demo/out/`:
 
 | file                    | what for                                  |
 |-------------------------|-------------------------------------------|
-| `mordor-demo.gif`       | 800px wide, ~3.5 MB — README / docs       |
+| `mordor-demo.gif`       | 800px wide, ~5 MB — README / docs         |
 | `mordor-demo.mp4`       | h264, ~1 MB — website, slides             |
 | `mordor-cli-demo.gif`   | 800px wide, ~3 MB — README / docs         |
 | `mordor-cli-demo.mp4`   | h264, ~1 MB — website, slides             |
