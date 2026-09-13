@@ -135,23 +135,44 @@ let pre_justifications structure =
                 Hashtbl.find_opt structure.restrict event.label
                 |> Option.value ~default:[];
               d =
-                ( if USet.mem structure.malloc_events w then USet.create ()
-                  else
-                    USet.flatten
-                      (USet.map
-                         (fun (e_opt : expr option) : string uset ->
-                           match e_opt with
-                           | Some e -> USet.of_list (Expr.get_symbols e)
-                           | None -> USet.create ()
-                         )
-                         (USet.of_list
-                            [
-                              event.loc;
-                              Option.map Expr.of_value event.rval;
-                              event.wval;
-                            ]
-                         )
-                      )
+                (let is_alloc = USet.mem structure.malloc_events w in
+                 (* An allocation depends on its size expression, [wval], and on
+                    nothing else. The symbol it introduces is [rval], and its
+                    origin is this very event, so taking it as a dependency
+                    would make every allocation depend on itself. A write
+                    depends on its location and the value it writes, a free on
+                    the expression naming the location it releases, which is
+                    [loc] in both cases. *)
+                 let depends_on =
+                   if is_alloc then [ event.wval ]
+                   else
+                     [
+                       event.loc;
+                       Option.map Expr.of_value event.rval;
+                       event.wval;
+                     ]
+                 in
+                 let syms =
+                   USet.flatten
+                     (USet.map
+                        (fun (e_opt : expr option) : string uset ->
+                          match e_opt with
+                          | Some e -> USet.of_list (Expr.get_symbols e)
+                          | None -> USet.create ()
+                        )
+                        (USet.of_list depends_on)
+                     )
+                 in
+                   if is_alloc then
+                     (* defensive: the introduced symbol is fresh here, so this
+                        removes nothing, but it states the invariant. *)
+                     match event.rval with
+                     | Some v ->
+                         USet.difference syms
+                           (USet.of_list
+                              (Expr.get_symbols (Expr.of_value v)))
+                     | None -> syms
+                   else syms
                 );
               fwd = USet.create ();
               we = USet.create ();
@@ -187,8 +208,11 @@ module ValueAssignElab = struct
     let model = Solver.solve solver in
       match model with
       | Some bindings ->
-          if Option.is_none just.w.wval then
-            (* Free or allocation event *)
+          if just.w.typ <> Write then
+            (* Allocation or free. Value Assignment is stated on a justified
+               write, so an allocation's size and a free's location keep their
+               symbols. Testing the type rather than [wval]: an allocation now
+               records its size there. *)
             []
           else
             (* A symbol is concretised only where the context *entails* its

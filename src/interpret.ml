@@ -700,7 +700,14 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             let rval = VSymbol symbol in
             let loc = ESymbol symbol in
             let base_evt : event = Event.create Malloc 0 () in
-            let evt = { base_evt with rval = Some rval; loc = Some loc } in
+            (* The size expression is recorded in [wval]. It was dropped, so an
+               allocation carried no dependency on a size it computed from a
+               read; pre-justifications take an allocation's dependencies from
+               it. *)
+            let size' = Expr.evaluate ~env:(Hashtbl.find_opt env) size in
+            let evt =
+              { base_evt with rval = Some rval; loc = Some loc; wval = Some size' }
+            in
             let event' : event = add_event events evt env annotation in
               Hashtbl.replace events.origin symbol event'.label;
               let defacto =
@@ -724,7 +731,10 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             let rval = VSymbol symbol in
             let loc = ESymbol symbol in
             let base_evt : event = Event.create Malloc 0 () in
-            let evt = { base_evt with rval = Some rval; loc = Some loc } in
+            let size' = Expr.evaluate ~env:(Hashtbl.find_opt env) size in
+            let evt =
+              { base_evt with rval = Some rval; loc = Some loc; wval = Some size' }
+            in
             let event' : event = add_event events evt env annotation in
               USet.add events.globals global |> ignore;
               Hashtbl.replace events.origin symbol event'.label;
