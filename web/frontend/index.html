@@ -319,15 +319,90 @@
                             <select id="memory-model" class="select" title="Executions are shown for this model">
                                 <option value="default" selected>Default (the test's model, or sMRD)</option>
                                 <option value="smrd">sMRD</option>
-                                <option value="rc11">RC11</option>
+                                <optgroup label="Language">
+                                    <option value="rc11">RC11</option>
+                                    <option value="rc17">RC17</option>
+                                    <option value="rc11z">RC11z</option>
+                                    <option value="od-lso">OD-LSO</option>
+                                    <option value="mrd">MRD</option>
+                                </optgroup>
+                                <optgroup label="Sequential and store-buffer">
+                                    <option value="sc">SC</option>
+                                    <option value="vbd">VbD</option>
+                                    <option value="tso">TSO</option>
+                                    <option value="x86-tso">x86-TSO</option>
+                                    <option value="clighttso">ClightTSO</option>
+                                </optgroup>
+                                <optgroup label="Release-acquire">
+                                    <option value="ra">RA</option>
+                                    <option value="sra">SRA</option>
+                                    <option value="wra">WRA</option>
+                                    <option value="cc">CC</option>
+                                </optgroup>
+                                <optgroup label="Steinke–Nutt">
+                                    <option value="coherence">Coherence</option>
+                                    <option value="pc">PC</option>
+                                    <option value="pram">PRAM</option>
+                                    <option value="causal">Causal</option>
+                                    <option value="slow">Slow</option>
+                                    <option value="local">Local</option>
+                                </optgroup>
+                                <optgroup label="Per-object causal and session guarantees">
+                                    <option value="pocausal">POCausal</option>
+                                    <option value="ryw">RYW</option>
+                                    <option value="mr">MR</option>
+                                    <option value="mw">MW</option>
+                                    <option value="wfr">WFR</option>
+                                </optgroup>
                             </select>
                         </label>
                     </div>
                     <div class="setting-item">
                         <span>Also compute executions under</span>
-                        <div id="compare-models" class="setting-options">
-                            <label><input type="checkbox" value="smrd" /> sMRD</label>
-                            <label><input type="checkbox" value="rc11" /> RC11</label>
+                        <div id="compare-models">
+                            <div class="setting-options">
+                                <label><input type="checkbox" value="smrd" /> sMRD</label>
+                            </div>
+                            <div class="setting-options-group">Language</div>
+                            <div class="setting-options">
+                                <label><input type="checkbox" value="rc11" /> RC11</label>
+                                <label><input type="checkbox" value="rc17" /> RC17</label>
+                                <label><input type="checkbox" value="rc11z" /> RC11z</label>
+                                <label><input type="checkbox" value="od-lso" /> OD-LSO</label>
+                                <label><input type="checkbox" value="mrd" /> MRD</label>
+                            </div>
+                            <div class="setting-options-group">Sequential and store-buffer</div>
+                            <div class="setting-options">
+                                <label><input type="checkbox" value="sc" /> SC</label>
+                                <label><input type="checkbox" value="vbd" /> VbD</label>
+                                <label><input type="checkbox" value="tso" /> TSO</label>
+                                <label><input type="checkbox" value="x86-tso" /> x86-TSO</label>
+                                <label><input type="checkbox" value="clighttso" /> ClightTSO</label>
+                            </div>
+                            <div class="setting-options-group">Release-acquire</div>
+                            <div class="setting-options">
+                                <label><input type="checkbox" value="ra" /> RA</label>
+                                <label><input type="checkbox" value="sra" /> SRA</label>
+                                <label><input type="checkbox" value="wra" /> WRA</label>
+                                <label><input type="checkbox" value="cc" /> CC</label>
+                            </div>
+                            <div class="setting-options-group">Steinke–Nutt</div>
+                            <div class="setting-options">
+                                <label><input type="checkbox" value="coherence" /> Coherence</label>
+                                <label><input type="checkbox" value="pc" /> PC</label>
+                                <label><input type="checkbox" value="pram" /> PRAM</label>
+                                <label><input type="checkbox" value="causal" /> Causal</label>
+                                <label><input type="checkbox" value="slow" /> Slow</label>
+                                <label><input type="checkbox" value="local" /> Local</label>
+                            </div>
+                            <div class="setting-options-group">Per-object causal and session guarantees</div>
+                            <div class="setting-options">
+                                <label><input type="checkbox" value="pocausal" /> POCausal</label>
+                                <label><input type="checkbox" value="ryw" /> RYW</label>
+                                <label><input type="checkbox" value="mr" /> MR</label>
+                                <label><input type="checkbox" value="mw" /> MW</label>
+                                <label><input type="checkbox" value="wfr" /> WFR</label>
+                            </div>
                         </div>
                         <p class="setting-note">
                             Each execution shows which of these also allow it. Executions are enumerated once and each model checks them, so the UB fold follows the primary model.

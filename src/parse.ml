@@ -247,6 +247,10 @@ let rec convert_assertion ast_assertion =
       let ir_outcome = outcome_of_string outcome in
         Outcome { outcome = ir_outcome; condition = ir_condition; model }
   | AModel { model } -> Model { model }
+  | AConjunction _ ->
+      (* [convert_litmus] flattens a conjunction into the assertion list, and
+         the grammar nests none. *)
+      invalid_arg "convert_assertion: nested conjunction"
   | AChained { model; outcome; rest } ->
       Chained
         {
@@ -282,6 +286,7 @@ and convert_litmus ast_litmus =
   let config = { name; model; values; defacto; constraints } in
   let assertions =
     match ast_litmus.assertion with
+    | Some (AConjunction assertions) -> List.map convert_assertion assertions
     | Some assertion -> [ convert_assertion assertion ]
     | None -> []
   in
@@ -499,21 +504,7 @@ let step_parse_litmus (ctx_lwt : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
             ctx.litmus_defacto <- Some config.defacto;
             ctx.litmus_constraints <- Some config.constraints;
             ctx.program_stmts <- Some program;
-            ctx.assertions <-
-              ( match assertions with
-              | [] -> None
-              | [ a ] -> (
-                  match a with
-                  | Ir.Outcome { model = Some model; _ } | Ir.Model { model } ->
-                      apply_model_options ctx model;
-                      Logs_safe.info (fun m ->
-                          m "Applied model options for %s" model
-                      );
-                      Some a
-                  | _ -> Some a
-                )
-              | _ -> failwith "Multiple assertions are not supported."
-              );
+            set_assertions ctx assertions;
             Lwt.return ctx
       | None ->
           Logs_safe.err (fun m -> m "No program provided for parsing.");

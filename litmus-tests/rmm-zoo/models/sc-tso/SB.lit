@@ -1,0 +1,48 @@
+// SB.
+//
+// Store buffering: each thread stores, then loads the other thread's location,
+//   and both loads see the initial value.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO allows,
+//     Coherence allows, RC11 allows, RC17 allows, OD-LSO allows.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO allows. Equivalent to TSO (zoo edge).
+//     ClightTSO allows. Equivalent to TSO (zoo edge).
+//     RC11z allows. Equivalent to RC11 (zoo edge).
+//     MRD allows. RC11 allows it, and MRD is weaker than RC11 (zoo edge RC11 ->
+//       MRD).
+//     PRAM allows. PC allows it, and PRAM is weaker.
+//     Slow allows. PRAM allows it, and Slow is weaker.
+//     Local allows. Slow allows it, and Local is weaker.
+//     RYW allows. PRAM allows it, and RYW is weaker.
+//     MR allows. PRAM allows it, and MR is weaker.
+//     MW allows. PRAM allows it, and MW is weaker.
+//     WFR allows. Causal allows it, and WFR is weaker.
+//   the models' definitions:
+//     CC allows. Implied by Causal.
+//     PC allows. Each location has one write, so one order per location
+//       constrains nothing, and each view places the other process's write
+//       last.
+//     Causal allows. Each process's view can place its own write before its
+//       load and the other's write after it.
+//     POCausal allows. x and y are different objects, and neither read has seen
+//       the write to its own location.
+//   Not asserted, for want of a verdict to check against: none. RA, SRA and WRA
+//     are defined on release stores and acquire loads, and this program has
+//     other accesses.
+x := 0;
+y := 0;
+{
+  x := 1;
+  r0 := y
+} ||| {
+  y := 1;
+  r1 := x
+}
+%%
+allow (r0 = 0 && r1 = 0) [TSO, x86-TSO, ClightTSO, Coherence, RC11, RC11z,
+                          RC17, OD-LSO, MRD, CC, PC, PRAM, Causal, Slow, Local,
+                          POCausal, RYW, MR, MW, WFR]
+forbid (r0 = 0 && r1 = 0) [SC, VbD]

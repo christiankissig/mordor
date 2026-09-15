@@ -249,6 +249,11 @@ module Display = struct
       | None -> ()
       | Some valid -> Printf.printf "Valid: %b\n" valid
       );
+      List.iter
+        (fun (assertion, holds) ->
+          Printf.printf "  %s %s\n" (if holds then "holds:" else "FAILS:") assertion
+        )
+        ctx.assertion_verdicts;
       ( match ctx.assertion_instances with
       | None -> ()
       | Some instances ->

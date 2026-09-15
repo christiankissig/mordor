@@ -1,0 +1,47 @@
+// Oscillating.
+//
+// A reader sees x go 1, 2, 1 while two writers each write once. Lahav & Boker,
+//   TOPLAS 2022, Ex. 3.7, over relaxed accesses.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence forbids, RC11 forbids, RC17 forbids, OD-LSO forbids.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z forbids. Equivalent to RC11 (zoo edge).
+//     PC forbids. Coherence forbids it, and PC is stronger.
+//     PRAM forbids. MR forbids it, and PRAM is stronger.
+//     Causal forbids. PRAM forbids it, and Causal is stronger.
+//     Slow forbids. Local forbids it, and Slow is stronger.
+//   the models' definitions:
+//     CC allows. CC is WRA with every access synchronising; herd7's wra.cat
+//       allows this shape over release and acquire accesses.
+//     Local forbids. A view is one order: seeing 1, 2, 1 needs one of the
+//       writes twice.
+//     POCausal forbids. Whichever write is arbitrated first, a later load that
+//       has seen both returns it.
+//     RYW allows. The reader wrote nothing.
+//     MR forbids. The second and third loads have seen both writes and return
+//       different ones.
+//     MW allows. MW alone rejects nothing: a read sees only the write it read.
+//     WFR allows. The reader writes nothing, and the writers read nothing.
+//   Not asserted, for want of a verdict to check against: MRD. RA, SRA and WRA
+//     are defined on release stores and acquire loads, and this program has
+//     other accesses.
+x := 0;
+{
+  x := 1
+} ||| {
+  r0 := x;
+  r1 := x;
+  r2 := x
+} ||| {
+  x := 2
+}
+%%
+allow (r0 = 1 && r1 = 2 && r2 = 1) [CC, RYW, MW, WFR]
+forbid (r0 = 1 && r1 = 2 && r2 = 1) [SC, VbD, TSO, x86-TSO, ClightTSO,
+                                     Coherence, RC11, RC11z, RC17, OD-LSO, PC,
+                                     PRAM, Causal, Slow, Local, POCausal, MR]

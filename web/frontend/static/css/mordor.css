@@ -1391,6 +1391,7 @@ pre.line-numbers > code {
 .input-number { width: 76px; }
 .setting-item .select { flex: 1; max-width: 280px; }
 .setting-options { display: flex; flex-wrap: wrap; gap: 0.3rem 1.25rem; margin: 0.5rem 0 0 1.6rem; }
+.setting-options-group { margin: 0.6rem 0 0 1.6rem; font-size: 11px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-muted); }
 .setting-note { margin: 0.5rem 0 0 1.6rem; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
 
 .modal-footer {
@@ -1412,3 +1413,6 @@ pre.line-numbers > code {
     .topbar .btn-ghost { width: 34px; padding: 0; }
     .brand { padding-right: 0.75rem; }
 }
+
+.assertion-verdicts { list-style: none; margin: 0.5rem 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.assertion-verdicts code { font-size: 12px; }

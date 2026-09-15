@@ -1,13 +1,13 @@
 # Litmus Tests Index
 
-Total tests: 275
-Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
+Total tests: 302
+Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-15
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
 > scanned: `litmus-tests-promising/` (`[Promising]`), `litmus-tests-cpp/`
-> (`[C11]`, `[C17]`, `[C20]`), `litmus-tests-ra/` (`[RA]`, `[SRA]`) and
-> `litmus-tests-jmm/` (`[JMM]`, the JSR-133 Java Causality Test Cases). Each has
+> (`[C11]`, `[C17]`, `[C20]`) and `litmus-tests-jmm/` (`[JMM]`, the JSR-133
+> Java Causality Test Cases). Each has
 > a README with the reference verdicts. Tests whose assertion MoRDor does not
 > validate are parked in `litmus-tests-review/`, also unscanned.
 
@@ -240,6 +240,10 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - own/sync/rel2lift.lit
 - own/sync/writeElision.lit
 - own/sync/writeElisionRel.lit
+- own/SB+sc.lit
+- own/nonatomic-store-no-sync-relaxed.lit
+- own/nonatomic-store-no-sync.lit
+- own/ptr-overwrite-coherence.lit
 - popl_promising/LBaa/LBa'0.lit
 - popl_promising/LBaa/LBa'1.lit
 - sevcik_thesis/Irrelevant Read Elimination/IREA.lit
@@ -261,6 +265,28 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - symmrd/refinement/LB+UB+data.lit
 - symmrd/refinement/LB+UBoff+data.lit
 - rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit
+- rmm-zoo/models/ra-sra-wra/2+2W+rel+acq.lit
+- rmm-zoo/models/ra-sra-wra/Oscillating.lit
+- rmm-zoo/models/ra-sra-wra/SF.lit
+- rmm-zoo/models/ra-sra-wra/WW.lit
+- rmm-zoo/models/ra-sra-wra/CAS-both+rel+acq.lit
+- rmm-zoo/models/rc11-rc17/LB.lit
+- rmm-zoo/models/rc11-rc17/RS17.lit
+- rmm-zoo/models/rc11-rc17/uaf-bug.lit
+- rmm-zoo/models/sc-tso/IRIW.lit
+- rmm-zoo/models/sc-tso/SB+cas.lit
+- rmm-zoo/models/sc-tso/SB+failed-cas.lit
+- rmm-zoo/models/sc-tso/SB+fence.lit
+- rmm-zoo/models/sc-tso/SB+fences.lit
+- rmm-zoo/models/sc-tso/SB.lit
+- rmm-zoo/models/sessions/Monotonic-read.lit
+- rmm-zoo/models/steinke-nutt/Cross-own.lit
+- rmm-zoo/models/steinke-nutt/MP.lit
+- rmm-zoo/models/steinke-nutt/Oscillating.lit
+- rmm-zoo/models/steinke-nutt/Readers-disagree.lit
+- rmm-zoo/models/steinke-nutt/Revised-order.lit
+- rmm-zoo/models/steinke-nutt/WRC.lit
+- rmm-zoo/models/steinke-nutt/Writer-reversed.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit
@@ -269,6 +295,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-10
 - rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit
 - rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit
 - rmm-zoo/properties/atomicity-mca/WRC+rlx.lit
+- rmm-zoo/properties/atomicity-mca/IRIW+rel+acq.lit
 - rmm-zoo/properties/elimination/load-store/opt.lit
 - rmm-zoo/properties/elimination/load-store/src.lit
 - rmm-zoo/properties/elimination/store-store/opt.lit

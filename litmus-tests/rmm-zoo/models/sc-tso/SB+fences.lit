@@ -1,0 +1,30 @@
+// SB+fences.
+//
+// Store buffering with a fence after each store. On x86 a fence is MFENCE,
+//   which drains the store buffer.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: TSO forbids, Coherence
+//     allows.
+//   the zoo's equivalence and ordering edges:
+//     SC forbids. SC forbids SB, and a fence adds no behaviour.
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to x86-TSO (zoo edge).
+//   Not asserted, for want of a verdict to check against: RC11, RC11z, RC17,
+//     OD-LSO, MRD, CC, PC, PRAM, Causal, Slow, Local, POCausal, RYW, MR, MW,
+//     WFR. RA, SRA and WRA are defined on release stores and acquire loads, and
+//     this program has other accesses.
+x := 0; y := 0;
+{
+  x := 1;
+  fence(sc);
+  r0 := y
+} ||| {
+  y := 1;
+  fence(sc);
+  r1 := x
+}
+%%
+allow (r0 = 0 && r1 = 0) [Coherence]
+forbid (r0 = 0 && r1 = 0) [SC, VbD, TSO, x86-TSO, ClightTSO]

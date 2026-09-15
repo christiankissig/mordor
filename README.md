@@ -40,7 +40,10 @@ the output on screen is captured from `mordor` itself.
 MoRDor explores weak memory through justified executions. It interprets a
 program symbolically as an event structure, derives justifications for its
 writes, freezes them into executions with their dependencies, and checks those
-executions against memory models such as sMRD and RC11.
+executions against memory models: sMRD, RC11 and IMM, and 24 models of the
+[Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org) defined over the same
+relations, from SC and TSO to the release-acquire family and the session
+guarantees.
 
 The command-line interface and web UI provide:
 - Parsing and validating programs and litmus tests

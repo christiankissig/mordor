@@ -219,6 +219,7 @@ val generate_executions :
   ?compute:compute_fn ->
   ?compare_models:string list ->
   ?admissions:(int, string list) Hashtbl.t ->
+  ?model_executions:(string, symbolic_execution list) Hashtbl.t ->
   symbolic_event_structure ->
   Forwarding.event_structure_context ->
   justification list ->
@@ -257,6 +258,7 @@ val calculate_dependencies :
   ?num_threads:int ->
   ?compare_models:string list ->
   ?admissions:(int, string list) Hashtbl.t ->
+  ?model_executions:(string, symbolic_execution list) Hashtbl.t ->
   symbolic_event_structure ->
   justification list ->
   Forwarding.event_structure_context ->

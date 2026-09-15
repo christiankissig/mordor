@@ -1,0 +1,50 @@
+// Revised-order.
+//
+// Bouajjani et al., POPL 2017, Fig. 2 history (2c): a thread writes 2, then
+//   reads the other thread's 1, then its own 2 again, revising the order of the
+//   two writes after reading one of them.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence forbids, RC11 forbids, RC17 forbids, OD-LSO forbids.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z forbids. Equivalent to RC11 (zoo edge).
+//     PC forbids. Coherence forbids it, and PC is stronger.
+//     PRAM forbids. Slow forbids it, and PRAM is stronger.
+//     Slow forbids. Local forbids it, and Slow is stronger.
+//   the models' definitions:
+//     CC allows. The same history is CC: each operation's causal past explains
+//       its value, and a site may revise its order.
+//     Causal forbids. Bouajjani et al., POPL 2017, Fig. 2 history (2c): the
+//       second thread would need 2 before 1 and 1 before 2.
+//     Local forbids. The thread's own view has x = 2 before both loads, so it
+//       cannot return 1 and then 2 without x = 1 placed twice.
+//     POCausal forbids. Whichever write is arbitrated first, a load that has
+//       seen the other returns it.
+//     RYW allows. The first load has seen its own x = 2 and returns x = 1, so x
+//       = 2 is arbitrated before x = 1; the second load returns x = 2 and has
+//       seen only it.
+//     MR allows. The second load has seen x = 1 and returns x = 2, so its
+//       replica orders x = 1 first; the first load constrains nothing.
+//     MW allows. MW alone rejects nothing: a read sees only the write it read.
+//     WFR allows. The thread writes before it reads, so writes-follow-reads
+//       orders nothing.
+//   Not asserted, for want of a verdict to check against: MRD. RA, SRA and WRA
+//     are defined on release stores and acquire loads, and this program has
+//     other accesses.
+x := 0;
+{
+  x := 1
+} ||| {
+  x := 2;
+  r0 := x;
+  r1 := x
+}
+%%
+allow (r0 = 1 && r1 = 2) [CC, RYW, MR, MW, WFR]
+forbid (r0 = 1 && r1 = 2) [SC, VbD, TSO, x86-TSO, ClightTSO, Coherence, RC11,
+                           RC11z, RC17, OD-LSO, PC, PRAM, Causal, Slow, Local,
+                           POCausal]

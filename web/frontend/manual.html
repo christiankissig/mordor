@@ -417,10 +417,23 @@
                     <tbody>
                         <tr><td><code>smrd</code></td><td>Symbolic MRD. Only dependencies, preserved program order and release/acquire synchronisation order events. This is the model a test that names none runs under.</td></tr>
                         <tr><td><code>rc11</code></td><td>Repaired C11 (Lahav et al., PLDI 2017). All of program order counts, and accesses in mode <code>sc</code> are sequentially consistent.</td></tr>
+                        <tr><td><code>rc17</code></td><td>RC11 with C++17's release sequences, which later same-thread relaxed stores no longer continue.</td></tr>
+                        <tr><td><code>rc11z</code></td><td>RC11 with allocations and frees ordered as writes to the memory they allocate or free.</td></tr>
+                        <tr><td><code>od-lso</code></td><td>Ou and Demsky's load-store ordering, <code>acyclic(sb ∪ rf)</code>, over the C/C++11 model.</td></tr>
+                        <tr><td><code>mrd</code></td><td>Modular Relaxed Dependencies. sMRD's axioms on programs that access only named globals and allocate nothing. Other programs are refused, because there sMRD admits executions MRD does not.</td></tr>
+                        <tr><td><code>sc</code>, <code>vbd</code></td><td>Sequential consistency, and Volatile-by-Default, which admits the same outcomes.</td></tr>
+                        <tr><td><code>tso</code>, <code>x86-tso</code>, <code>clighttso</code></td><td>Total store order. Only store-to-load reordering is relaxed. Fences and atomic instructions such as CAS flush the store buffer.</td></tr>
+                        <tr><td><code>ra</code>, <code>sra</code>, <code>wra</code></td><td>The release-acquire fragment of C/C++11, its strong variant, and its weak variant (Lahav and Boker). Only release stores synchronise with acquire loads.</td></tr>
+                        <tr><td><code>cc</code></td><td>Weak causal consistency (Bouajjani et al.): WRA's axioms with every access synchronising, and no RMW axiom.</td></tr>
+                        <tr><td><code>coherence</code></td><td>Per-location cache coherence: writes to one location are seen in one order.</td></tr>
+                        <tr><td><code>pc</code>, <code>pram</code>, <code>causal</code>, <code>slow</code>, <code>local</code></td><td>Steinke and Nutt's lattice. Each thread must have a view of all writes and its own reads in which every read sees the latest write. The models differ in what the views respect: a writer's order per location (Slow), a writer's order (PRAM), the causal order (Causal), or a writer's order and one order per location (PC).</td></tr>
+                        <tr><td><code>pocausal</code></td><td>Per-object causal consistency (Burckhardt et al.), with visibility read off <code>rf</code> and arbitration from <code>co</code>.</td></tr>
+                        <tr><td><code>ryw</code>, <code>mr</code>, <code>mw</code>, <code>wfr</code></td><td>Terry et al.'s session guarantees, with a thread as a session and an arbitration order per reader. On its own, <code>mw</code> rejects nothing: a read sees only the write it read, so it never has two writes of one session to put in order.</td></tr>
                         <tr><td><code>imm</code>, <code>rc11c</code></td><td>Further models a test can name in its assertion, but not selectable in the web UI's settings for now.</td></tr>
                     </tbody>
                 </table>
-                <p>A test names its model in its assertion, as in <code>forbid (…) [RC11]</code>. Some names map onto a model: <code>[Power]</code> onto IMM, and <code>[UB11]</code>, <code>[RC11UB]</code> and <code>[IMMUB]</code> also allow the undefined-behaviour fold <code>e / !r → e</code>. An unknown model name is an error. <code>[_]</code> means any model.</p>
+                <p>Every model is a check on the executions MoRDor generates. Those are already free of thin air, so a model weaker than sMRD cannot show an out-of-thin-air behaviour it would permit. The names follow the <a href="https://rmm-zoo.kissig.org">Relaxed Memory Model Zoo</a>; a name with a hyphen, such as <code>[x86-TSO]</code>, is written as the zoo spells it.</p>
+                <p>A test names its model in its assertion, as in <code>forbid (…) [RC11]</code>, or several, as in <code>forbid (…) [RA, SRA]</code>. Some names map onto a model: <code>[Power]</code> onto IMM, and <code>[UB11]</code>, <code>[RC11UB]</code> and <code>[IMMUB]</code> also allow the undefined-behaviour fold <code>e / !r → e</code>. An unknown model name is an error. <code>[_]</code> means any model.</p>
 
                 <h3 id="concepts-assertions">Assertions</h3>
                 <p><code>allow C</code> holds when some admitted execution satisfies <code>C</code>. <code>forbid C</code> holds when none does. Conditions can mention registers, final values of memory (<code>@x</code> is the value finally stored at <code>x</code>), and an execution's relations, as in <code>(3,2) ∈ .co</code> or <code>(1,4) ∈ .rf</code>. A refinement chain <code>~~></code> compares the observable behaviours of two programs.</p>
@@ -582,8 +595,8 @@
                 </ul>
                 <h4>Memory Model</h4>
                 <ul>
-                    <li><strong>Primary model</strong> is the model executions are shown for, and the model the assertion is checked under. <em>Default</em> is the model the test's assertion names, or sMRD if it names none. Choosing sMRD or RC11 replaces the test's own model.</li>
-                    <li><strong>Also compute executions under</strong> checks every execution against further models, sMRD and RC11 for now. The log reports how many executions each model admits. The information box lists, for the execution on screen, the compared models that also admit it.</li>
+                    <li><strong>Primary model</strong> is the model executions are shown for, and the model the assertion is checked under. <em>Default</em> is the model the test's assertion names, or sMRD if it names none. Choosing any other model replaces the test's own model, for every assertion the test has.</li>
+                    <li><strong>Also compute executions under</strong> checks every execution against further models, any of those in the table above except IMM and RC11c. The log reports how many executions each model admits. The information box lists, for the execution on screen, the compared models that also admit it.</li>
                 </ul>
                 <div class="note">
                     <strong>How comparison works.</strong> MoRDor enumerates executions once, and each model checks them. Nothing before the coherence check depends on the model, so a compared model admits exactly the executions it would keep as the primary. Interpretation is the exception: the undefined-behaviour fold of <code>[RC11UB]</code>, for example, happens before any model is consulted, so it follows the primary model.
@@ -1357,6 +1370,14 @@ r0 := flag;
 
 <span class="operator">%%</span>
 <span class="keyword">forbid</span> r0 = 1 && r1 = 1 [smrd]</code></pre>
+                </div>
+
+                <h3>Several Models</h3>
+                <p>An assertion can name several models, and a test can have several assertions, one per line. Each assertion is checked under each model it names, and the test is valid when every one holds. Executions are enumerated once and each model checks them, so the models of one test must agree on the undefined-behaviour fold. The first model named is the one executions are shown for.</p>
+                <div class="syntax-block">
+                    <pre><code><span class="operator">%%</span>
+<span class="keyword">allow</span> (r0 = 1 && r1 = 2 && r2 = 1) [WRA, CC]
+<span class="keyword">forbid</span> (r0 = 1 && r1 = 2 && r2 = 1) [RA, SRA, SC, RC11]</code></pre>
                 </div>
 
                 <h3>Chained Assertions</h3>

@@ -1,0 +1,51 @@
+// WRC.
+//
+// Write-read causality: the middle thread reads x = 1 and then writes y; the
+//   last thread reads that y and then x's old value.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence allows, RC11 allows, RC17 allows, OD-LSO allows.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z allows. Equivalent to RC11 (zoo edge).
+//     MRD allows. RC11 allows it, and MRD is weaker than RC11 (zoo edge RC11 ->
+//       MRD).
+//     Slow allows. PRAM allows it, and Slow is weaker.
+//     Local allows. Slow allows it, and Local is weaker.
+//     RYW allows. PRAM allows it, and RYW is weaker.
+//     MR allows. PRAM allows it, and MR is weaker.
+//     MW allows. PRAM allows it, and MW is weaker.
+//   the models' definitions:
+//     CC forbids. The same chain in hb, x = 1 before the load of x that reads
+//       the initial value: weak-read-coherence.
+//     PC allows. PC has no causal order across processes, and each location has
+//       one write.
+//     PRAM allows. Implied by PC.
+//     Causal forbids. x = 1 causally precedes y = 1, so a view that has seen y
+//       = 1 has seen x = 1.
+//     POCausal allows. Per object, the last load of x has seen nothing at x.
+//     WFR allows. y = 1 is arbitrated after x = 1, but the last reader sees
+//       only one write at each location, so nothing contradicts it.
+//   Not asserted, for want of a verdict to check against: none. RA, SRA and WRA
+//     are defined on release stores and acquire loads, and this program has
+//     other accesses.
+x := 0;
+y := 0;
+{
+  x := 1
+} ||| {
+  r0 := x;
+  y := 1
+} ||| {
+  r1 := y;
+  r2 := x
+}
+%%
+allow (r0 = 1 && r1 = 1 && r2 = 0) [Coherence, RC11, RC11z, RC17, OD-LSO, MRD,
+                                    PC, PRAM, Slow, Local, POCausal, RYW, MR,
+                                    MW, WFR]
+forbid (r0 = 1 && r1 = 1 && r2 = 0) [SC, VbD, TSO, x86-TSO, ClightTSO, CC,
+                                     Causal]

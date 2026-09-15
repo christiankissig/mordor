@@ -1,0 +1,49 @@
+// Oscillating -- the RA-vs-WRA separating behaviour.
+//
+// rmm-zoo edge: RA strictly weaker than WRA (i.e. WRA is the weaker model).
+// Source: Lahav & Boker, "What's Decidable about Causally Consistent Shared
+//         Memory?" (TOPLAS 2022), Ex. 3.7 (Oscillating); Lahav, Giannarakis &
+//         Vafeiadis, POPL 2016.
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/RA-vs-WRA/Oscillating.
+//
+// One reader sees x go 1, then 2, then 1 again, while two writers each write
+// once. Under RA and SRA the reader's three reads are hb-ordered and mo totally
+// orders the two writes, so returning to 1 after seeing 2 violates
+// read-coherence. WRA has no mo, and the two writes are hb|loc-unrelated, so
+// nothing forbids the oscillation.
+//
+// Reference verdicts: WRA ALLOWS. RA, SRA, C11, RC11 and SC FORBID
+//                     (this is a coherence violation for any model with mo).
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence forbids, RC11 forbids, RC17 forbids, OD-LSO forbids,
+//     RA forbids, SRA forbids, WRA allows.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z forbids. Equivalent to RC11 (zoo edge).
+//     CC allows. Equivalent to WRA on the release-acquire fragment (zoo edge
+//       WRA = CC).
+//     PC forbids. Coherence forbids it, and PC is stronger.
+//   the models' definitions:
+//     MW allows. MW alone rejects nothing: a read sees only the write it read.
+//   Not asserted, for want of a verdict to check against: MRD, PRAM, Causal,
+//     Slow, Local, POCausal, RYW, MR, WFR. C11 and C++17 are not implemented in
+//     MoRDor.
+x := 0;
+{
+  x.store(1, rel)
+} ||| {
+  r0 := x.load(acq);
+  r1 := x.load(acq);
+  r2 := x.load(acq)
+} ||| {
+  x.store(2, rel)
+}
+%%
+allow (r0 = 1 && r1 = 2 && r2 = 1) [WRA, CC, MW]
+forbid (r0 = 1 && r1 = 2 && r2 = 1) [SC, VbD, TSO, x86-TSO, ClightTSO,
+                                     Coherence, RC11, RC11z, RC17, OD-LSO, RA,
+                                     SRA, PC]

@@ -1,0 +1,50 @@
+// Readers-disagree.
+//
+// Two concurrent writes to x, and two readers that see them in opposite orders.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence forbids, RC11 forbids, RC17 forbids, OD-LSO forbids.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z forbids. Equivalent to RC11 (zoo edge).
+//     CC allows. Causal allows it, and CC is weaker.
+//     Slow allows. PRAM allows it, and Slow is weaker.
+//     Local allows. Slow allows it, and Local is weaker.
+//     RYW allows. PRAM allows it, and RYW is weaker.
+//     MR allows. PRAM allows it, and MR is weaker.
+//     MW allows. PRAM allows it, and MW is weaker.
+//     WFR allows. Causal allows it, and WFR is weaker.
+//   the models' definitions:
+//     PC forbids. PC adds one order of the writes to each location, shared by
+//       every view.
+//     PRAM allows. Writes from different processes may be seen in different
+//       orders by different processes.
+//     Causal allows. The two writes are causally unrelated.
+//     POCausal forbids. One arbitration of the two writes, and each reader has
+//       seen both before its second load, so one second load returns the write
+//       arbitrated first.
+//   Not asserted, for want of a verdict to check against: MRD. RA, SRA and WRA
+//     are defined on release stores and acquire loads, and this program has
+//     other accesses.
+x := 0;
+{
+  x := 1
+} ||| {
+  x := 2
+} ||| {
+  r0 := x;
+  r1 := x
+} ||| {
+  r2 := x;
+  r3 := x
+}
+%%
+allow (r0 = 1 && r1 = 2 && r2 = 2 && r3 = 1) [CC, PRAM, Causal, Slow, Local,
+                                              RYW, MR, MW, WFR]
+forbid (r0 = 1 && r1 = 2 && r2 = 2 && r3 = 1) [SC, VbD, TSO, x86-TSO,
+                                               ClightTSO, Coherence, RC11,
+                                               RC11z, RC17, OD-LSO, PC,
+                                               POCausal]

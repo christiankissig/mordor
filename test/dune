@@ -30,7 +30,8 @@
   test_solver
   test_symbolic_mrd
   test_types
-  test_uset)
+  test_uset
+  test_zoo_models)
  (libraries mordor_lib landmarks lwt lwt.unix z3 zarith core str alcotest)
  (preprocess
   (pps lwt_ppx landmarks-ppx)))

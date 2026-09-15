@@ -109,5 +109,8 @@ C11-specific.
 ## See also
 
 `litmus-tests/rmm-zoo/README.md` for the coverage analysis these tests were
-added for, and `litmus-tests-ra/` for the release-acquire family, which is out of
-the suite for the same reason.
+added for. The release-acquire family was out of the suite for the same reason
+until MoRDor implemented RA, SRA and WRA; it is back in
+`litmus-tests/rmm-zoo/models/ra-sra-wra/`. C11, C++17 and C++20 remain out: the
+zoo survey classes them as definable but unfaithful, because candidate
+generation forbids the thin-air executions they allow.

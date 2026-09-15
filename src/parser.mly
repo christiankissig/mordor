@@ -528,13 +528,29 @@ assertion_body:
         rest;
       } }
 
-  | outcome=outcome_keyword cond=expr check=assertion_check message=outcome_message?
-    { let model, _ = check in
-      AOutcome {
-        outcome;
-        condition = cond;
-        model = model;
-      } }
+  (* One or more outcome lines, each checked under every model its brackets
+     name: [forbid (c) [RA, SRA]] is [forbid (c) [RA]] and [forbid (c) [SRA]].
+     A single outcome under a single model is the assertion it always was; any
+     more make a conjunction, valid when every one of them holds. *)
+  | outcomes=nonempty_list(outcome_assertion)
+    { match List.concat outcomes with
+      | [ a ] -> a
+      | all -> AConjunction all }
+  ;
+
+outcome_assertion:
+  | outcome=outcome_keyword cond=expr models=outcome_models message=outcome_message?
+    { List.map
+        (fun model -> AOutcome { outcome; condition = cond; model })
+        models }
+  ;
+
+outcome_models:
+  | LBRACKET eq=outcome_eq? RBRACKET
+    { ignore eq; [ None ] }
+  | LBRACKET models=separated_nonempty_list(COMMA, model_name) eq=outcome_eq? RBRACKET
+    { ignore eq; List.map Option.some models }
+  | (* empty *) { [ None ] }
   ;
 
 assertion_check:
@@ -567,6 +583,11 @@ model_name:
      [RC11] takes the GLOBAL branch above and is lowercased there. *)
   | REGISTER { $1 }
   | SC { "sc" }
+  (* Hyphenated names, as the zoo spells them: [x86-TSO], [OD-LSO]. The lexer
+     has no identifier with a hyphen in it, so the name arrives in three
+     tokens. *)
+  | a=GLOBAL MINUS b=GLOBAL
+    { String.lowercase_ascii a ^ "-" ^ String.lowercase_ascii b }
   | RELAXED { "relaxed" }
   | RELEASE { "release" }
   | ACQUIRE { "acquire" }

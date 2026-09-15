@@ -1498,9 +1498,14 @@ let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
       Filled with, for each execution reaching the coherence stage, the models
       of [compare_models] that admit it -- executions [restrictions] rejects
       included.
+    @param model_executions
+      Filled with, for each model of [compare_models], the executions it
+      admits, each a copy carrying the coherence order that model admitted it
+      under.
     @return Promise of list of valid coherent executions. *)
 let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
-    ?(compare_models = []) ?admissions (structure : symbolic_event_structure)
+    ?(compare_models = []) ?admissions ?model_executions
+    (structure : symbolic_event_structure)
     (fwd_es_ctx : Forwarding.event_structure_context)
     (justs : justification list) statex ~restrictions =
   (* let* _ = Lwt.return_unit in *)
@@ -1823,20 +1828,37 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
          for the UB fold they need not (see [Context.select_models]). *)
       let check_exec exec =
         let admitted_by =
-          List.filter
+          List.filter_map
             (fun coherent ->
-              Option.is_some
-                (check_for_coherence structure exec { Coherence.coherent })
+              check_for_coherence structure exec { Coherence.coherent }
+              |> Option.map (fun co -> (coherent, co))
             )
             compare_models
         in
           (exec, check_for_coherence structure exec restrictions, admitted_by)
       in
         let* results = compute.run check_exec input_stream in
+          Option.iter
+            (fun tbl ->
+              List.iter
+                (fun ((exec : symbolic_execution), _, admitted_by) ->
+                  List.iter
+                    (fun (coherent, co) ->
+                      let kept =
+                        Hashtbl.find_opt tbl coherent |> Option.value ~default:[]
+                      in
+                        Hashtbl.replace tbl coherent
+                          ({ exec with co = Some co } :: kept)
+                    )
+                    admitted_by
+                )
+                (List.rev results)
+            )
+            model_executions;
           List.filter_map
             (fun (exec, co, admitted_by) ->
               Option.iter
-                (fun tbl -> Hashtbl.replace tbl exec.id admitted_by)
+                (fun tbl -> Hashtbl.replace tbl exec.id (List.map fst admitted_by))
                 admissions;
               match co with
               | Some co ->
@@ -1894,7 +1916,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
 let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
-    ?compare_models ?admissions (structure : symbolic_event_structure)
+    ?compare_models ?admissions ?model_executions
+    (structure : symbolic_event_structure)
     (final_justs : justification list)
     (fwd_es_ctx : Forwarding.event_structure_context) ~(exhaustive : bool)
     ~(restrictions : Coherence.restrictions) : symbolic_execution list Lwt.t =
@@ -1953,7 +1976,7 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
   (* Build executions if not just structure *)
   let* executions =
     generate_executions ~include_rf ~compute ?compare_models ?admissions
-      structure fwd_es_ctx final_justs statex ~restrictions
+      ?model_executions structure fwd_es_ctx final_justs statex ~restrictions
   in
 
   ( match pool with
@@ -1981,6 +2004,18 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
   let coherence_restrictions = { Coherence.coherent = ctx.options.coherent } in
     match (ctx.structure, ctx.justifications, ctx.num_threads) with
     | Some structure, Some final_justs, num_threads ->
+        (* The models the assertions name, besides the primary, are checked
+           as compared models are: every execution, once enumerated. *)
+        let assertion_models =
+          List.filter (fun m -> m <> ctx.options.coherent) ctx.assertion_models
+          |> List.sort_uniq String.compare
+        in
+        let checked_models =
+          List.sort_uniq String.compare (ctx.compare_models @ assertion_models)
+        in
+        List.iter
+          (Coherence.check_model_program structure)
+          (ctx.options.coherent :: checked_models);
         let* fwd_es_ctx =
           match ctx.fwd_es_ctx with
           | Some fwd_es_ctx -> Lwt.return fwd_es_ctx
@@ -1997,15 +2032,31 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
           | [] -> None
           | _ -> Some (Hashtbl.create 64)
         in
+        let model_executions =
+          match assertion_models with
+          | [] -> None
+          | _ -> Some (Hashtbl.create 8)
+        in
           let* executions =
-            calculate_dependencies ~num_threads
-              ~compare_models:ctx.compare_models ?admissions structure
-              final_justs fwd_es_ctx
+            calculate_dependencies ~num_threads ~compare_models:checked_models
+              ?admissions ?model_executions structure final_justs fwd_es_ctx
               ~exhaustive:(ctx.options.exhaustive || false)
               ~restrictions:coherence_restrictions
           in
+            (* Admissions report the models asked to be compared, not those
+               checked only for an assertion. *)
+            Option.iter
+              (fun tbl ->
+                Hashtbl.filter_map_inplace
+                  (fun _ models ->
+                    Some (List.filter (fun m -> List.mem m ctx.compare_models) models)
+                  )
+                  tbl
+              )
+              admissions;
             ctx.executions <- Some (USet.of_list executions);
             ctx.model_admissions <- admissions;
+            ctx.model_executions <- model_executions;
             Lwt.return ctx
     | _ ->
         Logs_safe.err (fun m ->
