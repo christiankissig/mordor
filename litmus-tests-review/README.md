@@ -17,7 +17,7 @@ the one the literature records.
 
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
-Every file here has an issue in the #36, #41-#65 range. Each records the symptom, the model actually in
+Every file here has an issue in the #36, #41-#65 range, or #90. Each records the symptom, the model actually in
 effect, where the test comes from and what to look at next. Nine files
 remain, the seven `jctc/` ones having moved to `litmus-tests-jmm/` and
 `avoidoota/listing16.lit` having returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57 and #59 have been fixed and
@@ -139,6 +139,18 @@ still synchronises with nothing. Fence ordering in the checker is what is left.
 | [`esop_problem/RRE.lit`](esop_problem/RRE.lit) #46 | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[Problem]` → sMRD |
 | [`popl_grounding/FADD.lit`](popl_grounding/FADD.lit) #60 | allow `r1=1 ∧ r3=1` | `[Grounding]` → IMM |
 | [`popl_promising/Upd-Stuck.lit`](popl_promising/Upd-Stuck.lit) #62 | allow `r1=1 ∧ r2=0` | `[IMM]` |
+| [`own/FWD-STRENGTHEN-LIFT.lit`](own/FWD-STRENGTHEN-LIFT.lit) #90 | allow `r0=1 ∧ r1=2` | sMRD |
+
+`own/FWD-STRENGTHEN-LIFT.lit` #90 joined this table on 2026-09-15, and unlike
+the rest it is not a divergence from the literature but a missing elaboration.
+The outcome is allowed in sMRD only by strengthening both arms of thread 2's
+branch with `r3 = 1`, value-assigning the else-arm and lifting the pair, and
+MoRDor implements no Strengthening. The suite used to pass it because
+`ValueAssignElab` discharged every conjunct unrelated to the write value under a
+solver model, which justified the then-arm write with no predicate at all. That
+discharge also admitted out-of-thin-air (`litmus-tests/own/VA-unrelated-guard-smrd.lit`);
+value assignment now keeps the predicate whole, as the paper's Definition 4.10
+does, and this test lost its only witness.
 
 `pldi_repairing/LB.lit` #57 has left this table. Its assertion was the thing
 that was wrong: RC11's no-thin-air axiom is `acyclic(sb ∪ rf)`, which forbids
