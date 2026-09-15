@@ -75,6 +75,12 @@ type events_t = {
       (** Register environment at each event label. *)
   thread_index : (int, int) Hashtbl.t;
       (** Mapping from event labels to thread indices. *)
+  mutable current_thread : int;
+      (** The thread the events being added belong to: [0] outside every
+          parallel block, and a fresh index for each thread of each block
+          interpreted, nested ones included. *)
+  mutable threads_allocated : int;
+      (** The last thread index handed out; see {!current_thread}. *)
   loop_indices : (int, int list) Hashtbl.t;
       (** Mapping from event labels to loop indices. *)
   loop_conditions : (int, expr list) Hashtbl.t;
@@ -106,6 +112,8 @@ let create_events ?(ubopt = false) defacto =
     env_by_evt = Hashtbl.create 256;
     source_spans = Hashtbl.create 256;
     thread_index = Hashtbl.create 256;
+    current_thread = 0;
+    threads_allocated = 0;
     loop_indices = Hashtbl.create 256;
     loop_conditions = Hashtbl.create 256;
     globals = USet.create ();
@@ -204,9 +212,15 @@ let add_event (events : events_t) event env (annotation : ir_node_ann) =
       | Some span -> Hashtbl.replace events.source_spans lbl span
       | None -> ()
       );
+      (* The index is the interpreter's, not the annotation's [tid]. The parser
+         annotates a thread body before the enclosing [threads] rule has
+         advanced [tid] -- Menhir reduces bottom-up -- so every body carried
+         [tid = 0] and every event of every thread shared one index. Memory
+         models that ask whether two events are in the same thread had nothing
+         to ask. The annotation still says whether the event belongs to the
+         program at all: terminal events carry none and stay unindexed. *)
       ( match annotation.thread_ctx with
-      | Some thread_ctx ->
-          Hashtbl.replace events.thread_index lbl thread_ctx.tid
+      | Some _ -> Hashtbl.replace events.thread_index lbl events.current_thread
       | None -> ()
       );
       ( match annotation.loop_ctx with
@@ -295,9 +309,16 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
         match stmt with
         | Threads { threads } ->
             let interpret_threads ts =
+              let parent = events.current_thread in
               List.fold_left
                 (fun acc t ->
-                  let t_structure = recurse t env phi events in
+                  events.threads_allocated <- events.threads_allocated + 1;
+                  events.current_thread <- events.threads_allocated;
+                  let t_structure =
+                    Fun.protect
+                      ~finally:(fun () -> events.current_thread <- parent)
+                      (fun () -> recurse t env phi events)
+                  in
                   let acc_structure = acc in
                     SymbolicEventStructure.cross acc_structure t_structure
                 )
