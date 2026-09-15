@@ -1,0 +1,34 @@
+// Value assignment must not discharge a guard on an unrelated read, under sMRD.
+//
+// The write of y is reached only when r2 > 0, and r2 reads x, which the other
+// thread writes from y. The outcome r2 = r3 = 1 is thin air: each read would be
+// justified by a cycle through its own dependency.
+//
+// r1 is fixed to 1 by its guard, so value assignment rewrites `W y r1` to
+// `W y 1`. sMRD's Definition 4.10 keeps the predicate whole: the data
+// dependency on r1 goes, the control dependencies on r1 and r2 stay. MoRDor
+// kept only the conjuncts sharing a symbol with the write value (71ba377) and
+// evaluated the rest under the solver model, so `r2 > 0` was discharged and
+// the write depended on nothing from x: 5 executions, Contradicted. The
+// companion VA-unrelated-guard+const-smrd.lit writes the constant 1 and was
+// forbidden throughout, the same asymmetry as LB+deps-smrd.lit and
+// LB+deps+const-smrd.lit, one conjunct further out.
+x := 0;
+y := 0;
+z := 1;
+{
+  r1 := z;
+  r2 := x;
+  if (r1 = 1) {
+    if (r2 > 0) {
+      y := r1
+    }
+  }
+} ||| {
+  r3 := y;
+  if (r3 > 0) {
+    x := r3
+  }
+}
+%%
+forbid (r2 = 1 && r3 = 1) []

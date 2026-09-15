@@ -99,7 +99,7 @@ Measured with `--allow-unknown-model`:
 | `JCTC6` | #36 | allow | forbids | needs the fact that `B` only ever holds 0 or 1 |
 | `JCTC8` | — | allow | forbids | hidden: the file asserts `forbid` |
 | `JCTC9`, `JCTC9b` | #53 | allow | forbids | JCTC9's `forbid` hides it; JCTC9b's `allow` shows it |
-| `JCTC12` | #48 | forbid | allows | see below |
+| `JCTC12` | #48 | forbid | forbids | agrees since 2026-09-15; see below |
 | `JCTC16` | — | allow | forbids | hidden: `96b40eb` flipped the assertion |
 | `JCTC18` | — | allow | forbids | see below |
 | `JCTC19`, `JCTC20` | #49, #51 | allow | forbids | see below |
@@ -107,7 +107,11 @@ Measured with `--allow-unknown-model`:
 **JCTC12.** The sMRD paper forbids this test in its pointer encoding, and so
 does MoRDor's `litmus-tests/own/JCTC12.lit`, which is in the scanned suite and
 passes. The file here is Pugh's original, which reaches the same shape through
-per-index globals and a chain of `if`s on `r1`, and MoRDor allows that one.
+per-index globals and a chain of `if`s on `r1`, and MoRDor allowed that one
+until 2026-09-15. It now forbids it too (166 executions to 112): value
+assignment used to discharge the guards on `r1` that shared no symbol with the
+value written, leaving `y := r2` without its dependency on the read of `x`, and
+it now keeps the predicate whole, as sMRD's Definition 4.10 does.
 P2850R0 §4.12 prints exactly this encoding and forbids it, but as a draft C++
 requirement rather than an sMRD verdict.
 
