@@ -242,76 +242,44 @@ module ValueAssignElab = struct
             let wval = Option.get just.w.wval |> Expr.evaluate ~env:entailed in
               if Expr.equal (Option.get just.w.wval) wval then []
               else
-                (* Only the conjuncts that do not constrain the write's own
-                   value may be discharged.
+                (* The predicate is kept whole, as in sMRD's Definition 4.10
+                   (Richards et al., OOPSLA 2025): value assignment substitutes
+                   into the write's expressions and so drops the *data*
+                   dependency, but the predicate carries the *control*
+                   dependency, and only lifting or weakening may remove that.
 
-                   Concretising [wval] and evaluating all of [just.p] under the
-                   same model drops every conjunct the model satisfies, and [d]
-                   is then rebuilt from what is left -- so a guard that pins the
-                   write value pins it and then vanishes, leaving the write
-                   justified by nothing.  That is thin air: in
+                   Discharging conjuncts of [just.p] under the solver model is
+                   thin air, whichever conjuncts: in
 
                      r1 := x; if (r1 = 1) { z := r1 }
 
-                   the model picks [r1 = 1], rewrites [W z r1] to [W z 1] and
-                   discharges [r1 = 1], and the write no longer depends on the
-                   read that produced it.  MoRDor allowed LB+deps under sMRD --
-                   MRD's headline no-thin-air example -- on exactly this.  The
-                   guard above catches only the case where [wval] was already
-                   the constant, which is why [z := 1] was forbidden while
-                   [z := r1] was not.
+                   discharging [r1 = 1] leaves [W z 1] depending on nothing
+                   (own/LB+deps-smrd.lit), which is why 71ba377 kept the
+                   conjuncts sharing a symbol with the write value. But a guard
+                   on an unrelated read is a control dependency too: in
 
-                   [keep] is the conjuncts reachable from the write value's own
-                   symbols, to a fixpoint: a conjunct sharing a symbol with the
-                   value is kept, and so is one sharing a symbol with a conjunct
-                   already kept, since [p1 = [beta = alpha]] pins the value just
-                   as surely through a second step.  Everything else is a guard
-                   on some unrelated read and is still discharged, which is what
-                   the elaboration is for. *)
-                let p =
-                  let symbols_of e = Expr.get_symbols e |> USet.of_list in
-                  let conjuncts = Array.of_list just.p in
-                  let keep = Array.make (Array.length conjuncts) false in
-                  let syms = ref (symbols_of (Option.get just.w.wval)) in
-                  let grew = ref true in
-                    while !grew do
-                      grew := false;
-                      Array.iteri
-                        (fun i conj ->
-                          if not keep.(i) then
-                            let cs = symbols_of conj in
-                              if not (USet.is_empty (USet.intersection cs !syms))
-                              then (
-                                keep.(i) <- true;
-                                syms := USet.union !syms cs;
-                                grew := true
-                              )
-                        )
-                        conjuncts
-                    done;
-                    let discharged =
-                      List.filteri (fun i _ -> not keep.(i)) just.p
-                      |> Expr.evaluate_conjunction ~env:(fun s ->
-                          Solver.concrete_value bindings s
-                          |> Option.map Expr.of_value
-                      )
-                    in
-                      List.filteri (fun i _ -> keep.(i)) just.p @ discharged
-                in
-                  if
-                    Expr.equal (Option.get just.w.wval) wval
-                    && List.length p = List.length just.p
-                    && List.equal Expr.equal p just.p
-                  then []
-                  else
-                    (* Reconstruct dependencies from predicate and write value *)
-                    let new_p_d =
-                      List.map Expr.get_symbols p
-                      |> List.flatten
+                     r1 := z; r2 := x; if (r1 = 1) { if (r2 > 0) { y := r1 } }
+
+                   discharging [r2 > 0] let the write of y escape its
+                   dependency on the read of x, allowing thin air that the same
+                   program writing the constant 1 forbids
+                   (own/VA-unrelated-guard-smrd.lit). *)
+                let p = just.p in
+                    (* Recompute the dependency set from the write's own
+                       expressions, as pre_justifications does and as
+                       Definition 4.10 does, D' = syms(x') u syms(eps'). The
+                       predicate's symbols stay out of [d]: freeze_dp takes dp
+                       from [p] and [d] together, so nothing is lost, and
+                       folding them into [d] makes the two arms of a
+                       conditional carry different dependency sets, which
+                       LiftElab reads as a mismatch and refuses to lift
+                       (esop_problem/cse.lit). *)
+                    let d =
+                      [ just.w.loc; Option.map Expr.of_value just.w.rval; Some wval ]
+                      |> List.filter_map Fun.id
+                      |> List.concat_map Expr.get_symbols
                       |> USet.of_list
                     in
-                    let new_w_d = Expr.get_symbols wval |> USet.of_list in
-                    let d = USet.union new_p_d new_w_d in
                     (* The one place a justification's write event stops
                        agreeing with the event structure's. wval is concretised
                        here and nowhere else -- Justification.relabel would

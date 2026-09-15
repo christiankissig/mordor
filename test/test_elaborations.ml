@@ -218,6 +218,41 @@ let test_value_assign_requires_write_change () =
          Lwt.return_unit
     )
 
+(** Value assignment keeps the predicate whole.
+
+    sMRD's Definition 4.10 substitutes into the write's expressions only. The
+    predicate carries the control dependencies, including a guard on a symbol
+    unrelated to the write value: [{(α = 1), (β > 0)} ⊢ W _ α] must elaborate to
+    [W _ 1] with both conjuncts kept, or the write escapes its dependency on the
+    read of β (litmus-tests/own/VA-unrelated-guard-smrd.lit). *)
+let test_value_assign_keeps_predicate () =
+  let ctx = TestData.make_context () in
+  let alpha_is_one = EBinOp (EVar "α", "=", ENum Z.one) in
+  let beta_positive = EBinOp (EVar "β", ">", ENum Z.zero) in
+  let p = [ alpha_is_one; beta_positive ] in
+
+  Lwt_main.run
+    (let just =
+       {
+         w = TestData.make_event 1 ~wval:(Some (EVar "α"));
+         p;
+         fwd = USet.create ();
+         we = USet.create ();
+         d = USet.create ();
+       }
+     in
+     let changed = ValueAssignElab.elab ctx just in
+       check bool "assignment into the write value does elaborate" true
+         (List.length changed > 0);
+       List.iter
+         (fun j ->
+           check bool "predicate is kept whole" true
+             (List.equal Expr.equal j.p p)
+         )
+         changed;
+       Lwt.return_unit
+    )
+
 (** Forward-related tests *)
 
 let test_fprime_operations () =
@@ -835,6 +870,8 @@ let suite =
       test_case "value_assign operations" `Quick test_value_assign_operations;
       test_case "value_assign requires write change" `Quick
         test_value_assign_requires_write_change;
+      test_case "value_assign keeps predicate" `Quick
+        test_value_assign_keeps_predicate;
       (* Forward-related *)
       test_case "fprime operations" `Quick test_fprime_operations;
       test_case "fwd operations" `Quick test_fwd_operations;
