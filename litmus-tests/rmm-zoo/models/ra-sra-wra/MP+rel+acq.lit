@@ -17,6 +17,27 @@
 // and sMRD forbids it for the reason above: the release/acquire pair is a
 // synchronises-with edge in sMRD's hb (#67). It allowed the outcome until that
 // edge was added, which is why the file sat outside the suite.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence allows, RC11 forbids, RC17 forbids, OD-LSO forbids, RA
+//     forbids, SRA forbids, WRA forbids.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z forbids. Equivalent to RC11 (zoo edge).
+//     CC forbids. Equivalent to WRA on the release-acquire fragment (zoo edge
+//       WRA = CC).
+//     Causal forbids. CC forbids it, and Causal is stronger.
+//     Slow allows. Coherence allows it, and Slow is weaker.
+//     Local allows. Slow allows it, and Local is weaker.
+//   the models' definitions:
+//     SMRD forbids. The acquire load of f synchronises with the release store
+//       (#67).
+//     MW allows. MW alone rejects nothing: a read sees only the write it read.
+//   Not asserted, for want of a verdict to check against: MRD, PC, PRAM,
+//     POCausal, RYW, MR, WFR. C11 and C++17 are not implemented in MoRDor.
 x := 0;
 f := 0;
 {
@@ -27,4 +48,6 @@ f := 0;
   r1 := x.load(acq)
 }
 %%
-forbid (r0 = 1 && r1 = 0) [SMRD]
+allow (r0 = 1 && r1 = 0) [Coherence, Slow, Local, MW]
+forbid (r0 = 1 && r1 = 0) [SC, VbD, TSO, x86-TSO, ClightTSO, RC11, RC11z, RC17,
+                           OD-LSO, SMRD, RA, SRA, WRA, CC, Causal]

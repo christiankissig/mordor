@@ -1,0 +1,53 @@
+// IRIW in the release-acquire fragment.
+//
+// rmm-zoo property: mca (Atomicity); also the SC-vs-SRA ordering witness.
+// Source: Lahav, Giannarakis & Vafeiadis, "Taming Release-Acquire Consistency"
+//         (POPL 2016); Lahav & Boker, "What's Decidable about Causally
+//         Consistent Shared Memory?" (TOPLAS 2022), Ex. 3.5.
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/SC-vs-SRA/IRIW.
+//
+// Release stores and acquire loads do not make writes multicopy atomic: the
+// execution closes no (hb u mo) cycle, so even SRA -- the strongest model of the
+// release-acquire family -- allows the two readers to disagree about the order
+// of the two writes. Only a genuinely multicopy-atomic model (SC, TSO, ARMv8)
+// forbids it.
+//
+// Reference verdicts: WRA, RA, SRA, C11, RC11 ALLOW. SC FORBIDS.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence allows, RC11 allows, RC17 allows, OD-LSO allows, RA
+//     allows, SRA allows, WRA allows.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z allows. Equivalent to RC11 (zoo edge).
+//     MRD allows. RC11 allows it, and MRD is weaker than RC11 (zoo edge RC11 ->
+//       MRD).
+//     CC allows. Equivalent to WRA on the release-acquire fragment (zoo edge
+//       WRA = CC).
+//     Slow allows. Coherence allows it, and Slow is weaker.
+//     Local allows. Slow allows it, and Local is weaker.
+//   the models' definitions:
+//     MW allows. MW alone rejects nothing: a read sees only the write it read.
+//   Not asserted, for want of a verdict to check against: PC, PRAM, Causal,
+//     POCausal, RYW, MR, WFR. C11 and C++17 are not implemented in MoRDor.
+x := 0;
+y := 0;
+{
+  x.store(1, rel)
+} ||| {
+  y.store(1, rel)
+} ||| {
+  r1 := x.load(acq);
+  r2 := y.load(acq)
+} ||| {
+  r3 := y.load(acq);
+  r4 := x.load(acq)
+}
+%%
+allow (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [Coherence, RC11, RC11z, RC17,
+                                              OD-LSO, MRD, RA, SRA, WRA, CC,
+                                              Slow, Local, MW]
+forbid (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [SC, VbD, TSO, x86-TSO, ClightTSO]

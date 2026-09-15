@@ -20,15 +20,14 @@ already explains. `properties/atomicity-mca/` fills that in.
 
 ```
 properties/     one directory per zoo property column (models.json propertySchema)
+models/         separating witnesses for the zoo models MoRDor implements
 ```
 
-The `models/` subtree that once sat beside it held witness families for models
-MoRDor does not implement — C11/C17/C20 and RA/SRA. Those files name a model the
-registry has no entry for, so the suite was checking them under the `smrd`
-fallback rather than under the model they were written for. They now live in
-`litmus-tests-cpp/` and `litmus-tests-ra/`, out of the scanned tree, each with a
-README recording the reference verdicts. Individual `properties/` files carrying
-those annotations moved with them.
+`models/` once also held witness families for models MoRDor did not implement,
+C11/C17/C20 and RA/SRA, checked under the `smrd` fallback rather than the model
+they were written for. The C family still lives in `litmus-tests-cpp/`, out of
+the scanned tree. The RA family is back, now that RA, SRA and WRA are
+implemented.
 
 Every `.lit` file carries a header comment naming the zoo property or edge it
 belongs to, the primary literature it comes from, and the reference verdicts
@@ -99,7 +98,7 @@ own model is characterised by.
 | Key | Column | MoRDor coverage |
 |---|---|---|
 | `edrf` | External DRF | **new** `properties/reasoning-guarantees/external-drf/`; its racy witness `MP+rlx-race.lit` is `[C11]` and moved to `litmus-tests-cpp/` |
-| `coh` | Coherence | `test6/{CoRR1,CoRW,CoWR,CoWW}.lit`; **new** `litmus-tests-ra/models/ra-sra-wra/{WW,Oscillating,SF}.lit` are single-location coherence violations |
+| `coh` | Coherence | `test6/{CoRR1,CoRW,CoWR,CoWW}.lit`; **new** `models/ra-sra-wra/{WW,Oscillating,SF}.lit` are single-location coherence violations |
 | `no_ub` | No undefined behaviour | `symmrd/` (`LB+UB+data.lit` and the `refinement/` variants) |
 | `in_order` | In-order execution | the LB family: `ISO/3-LB.lit`, `esop_problem/lb.lit`, `popl_bubbly/LB.lit`, … |
 | `no_oota` | No out-of-thin-air | `avoidoota/` (31 tests), `on_thin_air_reads19/`, `own/OOTA7.lit` |
@@ -108,7 +107,7 @@ own model is characterised by.
 
 | Key | Column | MoRDor coverage |
 |---|---|---|
-| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (8 tests here; 2 more carry `[C11]`/`[SRA]` and moved to `litmus-tests-cpp/` and `litmus-tests-ra/`; `MP+fence+addr.lit` is parked in `litmus-tests-review/`) |
+| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (9 tests here, `IRIW+rel+acq.lit` under `[SRA]` among them; one more carries `[C11]` and moved to `litmus-tests-cpp/`; `MP+fence+addr.lit` is parked in `litmus-tests-review/`) |
 
 This was the gap. The zoo has an `mca` cell for 63 models (31 true, 32 false) and
 **none for MRD or sMRD**.
@@ -176,17 +175,49 @@ vacuous.
 `IRIW+scfences` is a second finding worth flagging: MoRDor allows it, matching
 C11/C++17 and the known SC-fence defect that P0668 repaired, not RC11/C++20.
 
-## `models/ra-sra-wra/`
+## `models/`
 
-The release-acquire family (WRA ⊂ RA ⊂ SRA) is annotated `[RA]` / `[SRA]`, which
-`ModelRegistry` has no entry for, so the suite was checking it under the `smrd`
-fallback. Four of the five live in `litmus-tests-ra/`, with the reference
-verdicts and the per-test analysis in `litmus-tests-ra/README.md`.
+One file per separating shape. Each asserts, in place, the verdict of every
+implemented model there is evidence for, as `allow (c) [WRA, CC]` and
+`forbid (c) [RA, SRA, SC, …]`. The header names the source of each verdict:
 
-`MP+rel+acq.lit` is the exception and is back here. It is the family's negative
-control — every model in the zoo forbids it — so it is not asking an RA-specific
-question, and sMRD forbids it once `sw` is in `hb` (#67). It is annotated
-`[SMRD]`, since that is the model it is checked under.
+- **herd7** on the zoo's cat models, run on the same program: SC, TSO,
+  Coherence, RC11, RC17 and OD-LSO, and on release-acquire programs RA, SRA and
+  WRA. OD-LSO's cat model is `cpp11.cat` with `acyclic(sb | rf)` added.
+- **The zoo's edges**: VbD, x86-TSO, ClightTSO, RC11z and, on the
+  release-acquire fragment, CC take the verdict of the model they are
+  equivalent to, and an ordering edge carries an `allow` down to weaker models
+  and a `forbid` up to stronger ones.
+- **The definitions**: the distributed models' verdicts, each with its reason.
+
+A model without such a verdict is listed as not asserted, rather than asserted
+from MoRDor's own output. C11 and C++17, which the original headers also give
+verdicts for, are not implemented.
+
+| Directory | Shapes |
+|---|---|
+| `sc-tso/` | SB, with fences and with CAS; IRIW |
+| `ra-sra-wra/` | 2+2W, WW, SF, Oscillating and MP over release and acquire; two CASes |
+| `rc11-rc17/` | the zoo's release-sequence witness; LB; use-after-free |
+| `steinke-nutt/` | MP, WRC, readers that disagree, a writer seen reversed, Oscillating, Bouajjani et al.'s history (2c), each thread reading the other's write |
+| `sessions/` | monotonic reads |
+
+`properties/atomicity-mca/IRIW+rel+acq.lit` asserts across models the same
+way.
+
+Two limits apply to every model here. First, MoRDor's candidate executions are
+free of thin air before any model sees them, so a model weaker than sMRD cannot
+exhibit a thin-air behaviour it allows. Second, over named globals MoRDor never
+generates a read that skips its own thread's latest store to that location.
+That is the shape of every RYW violation, so on such programs RYW rejects
+nothing, and this suite has no RYW `forbid`. Through a pointer that may
+alias, such reads do occur, and RYW rejects them: `own/ptr-overwrite-coherence.lit`
+and both `fowm2024/load intro` variants. MW alone rejects nothing: a read sees only the
+write it read, so it never has two writes of one session to put in order.
+
+`MP+rel+acq.lit` is the release-acquire family's negative control: every model
+in the zoo forbids it, sMRD included, and it asserts that under every model with
+a verdict.
 
 ## `models/cpp-release-sequences/` — moved
 

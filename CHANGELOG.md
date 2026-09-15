@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Memory models
+- 24 models from the [Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org), each defined over relations the pipeline already computes, and each selectable by the zoo's name:
+  - `[SC]`, `[VbD]`, `[TSO]`, `[x86-TSO]` and `[ClightTSO]`. Fences and atomic instructions, a CAS or FADD, flush TSO's store buffer, as in herd's `tso.cat`.
+  - `[RC17]`, RC11 with C++17's release sequences; `[RC11z]`, RC11 with allocations and frees ordered as writes; `[OD-LSO]`, Ou and Demsky's `acyclic(sb ∪ rf)` over the C/C++11 model.
+  - `[MRD]`, as sMRD on programs that access only named globals and allocate nothing. Any other program is refused, because there sMRD admits executions MRD does not.
+  - `[RA]`, `[SRA]` and `[WRA]`, Lahav and Boker's release-acquire family, and `[CC]`, weak causal consistency.
+  - `[Coherence]`, `[PC]`, `[PRAM]`, `[Causal]`, `[Slow]` and `[Local]` from Steinke and Nutt's lattice, decided by searching for a view per thread.
+  - `[POCausal]`, and the session guarantees `[RYW]`, `[MR]`, `[MW]` and `[WFR]`.
+
+  SC, TSO, Coherence, RA, SRA, WRA, RC17 and OD-LSO agree with herd7 on the zoo's cat models across 1,838 outcome checks over 21 programs, with one known exception. Outside the release-acquire fragment, herd's RA cat files let a thread read its own later write, and MoRDor never generates that execution. The zoo's ordering edges hold execution by execution across the whole suite. `litmus-tests/rmm-zoo/models/` has one file per separating shape, asserting the verdict of every model there is evidence for: herd7, an equivalence or ordering edge of the zoo, or the model's definition, each named in the file's header. Every model is a check on the executions MoRDor generates, which are free of thin air, so a model weaker than sMRD cannot show a behaviour only thin air gives.
+
 #### Command line
 - `executions` command, and `POST /api/executions`, for exporting executions with their events and relations (`6db5120`).
 - `justifications` command, which lists the program's justification set and the elaboration step behind each justification, as text or with `--output-mode json` ([#80](https://github.com/christiankissig/mordor/issues/80)).
@@ -29,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Assertions and semantics
 - Refinement chains (`~~>`) are now decided. The checker compares the programs' observable register states, and a register that holds a pointer is compared by which allocation it points to ([#85](https://github.com/christiankissig/mordor/issues/85), [#87](https://github.com/christiankissig/mordor/issues/87)).
+- A test can have several assertions, one per line, and an assertion can name several models: `forbid (c) [RA, SRA, SC]`. Each is checked under its own model against one enumeration of the executions, and the test is valid when every one holds. `run` prints each assertion's verdict, the web UI's Assertions panel lists them, and goldens record them. The models of one test must agree on the undefined-behaviour fold. A refinement chain is still a test's only assertion.
 - `.co`, the coherence order an execution was admitted under, can be used in assertions. It is also exported, as the canonically least order that admits the execution ([#66](https://github.com/christiankissig/mordor/issues/66)).
 - `[_]` is accepted as a model annotation meaning "any model".
 - A `volatile` load or store is never elided by forwarding. That is all `volatile` means ([#83](https://github.com/christiankissig/mordor/issues/83)).
@@ -50,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A golden-diff suite, a canonicalizer and stage counters ([#34](https://github.com/christiankissig/mordor/pull/34)).
 - An episodicity integration suite with a per-test deadline (`8a47197`).
 - RMM Zoo property and model litmus tests ([#40](https://github.com/christiankissig/mordor/pull/40)).
-- Reference directories for tests MoRDor cannot decide: `litmus-tests-cpp/`, `litmus-tests-ra/`, `litmus-tests-promising/` and `litmus-tests-jmm/` for models it does not implement, and `litmus-tests-review/` for tests whose outcome it disagrees with. Each has a README.
+- Reference directories for tests MoRDor cannot decide: `litmus-tests-cpp/`, `litmus-tests-promising/` and `litmus-tests-jmm/` for models it does not implement, and `litmus-tests-review/` for tests whose outcome it disagrees with. Each has a README. The release-acquire tests that sat in `litmus-tests-ra/` are back in the suite, under the models they were written for.
 
 ### Fixed
 
@@ -63,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A condition over registers holding references compared the values of the globals they refer to: over `rp := &x; rq := &y`, `forbid (rp = rq)` failed whenever `x` and `y` held the same value.
 
 #### Interpretation
+- Every event of every thread had thread index 0. The parser annotates a thread body before the enclosing block advances its thread id, so each body saw 0. The interpreter now numbers threads as it enters them, nested blocks included, and the code after a join is back in its parent's thread. Canonical execution renderings, and so the goldens, name the real threads.
 - Symbolic `while` and `do` loops produced no executions ([#11](https://github.com/christiankissig/mordor/pull/11)).
 - `do { B } while (c)` never reached the loop after its first iteration (`76cc05c`).
 - `x := malloc n` did not store the address to `x`, so a later load from `x` read whatever it held before, and two allocations held in globals could be the same cell. It is now an allocation followed by a store to `x`.
@@ -75,7 +88,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Value assignment took a value from whichever model the solver returned. It now fills in a value only when the justification's predicates force it. This closes an out-of-thin-air witness in `avoidoota/listing16.lit` ([#43](https://github.com/christiankissig/mordor/issues/43), `ae177d0`).
 - Value assignment dropped the guard that fixed a write's value, and fired even when it left the write unchanged (`71ba377`, `bf93af4`).
 - Forwarding is followed when freezing the dependency relation, so a forwarded read no longer drops a dependency (`f7c45d3`).
-- Every event of every thread had thread index 0. The parser annotates a thread body before the enclosing block advances its thread id, so each body saw 0. The interpreter now numbers threads as it enters them, nested blocks included, and the code after a join is back in its parent's thread. Canonical execution renderings, and so the goldens, name the real threads.
 - An elided write could stop a read from reading an earlier write (`15df03a`). `dslwb` now decides shadowing under the same path predicates as the rf edge beside it (`540171f`).
 - Preserved program order kept same-location read pairs, and now orders accesses that *may* alias ([#38](https://github.com/christiankissig/mordor/issues/38)).
 - The RMW part of preserved program order composed `ppo_sync` with each (read, write) pair rather than (write, read), as the episodic loops paper defines it. For a CAS or fetch-and-add that ordered nothing, so neither acted as a synchronisation point, and forwarding could cross one. `popl_bridging/ARM FADD.lit` drops from 93 to 79 executions. No verdict changes.

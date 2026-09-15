@@ -1,0 +1,36 @@
+// uaf-bug: the use-after-free program of programs/uaf-bug-rc11.lit.
+//
+// RC11z makes allocation and deallocation writes to the memory they allocate or
+//   free, ordered by co with the stores to it. That changes the coherence
+//   orders the executions are admitted under, not the verdict.
+//
+// Asserted below, by source:
+//   the zoo's equivalence and ordering edges:
+//     RC11z forbids. RC11z coincides with RC11 on the concurrency behaviours of
+//       programs (zoo edge RC11 = RC11z).
+//   the models' definitions:
+//     RC11 forbids. The program's reference verdict under RC11: the relacq
+//       fence synchronises the free with the load of the freed cell, as
+//       programs/uaf-bug-rc11.lit asserts.
+//   Not asserted, for want of a verdict to check against: SC, VbD, TSO,
+//     x86-TSO, ClightTSO, Coherence, RC17, OD-LSO, MRD, CC, PC, PRAM, Causal,
+//     Slow, Local, POCausal, RYW, MR, MW, WFR. RA, SRA and WRA are defined on
+//     release stores and acquire loads, and this program has other accesses.
+rC := malloc(1);
+*rC := 0;
+rcu := malloc(1);
+*rcu := 1;
+fence(relacq);
+{
+  rtemp := *rcu;
+  if (rtemp = 0) {
+    free(rC);
+  }
+}
+|||
+{
+  rv := *rC;
+  *rcu := 0;
+}
+%%
+forbid (ub) [RC11, RC11z]

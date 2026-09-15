@@ -372,7 +372,13 @@ type mordor_ctx = {
   mutable litmus_defacto : expr list option;
       (** De facto constraints (implementation-specific) *)
   mutable program_stmts : ir_node list option;  (** Parsed IR statements *)
-  mutable assertions : ir_assertion option;  (** Assertions to verify *)
+  mutable assertions : ir_assertion list;
+      (** Assertions to verify. More than one is a conjunction, each checked
+          under its own model; a refinement chain is always alone. *)
+  mutable assertion_models : string list;
+      (** The coherence model each of [assertions] is checked under, in order.
+          Set by parsing, and by {!select_models} when a primary model replaces
+          the test's own. *)
   (* Event structures *)
   step_counter : int;  (** Loop iteration bound *)
   mutable structure : symbolic_event_structure option;
@@ -400,6 +406,13 @@ type mordor_ctx = {
       (** Coherence models every execution is also checked against, besides
           [options.coherent]. Empty unless {!select_models} was given some;
           [executions] stays the set [options.coherent] admits either way. *)
+  mutable model_executions : (string, symbolic_execution list) Hashtbl.t option;
+      (** For each model an assertion names besides [options.coherent], the
+          executions it admits, each carrying the coherence order that model
+          admitted it under. [None] when no assertion names another model. *)
+  mutable assertion_verdicts : (string * bool) list;
+      (** For a conjunction, each assertion as written and whether it held.
+          Empty for a single assertion, whose verdict is [valid]. *)
   mutable model_admissions : (int, string list) Hashtbl.t option;
       (** For each execution that reached the coherence stage, by id, the models
           of [compare_models] that admit it. That includes executions
@@ -448,7 +461,10 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     litmus = None;
     litmus_constraints = None;
     litmus_defacto = None;
-    assertions = None;
+    assertions = [];
+    assertion_models = [];
+    model_executions = None;
+    assertion_verdicts = [];
     program_stmts = None;
     step_counter;
     structure = None;
@@ -494,6 +510,36 @@ type model_options = {
     - etc.
 
     Models with "UB" suffix enable undefined behavior optimizations. *)
+(** The zoo's models MoRDor defines from the relations it already computes,
+    beyond [imm], [rc11] and [smrd]. *)
+let implemented_zoo_models =
+  [
+    "sc";
+    "tso";
+    "x86-tso";
+    "clighttso";
+    "rc11z";
+    "rc17";
+    "mrd";
+    "od-lso";
+    "coherence";
+    "ra";
+    "sra";
+    "wra";
+    "vbd";
+    "pc";
+    "pram";
+    "causal";
+    "cc";
+    "slow";
+    "local";
+    "pocausal";
+    "ryw";
+    "mr";
+    "mw";
+    "wfr";
+  ]
+
 let model_options_table : (string, model_options) Hashtbl.t =
   let tbl = Hashtbl.create 20 in
     Hashtbl.add tbl "power" { coherent = Some "imm"; ubopt = false };
@@ -510,6 +556,13 @@ let model_options_table : (string, model_options) Hashtbl.t =
     Hashtbl.add tbl "rc11ub" { coherent = Some "rc11"; ubopt = true };
     Hashtbl.add tbl "immub" { coherent = Some "imm"; ubopt = true };
     Hashtbl.add tbl "smrd" { coherent = Some "smrd"; ubopt = false };
+    (* Models defined over sMRD's relations as they stand, one coherence model
+       each under the zoo's name. [x86-TSO] and [ClightTSO] share TSO's
+       axioms, and [VbD] SC's, as the zoo's equivalence edges say they should;
+       each keeps its own name so a verdict says which one was asked. *)
+    List.iter
+      (fun name -> Hashtbl.add tbl name { coherent = Some name; ubopt = false })
+      implemented_zoo_models;
     Hashtbl.add tbl "ub11" { coherent = None; ubopt = true };
     (* [_] is the litmus syntax for "any model": the grammar's [model_name]
        rule maps UNDERSCORE to the empty string, so [""] is the name that
@@ -557,9 +610,10 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
          deliberate mappings onto the default and fall through to [Some] below.
 
          This is fatal unless the caller opted in. The reference directories
-         [litmus-tests-cpp/], [litmus-tests-promising/] and [litmus-tests-ra/]
-         exist because 43 files had to be moved out of the scanned suite by hand
-         once the mismatch was noticed; failing here is what stops the next one
+         [litmus-tests-cpp/] and [litmus-tests-promising/] exist because 43
+         files had to be moved out of the scanned suite by hand once the
+         mismatch was noticed -- the release-acquire ones have since come back,
+         under models of their own; failing here is what stops the next one
          being added unnoticed. Pass [--allow-unknown-model] to measure them. *)
       let detail =
         if String.lowercase_ascii model = "promising" then
@@ -570,12 +624,14 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
       in
       let msg =
         Printf.sprintf
-          "Unknown memory model %S. MoRDor implements imm, rc11, rc11c and \
-           smrd, and maps a further set of names onto those; this one is in \
+          "Unknown memory model %S. MoRDor implements imm, rc11, rc11c, smrd \
+           and %s, and maps a further set of names onto those; this one is in \
            neither, so no coherence model can be applied.%s Re-run with \
            --allow-unknown-model to check the test under the model already in \
            effect instead -- the verdict is then that model's, not %S's."
-          model detail model
+          model
+          (String.concat ", " implemented_zoo_models)
+          detail model
       in
         if ctx.options.allow_unknown_model then
           Logs_safe.warn (fun m -> m "%s" msg)
@@ -592,6 +648,74 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
          [Interpret] now gates the [e / !r -> e] rewrite on it. *)
       Logs_safe.debug (fun m -> m "setting ubopt %b" options.ubopt);
       ctx.options.ubopt <- options.ubopt
+
+(** [assertion_coherence_model ctx model] is the coherence model an assertion
+    naming [model] is checked under: the one the name maps to, or the model
+    already in effect when the name maps to none.
+
+    Asked once the first assertion's model has been applied, so "already in
+    effect" is that model.
+
+    @raise Failure
+      if [model] is unknown, unless [allow_unknown_model] is set, or if it
+      disagrees with the model in effect about the undefined-behaviour fold.
+      The fold happens at interpretation, before any model is consulted, and
+      the assertions of one test share one interpretation. *)
+let assertion_coherence_model (ctx : mordor_ctx) model =
+  match get_model_options model with
+  | Some { coherent; ubopt } ->
+      if ubopt <> ctx.options.ubopt then
+        failwith
+          (Printf.sprintf
+             "The assertions of one test are checked against one enumeration of \
+              its executions, and %S and %S differ in whether they fold \
+              undefined behaviour, which happens before any model is \
+              consulted. Put the assertions under %S in a test of their own."
+             model ctx.options.model model
+          );
+      Option.value coherent ~default:ctx.options.coherent
+  | None ->
+      (* Unknown: fail as [apply_model_options] does, or measure under the
+         model in effect when asked to. *)
+      let probe = { ctx with options = { ctx.options with model = ctx.options.model } } in
+        apply_model_options probe model;
+        ctx.options.coherent
+
+(** [set_assertions ctx assertions] records a test's assertions, applies the
+    first one's model, and resolves the model every assertion is checked under.
+
+    @raise Failure
+      if a refinement chain is not the only assertion, or as
+      {!assertion_coherence_model}. *)
+let set_assertions (ctx : mordor_ctx) (assertions : ir_assertion list) =
+  let model_of : ir_assertion -> string option = function
+    | Ir.Outcome { model; _ } -> model
+    | Ir.Model { model } -> Some model
+    | Ir.Chained _ -> None
+  in
+    ( match assertions with
+    | _ :: _ :: _
+      when List.exists (function Ir.Chained _ -> true | _ -> false) assertions
+      ->
+        failwith "A refinement chain has to be a litmus test's only assertion."
+    | first :: _ ->
+        Option.iter
+          (fun model ->
+            apply_model_options ctx model;
+            Logs_safe.info (fun m -> m "Applied model options for %s" model)
+          )
+          (model_of first)
+    | [] -> ()
+    );
+    ctx.assertions <- assertions;
+    ctx.assertion_models <-
+      List.map
+        (fun a ->
+          match model_of a with
+          | Some model -> assertion_coherence_model ctx model
+          | None -> ctx.options.coherent
+        )
+        assertions
 
 (** Create a new pipeline context and immediately apply model-specific options.
 
@@ -630,7 +754,12 @@ let make_context_with_model options ?(output_mode = Json)
     @raise Failure if a name in [others] names no coherence model. *)
 let select_models (ctx : mordor_ctx) ~primary ~others =
   let stated = ctx.options.coherent in
-    if primary <> "default" then apply_model_options ctx primary;
+    if primary <> "default" then begin
+      apply_model_options ctx primary;
+      (* The primary replaces the test's own model, and so every assertion's. *)
+      ctx.assertion_models <-
+        List.map (fun _ -> ctx.options.coherent) ctx.assertion_models
+    end;
     let coherence_model = function
       | "default" -> stated
       | name -> (

@@ -1,0 +1,51 @@
+// MP.
+//
+// Message passing: one thread writes x then y; the other reads y's new value
+//   and then x's old one.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence allows, RC11 allows, RC17 allows, OD-LSO allows.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z allows. Equivalent to RC11 (zoo edge).
+//     MRD allows. RC11 allows it, and MRD is weaker than RC11 (zoo edge RC11 ->
+//       MRD).
+//     Local allows. Slow allows it, and Local is weaker.
+//   the models' definitions:
+//     CC forbids. The initial store of x hb-precedes x = 1, which hb-precedes
+//       the load of x that reads the initial value: weak-read-coherence.
+//     PC forbids. PC is at least PRAM.
+//     PRAM forbids. The reader's view keeps the writer's writes in the order
+//       issued, so x = 1 precedes its load of y.
+//     Causal forbids. x = 1 causally precedes y = 1.
+//     Slow allows. Slow orders a writer's writes per location only, and x and y
+//       are different locations.
+//     POCausal allows. Per object, the load of x has not seen x = 1: nothing at
+//       location x relates them.
+//     RYW allows. The reader wrote nothing, so read-your-writes asks nothing of
+//       it.
+//     MR allows. The two loads are of different locations, so what the first
+//       saw does not constrain the second's value.
+//     MW allows. MW alone rejects nothing: a read sees only the write it read.
+//     WFR allows. The writer reads nothing and the reader writes nothing, so
+//       writes-follow-reads orders nothing.
+//   Not asserted, for want of a verdict to check against: none. RA, SRA and WRA
+//     are defined on release stores and acquire loads, and this program has
+//     other accesses.
+x := 0;
+y := 0;
+{
+  x := 1;
+  y := 1
+} ||| {
+  r0 := y;
+  r1 := x
+}
+%%
+allow (r0 = 1 && r1 = 0) [Coherence, RC11, RC11z, RC17, OD-LSO, MRD, Slow,
+                          Local, POCausal, RYW, MR, MW, WFR]
+forbid (r0 = 1 && r1 = 0) [SC, VbD, TSO, x86-TSO, ClightTSO, CC, PC, PRAM,
+                           Causal]

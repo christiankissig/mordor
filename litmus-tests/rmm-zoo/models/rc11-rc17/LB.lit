@@ -1,0 +1,49 @@
+// LB.
+//
+// Load buffering: each thread loads the location the other stores, then stores,
+//   and each load sees the other thread's store.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence allows, RC11 forbids, RC17 forbids, OD-LSO forbids.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z forbids. Equivalent to RC11 (zoo edge).
+//     Slow allows. PRAM allows it, and Slow is weaker.
+//     Local allows. Slow allows it, and Local is weaker.
+//     RYW allows. PRAM allows it, and RYW is weaker.
+//     MR allows. PRAM allows it, and MR is weaker.
+//     MW allows. PRAM allows it, and MW is weaker.
+//   the models' definitions:
+//     MRD allows. Neither store depends on its load, so MRD drops the order
+//       RC11 keeps. This is the zoo's RC11 -> MRD witness.
+//     CC forbids. hb = (po | rf)+ has the same cycle, and CC asks hb to be
+//       irreflexive.
+//     PC allows. As PRAM, with one write per location.
+//     PRAM allows. One write per process; each view places the other process's
+//       write before its load.
+//     Causal forbids. Each store causally follows the load before it, and each
+//       load reads the other thread's store: a causal cycle.
+//     POCausal allows. Per object, each location has one write and one read of
+//       it.
+//     WFR forbids. Each thread's store follows the write its load saw, so
+//       arbitration orders the two stores both ways.
+//   Not asserted, for want of a verdict to check against: none. RA, SRA and WRA
+//     are defined on release stores and acquire loads, and this program has
+//     other accesses.
+x := 0;
+y := 0;
+{
+  r0 := x;
+  y := 1
+} ||| {
+  r1 := y;
+  x := 1
+}
+%%
+allow (r0 = 1 && r1 = 1) [Coherence, MRD, PC, PRAM, Slow, Local, POCausal, RYW,
+                          MR, MW]
+forbid (r0 = 1 && r1 = 1) [SC, VbD, TSO, x86-TSO, ClightTSO, RC11, RC11z, RC17,
+                           OD-LSO, CC, Causal, WFR]

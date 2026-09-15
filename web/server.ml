@@ -118,7 +118,7 @@ let examples_handler _request =
 
 (** The models the settings dialog offers to compare, by the names the model
     table uses. *)
-let comparable_models = [ "smrd"; "rc11" ]
+let comparable_models = "smrd" :: "rc11" :: Context.implemented_zoo_models
 
 (** The primary models it offers: those, or ["default"], the model the litmus
     test states or sMRD, which can be one not offered here. *)

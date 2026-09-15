@@ -1,0 +1,40 @@
+// RS17.
+//
+// The zoo's RC11-vs-RC17 witness: a release store continued by a same-thread
+//   relaxed FADD, and an acquire load of the result that then loads y's old
+//   value. RC11's release sequence continues through the relaxed FADD, so the
+//   acquire load synchronises with it; C++17's is continued only by
+//   read-modify-writes, so it does not.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence allows, RC11 forbids, RC17 allows, OD-LSO allows.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to x86-TSO (zoo edge).
+//     RC11z forbids. Equivalent to RC11 (zoo edge).
+//   Not asserted, for want of a verdict to check against: MRD, CC, PC, PRAM,
+//     Causal, Slow, Local, POCausal, RYW, MR, MW, WFR. RA, SRA and WRA are
+//     defined on release stores and acquire loads, and this program has other
+//     accesses. herd7 verdicts are on the zoo's
+//     litmus/strictly-weaker/RC11-vs-RC17/mp-rs-add-est-atomic.litmus. The
+//     OD-LSO cat model is cpp11.cat with acyclic(sb | rf) added.
+x := 0; y := 0;
+{
+  y.store(1, rlx);
+  x.store(1, rel);
+  rpx := &x;
+  ra := FADD(normal, rlx, rlx, rpx, 1)
+} ||| {
+  rb := x.load(acq);
+  if (rb = 3) {
+    rc := y.load(rlx)
+  }
+} ||| {
+  x.store(2, rlx)
+}
+%%
+allow (@x = 3 && rb = 3 && rc = 0) [Coherence, RC17, OD-LSO]
+forbid (@x = 3 && rb = 3 && rc = 0) [SC, VbD, TSO, x86-TSO, ClightTSO, RC11,
+                                     RC11z]

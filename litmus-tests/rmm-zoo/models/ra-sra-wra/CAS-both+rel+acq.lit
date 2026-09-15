@@ -1,0 +1,36 @@
+// CAS-both+rel+acq.
+//
+// Two CASes from the initial value both succeed.
+//
+// Asserted below, by source:
+//   the models' definitions:
+//     SC forbids. Two RMWs read the same write, which RMW atomicity forbids.
+//     VbD forbids. Two RMWs read the same write, which RMW atomicity forbids.
+//     TSO forbids. Two RMWs read the same write, which RMW atomicity forbids.
+//     x86-TSO forbids. Two RMWs read the same write, which RMW atomicity
+//       forbids.
+//     ClightTSO forbids. Two RMWs read the same write, which RMW atomicity
+//       forbids.
+//     Coherence allows. Coherence has no atomicity axiom, and the two writes to
+//       x can be ordered either way.
+//     RC11 forbids. Two RMWs read the same write, which RMW atomicity forbids.
+//     RC11z forbids. Two RMWs read the same write, which RMW atomicity forbids.
+//     RA forbids. Two RMWs read the same write, which RMW atomicity forbids.
+//     SRA forbids. Two RMWs read the same write, which RMW atomicity forbids.
+//     WRA forbids. WRA's weak atomicity: no two RMWs read one write.
+//     CC allows. CC is stated over plain reads and writes and has no RMW axiom;
+//       it is where CC and WRA part.
+//   Not asserted, for want of a verdict to check against: RC17, OD-LSO, MRD,
+//     PC, PRAM, Causal, Slow, Local, POCausal, RYW, MR, MW, WFR.
+x := 0;
+{
+  rpx := &x;
+  r0 := CAS(acq, rel, rpx, 0, 1)
+} ||| {
+  rpy := &x;
+  r1 := CAS(acq, rel, rpy, 0, 2)
+}
+%%
+allow (r0 = 1 && r1 = 1) [Coherence, CC]
+forbid (r0 = 1 && r1 = 1) [SC, VbD, TSO, x86-TSO, ClightTSO, RC11, RC11z, RA,
+                           SRA, WRA]

@@ -103,7 +103,18 @@ let render (program : string) : string =
       | _ -> failwith "pipeline produced no structure/executions"
     in
     let canon = Canonicalize.canonicalize_set structure execs in
-      Printf.sprintf "verdict: %s\nexecutions: %d\n%s\n" verdict
+    (* A conjunction's assertions each have a verdict of their own; the
+       executions are the first assertion's model's. *)
+    let verdicts =
+      String.concat ""
+        (List.map
+           (fun (assertion, holds) ->
+             Printf.sprintf "  %s %s\n" (if holds then "holds" else "fails") assertion
+           )
+           ctx.assertion_verdicts
+        )
+    in
+      Printf.sprintf "verdict: %s\n%sexecutions: %d\n%s\n" verdict verdicts
         (List.length execs)
         (Canonicalize.set_signature ~with_predicates:true canon)
 

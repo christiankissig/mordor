@@ -135,6 +135,8 @@ type ast_assertion =
     }
   | AModel of { model : string }
   | AChained of { model : string; outcome : string; rest : ast_litmus }
+  | AConjunction of ast_assertion list
+      (** Several outcomes, each under its own model; see the grammar. *)
 
 and ast_litmus = {
   config : ast_config option;

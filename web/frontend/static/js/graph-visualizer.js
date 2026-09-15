@@ -578,6 +578,20 @@ class GraphVisualizer {
             </div>
         `;
         
+        // A test with several assertions, each under its own model, has a
+        // verdict per assertion. The executions on screen are the first one's.
+        if (this.assertionResults.verdicts && this.assertionResults.verdicts.length > 0) {
+            html += '<ul class="assertion-verdicts">';
+            this.assertionResults.verdicts.forEach(v => {
+                const cls = v.holds ? 'valid' : 'invalid';
+                const icon = v.holds ? '✓' : '✗';
+                const text = String(v.assertion)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html += `<li class="assertion-validity ${cls}"><span class="assertion-validity-icon">${icon}</span><code>${text}</code></li>`;
+            });
+            html += '</ul>';
+        }
+
         // Render each assertion instance
         html += '<div style="max-height: 400px; overflow-y: auto;">';
         
@@ -1725,7 +1739,14 @@ class GraphVisualizer {
 
     // Display name for a model as the backend and the settings dialog name it.
     static modelLabel(model) {
-        const labels = { default: 'Default', smrd: 'sMRD', rc11: 'RC11', rc11c: 'RC11c', imm: 'IMM' };
+        const labels = {
+            default: 'Default', smrd: 'sMRD', rc11: 'RC11', rc11c: 'RC11c', imm: 'IMM',
+            rc17: 'RC17', rc11z: 'RC11z', 'od-lso': 'OD-LSO', mrd: 'MRD',
+            sc: 'SC', vbd: 'VbD', tso: 'TSO', 'x86-tso': 'x86-TSO', clighttso: 'ClightTSO',
+            ra: 'RA', sra: 'SRA', wra: 'WRA', cc: 'CC',
+            coherence: 'Coherence', pc: 'PC', pram: 'PRAM', causal: 'Causal', slow: 'Slow', local: 'Local',
+            pocausal: 'POCausal', ryw: 'RYW', mr: 'MR', mw: 'MW', wfr: 'WFR',
+        };
         return labels[model] || model;
     }
 
@@ -1968,7 +1989,8 @@ class GraphVisualizer {
                 this.log('Received assertion results');
                 this.assertionResults = {
                     valid: data.valid,
-                    instances: data.instances || []
+                    instances: data.instances || [],
+                    verdicts: data.verdicts || []
                 };
                 this.renderAssertions();
             } else if (data.type === 'justification_set') {

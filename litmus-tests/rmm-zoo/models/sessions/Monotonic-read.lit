@@ -1,0 +1,45 @@
+// Monotonic-read.
+//
+// A reader sees x's new value and then its old one.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence forbids, RC11 forbids, RC17 forbids, OD-LSO forbids.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z forbids. Equivalent to RC11 (zoo edge).
+//     PC forbids. Coherence forbids it, and PC is stronger.
+//     PRAM forbids. MR forbids it, and PRAM is stronger.
+//     Causal forbids. CC forbids it, and Causal is stronger.
+//     Slow forbids. Local forbids it, and Slow is stronger.
+//   the models' definitions:
+//     CC forbids. The initial store hb-precedes x = 1, which hb-precedes the
+//       second load reading the initial value.
+//     Local forbids. The initial value precedes everything in a view, and the
+//       view has x = 1 before the first load.
+//     POCausal forbids. x = 1 is arbitrated after the initial value, and the
+//       second load has seen it.
+//     RYW allows. The reader wrote nothing, so read-your-writes asks nothing of
+//       it.
+//     MR forbids. The second load has seen x = 1 and returns the value it
+//       overwrote.
+//     MW allows. MW alone rejects nothing: a read sees only the write it read.
+//     WFR allows. The reader writes nothing, so writes-follow-reads asks
+//       nothing of it.
+//   Not asserted, for want of a verdict to check against: MRD. RA, SRA and WRA
+//     are defined on release stores and acquire loads, and this program has
+//     other accesses.
+x := 0;
+{
+  x := 1
+} ||| {
+  r0 := x;
+  r1 := x
+}
+%%
+allow (r0 = 1 && r1 = 0) [RYW, MW, WFR]
+forbid (r0 = 1 && r1 = 0) [SC, VbD, TSO, x86-TSO, ClightTSO, Coherence, RC11,
+                           RC11z, RC17, OD-LSO, CC, PC, PRAM, Causal, Slow,
+                           Local, POCausal, MR]

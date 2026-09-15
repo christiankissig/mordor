@@ -25,4 +25,5 @@ let () =
       Test_model_and_tuple_features.suite;
       Test_uset.suite;
       Test_episodicity.suite;
+      Test_zoo_models.suite;
     ]

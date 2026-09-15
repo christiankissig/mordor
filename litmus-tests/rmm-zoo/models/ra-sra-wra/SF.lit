@@ -1,0 +1,44 @@
+// SF (store forwarding) -- the RA-vs-WRA separating behaviour, second shape.
+//
+// rmm-zoo edge: RA strictly weaker than WRA.
+// Source: Lahav & Boker, TOPLAS 2022, Ex. 3.7 (SF).
+//         Vendored shape: rmm-zoo litmus/strictly-weaker/RA-vs-WRA/SF.
+//
+// A thread writes x = 1, reads x = 2 from the other thread, then reads x = 1
+// again -- its own earlier write, now stale. RA and SRA forbid it by
+// read-coherence. WRA allows it, which is why WRA validates the store-forwarding
+// optimisation that rewrites the second read to the constant 1; the paper notes
+// that same rewrite is UNSOUND for RA and SRA, since it would then yield this
+// outcome even under SC.
+//
+// Reference verdicts: WRA ALLOWS. RA, SRA, C11, RC11 and SC FORBID.
+//
+// Asserted below, by source:
+//   herd7 on the zoo's cat models, run on this program: SC forbids, TSO
+//     forbids, Coherence forbids, RC11 forbids, RC17 forbids, OD-LSO forbids,
+//     RA forbids, SRA forbids, WRA allows.
+//   the zoo's equivalence and ordering edges:
+//     VbD forbids. Equivalent to SC (zoo edge).
+//     x86-TSO forbids. Equivalent to TSO (zoo edge).
+//     ClightTSO forbids. Equivalent to TSO (zoo edge).
+//     RC11z forbids. Equivalent to RC11 (zoo edge).
+//     CC allows. Equivalent to WRA on the release-acquire fragment (zoo edge
+//       WRA = CC).
+//     PC forbids. Coherence forbids it, and PC is stronger.
+//   the models' definitions:
+//     MW allows. MW alone rejects nothing: a read sees only the write it read.
+//   Not asserted, for want of a verdict to check against: MRD, PRAM, Causal,
+//     Slow, Local, POCausal, RYW, MR, WFR. C11 and C++17 are not implemented in
+//     MoRDor.
+x := 0;
+{
+  x.store(1, rel);
+  r0 := x.load(acq);
+  r1 := x.load(acq)
+} ||| {
+  x.store(2, rel)
+}
+%%
+allow (r0 = 2 && r1 = 1) [WRA, CC, MW]
+forbid (r0 = 2 && r1 = 1) [SC, VbD, TSO, x86-TSO, ClightTSO, Coherence, RC11,
+                           RC11z, RC17, OD-LSO, RA, SRA, PC]

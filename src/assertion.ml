@@ -856,7 +856,7 @@ module Refinement = struct
       ctx.program_stmts <- Some litmus.program;
       (* No assertion: the chain's own outcome is what we are deciding, and
          [step_check_assertions] is not part of this pipeline anyway. *)
-      ctx.assertions <- None;
+      ctx.assertions <- [];
       let%lwt ctx =
         Lwt.return ctx
         |> Interpret.step_interpret
@@ -1715,6 +1715,20 @@ let ub_reasons_to_yojson = JSONSerialization.ub_reasons_to_yojson
 (** [ub_reasons_to_json ubs] converts UB reason list to JSON string. *)
 let ub_reasons_to_json = JSONSerialization.ub_reasons_to_json
 
+(** [describe_assertion assertion] is an outcome assertion as a test writes
+    it, [forbid (r0 = 1) [ra]], naming one model. *)
+let describe_assertion : Context.ir_assertion -> string = function
+  | Ir.Outcome { outcome; condition; model } ->
+      Printf.sprintf "%s (%s) [%s]"
+        (match outcome with Ir.Allow -> "allow" | Ir.Forbid -> "forbid")
+        ( match condition with
+        | Ir.CondUB -> "ub"
+        | Ir.CondExpr e -> Expr.to_string e
+        )
+        (Option.value model ~default:"")
+  | Ir.Model { model } -> Printf.sprintf "[%s]" model
+  | Ir.Chained { model; _ } -> Printf.sprintf "~~> [%s]" model
+
 (** [step_check_assertions ctx] checks assertions in verification context.
 
     Pipeline step that validates assertions against generated executions. Always
@@ -1729,7 +1743,7 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
         let execution_list = USet.to_list executions in
           let* assertion_result =
             match ctx.assertions with
-            | None ->
+            | [] ->
                 (* Even without assertions, run UB validation *)
                 let%lwt ub_reasons, execution_results =
                   AssertionChecker.run_ub_validation_all execution_list
@@ -1744,9 +1758,56 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                       checked_executions = Some execution_results;
                       assertion_instances = None;
                     }
-            | Some assertions ->
-                check_assertion ~ctx assertions execution_list structure
+            | [ assertion ] ->
+                check_assertion ~ctx assertion execution_list structure
                   ~exhaustive:ctx.options.exhaustive
+            | assertions ->
+                (* A conjunction: each assertion against the executions its own
+                   model admits, all of them from the one enumeration. *)
+                let executions_under model =
+                  if model = ctx.options.coherent then execution_list
+                  else
+                    Option.bind ctx.model_executions (fun tbl ->
+                        Hashtbl.find_opt tbl model
+                    )
+                    |> Option.value ~default:[]
+                in
+                let%lwt results =
+                  Lwt_list.map_s
+                    (fun (assertion, model) ->
+                      let%lwt result =
+                        check_assertion ~ctx assertion (executions_under model)
+                          structure ~exhaustive:ctx.options.exhaustive
+                      in
+                        Lwt.return (assertion, result)
+                    )
+                    (List.combine assertions ctx.assertion_models)
+                in
+                  ctx.assertion_verdicts <-
+                    List.map
+                      (fun (assertion, (result : assertion_result)) ->
+                        (describe_assertion assertion, result.valid)
+                      )
+                      results;
+                  (* Undefined behaviour and the checked executions are the
+                     first assertion's, whose model is the primary. *)
+                  let first = snd (List.hd results) in
+                    Lwt.return
+                      {
+                        first with
+                        valid =
+                          List.for_all
+                            (fun (_, (r : assertion_result)) -> r.valid)
+                            results;
+                        assertion_instances =
+                          Some
+                            (List.concat_map
+                               (fun (_, (r : assertion_result)) ->
+                                 Option.value r.assertion_instances ~default:[]
+                               )
+                               results
+                            );
+                      }
           in
             ctx.valid <- Some assertion_result.valid;
             ctx.undefined_behaviour <- Some assertion_result.ub;
@@ -1762,9 +1823,15 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
 (** {1 Send Assertion Results} *)
 
 (** Message format for sending assertion results. *)
+type assertion_verdict = { assertion : string; holds : bool }
+[@@deriving yojson]
+
 type assertion_results_message = {
   valid : bool;
   instances : assertion_instance list;
+  verdicts : assertion_verdict list;
+      (** A conjunction's assertions, one model each, and whether each held.
+          Empty for a single assertion. *)
 }
 [@@deriving yojson]
 
@@ -1781,7 +1848,12 @@ let step_send_assertion_results ~(send_data : string -> unit Lwt.t)
   let%lwt ctx = lwt_ctx in
     match (ctx.valid, ctx.assertion_instances) with
     | Some valid, Some instances ->
-        let message = { valid; instances } in
+        let verdicts =
+          List.map
+            (fun (assertion, holds) -> { assertion; holds })
+            ctx.assertion_verdicts
+        in
+        let message = { valid; instances; verdicts } in
         let result_json =
           Yojson.Safe.to_string (assertion_results_message_to_yojson message)
         in
