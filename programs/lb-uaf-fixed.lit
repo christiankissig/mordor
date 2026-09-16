@@ -1,0 +1,24 @@
+// lb-uaf.lit with both loads made acquire, which forbids the load->store
+// reordering the use-after-free rests on. 29 executions drop to 5 and the
+// undefined behaviour goes away.
+rC := malloc(1);
+*rC := 0;
+x := 0;
+y := 0;
+{
+  r0 :acq= x;
+  y := 1;
+  if (r0 = 1) {
+    free(rC);
+  }
+}
+|||
+{
+  r1 :acq= y;
+  x := 1;
+  if (r1 = 1) {
+    rv := *rC;
+  }
+}
+%%
+forbid (ub) [smrd]
