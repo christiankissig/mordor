@@ -79,11 +79,22 @@ let split ~size items =
     That also explains the CPU. While one domain spends 0.387s on that item the
     others have nothing to do, and seqlock-1 at eight threads burns user=6.25s
     against user=1.09s sequential for the same wall clock. It reads like the
-    pool spinning, and the fix is not in the pool: it is either splitting the
-    expensive items -- the path combination and freeze stages are where they
-    are -- or accepting that --threads pays only on programs whose work is
-    evenly divided. Chunking by count, which is what {!map} does, cannot
-    balance what one item dominates. *)
+    pool spinning, and the fix is not in the pool.
+
+    The dispatch in question is the freeze stage, [freeze_just_combo] in
+    {!Executions}, and it is the hot one in every program measured: seqlock-1
+    0.79s of 1.14s, rcu-1 0.17s of 0.36s, uaf-bug-extended 0.15s of 0.24s,
+    lb-uaf 0.06s of 0.08s. The other two, [combine_justifications] and
+    [check_exec], are dispatched with 1 to 4 and 0 to 29 items and cost little
+    beside it. So the whole question of whether [--threads] pays is a question
+    about one stage.
+
+    It is short of items as well as skewed: freeze is dispatched with 66 items
+    on seqlock-1 and 64 on lb-uaf, but 16 on uaf-bug-extended and 4 on rcu-1.
+    Four items cannot occupy eight domains however they are chunked. Chunking
+    by count, which is what {!map} does, can balance neither that nor an item
+    that dominates; both want a finer unit of work out of [Freeze.freeze]
+    itself. *)
 
 (** {1 The pool} *)
 
