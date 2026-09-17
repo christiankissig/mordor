@@ -1945,21 +1945,18 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
       !pairs @ structure.constraints
   in
 
-  (* Build compute_fn: sequential for 1 thread, parallel otherwise *)
-  let pool, compute =
-    if num_threads <= 1 then (None, sequential_compute)
-    else
-      let p = Lwt_domain.setup_pool num_threads in
-        (Some p, parallel_compute p)
+  (* Build compute_fn: sequential for 1 thread, otherwise the process's pool,
+     the same one the elaboration phase dispatched on. *)
+  let compute =
+    match Parallel.acquire ~num_threads with
+    | Some pool -> parallel_compute pool
+    | None -> sequential_compute
   in
 
   (* Build executions if not just structure *)
   let* executions =
-    Parallel.finalize_pool pool (fun () ->
-        generate_executions ~include_rf ~compute ?compare_models ?admissions
-          ?model_executions structure fwd_es_ctx final_justs statex
-          ~restrictions
-    )
+    generate_executions ~include_rf ~compute ?compare_models ?admissions
+      ?model_executions structure fwd_es_ctx final_justs statex ~restrictions
   in
 
   Logs_safe.debug (fun m ->
