@@ -41,13 +41,43 @@ type solver = {
 
     Functions for creating and managing Z3 solver contexts. *)
 
+(** The Z3 context this domain solves in.
+
+    A [Z3.context] is the whole AST manager, and building one costs both time
+    and a few megabytes of memory that OCaml cannot see: the native allocation
+    hangs off a small wrapper, so nothing about it pressures the GC into
+    finalising it. Creating one per query -- which is what a fresh context in
+    {!create_context} amounted to -- left hundreds of them alive at once.
+    Analysing seqlock-1 peaked at 334MB RSS against an OCaml heap of 1.6MB, and
+    at [--threads 8], with each domain building its own, at 973MB.
+
+    So the context is per domain rather than per query. A Z3 context is not
+    thread-safe, and domain-local storage is exactly the scope that gives each
+    domain one of its own to itself. Reuse also lets Z3 hash-cons across
+    queries: the predicates asked about here repeat heavily, and repeated
+    subformulas now share nodes instead of being rebuilt per context.
+
+    What must not be shared is the state a query builds up. The [Z3.Solver]
+    instance holds the assertions, and {!solve} reports a binding for every
+    variable in [vars], so both stay per query in {!create_context} below --
+    otherwise a later query would inherit an earlier one's constraints, and
+    every model would name variables the caller never asked about. *)
+let z3_context_key = Domain.DLS.new_key (fun () -> Z3.mk_context [])
+
+(* Built here, on the main domain, so that Z3's one-time global initialisation
+   happens before any domain is spawned rather than in whichever workers first
+   reach for a solver together. *)
+let () = ignore (Domain.DLS.get z3_context_key)
+
 (** Create a new solver context.
 
-    Initializes a fresh Z3 context and solver with an empty variable table.
+    Reuses this domain's Z3 context, and pairs it with a fresh Z3 solver and an
+    empty variable table so that no constraint or variable carries over from an
+    earlier query.
 
     @return A new context ready for use *)
 let create_context () =
-  let ctx = Z3.mk_context [] in
+  let ctx = Domain.DLS.get z3_context_key in
   let solver = Z3.Solver.mk_solver ctx None in
   let vars = Hashtbl.create 32 in
     { ctx; solver; vars }
