@@ -58,6 +58,27 @@ let split ~size items =
     on the returned promise, so the items after it in that chunk do not run.
     Dispatching per item ran all of them before failing; either way the
     exception reaches the caller, and here it reaches it sooner. *)
+(** [finalize_pool pool f] runs [f ()] and tears [pool] down once its promise
+    settles, whether that is with a value or with an exception.
+
+    Settling is the earliest the pool is finished with, rather than the end of
+    whatever function set it up, so the domains go back sooner on the ordinary
+    path.
+
+    On the failure path this is currently hygiene rather than a fix for
+    anything that bites. A leaked pool does not hang the process -- the runtime
+    does not wait for spawned domains at shutdown -- and the one caller that
+    could leak repeatedly, [--all-litmus-tests], stops at the first test that
+    raises. What it guards is the shape of the thing: OCaml stops at 128
+    domains, the web server already turns a failed analysis into a message and
+    carries on, and it leaks a pool per failure the day it is given a thread
+    count to pass down. *)
+let finalize_pool pool f =
+  Lwt.finalize f (fun () ->
+      Option.iter Lwt_domain.teardown_pool pool;
+      Lwt.return_unit
+  )
+
 let map pool f items =
   match items with
   | [] -> Lwt.return []

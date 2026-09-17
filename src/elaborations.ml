@@ -1557,7 +1557,11 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
     in
 
     let just_cache = JustificationCache.create 1024 in
-      let* final_justs = fixed_point [] pre_justs just_cache in
+      let* final_justs =
+        Parallel.finalize_pool pool (fun () ->
+            fixed_point [] pre_justs just_cache
+        )
+      in
         (* The derivation of each justification, kept rather than dropped with
            the elaboration context: it is the part that explains a surprising
            result, and it reached exactly one debug line (github #80). *)
@@ -1586,7 +1590,6 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
               (String.concat "\n" just_str)
         );
 
-        Option.iter Lwt_domain.teardown_pool pool;
         Landmark_safe.exit landmark;
         Lwt.return (final_justs, derivations)
 
