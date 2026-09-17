@@ -34,8 +34,8 @@ open Uset
     worker function over a list of items, returning results in an Lwt promise.
 
     - [sequential]: applies the worker with [List.map], no parallelism.
-    - [parallel pool]: dispatches each item to a domain pool via
-      [Lwt_domain.detach]. *)
+    - [parallel pool]: dispatches the items to a domain pool in chunks, via
+      {!Parallel.map}. *)
 type compute_fn = { run : 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
 
 (** [sequential_compute] is a [compute_fn] that runs items one by one. *)
@@ -45,27 +45,7 @@ let sequential_compute : compute_fn =
 (** [parallel_compute pool] is a [compute_fn] that dispatches items to [pool].
 *)
 let parallel_compute pool : compute_fn =
-  {
-    run =
-      (fun f items ->
-        let promises =
-          List.map
-            (fun item ->
-              Lwt_domain.detach pool
-                (fun () ->
-                  match f item with
-                  | result -> result
-                  | exception exn ->
-                      let bt = Printexc.get_raw_backtrace () in
-                        Printexc.raise_with_backtrace exn bt
-                )
-                ()
-            )
-            items
-        in
-          Lwt.all promises
-      );
-  }
+  { run = (fun f items -> Parallel.map pool f items) }
 
 (** {1 Basic Types} *)
 

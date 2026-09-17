@@ -1435,27 +1435,17 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
 
       let run_elab_parallel ~just_to_string ~name p elab_fn optrace_fn new_justs
           justs =
-        (* memory barrier - settle context objects *)
-        let _ = Atomic.make 0 |> Atomic.get in
-        let promises =
-          List.map
-            (fun just ->
-              Lwt_domain.detach p
-                (fun () ->
-                  match elab_fn elab_ctx just with
-                  | result -> (just, result)
-                  | exception exn ->
-                      let bt = Printexc.get_raw_backtrace () in
-                        Printf.eprintf "Exception in domain for just: %s\n%s%!"
-                          (Printexc.to_string exn)
-                          (Printexc.raw_backtrace_to_string bt);
-                        Printexc.raise_with_backtrace exn bt
-                )
-                ()
-            )
-            justs
+        let elaborate just =
+          match elab_fn elab_ctx just with
+          | result -> (just, result)
+          | exception exn ->
+              let bt = Printexc.get_raw_backtrace () in
+                Printf.eprintf "Exception in domain for just: %s\n%s%!"
+                  (Printexc.to_string exn)
+                  (Printexc.raw_backtrace_to_string bt);
+                Printexc.raise_with_backtrace exn bt
         in
-          let* results = Lwt.all promises in
+          let* results = Parallel.map p elaborate justs in
             add_elab_results_to_optrace optrace_fn results;
             log_elab_fanout ~just_to_string ~name results;
             filter_elab_results new_justs results |> Lwt.return

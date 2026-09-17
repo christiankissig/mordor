@@ -41,6 +41,7 @@
   lwt_utils
   logs_safe
   monad
+  parallel
   parse
   parser
   parser_state
