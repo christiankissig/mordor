@@ -58,6 +58,33 @@ let split ~size items =
     on the returned promise, so the items after it in that chunk do not run.
     Dispatching per item ran all of them before failing; either way the
     exception reaches the caller, and here it reaches it sooner. *)
+(** {1 What limits the speedup}
+
+    Measured on seqlock-1, because it is worth knowing before anyone tunes this
+    further.
+
+    The share of a sequential run that happens inside these dispatches is high:
+    73% on seqlock-1, 93% on uaf-bug-extended, 96% on rcu-1. There is no
+    Amdahl ceiling worth worrying about at the level of stages, and no shortage
+    of items either -- seqlock-1 makes 31 dispatches carrying 2227 items, five
+    of them with more than 128.
+
+    The cost of those items is what does not divide. One dispatch of 66 items
+    holds 0.738s of seqlock-1's 1.14s, and within it three items account for
+    0.387s, 0.182s and 0.144s while the other 63 together take 0.005s. A
+    dispatch cannot finish before its largest item does, so that stage cannot
+    go below 0.387s however many domains are given to it, and the run cannot go
+    below about 0.79s: a ceiling of roughly 1.45x, set by one item.
+
+    That also explains the CPU. While one domain spends 0.387s on that item the
+    others have nothing to do, and seqlock-1 at eight threads burns user=6.25s
+    against user=1.09s sequential for the same wall clock. It reads like the
+    pool spinning, and the fix is not in the pool: it is either splitting the
+    expensive items -- the path combination and freeze stages are where they
+    are -- or accepting that --threads pays only on programs whose work is
+    evenly divided. Chunking by count, which is what {!map} does, cannot
+    balance what one item dominates. *)
+
 (** {1 The pool} *)
 
 (** The pool this process dispatches on, and the thread count it was built for.
