@@ -43,9 +43,14 @@ type solver = {
 
     Functions for creating and managing Z3 solver contexts. *)
 
-(** Create a new solver context with fresh Z3 state.
+(** Create a new solver context.
 
-    This initializes a new Z3 context and solver, with an empty variable table.
+    The [Z3.context] is this domain's, shared by every query it runs: building
+    one per query cost megabytes of native memory that OCaml's GC has no reason
+    to reclaim. The Z3 solver and the variable table are fresh, so no
+    constraint and no variable carries over from an earlier query.
+
+    A context must not be used from more than one domain.
 
     @return A new context ready for solving *)
 val create_context : unit -> context
@@ -106,8 +111,9 @@ val create : expr list -> solver
 
 (** Reset a solver by creating a fresh context.
 
-    This discards all Z3 state and variable mappings, creating a new context
-    while keeping the same constraint expressions.
+    This discards the Z3 solver's assertions and the variable mappings, keeping
+    the same constraint expressions. The underlying [Z3.context] is this
+    domain's and is not rebuilt.
 
     @param solver The solver to reset
     @return A new solver with fresh context and the same expressions *)

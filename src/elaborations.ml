@@ -78,7 +78,7 @@ type context = {
       *)
 }
 
-let pred_landmark = Landmark.register "Elaborations.pred"
+let pred_landmark = Landmark_safe.register "Elaborations.pred"
 
 (** [pred elab_ctx ctx p ?ppo ()] computes the predecessor function.
 
@@ -92,7 +92,7 @@ let pred_landmark = Landmark.register "Elaborations.pred"
     @return Promise of a function from events to their predecessor sets. *)
 let pred (elab_ctx : context) (ctx : ForwardingContext.t option)
     (p : expr list option) ?ppo () =
-  Landmark.enter pred_landmark;
+  Landmark_safe.enter pred_landmark;
   let ppo_result =
     match ppo with
     | Some ppo_val -> ppo_val
@@ -105,7 +105,7 @@ let pred (elab_ctx : context) (ctx : ForwardingContext.t option)
   let immediate_ppo = URelation.transitive_reduction ppo_result in
   let inversed = URelation.inverse immediate_ppo in
   let tree = URelation.adjacency_map inversed in
-    Landmark.exit pred_landmark;
+    Landmark_safe.exit pred_landmark;
     fun e -> Hashtbl.find_opt tree e |> Option.value ~default:(USet.create ())
 
 (** [pre_justifications structure] computes initial pre-justifications.
@@ -738,7 +738,7 @@ end = struct
       )
 
   let is_closed_relab_equiv_landmark =
-    Landmark.register "Elaborations.is_closed_relab_equiv"
+    Landmark_safe.register "Elaborations.is_closed_relab_equiv"
 
   (** [is_closed_relab_equiv elab_ctx statex relab pred_1 pred_2 p1 e1 p2 e2]
       checks closed relabeling equivalence.
@@ -807,16 +807,16 @@ end = struct
           )
           else false
     in
-      Landmark.enter is_closed_relab_equiv_landmark;
+      Landmark_safe.enter is_closed_relab_equiv_landmark;
       let result = aux p1 e1 p2 e2 in
-        Landmark.exit is_closed_relab_equiv_landmark;
+        Landmark_safe.exit is_closed_relab_equiv_landmark;
         result
 
   let find_dist_preds_landmark =
-    Landmark.register "Elaborations.find_distinguishing_predicate"
+    Landmark_safe.register "Elaborations.find_distinguishing_predicate"
 
   let find_distinguishing_predicate preds_1 preds_2 =
-    Landmark.enter find_dist_preds_landmark;
+    Landmark_safe.enter find_dist_preds_landmark;
     let common_preds_1 =
       List.filter
         (fun expr_1 ->
@@ -866,11 +866,11 @@ end = struct
             if cmp = 0 then sorted_contains t1 t2 else sorted_contains t1 l2
     in
       if not (sorted_contains preds_2 inverse_preds_1) then (
-        Landmark.exit find_dist_preds_landmark;
+        Landmark_safe.exit find_dist_preds_landmark;
         None
       )
       else if not (sorted_contains preds_1 inverse_preds_2) then (
-        Landmark.exit find_dist_preds_landmark;
+        Landmark_safe.exit find_dist_preds_landmark;
         None
       )
       else
@@ -888,15 +888,15 @@ end = struct
           uncommon_preds_1 @ inverse_preds_2 |> List.sort_uniq Expr.compare
         in
         let disjunction = common_preds_1 in
-          Landmark.exit find_dist_preds_landmark;
+          Landmark_safe.exit find_dist_preds_landmark;
           Some (distinguishing_predicate, disjunction)
 
   let gen_relabs_landmark =
-    Landmark.register "Elaborations.generate_relabelings"
+    Landmark_safe.register "Elaborations.generate_relabelings"
 
   let generate_relabelings elab_ctx (just_1 : justification)
       (just_2 : justification) ppo_1 ppo_2 con_1 con_2 =
-    Landmark.enter gen_relabs_landmark;
+    Landmark_safe.enter gen_relabs_landmark;
 
     let remap_symbol ~con ~ppo (w : int) (s : string) =
       let origin = Eventstructures.origin elab_ctx.structure s |> Option.get in
@@ -974,15 +974,20 @@ end = struct
             just_2.d
       )
     in
-      Landmark.exit gen_relabs_landmark;
+      Landmark_safe.exit gen_relabs_landmark;
       relabs
 
-  let lift_elab_landmark = Landmark.register "Elaborations.LiftElab.elab"
+  let lift_elab_landmark = Landmark_safe.register "Elaborations.LiftElab.elab"
+
+  (* Registered here rather than where it is entered: registration writes to
+     landmarks' global tables, and the loop below runs on a worker domain. *)
+  let process_relabeling_landmark =
+    Landmark_safe.register "LiftElab.elab.process_relabeling"
 
   let elab elab_ctx just_1 just_2 =
     (* only consider justifications of writes in conflict and with non-trivial
        predicates *)
-    Landmark.enter lift_elab_landmark;
+    Landmark_safe.enter lift_elab_landmark;
     let is_trace = false in
       if
         (not
@@ -992,16 +997,16 @@ end = struct
         )
         || (List.length just_1.p = 0 && List.length just_2.p = 0)
       then (
-        Landmark.exit lift_elab_landmark;
+        Landmark_safe.exit lift_elab_landmark;
         []
       )
       else if not (URelation.is_function (USet.union just_1.we just_2.we)) then (
-        Landmark.exit lift_elab_landmark;
+        Landmark_safe.exit lift_elab_landmark;
         []
       )
       else if not (URelation.is_function (USet.union just_1.fwd just_2.fwd))
       then (
-        Landmark.exit lift_elab_landmark;
+        Landmark_safe.exit lift_elab_landmark;
         []
       )
       else (
@@ -1055,21 +1060,38 @@ end = struct
           let lifted =
             List.map
               (fun relab ->
-                let inner_landmark =
-                  Landmark.register "LiftElab.elab.process_relabeling"
+                Landmark_safe.enter process_relabeling_landmark;
+                let relabeled_just_1_p =
+                  List.map
+                    (Expr.relabel ~relab:(Hashtbl.find_opt relab))
+                    just_1.p
+                  |> Expr.evaluate_conjunction
                 in
-                  Landmark.enter inner_landmark;
-                  let relabeled_just_1_p =
-                    List.map
-                      (Expr.relabel ~relab:(Hashtbl.find_opt relab))
-                      just_1.p
-                    |> Expr.evaluate_conjunction
-                  in
-                  let result =
-                    match
-                      find_distinguishing_predicate relabeled_just_1_p just_2.p
-                    with
-                    | None ->
+                let result =
+                  match
+                    find_distinguishing_predicate relabeled_just_1_p just_2.p
+                  with
+                  | None ->
+                      if is_trace then
+                        Logs_safe.debug (fun m ->
+                            m
+                              "Relabeling did not yield distinguishing \
+                               predicate.\n\
+                               \tRelabeled P1: [%s]\n\
+                               \tP2: [%s]"
+                              (String.concat "; "
+                                 (List.map Expr.to_string relabeled_just_1_p)
+                              )
+                              (String.concat "; "
+                                 (List.map Expr.to_string just_2.p)
+                              )
+                        );
+                      None
+                  | Some (distinguishing_predicate, disjunction) ->
+                      if
+                        List.length disjunction = List.length just_2.p
+                        && List.equal Expr.equal disjunction just_2.p
+                      then (
                         if is_trace then
                           Logs_safe.debug (fun m ->
                               m
@@ -1085,115 +1107,95 @@ end = struct
                                 )
                           );
                         None
-                    | Some (distinguishing_predicate, disjunction) ->
-                        if
-                          List.length disjunction = List.length just_2.p
-                          && List.equal Expr.equal disjunction just_2.p
-                        then (
-                          if is_trace then
-                            Logs_safe.debug (fun m ->
-                                m
-                                  "Relabeling did not yield distinguishing \
-                                   predicate.\n\
-                                   \tRelabeled P1: [%s]\n\
-                                   \tP2: [%s]"
-                                  (String.concat "; "
-                                     (List.map Expr.to_string relabeled_just_1_p)
-                                  )
-                                  (String.concat "; "
-                                     (List.map Expr.to_string just_2.p)
-                                  )
-                            );
-                          None
-                        )
-                        else
-                          let is_closed_relab_equiv_writes =
-                            is_closed_relab_equiv elab_ctx statex relab pred_1
-                              pred_2 just_1.p just_1.w just_2.p just_2.w
-                          in
-                            if not is_closed_relab_equiv_writes then (
-                              if is_trace then
-                                Logs_safe.debug (fun m ->
-                                    m
-                                      "Relabeling failed writes equivalence.\n\
-                                       \tW1: %d\n\
-                                       \tW2: %d"
-                                      just_1.w.label just_2.w.label
-                                );
-                              None
-                            )
-                            else
-                              let is_closed_relab_equiv_origins =
-                                USet.for_all
-                                  (fun s ->
-                                    let o1 =
-                                      Hashtbl.find elab_ctx.structure.origin s
-                                    in
-                                      match Hashtbl.find_opt relab s with
-                                      | Some s' ->
-                                          let o2 =
-                                            Hashtbl.find
-                                              elab_ctx.structure.origin s'
-                                          in
-                                          (* Structure lookup, for the
-                                             same reason as in
-                                             is_closed_relab_equiv: no
-                                             justification for an
-                                             arbitrary origin event. *)
-                                          let e1 =
-                                            Hashtbl.find
-                                              elab_ctx.structure.events o1
-                                          in
-                                          let e2 =
-                                            Hashtbl.find
-                                              elab_ctx.structure.events o2
-                                          in
-                                            is_closed_relab_equiv elab_ctx
-                                              statex relab pred_1 pred_2
-                                              just_1.p e1 just_2.p e2
-                                      | None -> true
-                                  )
-                                  just_1.d
-                              in
-                                if not is_closed_relab_equiv_origins then (
-                                  if is_trace then
-                                    Logs_safe.debug (fun m ->
-                                        m
-                                          "Relabeling failed origins \
-                                           equivalence.\n\
-                                           \tW1: %d\n\
-                                           \tW2: %d"
-                                          just_1.w.label just_2.w.label
-                                    );
-                                  None
+                      )
+                      else
+                        let is_closed_relab_equiv_writes =
+                          is_closed_relab_equiv elab_ctx statex relab pred_1
+                            pred_2 just_1.p just_1.w just_2.p just_2.w
+                        in
+                          if not is_closed_relab_equiv_writes then (
+                            if is_trace then
+                              Logs_safe.debug (fun m ->
+                                  m
+                                    "Relabeling failed writes equivalence.\n\
+                                     \tW1: %d\n\
+                                     \tW2: %d"
+                                    just_1.w.label just_2.w.label
+                              );
+                            None
+                          )
+                          else
+                            let is_closed_relab_equiv_origins =
+                              USet.for_all
+                                (fun s ->
+                                  let o1 =
+                                    Hashtbl.find elab_ctx.structure.origin s
+                                  in
+                                    match Hashtbl.find_opt relab s with
+                                    | Some s' ->
+                                        let o2 =
+                                          Hashtbl.find
+                                            elab_ctx.structure.origin s'
+                                        in
+                                        (* Structure lookup, for the
+                                           same reason as in
+                                           is_closed_relab_equiv: no
+                                           justification for an
+                                           arbitrary origin event. *)
+                                        let e1 =
+                                          Hashtbl.find
+                                            elab_ctx.structure.events o1
+                                        in
+                                        let e2 =
+                                          Hashtbl.find
+                                            elab_ctx.structure.events o2
+                                        in
+                                          is_closed_relab_equiv elab_ctx
+                                            statex relab pred_1 pred_2
+                                            just_1.p e1 just_2.p e2
+                                    | None -> true
                                 )
-                                else
-                                  let new_p_d =
-                                    List.map Expr.get_symbols disjunction
-                                    |> List.flatten
-                                    |> USet.of_list
-                                  in
-                                  let new_w_d =
-                                    Option.map Expr.get_symbols just_2.w.wval
-                                    |> Option.value ~default:[]
-                                    |> USet.of_list
-                                  in
-                                  let d = USet.union new_p_d new_w_d in
+                                just_1.d
+                            in
+                              if not is_closed_relab_equiv_origins then (
+                                if is_trace then
+                                  Logs_safe.debug (fun m ->
+                                      m
+                                        "Relabeling failed origins \
+                                         equivalence.\n\
+                                         \tW1: %d\n\
+                                         \tW2: %d"
+                                        just_1.w.label just_2.w.label
+                                  );
+                                None
+                              )
+                              else
+                                let new_p_d =
+                                  List.map Expr.get_symbols disjunction
+                                  |> List.flatten
+                                  |> USet.of_list
+                                in
+                                let new_w_d =
+                                  Option.map Expr.get_symbols just_2.w.wval
+                                  |> Option.value ~default:[]
+                                  |> USet.of_list
+                                in
+                                let d = USet.union new_p_d new_w_d in
 
-                                  Some
-                                    {
-                                      p = disjunction;
-                                      (* fwd and we need to be of just_2 as
-                                         we're checking if delta is on path
-                                         while generating executions *)
-                                      fwd = USet.clone just_2.fwd;
-                                      we = USet.clone just_2.we;
-                                      d;
-                                      w = just_2.w;
-                                    }
-                  in
-                    Landmark.exit inner_landmark;
-                    result
+                                Some
+                                  {
+                                    p = disjunction;
+                                    (* fwd and we need to be of just_2 as
+                                       we're checking if delta is on path
+                                       while generating executions *)
+                                    fwd = USet.clone just_2.fwd;
+                                    we = USet.clone just_2.we;
+                                    d;
+                                    w = just_2.w;
+                                  }
+                in
+                  Landmark_safe.exit process_relabeling_landmark;
+                  result
               )
               (USet.values relabs)
           in
@@ -1212,7 +1214,7 @@ end = struct
                   )
             );
 
-          Landmark.exit lift_elab_landmark;
+          Landmark_safe.exit lift_elab_landmark;
           lifted
       )
 end
@@ -1256,6 +1258,9 @@ end
 
 (** {1 Chained elaboration operations.} *)
 
+let batch_elaborations_landmark =
+  Landmark_safe.register "Elaborations.batch_elaborations"
+
 (** [batch_elaborations elab_ctx pre_justs] performs batch elaborations.
 
     Applies value assignment, forwarding, lifting, and weakening elaborations
@@ -1266,8 +1271,8 @@ end
     @return Promise of justifications after batch elaborations. *)
 let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
     elab_ctx pre_justs =
-  let landmark = Landmark.register "Elaborations.batch_elaborations" in
-    Landmark.enter landmark;
+  let landmark = batch_elaborations_landmark in
+    Landmark_safe.enter landmark;
 
     (* Create a domain pool only when parallelism is requested. *)
     let pool =
@@ -1430,27 +1435,17 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
 
       let run_elab_parallel ~just_to_string ~name p elab_fn optrace_fn new_justs
           justs =
-        (* memory barrier - settle context objects *)
-        let _ = Atomic.make 0 |> Atomic.get in
-        let promises =
-          List.map
-            (fun just ->
-              Lwt_domain.detach p
-                (fun () ->
-                  match elab_fn elab_ctx just with
-                  | result -> (just, result)
-                  | exception exn ->
-                      let bt = Printexc.get_raw_backtrace () in
-                        Printf.eprintf "Exception in domain for just: %s\n%s%!"
-                          (Printexc.to_string exn)
-                          (Printexc.raw_backtrace_to_string bt);
-                        Printexc.raise_with_backtrace exn bt
-                )
-                ()
-            )
-            justs
+        let elaborate just =
+          match elab_fn elab_ctx just with
+          | result -> (just, result)
+          | exception exn ->
+              let bt = Printexc.get_raw_backtrace () in
+                Printf.eprintf "Exception in domain for just: %s\n%s%!"
+                  (Printexc.to_string exn)
+                  (Printexc.raw_backtrace_to_string bt);
+                Printexc.raise_with_backtrace exn bt
         in
-          let* results = Lwt.all promises in
+          let* results = Parallel.map p elaborate justs in
             add_elab_results_to_optrace optrace_fn results;
             log_elab_fanout ~just_to_string ~name results;
             filter_elab_results new_justs results |> Lwt.return
@@ -1597,7 +1592,7 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
         );
 
         Option.iter Lwt_domain.teardown_pool pool;
-        Landmark.exit landmark;
+        Landmark_safe.exit landmark;
         Lwt.return (final_justs, derivations)
 
 (** [generate_justifications structure init_ppo] generates justifications.

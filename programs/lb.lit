@@ -1,0 +1,14 @@
+// Load buffering: each relaxed load may read the value the other thread
+// stores afterwards, because the stores depend on nothing. Allowed by sMRD,
+// and the shape lb-uaf.lit builds a use-after-free on top of.
+x := 0;
+y := 0;
+{
+  r0 := x;
+  y := 1
+} ||| {
+  r1 := y;
+  x := 1
+}
+%%
+allow (r0 = 1 && r1 = 1) [smrd]

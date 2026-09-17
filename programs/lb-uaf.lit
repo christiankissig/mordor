@@ -1,0 +1,29 @@
+// Load buffering carrying a use-after-free.
+//
+// The stores to x and y stay unconditional, so this is plain LB and not a
+// thin-air cycle: (r0, r1) = (1, 1) is allowed. On that outcome both guarded
+// branches run, so one thread frees the cell the other reads through, with
+// nothing ordering the two. Reaching it needs load->store reordering, which
+// run-based checkers for Rust (loom, Miri) do not explore, so neither can
+// report the bug. lb-uaf-fixed.lit is the one-line repair.
+rC := malloc(1);
+*rC := 0;
+x := 0;
+y := 0;
+{
+  r0 := x;
+  y := 1;
+  if (r0 = 1) {
+    free(rC);
+  }
+}
+|||
+{
+  r1 := y;
+  x := 1;
+  if (r1 = 1) {
+    rv := *rC;
+  }
+}
+%%
+allow (ub) [smrd]

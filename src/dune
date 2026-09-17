@@ -36,10 +36,12 @@
   ir_context_utils
   isa_export
   justifications
+  landmark_safe
   lexer
   lwt_utils
   logs_safe
   monad
+  parallel
   parse
   parser
   parser_state
