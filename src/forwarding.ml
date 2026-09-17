@@ -122,13 +122,16 @@ end = struct
         (** Exact-match cache mapping keys to computed values. *)
     by_context :
       ( (int * int) uset * (int * int) uset,
-        (expr list * ppo_cache_value) list
+        (expr list * expr uset * ppo_cache_value) list
       )
       Hashtbl.t;
         (** Context-indexed cache for subset lookups.
 
             Groups cache entries by context, allowing lookup of entries whose
-            predicates are subsets of a query. *)
+            predicates are subsets of a query. Each entry carries its
+            predicates twice, as the list that keys it and as the set the
+            subset test needs: building that set per entry per lookup was the
+            bulk of what {!get_subset} did, and it never changes. *)
     mutex : Mutex.t;
         (** Mutex protecting concurrent access to [exact] and [by_context]. *)
   }
@@ -140,15 +143,7 @@ end = struct
       mutex = Mutex.create ();
     }
 
-  let with_lock cache f =
-    Mutex.lock cache.mutex;
-    match f () with
-    | result ->
-        Mutex.unlock cache.mutex;
-        result
-    | exception exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
+  let with_lock cache f = Mutex.protect cache.mutex f
 
   let clear cache =
     with_lock cache (fun () ->
@@ -164,41 +159,40 @@ end = struct
           | None -> { ppo = None; ppo_loc = None }
       )
 
+  (** [get_subset cache con predicates] is the cached entry under [con] with
+      the largest ppo among those whose predicates [predicates] subsumes, or
+      [None] if there is no such entry.
+
+      Only the bucket lookup is taken under the lock. Picking among a context's
+      entries is a subset test against each and a comparison of their sizes,
+      and doing that while holding the cache made every other domain wait
+      through it. Reading the bucket out is safe because its cells are
+      immutable and {!set_field} replaces the whole list: a reader sees the
+      bucket either before an update or after it, never partway through. *)
   let get_subset cache con predicates =
-    with_lock cache (fun () ->
-        match Hashtbl.find_opt cache.by_context con with
-        | None -> None
-        | Some entries -> (
-            let pred_set = USet.of_list predicates in
-            let matching =
-              List.filter
-                (fun (preds, _) -> USet.subset (USet.of_list preds) pred_set)
-                entries
-            in
-              match matching with
-              | [] -> None
-              | _ ->
-                  let sorted =
-                    List.sort
-                      (fun (_, v1) (_, v2) ->
-                        let size1 =
-                          match v1.ppo with
-                          | Some s -> USet.size s
-                          | None -> 0
-                        in
-                        let size2 =
-                          match v2.ppo with
-                          | Some s -> USet.size s
-                          | None -> 0
-                        in
-                          compare size2 size1
-                      )
-                      matching
-                  in
-                  let v = snd (List.hd sorted) in
-                    Some v
-          )
-    )
+    let entries =
+      with_lock cache (fun () ->
+          Hashtbl.find_opt cache.by_context con |> Option.value ~default:[]
+      )
+    in
+    let pred_set = USet.of_list predicates in
+    let ppo_size v =
+      match v.ppo with
+      | Some s -> USet.size s
+      | None -> 0
+    in
+      (* A larger ppo is a better base, since the caller filters it down rather
+         than adding to it. Where two entries tie this keeps the one earliest
+         in the bucket, which the sort it replaces left unspecified. *)
+      List.fold_left
+        (fun best (_, entry_preds, v) ->
+          if not (USet.subset entry_preds pred_set) then best
+          else
+            match best with
+            | Some b when ppo_size b >= ppo_size v -> best
+            | _ -> Some v
+        )
+        None entries
 
   (** [set_field cache con predicates field value] internal helper for updating
       cache fields.
@@ -212,27 +206,32 @@ end = struct
       @param value The new value.
       @return The value that was stored. *)
   let set_field cache con predicates field value =
-    with_lock cache (fun () ->
-        let key = { con; predicates } in
-        let current =
-          match Hashtbl.find_opt cache.exact key with
-          | Some v -> v
-          | None -> { ppo = None; ppo_loc = None }
-        in
-        let updated = field current value in
-          Hashtbl.replace cache.exact key updated;
-
-          (* Update by_context index *)
-          let entries =
-            match Hashtbl.find_opt cache.by_context con with
-            | Some e -> e
-            | None -> []
+    (* Built before the lock is taken, for the same reason get_subset no longer
+       builds one per entry: it depends on nothing the cache holds. *)
+    let pred_set = USet.of_list predicates in
+      with_lock cache (fun () ->
+          let key = { con; predicates } in
+          let current =
+            match Hashtbl.find_opt cache.exact key with
+            | Some v -> v
+            | None -> { ppo = None; ppo_loc = None }
           in
-          let filtered = List.filter (fun (p, _) -> p <> predicates) entries in
-            Hashtbl.replace cache.by_context con
-              ((predicates, updated) :: filtered)
-    );
-    value
+          let updated = field current value in
+            Hashtbl.replace cache.exact key updated;
+
+            (* Update by_context index *)
+            let entries =
+              match Hashtbl.find_opt cache.by_context con with
+              | Some e -> e
+              | None -> []
+            in
+            let filtered =
+              List.filter (fun (p, _, _) -> p <> predicates) entries
+            in
+              Hashtbl.replace cache.by_context con
+                ((predicates, pred_set, updated) :: filtered)
+      );
+      value
 
   let set_ppo cache con predicates value =
     set_field cache con predicates
@@ -309,55 +308,22 @@ end = struct
     { good = USet.create (); bad = USet.create (); mutex = Mutex.create () }
 
   let clear cache =
-    Mutex.lock cache.mutex;
-    ( try
+    Mutex.protect cache.mutex (fun () ->
         USet.clear cache.good |> ignore;
         USet.clear cache.bad |> ignore
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    );
-    Mutex.unlock cache.mutex
+    )
 
   let is_good cache fwd we =
-    Mutex.lock cache.mutex;
-    let result =
-      try USet.mem cache.good (fwd, we)
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    in
-      Mutex.unlock cache.mutex;
-      result
+    Mutex.protect cache.mutex (fun () -> USet.mem cache.good (fwd, we))
 
   let is_bad cache fwd we =
-    Mutex.lock cache.mutex;
-    let result =
-      try USet.mem cache.bad (fwd, we)
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    in
-      Mutex.unlock cache.mutex;
-      result
+    Mutex.protect cache.mutex (fun () -> USet.mem cache.bad (fwd, we))
 
   let mark_good cache fwd we =
-    Mutex.lock cache.mutex;
-    ( try USet.add cache.good (fwd, we) |> ignore
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    );
-    Mutex.unlock cache.mutex
+    Mutex.protect cache.mutex (fun () -> USet.add cache.good (fwd, we) |> ignore)
 
   let mark_bad cache fwd we =
-    Mutex.lock cache.mutex;
-    ( try USet.add cache.bad (fwd, we) |> ignore
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    );
-    Mutex.unlock cache.mutex
+    Mutex.protect cache.mutex (fun () -> USet.add cache.bad (fwd, we) |> ignore)
 end
 
 (** Precomputed PPO relations.

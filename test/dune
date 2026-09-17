@@ -46,7 +46,8 @@
  (modules
   test_integration
   test_integration_litmus_tests
-  test_integration_episodicity)
+  test_integration_episodicity
+  test_integration_parallel)
  (libraries
   mordor_lib
   landmarks

@@ -22,4 +22,5 @@ let () =
     [
       Test_integration_litmus_tests.suite_strict;
       Test_integration_episodicity.suite;
+      Test_integration_parallel.suite;
     ]

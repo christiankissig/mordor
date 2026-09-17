@@ -14,7 +14,6 @@ open Executions
 open Expr
 open Ir
 open Lwt.Syntax
-open Lwt_utils
 open Types
 open Uset
 
@@ -1378,19 +1377,16 @@ module AssertionChecker = struct
   let run_ub_validation_all executions structure =
     let all_ub_reasons = ref [] in
     let execution_results = ref [] in
-    let%lwt () =
-      lwt_piter
-        (fun execution ->
-          let ub_reasons = run_ub_validation_on_execution structure execution in
-            all_ub_reasons := ub_reasons @ !all_ub_reasons;
-            execution_results :=
-              { exec_id = execution.id; satisfied = false; ub_reasons }
-              :: !execution_results;
-            Lwt.return ()
-        )
-        executions
-    in
-      Lwt.return (!all_ub_reasons, !execution_results)
+    List.iter
+      (fun execution ->
+        let ub_reasons = run_ub_validation_on_execution structure execution in
+          all_ub_reasons := ub_reasons @ !all_ub_reasons;
+          execution_results :=
+            { exec_id = execution.id; satisfied = false; ub_reasons }
+            :: !execution_results
+      )
+      executions;
+    Lwt.return (!all_ub_reasons, !execution_results)
 
   (** [check_model_assertion model executions structure] checks model assertion.
 
@@ -1447,68 +1443,64 @@ module AssertionChecker = struct
       | _ -> Allow
     in
 
-    let%lwt () =
-      lwt_piter
-        (fun execution ->
-          let exec_satisfied, local_ub_reasons, detail_opt =
-            PerExecutionChecker.check assertion execution structure satisfied
-              ~exhaustive:true
-          in
-            ub_reasons := local_ub_reasons @ !ub_reasons;
-            execution_results :=
-              {
-                exec_id = execution.id;
-                satisfied = exec_satisfied;
-                ub_reasons = local_ub_reasons;
-              }
-              :: !execution_results;
+    List.iter
+      (fun execution ->
+        let exec_satisfied, local_ub_reasons, detail_opt =
+          PerExecutionChecker.check assertion execution structure satisfied
+            ~exhaustive:true
+        in
+          ub_reasons := local_ub_reasons @ !ub_reasons;
+          execution_results :=
+            {
+              exec_id = execution.id;
+              satisfied = exec_satisfied;
+              ub_reasons = local_ub_reasons;
+            }
+            :: !execution_results;
 
-            (* Track assertion instance only for executions that witness/contradict *)
-            ( match detail_opt with
-            | Some detail ->
-                if outcome = Allow && exec_satisfied then
-                  (* Allow assertion witnessed by this execution *)
-                  let instance =
-                    AssertionInstanceTracking.create_witnessed execution.id
-                      detail
-                  in
-                    assertion_instances := instance :: !assertion_instances
-                else if outcome = Forbid && exec_satisfied then
-                  (* Forbid assertion contradicted by this execution *)
-                  let instance =
-                    AssertionInstanceTracking.create_contradicted execution.id
-                      detail
-                  in
-                    assertion_instances := instance :: !assertion_instances
-                  (* Otherwise: execution doesn't witness/contradict, don't track it *)
-            | None ->
-                (* For UB assertions (detail_opt is None), create instances based
-                   on UB presence so the UI can navigate to the execution graph. *)
-                if local_ub_reasons <> [] then
-                  let detail =
-                    AssertionInstanceTracking.create_instance_detail None
-                      structure execution true
-                  in
-                    if outcome = Allow then
-                      (* allow (ub) witnessed by this UB execution *)
-                      let instance =
-                        AssertionInstanceTracking.create_witnessed execution.id
-                          detail
-                      in
-                        assertion_instances := instance :: !assertion_instances
-                    else
-                      (* forbid (ub) contradicted by this UB execution *)
-                      let instance =
-                        AssertionInstanceTracking.create_contradicted
-                          execution.id detail
-                      in
-                        assertion_instances := instance :: !assertion_instances
-            );
-
-            Lwt.return ()
-        )
-        executions
-    in
+          (* Track assertion instance only for executions that witness/contradict *)
+          ( match detail_opt with
+          | Some detail ->
+              if outcome = Allow && exec_satisfied then
+                (* Allow assertion witnessed by this execution *)
+                let instance =
+                  AssertionInstanceTracking.create_witnessed execution.id
+                    detail
+                in
+                  assertion_instances := instance :: !assertion_instances
+              else if outcome = Forbid && exec_satisfied then
+                (* Forbid assertion contradicted by this execution *)
+                let instance =
+                  AssertionInstanceTracking.create_contradicted execution.id
+                    detail
+                in
+                  assertion_instances := instance :: !assertion_instances
+                (* Otherwise: execution doesn't witness/contradict, don't track it *)
+          | None ->
+              (* For UB assertions (detail_opt is None), create instances based
+                 on UB presence so the UI can navigate to the execution graph. *)
+              if local_ub_reasons <> [] then
+                let detail =
+                  AssertionInstanceTracking.create_instance_detail None
+                    structure execution true
+                in
+                  if outcome = Allow then
+                    (* allow (ub) witnessed by this UB execution *)
+                    let instance =
+                      AssertionInstanceTracking.create_witnessed execution.id
+                        detail
+                    in
+                      assertion_instances := instance :: !assertion_instances
+                  else
+                    (* forbid (ub) contradicted by this UB execution *)
+                    let instance =
+                      AssertionInstanceTracking.create_contradicted
+                        execution.id detail
+                    in
+                      assertion_instances := instance :: !assertion_instances
+          )
+      )
+      executions;
 
     Lwt.return
       (!satisfied, !ub_reasons, !execution_results, !assertion_instances)

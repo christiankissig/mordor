@@ -885,8 +885,30 @@ module CLI = struct
         " Set log level to Error (least verbose)"
       );
       ( "--threads",
-        Arg.Int (fun n -> state.num_threads <- n),
-        " Number of threads for parallel execution (default: 1)"
+        (* Unchecked, this reached Domain.spawn: --threads 300 died with
+           "failed to allocate domain" after the analysis had started, and
+           --threads -4 ran sequentially without saying so. *)
+        Arg.Int
+          (fun n ->
+            if n < 1 then
+              raise
+                (Arg.Bad
+                   (Printf.sprintf "--threads: expected a positive count, got %d"
+                      n
+                   )
+                );
+            let cap = Domain.recommended_domain_count () in
+              if n > cap then (
+                Printf.eprintf
+                  "mordor: --threads %d is more than the %d domains this \
+                   machine recommends; using %d\n%!"
+                  n cap cap;
+                state.num_threads <- cap
+              )
+              else state.num_threads <- n
+          ),
+        " Number of threads for parallel execution (default: 1, capped at \
+         the machine's recommended domain count)"
       );
       (* Loop semantics - these are mutually exclusive *)
       ( "--symbolic-loop-semantics",

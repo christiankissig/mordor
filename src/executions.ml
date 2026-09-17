@@ -1955,14 +1955,12 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
 
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions ~include_rf ~compute ?compare_models ?admissions
-      ?model_executions structure fwd_es_ctx final_justs statex ~restrictions
+    Parallel.finalize_pool pool (fun () ->
+        generate_executions ~include_rf ~compute ?compare_models ?admissions
+          ?model_executions structure fwd_es_ctx final_justs statex
+          ~restrictions
+    )
   in
-
-  ( match pool with
-  | Some p -> Lwt_domain.teardown_pool p
-  | None -> ()
-  );
 
   Logs_safe.debug (fun m ->
       m "Executions generated: %d" (List.length executions)

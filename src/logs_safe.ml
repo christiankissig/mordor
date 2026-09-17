@@ -13,9 +13,7 @@ let mutex = Mutex.create ()
 
 (** [with_lock f] runs [f ()] with the logging mutex held, releasing it even if
     [f] raises. *)
-let with_lock f =
-  Mutex.lock mutex;
-  Fun.protect ~finally:(fun () -> Mutex.unlock mutex) f
+let with_lock f = Mutex.protect mutex f
 
 let debug msgf =
   if Logs.level () >= Some Logs.Debug then with_lock (fun () -> Logs.debug msgf)

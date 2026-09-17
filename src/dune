@@ -38,7 +38,6 @@
   justifications
   landmark_safe
   lexer
-  lwt_utils
   logs_safe
   monad
   parallel
