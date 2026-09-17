@@ -1269,10 +1269,9 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
   let landmark = batch_elaborations_landmark in
     Landmark_safe.enter landmark;
 
-    (* Create a domain pool only when parallelism is requested. *)
-    let pool =
-      if num_threads > 1 then Some (Lwt_domain.setup_pool num_threads) else None
-    in
+    (* The process's pool, shared with the executions phase, or None when no
+       parallelism was asked for. *)
+    let pool = Parallel.acquire ~num_threads in
 
     List.iter
       (fun just -> OpTrace.add elab_ctx.op_trace just PreJustification |> ignore)
@@ -1557,11 +1556,7 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
     in
 
     let just_cache = JustificationCache.create 1024 in
-      let* final_justs =
-        Parallel.finalize_pool pool (fun () ->
-            fixed_point [] pre_justs just_cache
-        )
-      in
+      let* final_justs = fixed_point [] pre_justs just_cache in
         (* The derivation of each justification, kept rather than dropped with
            the elaboration context: it is the part that explains a surprising
            result, and it reached exactly one debug line (github #80). *)

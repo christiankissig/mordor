@@ -58,25 +58,52 @@ let split ~size items =
     on the returned promise, so the items after it in that chunk do not run.
     Dispatching per item ran all of them before failing; either way the
     exception reaches the caller, and here it reaches it sooner. *)
-(** [finalize_pool pool f] runs [f ()] and tears [pool] down once its promise
-    settles, whether that is with a value or with an exception.
+(** {1 The pool} *)
 
-    Settling is the earliest the pool is finished with, rather than the end of
-    whatever function set it up, so the domains go back sooner on the ordinary
-    path.
+(** The pool this process dispatches on, and the thread count it was built for.
 
-    On the failure path this is currently hygiene rather than a fix for
-    anything that bites. A leaked pool does not hang the process -- the runtime
-    does not wait for spawned domains at shutdown -- and the one caller that
-    could leak repeatedly, [--all-litmus-tests], stops at the first test that
-    raises. What it guards is the shape of the thing: OCaml stops at 128
-    domains, the web server already turns a failed analysis into a message and
-    carries on, and it leaks a pool per failure the day it is given a thread
-    count to pass down. *)
-let finalize_pool pool f =
-  Lwt.finalize f (fun () ->
-      Option.iter Lwt_domain.teardown_pool pool;
-      Lwt.return_unit
+    A run used to set up a pool in [Elaborations.batch_elaborations] and
+    another in [Executions.calculate_dependencies], and tear each down again.
+    Spawning a domain costs a few milliseconds, so a run paid for
+    [2 * num_threads] of them before doing any work: on spinlock-1, which has
+    no work to speak of, that was the whole runtime, growing with the thread
+    count from 0.02s at one to 0.09s at eight. Over a directory of litmus
+    tests, which is one process and hundreds of programs, it was paid on every
+    one of them.
+
+    One pool, kept for the process, is spawned once however many programs the
+    process analyses. It also removes the leak that {!Lwt.finalize} was
+    guarding: there is no per-phase teardown left for an exception to skip. *)
+let pool_mutex = Mutex.create ()
+
+let pool_in_use : (int * Lwt_domain.pool) option ref = ref None
+
+(** [acquire ~num_threads] is the process's pool, built if this is the first
+    call and rebuilt if the thread count has changed since the last one, or
+    [None] when [num_threads] is 1 and the caller should stay sequential. *)
+let acquire ~num_threads =
+  if num_threads <= 1 then None
+  else
+    Mutex.protect pool_mutex (fun () ->
+        match !pool_in_use with
+        | Some (n, pool) when n = num_threads -> Some pool
+        | existing ->
+            Option.iter (fun (_, pool) -> Lwt_domain.teardown_pool pool) existing;
+            let pool = Lwt_domain.setup_pool num_threads in
+              pool_in_use := Some (num_threads, pool);
+              Some pool
+    )
+
+(** Handing the domains back at exit rather than leaving the runtime to drop
+    them. Nothing depends on this -- a pool left standing does not hold the
+    process open -- but a pool that is torn down is one that cannot be holding
+    anything when the next thing looks. *)
+let () =
+  at_exit (fun () ->
+      Mutex.protect pool_mutex (fun () ->
+          Option.iter (fun (_, pool) -> Lwt_domain.teardown_pool pool) !pool_in_use;
+          pool_in_use := None
+      )
   )
 
 let map pool f items =
