@@ -359,23 +359,22 @@ let cache_mutex = Mutex.create ()
 
 let quick_check_cached exprs =
   let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
-  (* Check cache without holding lock (optimistic read) *)
-
-  Mutex.lock cache_mutex;
-  let cached_result = ConjunctionCache.find_opt quick_check_cache exprs in
-    Mutex.unlock cache_mutex;
-    let result =
-      match cached_result with
-      | Some result -> result
-      | None ->
-          let result = quick_check exprs in
-            Mutex.lock cache_mutex;
-            ConjunctionCache.add quick_check_cache exprs result;
-            Mutex.unlock cache_mutex;
-            result
-    in
-
-    result
+  (* The Z3 call stays outside the lock: a miss that two domains take at once
+     costs a duplicated query, which is cheaper than holding the cache while
+     solving. *)
+  let cached_result =
+    Mutex.protect cache_mutex (fun () ->
+        ConjunctionCache.find_opt quick_check_cache exprs
+    )
+  in
+    match cached_result with
+    | Some result -> result
+    | None ->
+        let result = quick_check exprs in
+          Mutex.protect cache_mutex (fun () ->
+              ConjunctionCache.add quick_check_cache exprs result
+          );
+          result
 
 (** Simplified satisfiability check.
 

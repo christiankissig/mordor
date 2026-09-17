@@ -140,15 +140,7 @@ end = struct
       mutex = Mutex.create ();
     }
 
-  let with_lock cache f =
-    Mutex.lock cache.mutex;
-    match f () with
-    | result ->
-        Mutex.unlock cache.mutex;
-        result
-    | exception exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
+  let with_lock cache f = Mutex.protect cache.mutex f
 
   let clear cache =
     with_lock cache (fun () ->
@@ -309,55 +301,22 @@ end = struct
     { good = USet.create (); bad = USet.create (); mutex = Mutex.create () }
 
   let clear cache =
-    Mutex.lock cache.mutex;
-    ( try
+    Mutex.protect cache.mutex (fun () ->
         USet.clear cache.good |> ignore;
         USet.clear cache.bad |> ignore
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    );
-    Mutex.unlock cache.mutex
+    )
 
   let is_good cache fwd we =
-    Mutex.lock cache.mutex;
-    let result =
-      try USet.mem cache.good (fwd, we)
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    in
-      Mutex.unlock cache.mutex;
-      result
+    Mutex.protect cache.mutex (fun () -> USet.mem cache.good (fwd, we))
 
   let is_bad cache fwd we =
-    Mutex.lock cache.mutex;
-    let result =
-      try USet.mem cache.bad (fwd, we)
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    in
-      Mutex.unlock cache.mutex;
-      result
+    Mutex.protect cache.mutex (fun () -> USet.mem cache.bad (fwd, we))
 
   let mark_good cache fwd we =
-    Mutex.lock cache.mutex;
-    ( try USet.add cache.good (fwd, we) |> ignore
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    );
-    Mutex.unlock cache.mutex
+    Mutex.protect cache.mutex (fun () -> USet.add cache.good (fwd, we) |> ignore)
 
   let mark_bad cache fwd we =
-    Mutex.lock cache.mutex;
-    ( try USet.add cache.bad (fwd, we) |> ignore
-      with exn ->
-        Mutex.unlock cache.mutex;
-        raise exn
-    );
-    Mutex.unlock cache.mutex
+    Mutex.protect cache.mutex (fun () -> USet.add cache.bad (fwd, we) |> ignore)
 end
 
 (** Precomputed PPO relations.

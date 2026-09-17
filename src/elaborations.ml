@@ -41,9 +41,10 @@ module OpTraceTable = Hashtbl.Make (JustificationCacheKey)
 
 (** Thread-safe wrapper around [OpTraceTable].
 
-    Concurrent elaboration passes write to the trace from multiple Lwt threads.
-    All mutations are serialised through an [Lwt_mutex] so that interleaving at
-    Lwt yield points cannot corrupt the underlying hash table. *)
+    Every write happens on the main domain, once a round's elaborations have
+    come back: the workers return their results and this records them. The
+    mutex is kept so that the table stays safe if a write ever moves into an
+    elaborator, since a [Hashtbl] raced from two domains corrupts silently. *)
 module OpTrace = struct
   type 'a t = { tbl : 'a OpTraceTable.t; mutex : Mutex.t }
 
@@ -51,17 +52,11 @@ module OpTrace = struct
 
   (** [add t key value] appends [value] for [key] under the mutex. *)
   let add t key value =
-    Mutex.lock t.mutex;
-    OpTraceTable.add t.tbl key value;
-    Mutex.unlock t.mutex;
-    ()
+    Mutex.protect t.mutex (fun () -> OpTraceTable.add t.tbl key value)
 
   (** [find_opt t key] looks up [key] under the mutex. *)
   let find_opt t key =
-    Mutex.lock t.mutex;
-    let result = OpTraceTable.find_opt t.tbl key in
-      Mutex.unlock t.mutex;
-      result
+    Mutex.protect t.mutex (fun () -> OpTraceTable.find_opt t.tbl key)
 end
 
 (** Elaboration context containing the symbolic event structure and caches.
