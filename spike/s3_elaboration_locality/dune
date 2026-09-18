@@ -1,0 +1,7 @@
+; S3 (#16) -- elaboration per thread against elaboration of the whole. Run
+; from the repo root:
+;   dune exec spike/s3_elaboration_locality/s3_elaboration_locality.exe -- FILE ...
+
+(executable
+ (name s3_elaboration_locality)
+ (libraries mordor_lib lwt lwt.unix unix))

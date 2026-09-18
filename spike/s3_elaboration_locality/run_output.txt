@@ -1,0 +1,404 @@
+litmus-tests/3.2W.lit threads 6 whole 21 per-thread 21 missing 0 extra 0  join-aware same 
+litmus-tests/atomics/mp-atomic2.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/atomics/mp-atomic.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/additional_inventintload.lit threads 2 whole 124 per-thread 124 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/additional_nonlb.lit threads 3 whole 50 per-thread 50 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/additional_twosource.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing10.lit single-threaded
+litmus-tests/avoidoota/listing11.lit single-threaded
+litmus-tests/avoidoota/listing12.lit threads 2 whole 66 per-thread 66 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing13.lit threads 2 whole 85 per-thread 85 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing14.lit threads 2 whole 74 per-thread 74 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing15.lit threads 2 whole 207 per-thread 207 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing16.lit threads 2 whole 91 per-thread 91 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing17.lit threads 2 whole 55 per-thread 55 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing18.lit threads 3 whole 33 per-thread 33 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing19.lit threads 3 whole 37 per-thread 37 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing1.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing20.lit threads 2 whole 338 per-thread 338 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing21.lit threads 2 whole 43 per-thread 43 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing22.lit threads 3 whole 35 per-thread 35 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing23.lit threads 3 whole 75 per-thread 75 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing24.lit threads 3 whole 65 per-thread 65 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing2_5.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing25.lit threads 2 whole 26 per-thread 26 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing2_5pwg.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing26.lit threads 2 whole 32 per-thread 32 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing27_allow.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing27_forbid.lit threads 2 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing3.lit threads 2 whole 30 per-thread 30 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing7.lit threads 2 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing8.lit threads 2 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests/avoidoota/listing9.lit threads 2 whole 7 per-thread 7 missing 0 extra 0  join-aware same 
+litmus-tests/basic/coproduct-exns.lit single-threaded
+litmus-tests/basic/lb.lit threads 3 whole 17 per-thread 17 missing 0 extra 0  join-aware same 
+litmus-tests/basic.lit.lit single-threaded
+litmus-tests/basic/par-comp.lit threads 2 whole 0 per-thread 0 missing 0 extra 0  join-aware same 
+litmus-tests/basic/rw.lit single-threaded
+litmus-tests/c20/rs-example.lit threads 3 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-eadd.lit threads 3 whole 37 per-thread 37 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est-atomic.lit threads 3 whole 34 per-thread 34 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est.lit threads 3 whole 34 per-thread 34 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add.lit threads 2 whole 32 per-thread 32 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-st.lit threads 2 whole 72 per-thread 72 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-eadd.lit threads 3 whole 13 per-thread 13 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-est.lit threads 3 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd-atomics.lit threads 3 whole 23 per-thread 23 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd.lit threads 3 whole 23 per-thread 23 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est-atomics.lit threads 3 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est.lit threads 3 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-strel.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/models/cpp-release-sequences/RS+cpp20.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/properties/atomicity-mca/IRIW+scfences.lit threads 4 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/properties/global-transformations/thread-inlining/opt.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/properties/global-transformations/thread-inlining/src.lit threads 3 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests-cpp/properties/reasoning-guarantees/external-drf/MP+rlx-race.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/esop_problem/cse.lit threads 2 whole 52 per-thread 52 missing 0 extra 0  join-aware same 
+litmus-tests/esop_problem/lb+ctrldat+ctrl-single.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests/esop_problem/lb+ctrldata+ctrl-double.lit threads 2 whole 30 per-thread 30 missing 0 extra 0  join-aware same 
+litmus-tests/esop_problem/lb+ctrldata+po.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests/esop_problem/lb+datas.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/esop_problem/lb.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/esop_problem/mp.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/esop_problem/sb.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/fowm2024/load intro - no aliasing.lit threads 2 whole 26 per-thread 26 missing 0 extra 0  join-aware same 
+litmus-tests/fowm2024/load intro - potential aliasing.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/fowm2024/nullptr - no use.lit threads 2 whole 2 per-thread 2 missing 0 extra 0  join-aware same 
+litmus-tests/fowm2024/nullptr - use.lit threads 2 whole 2 per-thread 2 missing 0 extra 0  join-aware same 
+litmus-tests/fwd/ra/lift_rel.lit threads 2 whole 26 per-thread 26 missing 0 extra 0  join-aware same 
+litmus-tests/fwd/ra/lift_relrel.lit threads 2 whole 26 per-thread 26 missing 0 extra 0  join-aware same 
+litmus-tests/fwd/rlx/lift_F1r.lit threads 2 whole 95 per-thread 95 missing 0 extra 0  join-aware same 
+litmus-tests/fwd/rlx/lift_F1w.lit threads 2 whole 87 per-thread 87 missing 0 extra 0  join-aware same 
+litmus-tests/fwd/rlx/lift_F1wr.lit threads 2 whole 59 per-thread 59 missing 0 extra 0  join-aware same 
+litmus-tests/fwd/rlx/lift_F2w.lit threads 2 whole 34 per-thread 34 missing 0 extra 0  join-aware same 
+litmus-tests/fwd/rlx/lift.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/imm/FADD RMW Atomicity.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/imm/LB+falsedep+Fsc.lit threads 2 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests/ISO/1-MP.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/ISO/2-MP+rel+acq.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/ISO/3-LB.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/ISO/4-LB+deps.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/ISO/5-LB+false-dep.lit threads 2 whole 28 per-thread 28 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC10.lit threads 4 whole 17 per-thread 17 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC11.lit threads 2 whole 118 per-thread 118 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC12.lit threads 2 whole 168 per-thread 168 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC13.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC14.lit threads 2 whole 127 per-thread 127 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC15.lit threads 3 whole 142 per-thread 142 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC16.lit threads 2 whole 7 per-thread 7 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC17-left.lit single-threaded
+litmus-tests-jmm/jctc/JCTC17.lit threads 2 whole 89 per-thread 89 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC17-smaller.lit single-threaded
+litmus-tests-jmm/jctc/JCTC18.lit threads 2 whole 77 per-thread 77 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC19.lit threads 3 whole 27 per-thread 25 missing 8 extra 6 +Forwarding:5 +ValueAssignElab:1 Forwarding:8 join-aware same executions: DIFFER (19 whole, 0 per-thread), verdict invalid/invalid; join-aware: justifications same, executions same, verdict invalid
+litmus-tests-jmm/jctc/JCTC1.lit threads 2 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC20.lit threads 3 whole 27 per-thread 25 missing 8 extra 6 +Forwarding:5 +ValueAssignElab:1 Forwarding:8 join-aware same executions: DIFFER (19 whole, 0 per-thread), verdict invalid/invalid; join-aware: justifications same, executions same, verdict invalid
+litmus-tests-jmm/jctc/JCTC2.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC3.lit threads 3 whole 24 per-thread 24 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC4.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC5.lit threads 4 whole 35 per-thread 35 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC6.lit threads 2 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC7.lit threads 2 whole 45 per-thread 45 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC8b.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC8.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC9b.lit threads 3 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests-jmm/jctc/JCTC9.lit threads 3 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests/MP/MP+rel+acq.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/MP/MP.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/on_thin_air_reads19/ex3.5.lit threads 2 whole 17 per-thread 17 missing 0 extra 0  join-aware same 
+litmus-tests/on_thin_air_reads19/P1.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/on_thin_air_reads19/P2.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/on_thin_air_reads19/P3.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/on_thin_air_reads19/P4.lit threads 3 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/on_thin_air_reads19/P6.lit threads 3 whole 25 per-thread 25 missing 0 extra 0  join-aware same 
+litmus-tests/on_thin_air_reads19/s5.3.2.lit threads 2 whole 43 per-thread 43 missing 0 extra 0  join-aware same 
+litmus-tests/on_thin_air_reads19/TC7.lit threads 2 whole 45 per-thread 45 missing 0 extra 0  join-aware same 
+litmus-tests/on_thin_air_reads19/TC9a.lit threads 3 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests/opts/store-forward.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/own/atloc-alias.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/own/atloc-final-value.lit single-threaded
+litmus-tests/own/atloc-noalias.lit threads 2 whole 9 per-thread 9 missing 0 extra 0  join-aware same 
+litmus-tests/own/atloc-unwritten.lit single-threaded
+litmus-tests/own/coproductReorder.lit threads 2 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/own/co-witness-exported.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/own/co-witness-respects-po.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/own/ctrl_subsumed_by_data.lit single-threaded
+litmus-tests/own/DOMAIN.lit single-threaded
+litmus-tests/own/elideanddontobserve.lit threads 3 whole 54 per-thread 54 missing 0 extra 0  join-aware same 
+litmus-tests/own/expressionPreservingSubstitution.lit single-threaded
+litmus-tests/own/FreeRace2.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/own/FreeRace.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/own/JCTC12.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/own/join-continuation.lit threads 2 whole 20 per-thread 28 missing 10 extra 18 +Forwarding:16 +ValueAssignElab:2 Forwarding:10 join-aware same executions: DIFFER (12 whole, 0 per-thread), verdict valid/valid; join-aware: justifications same, executions same, verdict valid
+litmus-tests/own/LB+deps+const-smrd.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/own/LB+deps-smrd.lit threads 2 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/own/LF.lit single-threaded
+litmus-tests/own/nonatomic-store-no-sync.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/own/nonatomic-store-no-sync-relaxed.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/own/OOTA7.lit threads 2 whole 13 per-thread 13 missing 0 extra 0  join-aware same 
+litmus-tests/own/oota-direct-reuse.lit threads 2 whole 55 per-thread 55 missing 0 extra 0  join-aware same 
+litmus-tests/own/oota-forwarded-reread.lit threads 2 whole 91 per-thread 91 missing 0 extra 0  join-aware same 
+litmus-tests/own/ORI2.lit threads 3 whole 65 per-thread 65 missing 0 extra 0  join-aware same 
+litmus-tests/own/ORI.lit threads 3 whole 40 per-thread 40 missing 0 extra 0  join-aware same 
+litmus-tests/own/paper108.lit single-threaded
+litmus-tests/own/paper109.lit single-threaded
+litmus-tests/own/paper112F.lit single-threaded
+litmus-tests/own/paper113.lit single-threaded
+litmus-tests/own/paper115.lit single-threaded
+litmus-tests/own/ptr-overwrite-coherence.lit threads 2 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests/own/relaxed-store-elided.lit single-threaded
+litmus-tests/own/SB+sc.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/own/speculative_optimisation.lit threads 2 whole 52 per-thread 52 missing 0 extra 0  join-aware same 
+litmus-tests/own/sync/fence0lift.lit threads 2 whole 30 per-thread 30 missing 0 extra 0  join-aware same 
+litmus-tests/own/sync/fence1lift.lit threads 2 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests/own/sync/fence2lift.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests/own/sync/rel1lift.lit threads 2 whole 30 per-thread 30 missing 0 extra 0  join-aware same 
+litmus-tests/own/sync/rel2lift.lit threads 2 whole 30 per-thread 30 missing 0 extra 0  join-aware same 
+litmus-tests/own/sync/writeElision.lit threads 2 whole 54 per-thread 54 missing 0 extra 0  join-aware same 
+litmus-tests/own/sync/writeElisionRel.lit threads 2 whole 34 per-thread 34 missing 0 extra 0  join-aware same 
+litmus-tests/own/VA-unrelated-guard+const-smrd.lit threads 2 whole 17 per-thread 17 missing 0 extra 0  join-aware same 
+litmus-tests/own/VA-unrelated-guard-smrd.lit threads 2 whole 29 per-thread 29 missing 0 extra 0  join-aware same 
+litmus-tests/own/volatile-store-not-elided.lit single-threaded
+litmus-tests/own/VRA-JCTC1.lit threads 2 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests/pldi_repairing/IRIW+acq+sc.lit threads 4 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/pldi_repairing/LB+deps.lit threads 2 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/pldi_repairing/LB.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/pldi_repairing/RWC+syncs.lit threads 3 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/pldi_repairing/W+WRC.lit threads 3 whole 11 per-thread 11 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/ARM FADD.lit threads 2 whole 45 per-thread 45 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/FADD Example.lit threads 3 whole 12 per-thread 12 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/IRIW+Fsc+Fsc.lit threads 4 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/LB.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/Load buffering with acquire reads.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/Load buffering with release writes.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/MP+rel+acq.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/PSC.lit threads 3 whole 9 per-thread 9 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/rfi is not always preserved.lit threads 2 whole 49 per-thread 49 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bridging/RMW Atomicity.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bubbly/LB+deps.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bubbly/LB+false-deps.lit threads 2 whole 30 per-thread 30 missing 0 extra 0  join-aware same 
+litmus-tests/popl_bubbly/LB.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/popl_grounding/Coh-CYC (Soham).lit threads 2 whole 28 per-thread 28 missing 0 extra 0  join-aware same 
+litmus-tests/popl_grounding/Coh.lit threads 2 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/popl_grounding/Cwrites.lit threads 3 whole 15 per-thread 15 missing 0 extra 0  join-aware same 
+litmus-tests/popl_grounding/LBfd.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/popl_grounding/LB.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/popl_grounding/RNGb.lit single-threaded
+litmus-tests/popl_grounding/RNG.lit threads 3 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/2+2W.lit threads 2 whole 4 per-thread 4 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/ARM-weak.lit threads 3 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/COH.lit threads 2 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/CYC.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/LBaa/LBa'0.lit threads 2 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/LBaa/LBa'1.lit threads 2 whole 4 per-thread 4 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/LBa.lit threads 2 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/LBa'.lit threads 2 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/LBd.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/LBfd.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/LB.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/LBr.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/MP+fences.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/Page 7 Column 1.lit threads 3 whole 17 per-thread 17 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/Par-Inc.lit threads 2 whole 11 per-thread 11 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/SB+fences.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/popl_promising/SB.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests-promising/2+2W.lit threads 2 whole 4 per-thread 4 missing 0 extra 0  join-aware same 
+litmus-tests-promising/ARM-weak.lit threads 3 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests-promising/Coh-CYC (Promising).lit threads 2 whole 28 per-thread 28 missing 0 extra 0  join-aware same 
+litmus-tests-promising/COH.lit threads 2 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests-promising/CYC.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests-promising/LBaa/LBa'0.lit threads 2 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests-promising/LBaa/LBa'1.lit threads 2 whole 4 per-thread 4 missing 0 extra 0  join-aware same 
+litmus-tests-promising/LBa.lit threads 2 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests-promising/LBa'.lit threads 2 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests-promising/LBd.lit threads 2 whole 22 per-thread 22 missing 0 extra 0  join-aware same 
+litmus-tests-promising/LBfd.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests-promising/LB.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests-promising/LBr.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests-promising/MP+fences.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests-promising/Page 7 Column 1b.lit threads 3 whole 23 per-thread 23 missing 0 extra 0  join-aware same 
+litmus-tests-promising/Page 7 Column 1.lit threads 3 whole 17 per-thread 17 missing 0 extra 0  join-aware same 
+litmus-tests-promising/Par-Inc.lit threads 2 whole 11 per-thread 11 missing 0 extra 0  join-aware same 
+litmus-tests-promising/SB+fences.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests-promising/SB.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests-promising/Upd-Stuck.lit threads 3 whole 50 per-thread 50 missing 0 extra 0  join-aware same 
+litmus-tests/requests/0nONvMSw7 (MP).lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/requests/1MR_opBNP (2+2W with obs thread).lit threads 4 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/requests/2zm8LRQsJ (LB).lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/requests/Aj1vSoVpE (MP).lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/requests/E8OKvIVLN (2+2W with obs thread).lit threads 4 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/requests/leb0OUCUM (LB).lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/requests/oEk0xQtQy (CoWR).lit threads 3 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/requests/ptmsQeW4i (CoWR).lit threads 3 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/requests/XXLpA6s8E (LB).lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/requests/ZcUmGBDR9 (MP).lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests-review/esop_problem/RRE.lit threads 2 whole 32 per-thread 32 missing 0 extra 0  join-aware same 
+litmus-tests-review/on_thin_air_reads19/P5.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests-review/own/FWD-STRENGTHEN-LIFT.lit threads 2 whole 85 per-thread 85 missing 0 extra 0  join-aware same 
+litmus-tests-review/popl_bridging/Preserving detour.lit threads 3 whole 67 per-thread 67 missing 0 extra 0  join-aware same 
+litmus-tests-review/popl_grounding/FADD.lit threads 2 whole 86 per-thread 86 missing 0 extra 0  join-aware same 
+litmus-tests-review/popl_promising/Page 7 Column 1b.lit threads 3 whole 23 per-thread 23 missing 0 extra 0  join-aware same 
+litmus-tests-review/popl_promising/Upd-Stuck.lit threads 3 whole 50 per-thread 50 missing 0 extra 0  join-aware same 
+litmus-tests-review/rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests-review/sevcik_thesis/Skip/LB+locks.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests-review/symmrd/LB+UB+data+z.lit threads 2 whole 41 per-thread 41 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/ra-sra-wra/2+2W+rel+acq.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/ra-sra-wra/CAS-both+rel+acq.lit threads 2 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/ra-sra-wra/Oscillating.lit threads 3 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/ra-sra-wra/SF.lit threads 2 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/ra-sra-wra/WW.lit threads 2 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/rc11-rc17/LB.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/rc11-rc17/RS17.lit threads 3 whole 34 per-thread 34 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/rc11-rc17/uaf-bug.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/sc-tso/IRIW.lit threads 4 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/sc-tso/SB+cas.lit threads 2 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/sc-tso/SB+failed-cas.lit threads 2 whole 20 per-thread 20 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/sc-tso/SB+fence.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/sc-tso/SB+fences.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/sc-tso/SB.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/sessions/Monotonic-read.lit threads 2 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/steinke-nutt/Cross-own.lit threads 2 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/steinke-nutt/MP.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/steinke-nutt/Oscillating.lit threads 3 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/steinke-nutt/Readers-disagree.lit threads 4 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/steinke-nutt/Revised-order.lit threads 2 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/steinke-nutt/WRC.lit threads 3 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/models/steinke-nutt/Writer-reversed.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit threads 4 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit threads 4 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rel+acq.lit threads 4 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit threads 4 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit threads 3 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit threads 3 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit threads 3 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit threads 3 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rlx.lit threads 3 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/elimination/load-store/opt.lit single-threaded
+litmus-tests/rmm-zoo/properties/elimination/load-store/src.lit single-threaded
+litmus-tests/rmm-zoo/properties/elimination/store-store/opt.lit single-threaded
+litmus-tests/rmm-zoo/properties/elimination/store-store/src.lit single-threaded
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/opt.lit single-threaded
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/src.lit single-threaded
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/opt.lit single-threaded
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/src.lit single-threaded
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/opt.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/src.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rel+acq-drf.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/rmm-zoo/properties/reordering/load-load/opt.lit single-threaded
+litmus-tests/rmm-zoo/properties/reordering/load-load/src.lit single-threaded
+litmus-tests/rmm-zoo/properties/reordering/load-store/opt.lit single-threaded
+litmus-tests/rmm-zoo/properties/reordering/load-store/src.lit single-threaded
+litmus-tests/rmm-zoo/properties/reordering/store-load/opt.lit single-threaded
+litmus-tests/rmm-zoo/properties/reordering/store-load/src.lit single-threaded
+litmus-tests/rmm-zoo/properties/reordering/store-store/opt.lit single-threaded
+litmus-tests/rmm-zoo/properties/reordering/store-store/src.lit single-threaded
+litmus-tests/rmw/cas_acqrel_failure_reorder.lit threads 2 whole 9 per-thread 9 missing 0 extra 0  join-aware same 
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREA.lit single-threaded
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREB.lit single-threaded
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (b).lit threads 2 whole 39 per-thread 39 missing 0 extra 0  join-aware same 
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIA.lit single-threaded
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIB.lit single-threaded
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIC.lit single-threaded
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction.lit threads 2 whole 45 per-thread 45 missing 0 extra 0  join-aware same 
+litmus-tests/sevcik_thesis/LB.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/sevcik_thesis/MP.lit threads 2 whole 21 per-thread 21 missing 0 extra 0  join-aware same 
+litmus-tests/sevcik_thesis/Redundant Read after Read Elimination.lit threads 2 whole 52 per-thread 52 missing 0 extra 0  join-aware same 
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERA.lit single-threaded
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERB.lit single-threaded
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit single-threaded
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit single-threaded
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RA.lit single-threaded
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RB.lit single-threaded
+litmus-tests/sevcik_thesis/Roach Motel Semantics.lit threads 4 whole 45 per-thread 45 missing 0 extra 0  join-aware same 
+litmus-tests/sevcik_thesis/Skip/Redundant Write after Read Elimination.lit threads 3 whole 12 per-thread 12 missing 0 extra 0  join-aware same 
+litmus-tests/sevcik_thesis/Skip/Reordering with external actions.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit single-threaded
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPB.lit single-threaded
+litmus-tests/single-thread-lift-tests/basic-lift.lit single-threaded
+litmus-tests/single-thread-lift-tests/basic-not-lift.lit single-threaded
+litmus-tests/single-thread-lift-tests/lift-above-read-2.lit single-threaded
+litmus-tests/single-thread-lift-tests/lift-above-read.lit single-threaded
+litmus-tests/single-thread-lift-tests/lift-with-read-freezing.lit single-threaded
+litmus-tests/single-thread-lift-tests/lift-with-write-freezing.lit single-threaded
+litmus-tests/single-thread-lift-tests/lock-test.lit single-threaded
+litmus-tests/single-thread-lift-tests/one-sided-lift.lit single-threaded
+litmus-tests/single-thread-lift-tests/read-freezing.lit single-threaded
+litmus-tests/single-thread-lift-tests/write-after-read-elim.lit single-threaded
+litmus-tests/single-thread-lift-tests/write-before-lift.lit single-threaded
+litmus-tests/single-thread-lift-tests/write-chain.lit single-threaded
+litmus-tests/single-thread-lift-tests/write-freezing.lit single-threaded
+litmus-tests/symmrd/alignment.lit single-threaded
+litmus-tests/symmrd/LB+alias+data.lit threads 2 whole 7 per-thread 7 missing 0 extra 0  join-aware same 
+litmus-tests/symmrd/LB+UB+data+arr.lit threads 2 whole 18 per-thread 18 missing 0 extra 0  join-aware same 
+litmus-tests/symmrd/LB+UB+data-forbid.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/symmrd/LB+UB+data.lit threads 2 whole 16 per-thread 16 missing 0 extra 0  join-aware same 
+litmus-tests/symmrd/no-alignment.lit single-threaded
+litmus-tests/symmrd/refinement/LB+UB+data+z.lit threads 2 whole 42 per-thread 42 missing 0 extra 0  join-aware same 
+litmus-tests/symmrd/refinement/LB+UB+data.lit threads 2 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/symmrd/refinement/LB+UBoff+data.lit threads 2 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/test6/2+2W.lit threads 2 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/test6/2+2W with obs thread.lit threads 4 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/test6/3.2W.lit threads 3 whole 21 per-thread 21 missing 0 extra 0  join-aware same 
+litmus-tests/test6/3.LB.lit threads 3 whole 15 per-thread 15 missing 0 extra 0  join-aware same 
+litmus-tests/test6/3.SB.lit threads 3 whole 9 per-thread 9 missing 0 extra 0  join-aware same 
+litmus-tests/test6/CoRR1.lit threads 2 whole 3 per-thread 3 missing 0 extra 0  join-aware same 
+litmus-tests/test6/CoRW.lit threads 3 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/test6/CoWR.lit threads 3 whole 5 per-thread 5 missing 0 extra 0  join-aware same 
+litmus-tests/test6/CoWW.lit threads 2 whole 30 per-thread 30 missing 0 extra 0  join-aware same 
+litmus-tests/test6/IRIW.lit threads 4 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/test6/IRRWIW.lit threads 4 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/test6/IRWIW.lit threads 4 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/test6/ISA2+Fsc+Fsc.lit threads 3 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/test6/ISA2.lit threads 3 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/test6/LB.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/test6/MP.lit threads 2 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/test6/PPO000-019.lit threads 2 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/test6/R.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/test6/RWC.lit threads 3 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/test6/RW.lit single-threaded
+litmus-tests/test6/SB.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+litmus-tests/test6/S.lit threads 2 whole 12 per-thread 12 missing 0 extra 0  join-aware same 
+litmus-tests/test6/S with obs thread.lit threads 3 whole 12 per-thread 12 missing 0 extra 0  join-aware same 
+litmus-tests/test6/W+RWC.lit threads 3 whole 11 per-thread 11 missing 0 extra 0  join-aware same 
+litmus-tests/test6/WRC.lit threads 3 whole 8 per-thread 8 missing 0 extra 0  join-aware same 
+litmus-tests/test6/WRR+2W.lit threads 3 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/test6/WRW+2W.lit threads 3 whole 14 per-thread 14 missing 0 extra 0  join-aware same 
+litmus-tests/test6/WRW+WR.lit threads 3 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+litmus-tests/test6/WWC.lit threads 3 whole 12 per-thread 12 missing 0 extra 0  join-aware same 
+litmus-tests/test6/Z6.0.lit threads 3 whole 15 per-thread 15 missing 0 extra 0  join-aware same 
+litmus-tests/test6/Z6.1.lit threads 3 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/test6/Z6.2.lit threads 3 whole 17 per-thread 17 missing 0 extra 0  join-aware same 
+litmus-tests/test6/Z6.3.lit threads 3 whole 15 per-thread 15 missing 0 extra 0  join-aware same 
+litmus-tests/test6/Z6.4.lit threads 3 whole 19 per-thread 19 missing 0 extra 0  join-aware same 
+litmus-tests/test6/Z6.5.lit threads 3 whole 17 per-thread 17 missing 0 extra 0  join-aware same 
+programs/cas_aba.lit threads 2 whole 40 per-thread 40 missing 0 extra 0  join-aware same 
+programs/episodicity/branch_condition/fail.lit threads 2 whole 15 per-thread 15 missing 0 extra 0  join-aware same 
+programs/episodicity/branch_condition/nested_fail.lit single-threaded
+programs/episodicity/events_condition/cas_inc_loop.lit single-threaded
+programs/episodicity/events_condition/two_reads_fail.lit single-threaded
+programs/episodicity/hp-1.lit single-threaded
+programs/episodicity/multiple/register_events_fail.lit single-threaded
+programs/episodicity/multiple/register_write_fail.lit single-threaded
+programs/episodicity/rcu-1.lit single-threaded
+programs/episodicity/register_condition/fail.lit single-threaded
+programs/episodicity/self_increment/do.lit single-threaded
+programs/episodicity/self_increment/rotated.lit single-threaded
+programs/episodicity/self_increment/while.lit single-threaded
+programs/episodicity/seqlock-1.lit single-threaded
+programs/episodicity/spinlock-1.lit single-threaded
+programs/episodicity/valid/read.lit single-threaded
+programs/episodicity/valid/rotated.lit single-threaded
+programs/episodicity/valid/write_only.lit single-threaded
+programs/episodicity/write_condition/fail.lit single-threaded
+programs/lb.lit threads 2 whole 10 per-thread 10 missing 0 extra 0  join-aware same 
+programs/lb-uaf-fixed.lit threads 2 whole 9 per-thread 9 missing 0 extra 0  join-aware same 
+programs/lb-uaf.lit threads 2 whole 13 per-thread 13 missing 0 extra 0  join-aware same 
+programs/rcu-1.lit single-threaded
+programs/seqlock-1.lit single-threaded
+programs/spinlock-1.lit single-threaded
+programs/uaf-bug-fixed.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+programs/uaf-bug.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+programs/uaf-bug-rc11.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
+programs/uaf-bug-smrd.lit threads 2 whole 6 per-thread 6 missing 0 extra 0  join-aware same 
