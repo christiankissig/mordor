@@ -32,6 +32,19 @@ module type MEMORY_MODEL = sig
     cache
 
   val check_coherence : cache -> (int * int) uset -> bool
+
+  (** One candidate coherence order, with the cache it is checked against and
+      the relations the axioms derive from the two. Each is computed once, and
+      only if an axiom asks for it. *)
+  type candidate
+
+  val candidate : cache -> (int * int) uset -> candidate
+
+  (** The model's axioms, by name, in the order [check_coherence] asks them:
+      [check_coherence cache co] holds when every one holds of
+      [candidate cache co]. Each can be asked on its own. *)
+  val axioms : (string * (candidate -> bool)) list
+
   val check_thin_air : cache -> symbolic_execution -> bool
 
   (** Whether [check_coherence] reads the coherence order it is given. A model
@@ -57,6 +70,27 @@ module type MEMORY_MODEL = sig
     (int, expr list) Hashtbl.t ->
     (int * int) uset
 end
+
+(** A model that can be asked about a coherence order while it is being built.
+
+    [start] is what is known before any edge; [extend] adds edges and answers
+    [None] once no completion can be coherent, so that a search can stop there;
+    [finalize] decides the complete order. {!Incremental} is the adapter every
+    model has until it says more: it never prunes, and decides at the end with
+    {!MEMORY_MODEL.check_coherence}. *)
+module type INCREMENTAL_MODEL = sig
+  include MEMORY_MODEL
+
+  type partial
+
+  val start : cache -> partial
+  val extend : partial -> (int * int) uset -> partial option
+  val finalize : partial -> (int * int) uset -> bool
+end
+
+(** The default adapter: nothing is known of a partial order but the cache. *)
+module Incremental (M : MEMORY_MODEL) :
+  INCREMENTAL_MODEL with type cache = M.cache and type partial = M.cache
 
 (** {1 Shared Logic} *)
 
@@ -130,6 +164,13 @@ type restrictions = { coherent : string }
 (** Registry of the memory models, by name. *)
 module ModelRegistry : sig
   val lookup : string -> (module MEMORY_MODEL) option
+
+  (** [lookup_incremental name] is the model [name] as an {!INCREMENTAL_MODEL}:
+      the one registered for it, or else {!Incremental} of the model. *)
+  val lookup_incremental : string -> (module INCREMENTAL_MODEL) option
+
+  (** The names models are registered under. *)
+  val names : unit -> string list
 end
 
 (** {1 Coherence Checking Entry Points} *)
