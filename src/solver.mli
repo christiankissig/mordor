@@ -8,7 +8,7 @@
     - Check satisfiability of constraint expressions
     - Extract concrete models (variable assignments)
     - Perform semantic equality checks
-    - Support incremental solving with push/pop
+    - Solve in scopes of a long-lived solver, one per domain
     - Cache results for performance
 
     @author Your Name
@@ -172,6 +172,20 @@ val trivially : expr list -> bool option
     Z3 solver, by {!add_assertions} or earlier checks, and nothing else: no
     syntactic shortcut and nothing added. *)
 val check_asserted : solver -> bool option
+
+(** {1 Scoped Solving} *)
+
+(** [scoped f] is [f] applied to this domain's long-lived solver, in a scope of
+    its own: whatever [f] asserts is retracted when [f] returns or raises. What
+    [f] finds asserted when it starts is what enclosing scopes asserted, which
+    at the outermost is nothing. A domain's solver is its own, so domains
+    solving at once do not share one. *)
+val scoped : (solver -> 'a) -> 'a
+
+(** Whether {!quick_check} builds a fresh Z3 solver per query instead of solving
+    in a scope of this domain's long-lived one. Off unless [MORDOR_FRESH_SOLVER]
+    is set. The answers are the same; the fresh solver is slower. *)
+val fresh_solvers : bool ref
 
 (** Quick satisfiability check without caching.
 
