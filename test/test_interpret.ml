@@ -687,12 +687,61 @@ let test_referenced_global_is_distinct () =
          structure.constraints
       )
 
+(* Each thread is interpreted with labels of its own and relabelled into place.
+   Labels still count up in program order with no gap or overlap, symbols are
+   fresh across threads, and the threads of a nested block are numbered after
+   the thread they are in. *)
+let test_threads_relabelled_into_place () =
+  let structure =
+    interpret_symbolic
+      "x := 0; { r1 := x; y := 1 } ||| { { r2 := y } ||| { z := 2 } }; w := 1"
+  in
+  let find typ loc =
+    Hashtbl.fold
+      (fun _ (e : event) acc ->
+        if e.typ = typ && e.loc = Some (EVar loc) then Some e.label else acc
+      )
+      structure.events None
+    |> Option.get
+  in
+  let accesses =
+    [
+      ("x := 0", find Write "x", 0);
+      ("r1 := x", find Read "x", 1);
+      ("y := 1", find Write "y", 1);
+      ("r2 := y", find Read "y", 3);
+      ("z := 2", find Write "z", 4);
+      ("w := 1", find Write "w", 0);
+    ]
+  in
+  let labels = List.map (fun (_, l, _) -> l) accesses in
+  let read_symbol loc = (Hashtbl.find structure.events (find Read loc)).rval in
+    Alcotest.(check bool)
+      "the threads' reads are of different symbols" false
+      (read_symbol "x" = read_symbol "y");
+    Alcotest.(check (list int))
+      "labels are dense"
+      (List.init (USet.size structure.e) Fun.id)
+      (USet.values structure.e |> List.sort compare);
+    Alcotest.(check (list int))
+      "labels follow program order" (List.sort compare labels) labels;
+    List.iter
+      (fun (name, label, thread) ->
+        Alcotest.(check (option int))
+          (name ^ " is in its thread")
+          (Some thread)
+          (Hashtbl.find_opt structure.thread_index label)
+      )
+      accesses
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
     [
       Alcotest.test_case "Structure describes its events only" `Quick
         test_structure_describes_its_events_only;
+      Alcotest.test_case "Threads are relabelled into place" `Quick
+        test_threads_relabelled_into_place;
       Alcotest.test_case "While symbolic guard well-formed" `Quick
         test_while_symbolic_guard_wellformed;
       Alcotest.test_case "While symbolic guard yields executions" `Quick

@@ -164,6 +164,15 @@ let dot_is_seq_of_singleton _ (b : E.t) _ =
 
 let join_is_combinators_seq a b _ = E.equal (S.seq a b) (E.seq ~join:true a b)
 
+(* A relabelling renames and does nothing else. A cas guard is built
+   unevaluated, as [(δ = β)], and evaluating it would swap its sides. *)
+let relabel_only_renames (a : E.t) _ _ =
+  let rng = Random.State.make [| USet.size a.e |] in
+  let guard = EBinOp (ESymbol "δ", "=", ESymbol "β") in
+  let branch = { (event rng 5000) with typ = Branch; cond = Some guard } in
+  let s = E.seq (E.singleton branch [ guard ] []) a in
+    E.equal s (E.relabel s)
+
 (* Operands are left as they were found. *)
 let operands_untouched a b _ =
   let a0 = E.relabel a and b0 = E.relabel b in
@@ -191,6 +200,7 @@ let suite =
             relabel_is_building_elsewhere;
           case "relabel is undone by its inverse" relabel_is_undone;
           case "relabel moves every label and symbol" relabel_moves_everything;
+          case "relabel only renames" relabel_only_renames;
           case "dot is seq after a singleton" dot_is_seq_of_singleton;
           case "the combinators' seq is the join" join_is_combinators_seq;
           case "operands are left untouched" operands_untouched;
