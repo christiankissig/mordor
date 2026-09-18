@@ -1745,41 +1745,101 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
           |> Lwt.return
     in
 
+    (* The minimality passes compared every result with every other, and on
+       rcu-3-2t-trunc, with 19,000 freeze results, that was minutes each.
+       Only results with the same events can contain one another, and so they
+       are compared within buckets of equal keys. A key is a string: a list
+       would be hashed on its first few elements alone, and these share long
+       prefixes. *)
+    let sorted u = USet.values u |> List.sort compare in
+    let key_of l = Marshal.to_string l [ Marshal.No_sharing ] in
+    let buckets key xs =
+      let tbl = Hashtbl.create 64 in
+        List.iteri
+          (fun i x ->
+            let k = key x in
+              Hashtbl.replace tbl k
+                ((i, x) :: (Hashtbl.find_opt tbl k |> Option.value ~default:[]))
+          )
+          xs;
+        tbl
+    in
+
+    (* A freeze result contains another only if the two have the same events
+       and the same read-from ([FreezeResult.contains]). *)
     let keep_minimal_freeze_results fr_list =
       Logs_safe.debug (fun m -> m "Keeping minimal freeze results...");
       let* fr_list = fr_list in
-      let indexed_list = List.mapi (fun i fr -> (i, fr)) fr_list in
-        List.filter_map
-          (fun (i, fr1) ->
-            let is_contained =
-              List.exists
-                (fun (j, fr2) -> i <> j && FreezeResult.contains fr1 fr2
-                ) (* Is fr1 contained by fr2? *)
-                indexed_list
-            in
-              if is_contained then None
-              else Some fr1 (* Keep if NOT contained by any other *)
+      let key (fr : FreezeResult.t) = key_of (sorted fr.e, sorted fr.rf) in
+      let by_key = buckets key fr_list in
+        List.filteri
+          (fun i (fr1 : FreezeResult.t) ->
+            (* Is fr1 contained by another? Keep it if not. *)
+            not
+              (List.exists
+                 (fun (j, fr2) -> i <> j && FreezeResult.contains fr1 fr2)
+                 (Hashtbl.find by_key (key fr1))
+              )
           )
-          indexed_list
+          fr_list
         |> Lwt.return
     in
 
+    (* An execution contains another only if the two have the same events and
+       its read-from includes the other's ([Execution.contains]). Within a
+       bucket of equal events the candidates are those with the same
+       read-from, and those whose read-from is strictly larger and includes
+       it. *)
     let keep_minimal_executions exec_list =
       Logs_safe.debug (fun m -> m "Keeping minimal executions...");
       let* exec_list = exec_list in
-      let indexed_list = List.mapi (fun i exec -> (i, exec)) exec_list in
-        List.filter_map
-          (fun (i, exec1) ->
-            let is_contained =
-              List.exists
-                (fun (j, exec2) -> i <> j && Execution.contains exec2 exec1
-                ) (* Is exec1 contained by exec2? *)
-                indexed_list
-            in
-              if is_contained then None
-              else Some exec1 (* Keep if NOT contained by any other *)
+      let events_key (ex : symbolic_execution) = key_of (sorted ex.e) in
+      let by_events = buckets events_key exec_list in
+      (* Per bucket of events: its members by read-from, each sub-bucket with
+         its read-from, and the size of the largest. *)
+      let by_rf = Hashtbl.create (Hashtbl.length by_events) in
+        Hashtbl.iter
+          (fun events members ->
+            let sub = Hashtbl.create 16 in
+              List.iter
+                (fun ((_, (ex : symbolic_execution)) as m) ->
+                  let rf = sorted ex.rf in
+                  let k = key_of rf in
+                  let _, ms =
+                    Hashtbl.find_opt sub k |> Option.value ~default:(rf, [])
+                  in
+                    Hashtbl.replace sub k (rf, m :: ms)
+                )
+                members;
+              let largest =
+                Hashtbl.fold (fun _ (rf, _) n -> max n (List.length rf)) sub 0
+              in
+                Hashtbl.replace by_rf events (sub, largest)
           )
-          indexed_list
+          by_events;
+        List.filteri
+          (fun i (exec1 : symbolic_execution) ->
+            let sub, largest = Hashtbl.find by_rf (events_key exec1) in
+            let rf1 = sorted exec1.rf in
+            let contained_in members =
+              List.exists
+                (fun (j, exec2) -> i <> j && Execution.contains exec2 exec1)
+                members
+            in
+              not
+                (contained_in (snd (Hashtbl.find sub (key_of rf1)))
+                || List.length rf1 < largest
+                   && Hashtbl.fold
+                        (fun _ (rf2, members) found ->
+                          found
+                          || List.compare_lengths rf2 rf1 > 0
+                             && List.for_all (fun p -> List.mem p rf2) rf1
+                             && contained_in members
+                        )
+                        sub false
+                )
+          )
+          exec_list
         |> Lwt.return
     in
 
