@@ -1,0 +1,120 @@
+== 3.2W.trace: 352724 queries, 348698 answered by the pipeline's cache
+  fresh             5.698s  misses    4026  z3    4014  disagree 0
+  pushpop           1.903s  misses    4026  z3    4014  disagree 0
+  pushpop-raw       1.912s  misses    4026  z3    4026  disagree 0
+  prefix            2.061s  misses    4026  z3    4014  disagree 0
+  fresh-again       5.717s  misses    4026  z3    4014  disagree 0
+    Coherence.check_for_coherence.(fun)                 302379 queries  fresh   3.646s  pushpop   1.576s
+    Algorithms.ListMapCombinationBuilder.build_combinations.combine_and_check.(fun)   28440 queries  fresh   1.237s  pushpop   0.176s
+    Executions.Freeze.instantiate_execution              15661 queries  fresh   0.781s  pushpop   0.104s
+    Base__Hashtbl.filteri.(fun)                           1950 queries  fresh   0.007s  pushpop   0.004s
+    Executions.Freeze.compute_path_rf.(fun)               3712 queries  fresh   0.007s  pushpop   0.007s
+    Base__Hashtbl.existsi.(fun)                            264 queries  fresh   0.000s  pushpop   0.000s
+    Executions.Freeze.freeze                               144 queries  fresh   0.000s  pushpop   0.000s
+    Executions.JustValidation.check_final                  144 queries  fresh   0.000s  pushpop   0.000s
+    Forwarding.ForwardingContext.check                      21 queries  fresh   0.000s  pushpop   0.000s
+    Elaborations.generate_justifications                     9 queries  fresh   0.000s  pushpop   0.000s
+== JCTC11.trace: 340020 queries, 339573 answered by the pipeline's cache
+  fresh             1.641s  misses     447  z3     423  disagree 0
+  pushpop           1.345s  misses     447  z3     423  disagree 0
+  pushpop-raw       1.337s  misses     447  z3     447  disagree 0
+  prefix            1.383s  misses     447  z3     423  disagree 0
+  fresh-again       1.704s  misses     447  z3     423  disagree 0
+    Coherence.check_for_coherence.(fun)                  36585 queries  fresh   0.331s  pushpop   0.195s
+    Algorithms.ListMapCombinationBuilder.build_combinations.combine_and_check.(fun)   43704 queries  fresh   0.309s  pushpop   0.234s
+    Executions.Freeze.compute_path_rf.(fun)              85702 queries  fresh   0.291s  pushpop   0.280s
+    Base__Hashtbl.filteri.(fun)                          36330 queries  fresh   0.250s  pushpop   0.169s
+    Base__Hashtbl.existsi.(fun)                          67258 queries  fresh   0.211s  pushpop   0.203s
+    Executions.Freeze.instantiate_execution              24182 queries  fresh   0.143s  pushpop   0.121s
+    Executions.Freeze.freeze                             23072 queries  fresh   0.126s  pushpop   0.105s
+    Forwarding.ForwardingContext.check                      71 queries  fresh   0.005s  pushpop   0.000s
+    Executions.JustValidation.check_final                23072 queries  fresh   0.001s  pushpop   0.001s
+    Elaborations.ValueAssignElab.elab.entailed              36 queries  fresh   0.001s  pushpop   0.000s
+    Elaborations.generate_justifications                     8 queries  fresh   0.000s  pushpop   0.000s
+== listing15.trace: 407899 queries, 407392 answered by the pipeline's cache
+  fresh             1.941s  misses     507  z3     487  disagree 0
+  pushpop           1.582s  misses     507  z3     487  disagree 0
+  pushpop-raw       1.561s  misses     507  z3     507  disagree 0
+  prefix            1.552s  misses     507  z3     487  disagree 0
+  fresh-again       1.943s  misses     507  z3     487  disagree 0
+    Executions.Freeze.compute_path_rf.(fun)             129280 queries  fresh   0.415s  pushpop   0.432s
+    Base__Hashtbl.filteri.(fun)                          45402 queries  fresh   0.386s  pushpop   0.221s
+    Algorithms.ListMapCombinationBuilder.build_combinations.combine_and_check.(fun)   48381 queries  fresh   0.351s  pushpop   0.261s
+    Base__Hashtbl.existsi.(fun)                          92109 queries  fresh   0.269s  pushpop   0.281s
+    Coherence.check_for_coherence.(fun)                  26154 queries  fresh   0.199s  pushpop   0.138s
+    Executions.Freeze.freeze                             24000 queries  fresh   0.137s  pushpop   0.108s
+    Executions.Freeze.instantiate_execution              18351 queries  fresh   0.100s  pushpop   0.093s
+    Elaborations.ValueAssignElab.elab.entailed             136 queries  fresh   0.026s  pushpop   0.002s
+    Forwarding.ForwardingContext.check                      78 queries  fresh   0.014s  pushpop   0.001s
+    Executions.JustValidation.check_final                24000 queries  fresh   0.001s  pushpop   0.001s
+    Elaborations.generate_justifications                     8 queries  fresh   0.000s  pushpop   0.000s
+== uaf-bug-extended.trace: 2932 queries, 2781 answered by the pipeline's cache
+  fresh             0.119s  misses     151  z3     137  disagree 0
+  pushpop           0.015s  misses     151  z3     137  disagree 0
+  pushpop-raw       0.015s  misses     151  z3     151  disagree 0
+  prefix            0.018s  misses     151  z3     137  disagree 0
+  fresh-again       0.119s  misses     151  z3     137  disagree 0
+    Coherence.check_for_coherence.(fun)                   1315 queries  fresh   0.034s  pushpop   0.007s
+    Base__Hashtbl.filteri.(fun)                            902 queries  fresh   0.033s  pushpop   0.003s
+    Algorithms.ListMapCombinationBuilder.build_combinations.combine_and_check.(fun)     240 queries  fresh   0.027s  pushpop   0.002s
+    Executions.Freeze.instantiate_execution                 36 queries  fresh   0.009s  pushpop   0.001s
+    Base__Hashtbl.existsi.(fun)                            252 queries  fresh   0.006s  pushpop   0.001s
+    Executions.Freeze.freeze                                16 queries  fresh   0.002s  pushpop   0.000s
+    Executions.Freeze.compute_path_rf.(fun)                130 queries  fresh   0.002s  pushpop   0.000s
+    Interpret.interpret_statements_open                      6 queries  fresh   0.002s  pushpop   0.000s
+    Executions.JustValidation.check_final                   16 queries  fresh   0.002s  pushpop   0.000s
+    Forwarding.ForwardingContext.check                       8 queries  fresh   0.001s  pushpop   0.000s
+    Elaborations.generate_justifications                    11 queries  fresh   0.000s  pushpop   0.000s
+== rcu-1.trace: 5128 queries, 4744 answered by the pipeline's cache
+  fresh             0.320s  misses     384  z3     347  disagree 0
+  pushpop           0.049s  misses     384  z3     347  disagree 0
+  pushpop-raw       0.050s  misses     384  z3     384  disagree 0
+  prefix            0.058s  misses     384  z3     347  disagree 0
+  fresh-again       0.333s  misses     384  z3     347  disagree 0
+    Base__Hashtbl.filteri.(fun)                           3118 queries  fresh   0.226s  pushpop   0.023s
+    Coherence.check_for_coherence.(fun)                   1552 queries  fresh   0.062s  pushpop   0.020s
+    Algorithms.ListMapCombinationBuilder.build_combinations.combine_and_check.(fun)      44 queries  fresh   0.017s  pushpop   0.001s
+    Executions.Freeze.compute_path_rf.(fun)                140 queries  fresh   0.009s  pushpop   0.001s
+    Base__Hashtbl.existsi.(fun)                            228 queries  fresh   0.007s  pushpop   0.002s
+    Executions.JustValidation.check_final                    4 queries  fresh   0.003s  pushpop   0.000s
+    Interpret.interpret_statements_open                      6 queries  fresh   0.002s  pushpop   0.000s
+    Executions.Freeze.instantiate_execution                  8 queries  fresh   0.002s  pushpop   0.000s
+    Executions.Freeze.freeze                                 4 queries  fresh   0.002s  pushpop   0.000s
+    Elaborations.ValueAssignElab.elab.entailed               4 queries  fresh   0.001s  pushpop   0.000s
+    Forwarding.ForwardingContext.check                       3 queries  fresh   0.001s  pushpop   0.000s
+    Elaborations.generate_justifications                    17 queries  fresh   0.000s  pushpop   0.000s
+== cas-increment-race.trace: 895 queries, 758 answered by the pipeline's cache
+  fresh             0.070s  misses     137  z3     126  disagree 0
+  pushpop           0.006s  misses     137  z3     126  disagree 0
+  pushpop-raw       0.006s  misses     137  z3     137  disagree 0
+  prefix            0.007s  misses     137  z3     126  disagree 0
+  fresh-again       0.076s  misses     137  z3     126  disagree 0
+    Base__Hashtbl.filteri.(fun)                            456 queries  fresh   0.031s  pushpop   0.002s
+    Algorithms.ListMapCombinationBuilder.build_combinations.combine_and_check.(fun)      48 queries  fresh   0.016s  pushpop   0.001s
+    Forwarding.ForwardingContext.check                      16 queries  fresh   0.010s  pushpop   0.000s
+    Coherence.check_for_coherence.(fun)                    264 queries  fresh   0.007s  pushpop   0.001s
+    Executions.Freeze.freeze                                 6 queries  fresh   0.005s  pushpop   0.000s
+    Executions.Freeze.instantiate_execution                 11 queries  fresh   0.003s  pushpop   0.000s
+    Interpret.interpret_statements_open                      8 queries  fresh   0.001s  pushpop   0.000s
+    Base__Hashtbl.existsi.(fun)                             37 queries  fresh   0.001s  pushpop   0.000s
+    Executions.Freeze.compute_path_rf.(fun)                 29 queries  fresh   0.001s  pushpop   0.000s
+    Elaborations.ValueAssignElab.elab.entailed               6 queries  fresh   0.001s  pushpop   0.000s
+    Executions.JustValidation.check_final                    6 queries  fresh   0.000s  pushpop   0.000s
+    Elaborations.generate_justifications                     8 queries  fresh   0.000s  pushpop   0.000s
+== Upd-Stuck.trace: 22418 queries, 22104 answered by the pipeline's cache
+  fresh             0.261s  misses     314  z3     303  disagree 0
+  pushpop           0.082s  misses     314  z3     303  disagree 0
+  pushpop-raw       0.074s  misses     314  z3     314  disagree 0
+  prefix            0.077s  misses     314  z3     303  disagree 0
+  fresh-again       0.253s  misses     314  z3     303  disagree 0
+    Base__Hashtbl.filteri.(fun)                           6325 queries  fresh   0.071s  pushpop   0.025s
+    Coherence.check_for_coherence.(fun)                   7432 queries  fresh   0.059s  pushpop   0.028s
+    Algorithms.ListMapCombinationBuilder.build_combinations.combine_and_check.(fun)    1898 queries  fresh   0.058s  pushpop   0.011s
+    Executions.Freeze.freeze                               966 queries  fresh   0.034s  pushpop   0.004s
+    Executions.Freeze.instantiate_execution               1024 queries  fresh   0.012s  pushpop   0.005s
+    Forwarding.ForwardingContext.check                      29 queries  fresh   0.007s  pushpop   0.000s
+    Executions.Freeze.compute_path_rf.(fun)               2833 queries  fresh   0.005s  pushpop   0.005s
+    Elaborations.ValueAssignElab.elab.entailed              20 queries  fresh   0.003s  pushpop   0.000s
+    Base__Hashtbl.existsi.(fun)                            918 queries  fresh   0.001s  pushpop   0.002s
+    Executions.JustValidation.check_final                  966 queries  fresh   0.000s  pushpop   0.000s
+    Elaborations.generate_justifications                     7 queries  fresh   0.000s  pushpop   0.000s

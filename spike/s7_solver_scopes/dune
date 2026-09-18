@@ -1,0 +1,7 @@
+; S7 (#19) -- Z3 push/pop against fresh solvers and the cache. Run from the
+; repo root, on traces captured with MORDOR_S7_TRACE=<file>:
+;   dune exec spike/s7_solver_scopes/s7_solver_scopes.exe -- TRACE ...
+
+(executable
+ (name s7_solver_scopes)
+ (libraries mordor_lib unix))
