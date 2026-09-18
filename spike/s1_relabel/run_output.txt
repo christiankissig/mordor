@@ -1,0 +1,40 @@
+files                         : 379
+  skipped, no parallel block    : 17
+  skipped, nested or repeated parallel block : 45
+  skipped, branching prefix     : 74
+  errors                      : 0
+compared                      : 243
+  identical, labels and all   : 243
+  constraints, fragment union : 234 equal
+  constraints, recomputed     : 237 equal
+time, all compared: classic 0.051s, fragments 0.013s, relabel 0.003s, compose 0.007s
+
+--cost:
+    of which po          : 0.0115s (60064 pairs)
+    of which conflict    : 0.2690s (607428 pairs)
+    of which environments: 0.0022s (15762 bindings)
+  programs/rcu-3.lit                        1463 events  654 symbols  60064 po: interpret 1.1090s, relabel 0.3149s (28.4%)
+    of which po          : 0.0027s (12135 pairs)
+    of which conflict    : 0.0147s (46752 pairs)
+    of which environments: 0.0003s (3845 bindings)
+  programs/rcu-2.lit                         371 events  161 symbols  12135 po: interpret 0.1338s, relabel 0.0131s (9.8%)
+    of which po          : 0.0023s (9680 pairs)
+    of which conflict    : 0.0129s (65030 pairs)
+    of which environments: 0.0003s (4185 bindings)
+  programs/hp-1.lit                          291 events   84 symbols   9680 po: interpret 0.1327s, relabel 0.0171s (12.9%)
+    of which po          : 0.0003s (1966 pairs)
+    of which conflict    : 0.0005s (2874 pairs)
+    of which environments: 0.0001s (772 bindings)
+  programs/rcu-1.lit                          83 events   34 symbols   1966 po: interpret 0.0130s, relabel 0.0010s (8.0%)
+    of which po          : 0.0001s (1004 pairs)
+    of which conflict    : 0.0001s (180 pairs)
+    of which environments: 0.0000s (433 bindings)
+  programs/rcu-3-2t-trunc.lit                 60 events   17 symbols   1004 po: interpret 0.0035s, relabel 0.0003s (7.6%)
+    of which po          : 0.0001s (464 pairs)
+    of which conflict    : 0.0000s (128 pairs)
+    of which environments: 0.0000s (207 bindings)
+  programs/rcu-inc-reclaim.lit                33 events    9 symbols    464 po: interpret 0.0031s, relabel 0.0001s (2.8%)
+    of which po          : 0.0000s (96 pairs)
+    of which conflict    : 0.0000s (0 pairs)
+    of which environments: 0.0000s (9 bindings)
+  litmus-tests/3.2W.lit                       22 events    6 symbols     96 po: interpret 0.0002s, relabel 0.0000s (11.6%)

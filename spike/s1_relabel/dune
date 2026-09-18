@@ -1,0 +1,10 @@
+; S1 (#14) -- relabeling feasibility and cost. Run from the repo root:
+;   dune exec spike/s1_relabel/s1_relabel.exe -- [DIR|FILE ...]
+
+(executable
+ (name s1_relabel)
+ (flags
+  (:standard -g -w -26-27-32-33))
+ (libraries mordor_lib lwt lwt.unix z3 zarith core str unix)
+ (preprocess
+  (pps lwt_ppx)))
