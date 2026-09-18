@@ -319,57 +319,68 @@ let disjoint (loc1, val1) (loc2, val2) =
 
 (** {1 RF Validation} *)
 
-(** Read-from relation validation.
+(** The checks an execution's read-from relation is validated by, over explicit
+    inputs, as {!Freeze.instantiate_execution} asks them.
 
-    Validates that read-from relations satisfy various consistency requirements
-    including PPO respect, totality, and semantic correctness. *)
-module ReadFromValidation = struct
-  (** [rf_respects_ppo rf ppo_loc] checks RF respects preserved program order.
+    Each has a [_delta] form, shaped for a fragment merge that knows what it is
+    adding to relations already checked: the plain arguments are what was
+    checked, and the [d] arguments what is added. Those are stubs: they check
+    the union from scratch, and are there to be replaced by forms that look at
+    the added edges alone. *)
+module Validation = struct
+  (** [rf_respects_ppo ~rf ~ppo]: every rf edge [(w, r)] that is in [ppo] has
+      [r] among [w]'s successors in [ppo].
 
-      For each RF edge [(w,r)], if [(w,r)] is in [ppo_loc], then [r] must be
-      reachable from [w] in the PPO relation (i.e., the edge must be direct).
-
-      @param rf Read-from relation.
-      @param ppo_loc Location-based PPO.
-      @return [true] if all RF edges respect PPO. *)
-  let rf_respects_ppo rf ppo_loc =
-    let ppo_loc_tree = URelation.adjacency_map ppo_loc in
+      As stated this never fails -- an edge in [ppo] is its own witness -- and
+      it is kept as it was found. *)
+  let rf_respects_ppo ~rf ~ppo =
+    let ppo_tree = URelation.adjacency_map ppo in
       USet.for_all
         (fun (w, r) ->
-          if USet.mem ppo_loc (w, r) then
-            (* If (w,r) in ppo_loc, check that r is reachable from w *)
+          if USet.mem ppo (w, r) then
+            (* If (w,r) in ppo, check that r is reachable from w *)
             try
-              let successors = Hashtbl.find ppo_loc_tree w in
+              let successors = Hashtbl.find ppo_tree w in
                 USet.mem successors r
             with Not_found -> false
           else true
         )
         rf
 
-  (** [check_rf_elided rf delta] checks reads don't observe elided writes.
+  let rf_respects_ppo_delta ~rf ~ppo ~drf ~dppo =
+    rf_respects_ppo ~rf:(USet.union rf drf) ~ppo:(USet.union ppo dppo)
 
-      Verifies that no read in RF reads from a write that has been elided
-      (overwritten) by write-exclusion edges in delta.
-
-      @param rf Read-from relation.
-      @param delta Combined forwarding and write-exclusion edges.
-      @return [true] if no elided writes are read. *)
-  let check_rf_elided rf delta =
+  (** [rf_not_elided ~rf ~delta]: no read reads from a write that [delta], the
+      forwarding and write-elision edges, elides. *)
+  let rf_not_elided ~rf ~delta =
     USet.size (USet.intersection (URelation.pi_2 delta) (URelation.pi_1 rf)) = 0
 
-  (** [check_rf_total rf read_events delta] checks RF is total.
+  let rf_not_elided_delta ~rf ~delta ~drf ~ddelta =
+    rf_not_elided ~rf:(USet.union rf drf) ~delta:(USet.union delta ddelta)
 
-      Verifies that every non-elided read has a read-from edge.
+  (** [rf_total ~rf ~reads ~delta]: every read of [reads] that [delta] does not
+      elide reads from something. *)
+  let rf_total ~rf ~reads ~delta =
+    USet.subset (USet.set_minus reads (URelation.pi_2 delta)) (URelation.pi_2 rf)
 
-      @param rf Read-from relation.
-      @param read_events Set of all read events.
-      @param delta Combined forwarding and write-exclusion edges.
-      @return [true] if RF covers all non-elided reads. *)
-  let check_rf_total rf read_events delta =
-    USet.subset
-      (USet.set_minus read_events (URelation.pi_2 delta))
-      (URelation.pi_2 rf)
+  let rf_total_delta ~rf ~reads ~delta ~drf ~dreads ~ddelta =
+    rf_total ~rf:(USet.union rf drf) ~reads:(USet.union reads dreads)
+      ~delta:(USet.union delta ddelta)
 
+  (** [rhb ~dp ~ppo ~rf] is reads-happen-before, [dp ∪ ppo ∪ rf]. *)
+  let rhb ~dp ~ppo ~rf = USet.union (USet.union dp ppo) rf
+
+  (** [rhb_acyclic rhb]: no event reads-happens-before itself. *)
+  let rhb_acyclic rhb = URelation.acyclic rhb
+
+  let rhb_acyclic_delta rhb ~drhb = rhb_acyclic (USet.union rhb drhb)
+end
+
+(** Read-from relation validation.
+
+    Validates that read-from relations satisfy various consistency requirements
+    including PPO respect, totality, and semantic correctness. *)
+module ReadFromValidation = struct
   (** [env_rf structure rf] computes value equality constraints from RF.
 
       For each RF edge [(w,r)], creates constraint that the value read equals
@@ -899,7 +910,7 @@ module Freeze = struct
           (USet.size ppo)
     );
     let*? () =
-      (ReadFromValidation.rf_respects_ppo rf ppo, "RF edges do not respect PPO")
+      (Validation.rf_respects_ppo ~rf ~ppo, "RF edges do not respect PPO")
     in
 
     (* Filter RMW relation to execution events and predicates only *)
@@ -940,17 +951,17 @@ module Freeze = struct
 
        Kept as the invariant it now is rather than deleted, since it is the
        only thing standing between a future caller that builds rf some other
-       way and a read observing an elided write. check_rf_total below is not
+       way and a read observing an elided write. rf_total below is not
        in the same position: generation does not guarantee every read gets an
        edge. *)
     let*? () =
-      (ReadFromValidation.check_rf_elided rf delta, "RF fails RF elided check")
+      (Validation.rf_not_elided ~rf ~delta, "RF fails RF elided check")
     in
       Logs_safe.debug (fun m ->
           m "  [instantiate_execution] RF elided check passed"
       );
       let*? () =
-        ( ReadFromValidation.check_rf_total rf read_events delta,
+        ( Validation.rf_total ~rf ~reads:read_events ~delta,
           "RF fails RF total check"
         )
       in
@@ -961,16 +972,15 @@ module Freeze = struct
               (USet.size read_events) (USet.size rf)
         );
 
-        (* Check acyclicity of rhb = dp_ppo ∪ rf *)
-        let dp_ppo = USet.union dp ppo in
-        let rhb = USet.union dp_ppo rf in
+        let rhb = Validation.rhb ~dp ~ppo ~rf in
+        let rhb_acyclic = Validation.rhb_acyclic rhb in
           Logs_safe.debug (fun m ->
               m
                 "  [instantiate_execution] Checking RHB acyclicity (dp: %d, \
                  ppo: %d, rf: %d, rhb: %d)"
                 (USet.size dp) (USet.size ppo) (USet.size rf) (USet.size rhb)
           );
-          if not (URelation.acyclic rhb) then (
+          if not rhb_acyclic then (
             Logs_safe.debug (fun m ->
                 m "dp = %s"
                   (USet.to_string
@@ -994,7 +1004,7 @@ module Freeze = struct
             )
           );
           (* TODO discern memory model *)
-          let*? () = (URelation.acyclic rhb, "RHB is not acyclic") in
+          let*? () = (rhb_acyclic, "RHB is not acyclic") in
             Logs_safe.debug (fun m ->
                 m "  [instantiate_execution] RHB acyclicity check passed"
             );

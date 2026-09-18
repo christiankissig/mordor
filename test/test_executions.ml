@@ -323,6 +323,61 @@ let test_path_rf_in_a_scope () =
       (sources local_rf);
     check bool "r1 has a write to read" true (sources local_rf <> [])
 
+(** {1 Validation predicates} *)
+
+let rel = USet.of_list
+
+(* A read of an elided write, a read with no write, a cycle through rf. *)
+let test_validation_predicates () =
+  check bool "reading an elided write" false
+    (Validation.rf_not_elided ~rf:(rel [ (1, 2) ]) ~delta:(rel [ (0, 1) ]));
+  check bool "reading a write nothing elides" true
+    (Validation.rf_not_elided ~rf:(rel [ (1, 2) ]) ~delta:(rel [ (0, 3) ]));
+  check bool "a read with nothing to read" false
+    (Validation.rf_total
+       ~rf:(rel [ (1, 2) ])
+       ~reads:(USet.of_list [ 2; 4 ])
+       ~delta:(rel [])
+    );
+  check bool "an elided read needs nothing to read" true
+    (Validation.rf_total
+       ~rf:(rel [ (1, 2) ])
+       ~reads:(USet.of_list [ 2; 4 ])
+       ~delta:(rel [ (3, 4) ])
+    );
+  check bool "rf against dp closes a cycle" false
+    (Validation.rhb_acyclic
+       (Validation.rhb ~dp:(rel [ (2, 3) ]) ~ppo:(rel []) ~rf:(rel [ (3, 2) ]))
+    );
+  check bool "rf_respects_ppo holds of an rf edge in ppo" true
+    (Validation.rf_respects_ppo ~rf:(rel [ (1, 2) ]) ~ppo:(rel [ (1, 2) ]))
+
+(* The delta forms decide what the plain ones decide of the union. *)
+let test_validation_deltas () =
+  let base = rel [ (1, 2) ] and added = rel [ (2, 1) ] in
+    check bool "a merge can close a cycle"
+      (Validation.rhb_acyclic (USet.union base added))
+      (Validation.rhb_acyclic_delta base ~drhb:added);
+    check bool "a merge can elide a write already read"
+      (Validation.rf_not_elided ~rf:base ~delta:(rel [ (0, 1) ]))
+      (Validation.rf_not_elided_delta ~rf:base ~delta:(rel []) ~drf:(rel [])
+         ~ddelta:(rel [ (0, 1) ])
+      );
+    check bool "a merge can add a read with nothing to read"
+      (Validation.rf_total ~rf:base
+         ~reads:(USet.of_list [ 2; 4 ])
+         ~delta:(rel [])
+      )
+      (Validation.rf_total_delta ~rf:base ~reads:(USet.of_list [ 2 ])
+         ~delta:(rel []) ~drf:(rel []) ~dreads:(USet.of_list [ 4 ])
+         ~ddelta:(rel [])
+      );
+    check bool "rf_respects_ppo_delta"
+      (Validation.rf_respects_ppo ~rf:(USet.union base added) ~ppo:base)
+      (Validation.rf_respects_ppo_delta ~rf:base ~ppo:base ~drf:added
+         ~dppo:(rel [])
+      )
+
 let suite =
   [
     (* Parameterized origin tests *)
@@ -349,6 +404,8 @@ let suite =
         test_justification_combinations_in_a_scope
       );
       ("read-from in a scope", `Quick, test_path_rf_in_a_scope);
+      ("validation predicates", `Quick, test_validation_predicates);
+      ("validation deltas", `Quick, test_validation_deltas);
     ];
   ]
   |> List.flatten
