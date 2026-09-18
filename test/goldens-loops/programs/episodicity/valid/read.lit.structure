@@ -1,0 +1,25 @@
+event 0: I
+event 1: A
+event 2: W
+event 3: R
+event 4: B
+event 5: R
+event 6: T
+event 7: T
+po: (0,1) (0,2) (0,3) (0,4) (0,5) (0,6) (0,7) (1,2) (1,3) (1,4) (1,5) (1,6) (1,7) (2,3) (2,4) (2,5) (2,6) (2,7) (3,4) (3,5) (3,6) (3,7) (4,5) (4,6) (4,7) (5,6)
+po_iter: 
+conflict: (5,7) (6,7) (7,5) (7,6)
+restrict 0: 
+restrict 1: 
+restrict 2: 
+restrict 3: 
+restrict 4: 
+restrict 5: (α < 5)
+restrict 6: (α < 5)
+restrict 7: (α >= 5)
+loop_indices 1: 
+loop_indices 2: 
+loop_indices 3: 
+loop_indices 4: 
+loop_indices 5: 1
+loop_conditions 1: ((β < 5) && (α < 5))

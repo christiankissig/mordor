@@ -1,0 +1,37 @@
+event 0: I
+event 1: A
+event 2: A
+event 3: W
+event 4: W
+event 5: R
+event 6: R
+event 7: B
+event 8: R
+event 9: R
+event 10: T
+event 11: T
+po: (0,1) (0,10) (0,11) (0,2) (0,3) (0,4) (0,5) (0,6) (0,7) (0,8) (0,9) (1,10) (1,11) (1,2) (1,3) (1,4) (1,5) (1,6) (1,7) (1,8) (1,9) (2,10) (2,11) (2,3) (2,4) (2,5) (2,6) (2,7) (2,8) (2,9) (3,10) (3,11) (3,4) (3,5) (3,6) (3,7) (3,8) (3,9) (4,10) (4,11) (4,5) (4,6) (4,7) (4,8) (4,9) (5,10) (5,11) (5,6) (5,7) (5,8) (5,9) (6,10) (6,11) (6,7) (6,8) (6,9) (7,10) (7,11) (7,8) (7,9) (8,10) (8,9) (9,10)
+po_iter: (8,9) (9,8)
+conflict: (10,11) (11,10) (11,8) (11,9) (8,11) (9,11)
+restrict 0: 
+restrict 1: 
+restrict 2: 
+restrict 3: 
+restrict 4: 
+restrict 5: 
+restrict 6: 
+restrict 7: 
+restrict 8: (α = β)
+restrict 9: (α = β)
+restrict 10: (α = β)
+restrict 11: (α != β)
+loop_indices 1: 
+loop_indices 2: 
+loop_indices 3: 
+loop_indices 4: 
+loop_indices 5: 
+loop_indices 6: 
+loop_indices 7: 
+loop_indices 8: 1
+loop_indices 9: 1
+loop_conditions 1: ((γ = δ) && (α = β))

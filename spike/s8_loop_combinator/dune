@@ -1,0 +1,6 @@
+; S8 (#20) -- can a loop produce its own po_iter? Run from the repo root:
+;   dune exec spike/s8_loop_combinator/s8_loop_combinator.exe -- FILE ...
+
+(executable
+ (name s8_loop_combinator)
+ (libraries mordor_lib lwt lwt.unix unix))
