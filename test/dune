@@ -16,6 +16,7 @@
   test_coherence
   test_elaborations
   test_events
+  test_eventstructure_algebra
   test_episodicity
   test_executions
   test_executions_export

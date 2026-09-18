@@ -9,6 +9,7 @@ let () =
       Test_expr.suite;
       Test_solver.suite;
       Test_events.suite;
+      Test_eventstructure_algebra.suite;
       Test_coherence.suite;
       Test_elaborations.suite;
       Test_executions.suite;

@@ -141,9 +141,32 @@ module SymbolicEventStructure = struct
      it: the test for physical equality is what keeps that case from walking the
      table twice. Operands that own their tables get the union. *)
   let merged a b =
-    let tbl = Hashtbl.copy a in
-      if b != a then Hashtbl.iter (Hashtbl.replace tbl) b;
-      tbl
+    if a == b || Hashtbl.length a >= Hashtbl.length b then (
+      let tbl = Hashtbl.copy a in
+        if b != a then Hashtbl.iter (Hashtbl.replace tbl) b;
+        tbl
+    )
+    else
+      (* Copy the larger and add the smaller: one event prefixed to a long
+         continuation is the common case. *)
+      let tbl = Hashtbl.copy b in
+        Hashtbl.iter
+          (fun k v -> if not (Hashtbl.mem tbl k) then Hashtbl.replace tbl k v)
+          a;
+        tbl
+
+  (* [join x y] is the union of two sets, and is one of them when the other is
+     empty rather than a copy of it.
+
+     Sharing is safe because nothing adds to a structure's sets in place: [dot]
+     has always handed its operand's [conflict], [rmw], [lo] and [fj] to its
+     result as they were. It is needed because a structure is mostly built one
+     event at a time, and a singleton is empty in every relation and all but
+     one of the event sets. Copying the continuation's at each step made
+     interpreting rcu-3, whose conflict relation has 607k pairs, take about
+     5s instead of about 1s. *)
+  let join x y =
+    if USet.is_empty y then x else if USet.is_empty x then y else USet.union x y
 
   (* What [plus] and [cross] agree on: every set and relation is the union of
      the operands', and the per-event tables are merged. They differ in
@@ -155,15 +178,15 @@ module SymbolicEventStructure = struct
      hands it over when it returns (interpret.ml). *)
   let union (a : t) (b : t) ~conflict : t =
     {
-      e = USet.union a.e b.e;
+      e = join a.e b.e;
       events = merged a.events b.events;
-      po = USet.union a.po b.po;
+      po = join a.po b.po;
       po_iter = USet.create ();
-      rmw = USet.union a.rmw b.rmw;
-      lo = USet.union a.lo b.lo;
+      rmw = join a.rmw b.rmw;
+      lo = join a.lo b.lo;
       restrict = merged a.restrict b.restrict;
       defacto = merged a.defacto b.defacto;
-      fj = USet.union a.fj b.fj;
+      fj = join a.fj b.fj;
       p = merged a.p b.p;
       constraints = a.constraints @ b.constraints;
       conflict;
@@ -171,15 +194,15 @@ module SymbolicEventStructure = struct
       loop_indices = merged a.loop_indices b.loop_indices;
       loop_conditions = a.loop_conditions;
       thread_index = merged a.thread_index b.thread_index;
-      write_events = USet.union a.write_events b.write_events;
-      read_events = USet.union a.read_events b.read_events;
-      rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
-      rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
-      fence_events = USet.union a.fence_events b.fence_events;
-      branch_events = USet.union a.branch_events b.branch_events;
-      malloc_events = USet.union a.malloc_events b.malloc_events;
-      free_events = USet.union a.free_events b.free_events;
-      terminal_events = USet.union a.terminal_events b.terminal_events;
+      write_events = join a.write_events b.write_events;
+      read_events = join a.read_events b.read_events;
+      rlx_write_events = join a.rlx_write_events b.rlx_write_events;
+      rlx_read_events = join a.rlx_read_events b.rlx_read_events;
+      fence_events = join a.fence_events b.fence_events;
+      branch_events = join a.branch_events b.branch_events;
+      malloc_events = join a.malloc_events b.malloc_events;
+      free_events = join a.free_events b.free_events;
+      terminal_events = join a.terminal_events b.terminal_events;
     }
 
   let plus a b : t =
@@ -192,7 +215,7 @@ module SymbolicEventStructure = struct
     in
       union a b ~conflict
 
-  let cross a b : t = union a b ~conflict:(USet.union a.conflict b.conflict)
+  let cross a b : t = union a b ~conflict:(join a.conflict b.conflict)
 
   (* On [events_in_loop], below: intersected with [e]. [loop_indices] was once a
      program-wide table that interpret.ml handed over whole, stamped with every
@@ -244,6 +267,125 @@ module SymbolicEventStructure = struct
 
   let events_po_before structure event =
     USet.filter (fun (e1, e2) -> e2 = event) structure.po |> URelation.pi_1
+end
+
+(* The algebra of event structures: what a program denotes is built from
+   [empty] and [singleton] with [seq], [choice] and [par], and nothing else.
+
+   It is a facade over [SymbolicEventStructure]'s combinators and adds no
+   behaviour of its own. What it adds is the vocabulary: the classic recursion
+   builds a structure from the end with [dot], a bottom-up construction builds
+   fragments and joins them, and both can say what they build in these five
+   operations. This is the seam between the two. *)
+module EventStructure = struct
+  module S = SymbolicEventStructure
+
+  type t = symbolic_event_structure
+
+  let empty = S.create
+
+  let singleton ?env ?loops ?thread event phi defacto =
+    S.dot ?env ?loops ?thread event (S.create ()) phi defacto
+
+  let choice = S.plus
+  let par = S.cross
+
+  (* [S.dot event b] is [seq (singleton event) b], and [S.seq a b] is
+     [seq ~join:true a b]. *)
+  let seq ?(join = false) (a : t) (b : t) : t =
+    let ordered = URelation.cross a.e b.e in
+    let c = S.cross a b in
+      {
+        c with
+        po = USet.union c.po ordered;
+        fj = (if join then USet.union c.fj ordered else c.fj);
+      }
+
+  let relabel ?(off = 0) ?(relab = fun _ -> None) ?(env_key = Fun.id) ?thread
+      (s : t) : t =
+    let l x = x + off in
+    let pair (a, b) = (l a, l b) in
+    let ex = Expr.relabel ~relab in
+    let map fk fv tbl =
+      let t = Hashtbl.create (max 16 (Hashtbl.length tbl)) in
+        Hashtbl.iter (fun k v -> Hashtbl.replace t (fk k) (fv v)) tbl;
+        t
+    in
+    let event (ev : event) =
+      { (Event.relabel ~relab ev) with label = l ev.label }
+    in
+      {
+        e = USet.map l s.e;
+        events = map l event s.events;
+        po = USet.map pair s.po;
+        po_iter = USet.map pair s.po_iter;
+        rmw = USet.map (fun (a, c, b) -> (l a, ex c, l b)) s.rmw;
+        lo = USet.map pair s.lo;
+        restrict = map l (List.map ex) s.restrict;
+        defacto = map l (List.map ex) s.defacto;
+        fj = USet.map pair s.fj;
+        p = map l (map env_key ex) s.p;
+        constraints = List.map ex s.constraints;
+        conflict = USet.map pair s.conflict;
+        origin = map (fun x -> Option.value (relab x) ~default:x) l s.origin;
+        loop_indices = map l Fun.id s.loop_indices;
+        loop_conditions = s.loop_conditions;
+        thread_index =
+          map l (fun t -> Option.value thread ~default:t) s.thread_index;
+        write_events = USet.map l s.write_events;
+        read_events = USet.map l s.read_events;
+        rlx_write_events = USet.map l s.rlx_write_events;
+        rlx_read_events = USet.map l s.rlx_read_events;
+        fence_events = USet.map l s.fence_events;
+        branch_events = USet.map l s.branch_events;
+        malloc_events = USet.map l s.malloc_events;
+        free_events = USet.map l s.free_events;
+        terminal_events = USet.map l s.terminal_events;
+      }
+
+  (* Everything rendered to sorted strings: the sets and tables are hash
+     tables, whose order is an accident, and an expression holds a [Z.t]. *)
+  let render (s : t) : string list list =
+    let i = string_of_int in
+    let pair (a, b) = Printf.sprintf "(%d,%d)" a b in
+    let set show u = USet.values u |> List.map show |> List.sort compare in
+    let tbl show_k show_v t =
+      Hashtbl.fold (fun k v acc -> (show_k k ^ ": " ^ show_v v) :: acc) t []
+      |> List.sort compare
+    in
+    let exprs es = String.concat " && " (List.map Expr.to_string es) in
+    let env e = String.concat ", " (tbl Fun.id Expr.to_string e) in
+      [
+        set i s.e;
+        tbl i show_event s.events;
+        set pair s.po;
+        set pair s.po_iter;
+        set
+          (fun (a, c, b) -> Printf.sprintf "(%d,%s,%d)" a (Expr.to_string c) b)
+          s.rmw;
+        set pair s.lo;
+        tbl i exprs s.restrict;
+        tbl i exprs s.defacto;
+        set pair s.fj;
+        tbl i env s.p;
+        List.map Expr.to_string s.constraints |> List.sort_uniq compare;
+        set pair s.conflict;
+        tbl Fun.id i s.origin;
+        tbl i (fun ls -> String.concat ";" (List.map i ls)) s.loop_indices;
+        tbl i exprs s.loop_conditions;
+        tbl i i s.thread_index;
+        set i s.write_events;
+        set i s.read_events;
+        set i s.rlx_write_events;
+        set i s.rlx_read_events;
+        set i s.fence_events;
+        set i s.branch_events;
+        set i s.malloc_events;
+        set i s.free_events;
+        set i s.terminal_events;
+      ]
+
+  let equal a b = render a = render b
 end
 
 (* Find the origin of a symbol in a symbolic event structure *)

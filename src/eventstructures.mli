@@ -50,6 +50,80 @@ module SymbolicEventStructure : sig
   val events_po_before : t -> int -> int uset
 end
 
+(** {1 The Algebra of Event Structures} *)
+
+(** What a program denotes, built from {!empty} and {!singleton} with {!seq},
+    {!choice} and {!par} and nothing else.
+
+    A facade over {!SymbolicEventStructure}'s combinators, adding no behaviour
+    of its own. The classic recursion builds a structure from the end, one
+    prefixed event at a time; a bottom-up construction builds fragments and
+    joins them. Both can say what they build in these five operations, and this
+    is the seam between the two.
+
+    The laws, up to {!equal}: [seq], [choice] and [par] are associative with
+    [empty ()] their unit, [choice] and [par] are commutative, and {!relabel}
+    distributes over all three. *)
+module EventStructure : sig
+  type t = symbolic_event_structure
+
+  (** The structure with no events. A function, since a structure's tables are
+      mutable and two structures must not share them. *)
+  val empty : unit -> t
+
+  (** [singleton ?env ?loops ?thread event phi defacto] is the structure of
+      [event] alone, under path condition [phi] and de facto constraints
+      [defacto]; the optional arguments are {!SymbolicEventStructure.dot}'s. *)
+  val singleton :
+    ?env:(string, expr) Hashtbl.t ->
+    ?loops:int list ->
+    ?thread:int ->
+    event ->
+    expr list ->
+    expr list ->
+    t
+
+  (** [seq ?join a b] is [a] followed by [b]: every event of [a] is po-before
+      every event of [b]. With [~join:true] the same pairs are recorded in [fj],
+      as the join of a parallel block with its continuation needs.
+
+      [b] is not copied. Where [a] ends in a choice, [b] follows every branch of
+      it at once, which is what the classic recursion avoids by interpreting the
+      continuation once per branch; sequencing with copies is the bottom-up
+      construction's to add. *)
+  val seq : ?join:bool -> t -> t -> t
+
+  (** [choice a b] is [a] or [b]: every event of one conflicts with every event
+      of the other. *)
+  val choice : t -> t -> t
+
+  (** [par a b] is [a] beside [b], unordered and without conflict. *)
+  val par : t -> t -> t
+
+  (** [relabel ?off ?relab ?env_key ?thread s] is [s] with every event label
+      shifted by [off], every symbol renamed by [relab], and every indexed event
+      moved to [thread]. Labels and symbols are rewritten wherever they occur:
+      in the sets and relations, as keys and values of the tables, and inside
+      events, conditions, environments and constraints.
+
+      [env_key] rewrites the keys of the register environments, for the ones
+      that spell out a symbol's name, which no traversal of an expression finds.
+      [loop_conditions] is left as it is: it is keyed by loop. *)
+  val relabel :
+    ?off:int ->
+    ?relab:(string -> string option) ->
+    ?env_key:(string -> string) ->
+    ?thread:int ->
+    t ->
+    t
+
+  (** Extensional equality: the same events, relations and table bindings,
+      whatever order the underlying hash tables hold them in. [constraints] is
+      compared as a set, since its order and repetitions record only the order
+      in which structures were combined. *)
+  val equal : t -> t -> bool
+end
+
 (** {1 Types} *)
 
 (** Path information containing event sequence and predicates *)
