@@ -14,31 +14,30 @@ open Eventstructures
 open Types
 open Uset
 
-(** {1 Event and Symbol Generation}
+(** {1 Event and Symbol Allocation} *)
 
-    Module-level counters. They are exposed because the unit tests reset and
-    read them; the explicit allocator that is to replace them takes them out of
-    the interface again. *)
+(** Allocator of event labels and fresh symbols.
 
-(** Event counter for generating unique event identifiers. *)
-val event_counter : int ref
+    One allocator is made for each interpretation and handed down the recursion
+    inside {!events_t}, so labels and symbols are fresh within an interpretation
+    and start over with the next one. *)
+module Allocator : sig
+  type t
 
-(** Generate the next unique event identifier. *)
-val next_event_id : unit -> int
+  (** [create ()] is an allocator that has handed out nothing. *)
+  val create : unit -> t
 
-(** Counter for Greek letter symbols (α, β, γ, ...). *)
-val greek_counter : int ref
+  (** [next_label t] is the next unused event label, counting from [0]. *)
+  val next_label : t -> int
 
-(** Generate the next Greek letter symbol, with a numeric suffix once the
-    alphabet is exhausted (e.g. "α", "β", ..., "α1", "β1", ...). *)
-val next_greek : unit -> string
+  (** [next_greek t] is the next Greek letter symbol, with a numeric suffix once
+      the alphabet is exhausted (e.g. "α", "β", ..., "α1", "β1", ...). *)
+  val next_greek : t -> string
 
-(** Counter for Chinese character symbols. *)
-val zh_counter : int ref
-
-(** Generate the next Chinese character symbol, with a numeric suffix once the
-    alphabet is exhausted. *)
-val next_zh : unit -> string
+  (** [next_zh t] is the next Chinese character symbol, with a numeric suffix
+      once the alphabet is exhausted. *)
+  val next_zh : t -> string
+end
 
 (** {1 Event Structure Tracking} *)
 
@@ -72,11 +71,11 @@ type events_t = {
       (** Mapping from event labels to source code spans. *)
   globals : string USet.t;  (** Set of global variable names. *)
   ubopt : bool;  (** Whether the model exploits undefined behaviour. *)
-  mutable label : int;  (** Counter for generating unique event labels. *)
+  alloc : Allocator.t;  (** Source of event labels and fresh symbols. *)
 }
 
-(** [create_events ?ubopt defacto] is a fresh [events_t] with empty tables and a
-    zero label counter. *)
+(** [create_events ?ubopt defacto] is a fresh [events_t] with empty tables and
+    an allocator of its own. *)
 val create_events : ?ubopt:bool -> expr list -> events_t
 
 (** Prefix of the environment keys under which a path's undefined-behaviour

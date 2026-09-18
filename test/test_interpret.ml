@@ -17,58 +17,60 @@ let make_ir_node stmt =
 (** Helper to run Lwt tests *)
 let run_lwt f () = Lwt_main.run (f ())
 
-(** Reset counters for consistent testing *)
-let reset_counters () =
-  event_counter := 0;
-  greek_counter := 0;
-  zh_counter := 0
-
-(** Test event ID generation *)
-let test_next_event_id () =
-  reset_counters ();
-  let id1 = next_event_id () in
-  let id2 = next_event_id () in
-  let id3 = next_event_id () in
-    Alcotest.(check int) "first event id" 1 id1;
-    Alcotest.(check int) "second event id" 2 id2;
-    Alcotest.(check int) "third event id" 3 id3
+(** Labels count from zero *)
+let test_next_label () =
+  let alloc = Allocator.create () in
+  let l1 = Allocator.next_label alloc in
+  let l2 = Allocator.next_label alloc in
+  let l3 = Allocator.next_label alloc in
+    Alcotest.(check int) "first label" 0 l1;
+    Alcotest.(check int) "second label" 1 l2;
+    Alcotest.(check int) "third label" 2 l3
 
 (** Test Greek symbol generation *)
 let test_next_greek () =
-  reset_counters ();
-  let g1 = next_greek () in
-  let g2 = next_greek () in
+  let alloc = Allocator.create () in
+  let g1 = Allocator.next_greek alloc in
+  let g2 = Allocator.next_greek alloc in
     Alcotest.(check string) "first greek symbol" "α" g1;
     Alcotest.(check string) "second greek symbol" "β" g2
 
 let test_next_greek_overflow () =
-  reset_counters ();
-  (* Generate more symbols than in the alphabet to test suffix *)
-  for _i = 1 to String.length greek_alpha do
-    let _ = next_greek () in
-      ()
-  done;
-  let overflow = next_greek () in
-    Alcotest.(check string) "greek with suffix" "α2" overflow
+  let alloc = Allocator.create () in
+    (* Generate more symbols than in the alphabet to test suffix *)
+    for _i = 1 to String.length greek_alpha do
+      let _ = Allocator.next_greek alloc in
+        ()
+    done;
+    let overflow = Allocator.next_greek alloc in
+      Alcotest.(check string) "greek with suffix" "α2" overflow
 
 (** Test Chinese symbol generation *)
 let test_next_zh () =
-  reset_counters ();
-  let z1 = next_zh () in
-  let z2 = next_zh () in
+  let alloc = Allocator.create () in
+  let z1 = Allocator.next_zh alloc in
+  let z2 = Allocator.next_zh alloc in
     Alcotest.(check bool) "first zh is string" true (String.length z1 > 0);
     Alcotest.(check bool) "second zh is string" true (String.length z2 > 0);
     Alcotest.(check bool) "zh symbols differ" true (z1 <> z2)
 
+(** Two allocators share nothing: what one hands out does not move the other,
+    which is what lets an interpretation, and later a fragment, own one. *)
+let test_allocators_are_independent () =
+  let a = Allocator.create () and b = Allocator.create () in
+    ignore (Allocator.next_label a, Allocator.next_greek a, Allocator.next_zh a);
+    Alcotest.(check int) "b's labels start at 0" 0 (Allocator.next_label b);
+    Alcotest.(check string) "b's greek starts at α" "α" (Allocator.next_greek b);
+    Alcotest.(check string) "b's zh starts at 一" "一" (Allocator.next_zh b)
+
 (** Test events collection creation *)
 let test_create_events () =
   let events = create_events [] in
-    Alcotest.(check int) "initial label is 1" 0 events.label;
-    Alcotest.(check int) "events table is empty" 0 (Hashtbl.length events.events)
+    Alcotest.(check int) "events table is empty" 0 (Hashtbl.length events.events);
+    Alcotest.(check int) "first label is 0" 0 (Allocator.next_label events.alloc)
 
 (** Test adding events *)
 let test_add_event () =
-  reset_counters ();
   let events = create_events [] in
   let evt = Event.create Read 0 () in
   let env = Hashtbl.create 16 in
@@ -77,11 +79,12 @@ let test_add_event () =
       { source_span = None; thread_ctx = None; loop_ctx = None }
   in
     Alcotest.(check int) "event label assigned" 0 added_evt.label;
-    Alcotest.(check int) "label counter incremented" 1 events.label;
+    Alcotest.(check int)
+      "label counter incremented" 1
+      (Allocator.next_label events.alloc);
     Alcotest.(check int) "event added to table" 1 (Hashtbl.length events.events)
 
 let test_add_multiple_events () =
-  reset_counters ();
   let events = create_events [] in
   let evt1 = Event.create Read 0 () in
   let evt2 = Event.create Write 0 () in
@@ -275,7 +278,6 @@ let test_interpret_empty_statements =
 (** Test interpret GlobalStore statement *)
 let test_interpret_global_store =
   run_lwt (fun () ->
-      reset_counters ();
       let env = Hashtbl.create 16 in
       let events = create_events [] in
       let mode = Types.SC in
@@ -295,7 +297,6 @@ let test_interpret_global_store =
 (** Test interpret GlobalLoad statement *)
 let test_interpret_global_load =
   run_lwt (fun () ->
-      reset_counters ();
       let env = Hashtbl.create 16 in
       let events = create_events [] in
       let mode = Types.SC in
@@ -312,7 +313,6 @@ let test_interpret_global_load =
 (** Test interpret Fence statement *)
 let test_interpret_fence =
   run_lwt (fun () ->
-      reset_counters ();
       let env = Hashtbl.create 16 in
       let events = create_events [] in
       let mode = Types.SC in
@@ -329,7 +329,6 @@ let test_interpret_fence =
 (** Test interpret multiple statements *)
 let test_interpret_multiple_statements =
   run_lwt (fun () ->
-      reset_counters ();
       let env = Hashtbl.create 16 in
       let events = create_events [] in
       let stmts =
@@ -356,7 +355,6 @@ let test_interpret_multiple_statements =
 (** Test main interpret function *)
 let test_interpret_main =
   run_lwt (fun () ->
-      reset_counters ();
       let ast =
         List.map make_ir_node
           [
@@ -381,7 +379,6 @@ let test_interpret_main =
 
 let test_interpret_main_with_po =
   run_lwt (fun () ->
-      reset_counters ();
       let ast =
         List.map make_ir_node
           [
@@ -682,7 +679,9 @@ let suite =
         test_global_malloc_stores_the_address;
       Alcotest.test_case "Referenced global is distinct" `Quick
         test_referenced_global_is_distinct;
-      Alcotest.test_case "Event ID generation" `Quick test_next_event_id;
+      Alcotest.test_case "Label generation" `Quick test_next_label;
+      Alcotest.test_case "Allocators are independent" `Quick
+        test_allocators_are_independent;
       Alcotest.test_case "Greek symbol generation" `Quick test_next_greek;
       Alcotest.test_case "Greek symbol overflow" `Quick test_next_greek_overflow;
       Alcotest.test_case "Chinese symbol generation" `Quick test_next_zh;

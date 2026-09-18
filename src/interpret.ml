@@ -15,47 +15,50 @@ open Uset
 
 let ir_node_to_string = Ir.to_string ~ann_to_string:(fun _ -> "")
 
-(** {1 Event and Symbol Generation} *)
+(** {1 Event and Symbol Allocation} *)
 
-(** Event counter for generating unique event identifiers. *)
-let event_counter = ref 0
+(** Allocator of event labels and fresh symbols.
 
-(** Generate the next unique event identifier.
-    @return A fresh integer identifier. *)
-let next_event_id () =
-  incr event_counter;
-  !event_counter
+    One allocator is made for each interpretation and handed down the recursion
+    inside {!events_t}, so labels and symbols are fresh within an interpretation
+    and start over with the next one. The three counters used to be module-level
+    references that every entry point had to remember to reset, and that two
+    interpretations running at once would have shared.
 
-(** Counter for Greek letter symbols (α, β, γ, ...). *)
-let greek_counter = ref 0
+    It is a value so that it can be swapped: fragment-local labels are this same
+    interface over an allocator the fragment owns. *)
+module Allocator = struct
+  type t = { mutable label : int; mutable greek : int; mutable zh : int }
 
-(** Generate the next Greek letter symbol with optional numeric suffix.
-    @return
-      A string containing a Greek letter, possibly with a numeric suffix (e.g.,
-      "α", "β", "α1", "β1", ...). *)
-let next_greek () =
-  let num_greek_letters = String.length greek_alpha / 2 in
-  (* 24 letters *)
-  let idx = !greek_counter mod num_greek_letters in
-  let suffix = !greek_counter / num_greek_letters in
-    incr greek_counter;
-    let base = String.sub greek_alpha (idx * 2) 2 in
-      if suffix = 0 then base else base ^ string_of_int suffix
+  let create () = { label = 0; greek = 0; zh = 0 }
 
-(** Counter for Chinese character symbols. *)
-let zh_counter = ref 0
+  (** [next_label t] is the next unused event label, counting from [0]. *)
+  let next_label t =
+    let label = t.label in
+      t.label <- label + 1;
+      label
 
-(** Generate the next Chinese character symbol with optional numeric suffix.
-    @return
-      A string containing a Chinese character, possibly with a numeric suffix.
-*)
-let next_zh () =
-  let num_zh_chars = String.length zh_alpha / 3 in
-  let idx = !zh_counter mod num_zh_chars in
-  let suffix = !zh_counter / num_zh_chars in
-    incr zh_counter;
-    let base = String.sub zh_alpha (idx * 3) 3 in
-      if suffix = 0 then base else base ^ string_of_int suffix
+  (* The [n]th symbol over an alphabet of [width]-byte characters: the
+     alphabet's letters in turn, then again with a numeric suffix. *)
+  let nth_symbol alphabet width n =
+    let letters = String.length alphabet / width in
+    let base = String.sub alphabet (n mod letters * width) width in
+      if n < letters then base else base ^ string_of_int (n / letters)
+
+  (** [next_greek t] is the next Greek letter symbol, with a numeric suffix once
+      the alphabet is exhausted (e.g., "α", "β", ..., "α1", "β1", ...). *)
+  let next_greek t =
+    let n = t.greek in
+      t.greek <- n + 1;
+      nth_symbol greek_alpha 2 n
+
+  (** [next_zh t] is the next Chinese character symbol, with a numeric suffix
+      once the alphabet is exhausted. *)
+  let next_zh t =
+    let n = t.zh in
+      t.zh <- n + 1;
+      nth_symbol zh_alpha 3 n
+end
 
 (** {1 Event Structure Tracking} *)
 
@@ -98,11 +101,11 @@ type events_t = {
   ubopt : bool;
       (** Whether the model exploits undefined behaviour. Gates the rewrite in
           {!apply_ub_constraints}. *)
-  mutable label : int;  (** Counter for generating unique event labels. *)
+  alloc : Allocator.t;  (** Source of event labels and fresh symbols. *)
 }
 
 (** Create a new empty events structure.
-    @return A fresh events_t with empty tables and zero label counter. *)
+    @return A fresh events_t with empty tables and an allocator of its own. *)
 let create_events ?(ubopt = false) defacto =
   {
     defacto;
@@ -117,7 +120,7 @@ let create_events ?(ubopt = false) defacto =
     loop_indices = Hashtbl.create 256;
     loop_conditions = Hashtbl.create 256;
     globals = USet.create ();
-    label = 0;
+    alloc = Allocator.create ();
   }
 
 (** [apply_ub_constraints events e] folds [lhs / !r] to [lhs] when the model
@@ -203,8 +206,7 @@ let ub_assume events env e =
       Source annotations including span, thread, and loop context.
     @return The event with its newly assigned label. *)
 let add_event (events : events_t) event env (annotation : ir_node_ann) =
-  let lbl = events.label in
-    events.label <- events.label + 1;
+  let lbl = Allocator.next_label events.alloc in
     let event' : event = { event with label = lbl } in
       Hashtbl.replace events.events lbl event';
       Hashtbl.replace events.env_by_evt lbl (Hashtbl.copy env);
@@ -411,7 +413,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             let cont = recurse rest env phi events in
               SymbolicEventStructure.dot event' cont phi defacto
         | DerefLoad { register; address; load } ->
-            let symbol = next_greek () in
+            let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
             let evt =
               {
@@ -435,7 +437,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let cont = recurse rest env' phi events in
                   SymbolicEventStructure.dot event' cont phi defacto
         | GlobalLoad { register; global; load } ->
-            let symbol = next_greek () in
+            let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
             let evt =
               {
@@ -464,7 +466,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
         | Fadd { register; address; operand; rmw_mode; load_mode; assign_mode }
           ->
             let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-            let symbol = next_greek () in
+            let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
             let base_evt_load : event = Event.create Read 0 () in
             let evt_load =
@@ -523,7 +525,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
         | Cas { register; address; expected; desired; load_mode; assign_mode }
           ->
             let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-            let symbol = next_greek () in
+            let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
             let evt_load =
               {
@@ -723,7 +725,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             let cont = recurse rest env phi events in
               SymbolicEventStructure.dot event' cont phi defacto
         | RegMalloc { register; size } ->
-            let symbol = next_zh () in
+            let symbol = Allocator.next_zh events.alloc in
             let rval = VSymbol symbol in
             let loc = ESymbol symbol in
             let base_evt : event = Event.create Malloc 0 () in
@@ -754,7 +756,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                events, as [r := malloc n; x := r] would be. The store used to be
                missing, so the global never held the address and a load from it
                read whatever it held before. *)
-            let symbol = next_zh () in
+            let symbol = Allocator.next_zh events.alloc in
             let rval = VSymbol symbol in
             let loc = ESymbol symbol in
             let base_evt : event = Event.create Malloc 0 () in
@@ -1506,8 +1508,6 @@ let step_interpret lwt_ctx =
           | Generic -> "generic"
           )
     );
-    greek_counter := 0;
-    zh_counter := 0;
     match ctx.options.loop_semantics with
     | FiniteStepCounter | StepCounterPerLoop ->
         StepCounterSemantics.step_interpret lwt_ctx
