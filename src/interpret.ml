@@ -839,24 +839,37 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
 
 (** Create a generic terminal structure with a terminal event.
 
-    Adds a single terminal event and establishes distinctness constraints for
-    all global variables.
-
     @param add_event Function to add events to the global table.
     @param env The current register environment.
     @param phi The current path condition.
     @param events The global events structure.
     @return A symbolic event structure with a terminal event. *)
 let make_generic_terminal_structure ~add_event env phi events =
-  let structure = EventStructure.empty () in
   let terminal_evt = Event.create Terminal 0 () in
   let terminal_evt : event =
     add_event events terminal_evt env
       { source_span = None; thread_ctx = None; loop_ctx = None }
   in
+  let defacto =
+    List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
+    @ ub_facts env
+  in
+    prefix events terminal_evt (EventStructure.empty ()) phi defacto
+
+(** [distinctness globals structure] is what the program says about its
+    locations: [globals] are pairwise distinct, and the allocations of
+    [structure] are pairwise distinct and distinct from every global.
+
+    It is a property of the whole program and is computed once, from the
+    finished structure. It used to be attached to each terminal structure,
+    computed from what interpretation had seen by then -- a thread's terminal
+    knew nothing of an allocation in the next thread -- and the structure's list
+    was the concatenation of them all. The last terminal had seen everything, so
+    the union is this list, with duplicates. *)
+let distinctness globals (structure : symbolic_event_structure) =
   let global_constraints =
-    URelation.cross events.globals events.globals
-    |> (fun rel -> USet.set_minus rel (URelation.identity events.globals))
+    URelation.cross globals globals
+    |> (fun rel -> USet.set_minus rel (URelation.identity globals))
     |> USet.values
     |> List.map (fun (g1, g2) -> if g1 < g2 then (g1, g2) else (g2, g1))
     |> List.sort_uniq (fun (a1, b1) (a2, b2) ->
@@ -877,7 +890,7 @@ let make_generic_terminal_structure ~add_event env phi events =
           | Malloc, Some loc -> loc :: acc
           | _ -> acc
         )
-        events.events []
+        structure.events []
       |> List.sort_uniq Expr.compare
     in
     let rec distinct_pairs = function
@@ -892,20 +905,13 @@ let make_generic_terminal_structure ~add_event env phi events =
          *p and x be told apart, and so lets the two accesses be reordered. *)
       List.concat_map
         (fun loc ->
-          USet.values events.globals
+          USet.values globals
           |> List.map (fun g -> Expr.binop loc "!=" (EVar g))
         )
         locations
       @ distinct_pairs locations
   in
-  let constraints = global_constraints @ allocation_constraints in
-  let cont = { structure with constraints } in
-  let defacto =
-    List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
-    @ ub_facts env
-  in
-
-  prefix events terminal_evt cont phi defacto
+    global_constraints @ allocation_constraints
 
 (** {1 Basic Interpretation} *)
 
@@ -962,10 +968,15 @@ let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
   let structure = prefix events init_event' structure [] defacto in
 
   (* The per-event tables are the structure's own by now; [dot] built them.
-     The loop guards are the one thing still handed over whole: they are keyed
-     by loop, not by event, and accumulate one per interpreted occurrence. *)
+     The loop guards are still handed over whole: they are keyed by loop, not
+     by event, and accumulate one per interpreted occurrence. The constraints
+     are about the program as a whole. *)
   let structure =
-    { structure with loop_conditions = events.loop_conditions }
+    {
+      structure with
+      loop_conditions = events.loop_conditions;
+      constraints = distinctness events.globals structure;
+    }
   in
 
   (structure, events.source_spans)
