@@ -122,6 +122,32 @@ let test_dot () =
     Alcotest.(check bool) "po (1,2) exists" true (USet.mem result.po (1, 2));
     Alcotest.(check bool) "po (1,3) exists" true (USet.mem result.po (1, 3))
 
+(** [dot] leaves its operand as it found it: the path condition and de facto
+    constraints of the prefixed event go into the result's tables, not the
+    operand's, so prefixing one structure twice gives two results that know
+    nothing of each other. *)
+let test_dot_leaves_operand_alone () =
+  let s = { (SymbolicEventStructure.create ()) with e = USet.of_list [ 3 ] } in
+  let phi = [ EBoolean true ] in
+  let r1 = SymbolicEventStructure.dot (Event.create Read 1 ()) s phi phi in
+  let r2 = SymbolicEventStructure.dot (Event.create Write 2 ()) s [] [] in
+    Alcotest.(check int)
+      "operand restrict untouched" 0
+      (Hashtbl.length s.restrict);
+    Alcotest.(check int) "operand defacto untouched" 0 (Hashtbl.length s.defacto);
+    Alcotest.(check bool)
+      "first result restricts 1" true
+      (Hashtbl.find_opt r1.restrict 1 = Some phi);
+    Alcotest.(check bool)
+      "first result has defacto for 1" true
+      (Hashtbl.find_opt r1.defacto 1 = Some phi);
+    Alcotest.(check bool)
+      "first result does not see 2" false
+      (Hashtbl.mem r1.restrict 2 || Hashtbl.mem r1.defacto 2);
+    Alcotest.(check bool)
+      "second result does not see 1" false
+      (Hashtbl.mem r2.restrict 1 || Hashtbl.mem r2.defacto 1)
+
 (** Test SymbolicEventStructure.plus operation *)
 let test_plus () =
   let s1 =
@@ -600,6 +626,8 @@ let suite =
       Alcotest.test_case "Add multiple events" `Quick test_add_multiple_events;
       Alcotest.test_case "Empty structure" `Quick test_empty_structure;
       Alcotest.test_case "Dot operation" `Quick test_dot;
+      Alcotest.test_case "Dot leaves its operand alone" `Quick
+        test_dot_leaves_operand_alone;
       Alcotest.test_case "Plus operation" `Quick test_plus;
       Alcotest.test_case "Plus with relations" `Quick test_plus_with_relations;
       Alcotest.test_case "Cross operation" `Quick test_cross;
