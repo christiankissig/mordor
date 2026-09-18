@@ -113,8 +113,72 @@ module TestUSet = struct
       check int "source is unchanged" 3 (USet.size s);
       ()
 
+  (** A set is an element by its members: two sets built differently, with the
+      same members, are one element of a set of sets. *)
+  let test_sets_of_sets_by_content () =
+    let a = USet.of_list [ 1; 2; 3 ] in
+    let b = USet.create () in
+      List.iter (fun x -> ignore (USet.add b x)) [ 3; 2; 1; 4 ];
+      ignore (USet.remove b 4);
+      let ss = USet.of_list [ a; b; USet.of_list [ 5 ] ] in
+        check int "two distinct sets" 2 (USet.size ss);
+        check bool "the other is found by content" true
+          (USet.mem ss (USet.of_list [ 2; 3; 1 ]))
+
+  (** So is a set inside a record, as an execution's relations are. *)
+  let test_records_holding_sets_by_content () =
+    let r1 = (1, USet.of_list [ (1, 2); (2, 3) ]) in
+    let r2 = (1, USet.of_list [ (2, 3); (1, 2) ]) in
+      check bool "value_equality" true (USet.value_equality r1 r2);
+      check int "one element" 1 (USet.size (USet.of_list [ r1; r2 ]))
+
+  (** Reading a set writes nothing to it: domains iterating one set at once
+      leave it as it was, and it can be added to afterwards. Base's hash sets,
+      which this used to be, could be left refusing every [add]. *)
+  let test_concurrent_iteration_leaves_set_usable () =
+    let s = USet.of_list (List.init 10_000 Fun.id) in
+    let domains =
+      List.init 4 (fun _ ->
+          Domain.spawn (fun () ->
+              let n = ref 0 in
+                for _ = 1 to 50 do
+                  USet.iter (fun _ -> incr n) s
+                done;
+                !n
+          )
+      )
+    in
+      List.iter
+        (fun d ->
+          check int "each domain saw every member" 500_000 (Domain.join d)
+        )
+        domains;
+      ignore (USet.add s (-1));
+      check int "added to afterwards" 10_001 (USet.size s)
+
+  (** Reversing the iteration order changes the order and nothing else. *)
+  let test_reversed_iteration () =
+    let s = USet.of_list (List.init 100 Fun.id) in
+    let forward = USet.values s in
+      USet.reversed_iteration := true;
+      let reversed =
+        Fun.protect
+          ~finally:(fun () -> USet.reversed_iteration := false)
+          (fun () -> USet.values s)
+      in
+        check (list int) "same members"
+          (List.sort compare forward)
+          (List.sort compare reversed);
+        check bool "another order" true (forward <> reversed)
+
   let suite =
     [
+      test_case "sets of sets by content" `Quick test_sets_of_sets_by_content;
+      test_case "records holding sets by content" `Quick
+        test_records_holding_sets_by_content;
+      test_case "concurrent iteration leaves a set usable" `Quick
+        test_concurrent_iteration_leaves_set_usable;
+      test_case "reversed iteration" `Quick test_reversed_iteration;
       test_case "filter_map keeps and drops" `Quick
         test_filter_map_keeps_and_drops;
       test_case "filter_map collapses duplicates" `Quick
