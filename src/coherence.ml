@@ -157,11 +157,6 @@ module ModelUtils = struct
       let result = URelation.identity result in
         result
 
-  (** Thread-local restriction *)
-  let thread_internal po x = USet.intersection x po
-
-  let thread_external po x = USet.set_minus x po
-
   (** [same_thread thread_index a b]: [a] and [b] are events of one thread.
       Events outside every thread -- the initial event, terminals -- are in
       none, so every pair involving one is external. *)
@@ -1631,21 +1626,16 @@ end
 
 type restrictions = { coherent : string }
 
-(** First-class module type for dynamic dispatch *)
-type model = (module MEMORY_MODEL)
-
 (** Model registry with configs *)
 module ModelRegistry = struct
-  type model_entry = { name : string; create : unit -> (module MEMORY_MODEL) }
+  let models : (string, unit -> (module MEMORY_MODEL)) Hashtbl.t =
+    Hashtbl.create 10
 
-  let models : (string, model_entry) Hashtbl.t = Hashtbl.create 10
-
-  let register name create_fn =
-    Hashtbl.add models name { name; create = create_fn }
+  let register name create_fn = Hashtbl.add models name create_fn
 
   let lookup name =
     match Hashtbl.find_opt models name with
-    | Some entry -> Some (entry.create ())
+    | Some create -> Some (create ())
     | None -> None
 
   let () =
