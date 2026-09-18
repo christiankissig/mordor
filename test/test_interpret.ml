@@ -457,6 +457,42 @@ let check_structure_wellformed name structure =
       0
       (USet.size (USet.intersection structure.po structure.conflict))
 
+(* A structure describes the events that are in it, and no others.
+
+   The interpreter creates a branch event before it knows whether the branch
+   survives: a guard that folds to a constant is elided, and its event, already
+   labelled and recorded, never enters the structure. While the structure was
+   handed the interpreter's program-wide tables it described those events too,
+   and [po_iter], built from [loop_indices], ordered them. This is
+   branch_condition/nested_fail, whose loop came back with two members that
+   were not events of the structure. *)
+let test_structure_describes_its_events_only () =
+  let structure =
+    interpret_symbolic
+      "x := 0; y := 1; rval := x; rtest := y; do { ri := 0; if (rval = 0) { if \
+       (rtest = 1) { ri := 1; } } } while (ri = 0)"
+  in
+  let here label = USet.mem structure.e label in
+  let keys_here name tbl =
+    Alcotest.(check bool)
+      (name ^ " binds events of the structure only")
+      true
+      (Hashtbl.fold (fun label _ acc -> acc && here label) tbl true)
+  in
+    keys_here "events" structure.events;
+    keys_here "p" structure.p;
+    keys_here "loop_indices" structure.loop_indices;
+    keys_here "thread_index" structure.thread_index;
+    Alcotest.(check bool)
+      "origin names events of the structure only" true
+      (Hashtbl.fold (fun _ label acc -> acc && here label) structure.origin true);
+    Alcotest.(check int)
+      "every event is described" (USet.size structure.e)
+      (Hashtbl.length structure.events);
+    Alcotest.(check bool)
+      "po_iter orders events of the structure only" true
+      (USet.for_all (fun (a, b) -> here a && here b) structure.po_iter)
+
 (* A while loop whose guard reads a value updated by the body branches on a
    symbolic guard: both "enter" and "exit" branches are feasible. *)
 let test_while_symbolic_guard_wellformed () =
@@ -655,6 +691,8 @@ let test_referenced_global_is_distinct () =
 let suite =
   ( "Interpreter",
     [
+      Alcotest.test_case "Structure describes its events only" `Quick
+        test_structure_describes_its_events_only;
       Alcotest.test_case "While symbolic guard well-formed" `Quick
         test_while_symbolic_guard_wellformed;
       Alcotest.test_case "While symbolic guard yields executions" `Quick

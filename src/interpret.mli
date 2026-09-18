@@ -41,11 +41,15 @@ end
 
 (** {1 Event Structure Tracking} *)
 
-(** Structure tracking events globally during interpretation.
+(** The interpreter's working record of an interpretation: every event it has
+    created, in the order it created them.
 
-    Events and symbols (and thus origins) are enumerated from the start of the
-    program, but event structures are constructed from the end as continuations,
-    so the tables are kept here rather than merged at every step. *)
+    Events and symbols are enumerated from the start of the program, while event
+    structures are constructed from the end, as continuations, so an event is
+    labelled and recorded here before the structure it will be prefixed to
+    exists. The structure's own tables are built as events are prefixed to it
+    and describe the events that made it in, which these tables do not promise.
+*)
 type events_t = {
   defacto : expr list;  (** Optional de facto constraints from litmus tests. *)
   events : (int, event) Hashtbl.t;  (** Events indexed by label. *)

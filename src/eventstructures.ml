@@ -45,14 +45,26 @@ module SymbolicEventStructure = struct
       Hashtbl.replace tbl k v;
       tbl
 
-  let dot (event : event) (structure : t) phi defacto : t =
+  (* [with_binding] when there is something to bind. *)
+  let with_binding_opt tbl k = function
+    | Some v -> with_binding tbl k v
+    | None -> tbl
+
+  (* [dot] is where an event enters a structure, so it is where the per-event
+     tables learn of it: the event itself, the symbol it originates -- the one
+     it reads or allocates, if any -- and, where the caller has them, the
+     register environment it ran in, the loops it is inside and its thread.
+     Interpretation used to keep one program-wide table of each and stamp them
+     onto the finished structure, which then also described every event that
+     had been created and never made it in. *)
+  let dot ?env ?loops ?thread (event : event) (structure : t) phi defacto : t =
     if List.exists (fun p -> p = EBoolean false) phi then
       Logs_safe.warn (fun m ->
           m "Adding event %d under unsatisfiable path condition.\n" event.label
       );
     {
       e = USet.union structure.e (USet.singleton event.label);
-      events = structure.events;
+      events = with_binding structure.events event.label event;
       po =
         USet.union structure.po
           (USet.map (fun e -> (event.label, e)) structure.e);
@@ -62,13 +74,18 @@ module SymbolicEventStructure = struct
       restrict = with_binding structure.restrict event.label phi;
       defacto = with_binding structure.defacto event.label defacto;
       fj = structure.fj;
-      p = structure.p;
+      p = with_binding_opt structure.p event.label env;
       constraints = structure.constraints;
       conflict = structure.conflict;
-      origin = structure.origin;
-      loop_indices = structure.loop_indices;
+      origin =
+        ( match event.rval with
+        | Some (VSymbol symbol) ->
+            with_binding structure.origin symbol event.label
+        | _ -> structure.origin
+        );
+      loop_indices = with_binding_opt structure.loop_indices event.label loops;
       loop_conditions = structure.loop_conditions;
-      thread_index = structure.thread_index;
+      thread_index = with_binding_opt structure.thread_index event.label thread;
       write_events =
         ( if event.typ = Write then
             USet.union structure.write_events (USet.singleton event.label)
@@ -132,10 +149,10 @@ module SymbolicEventStructure = struct
      the operands', and the per-event tables are merged. They differ in
      [conflict] alone.
 
-     [loop_indices], [loop_conditions] and [thread_index] are still taken from
-     [a]. They are program-wide tables that interpretation stamps onto the
-     structure when it returns (interpret.ml), and moving them in here is R6's.
-  *)
+     [loop_conditions] is the exception. It is keyed by loop, not by event, and
+     holds one guard per interpreted occurrence of the loop, so it is not a
+     table two operands can be asked to agree on; interpretation keeps it and
+     hands it over when it returns (interpret.ml). *)
   let union (a : t) (b : t) ~conflict : t =
     {
       e = USet.union a.e b.e;
@@ -151,9 +168,9 @@ module SymbolicEventStructure = struct
       constraints = a.constraints @ b.constraints;
       conflict;
       origin = merged a.origin b.origin;
-      loop_indices = a.loop_indices;
+      loop_indices = merged a.loop_indices b.loop_indices;
       loop_conditions = a.loop_conditions;
-      thread_index = a.thread_index;
+      thread_index = merged a.thread_index b.thread_index;
       write_events = USet.union a.write_events b.write_events;
       read_events = USet.union a.read_events b.read_events;
       rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
@@ -177,16 +194,18 @@ module SymbolicEventStructure = struct
 
   let cross a b : t = union a b ~conflict:(USet.union a.conflict b.conflict)
 
-  (* Intersected with [e]. [loop_indices] is one of the program-wide tables
-     interpret.ml hands over whole -- every event it ever creates is stamped
-     there -- while [e] is the event set of this structure, so an event dropped
-     on the way out of interpretation keeps its loop membership and the fold
-     alone would name events that are not here.
+  (* On [events_in_loop], below: intersected with [e]. [loop_indices] was once a
+     program-wide table that interpret.ml handed over whole, stamped with every
+     event it ever created, so an event dropped on the way out of interpretation
+     kept its loop membership. branch_condition/nested_fail is where that
+     showed: loop 1's members came back as [8; 9; 12] against an [e] holding
+     neither 9 nor 12, so episodicity bisected over two events that did not
+     exist.
 
-     branch_condition/nested_fail is where that showed. Loop 1's members came
-     back as [8; 9; 12] against an [e] of twelve events holding neither 9 nor
-     12, so episodicity bisected over two events that did not exist and the
-     events condition reported six violations that no [ppo] could ever order. *)
+     [dot] builds the table now and it binds events of the structure only, so
+     for a structure interpretation built the intersection removes nothing. It
+     stays for the ones built by hand, in tests and elsewhere, that make no
+     such promise. *)
 
   (* [seq a b] is [a] followed by [b]: everything in [a] is po-before everything
      in [b], and the same pairs are recorded in [fj].

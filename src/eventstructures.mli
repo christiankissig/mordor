@@ -10,8 +10,23 @@ module SymbolicEventStructure : sig
   (** Create an empty symbolic event structure *)
   val create : unit -> t
 
-  (** Prefix symbolic operation with event *)
-  val dot : event -> t -> expr list -> expr list -> t
+  (** [dot ?env ?loops ?thread event structure phi defacto] prefixes [structure]
+      with [event], under path condition [phi] and de facto constraints
+      [defacto]. [structure] is left as it was.
+
+      The result's per-event tables learn of [event]: [events] binds its label
+      to it, [origin] binds the symbol it reads or allocates, if any, and [p],
+      [loop_indices] and [thread_index] bind its label to [env], [loops] and
+      [thread] where given. *)
+  val dot :
+    ?env:(string, expr) Hashtbl.t ->
+    ?loops:int list ->
+    ?thread:int ->
+    event ->
+    t ->
+    expr list ->
+    expr list ->
+    t
 
   (** Disjoint union of two symbolic event structures; intended for branching.
   *)
@@ -81,10 +96,10 @@ val generate_max_conflictfree_sets : symbolic_event_structure -> path_info list
     write it has elided cannot shadow anything. It defaults to empty, which
     reads the condition off the structure alone.
 
-    [state] is the solver state location equality is decided under. It
-    defaults to the branch conditions guarding the read; a caller that has
-    already checked the rf edge's own location under stronger predicates
-    should pass those, so both tests on the edge see the same assumptions.
+    [state] is the solver state location equality is decided under. It defaults
+    to the branch conditions guarding the read; a caller that has already
+    checked the rf edge's own location under stronger predicates should pass
+    those, so both tests on the edge see the same assumptions.
 
     @param exclude Events the execution does not contain
     @param state Predicates to decide location equality under

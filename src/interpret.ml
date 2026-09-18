@@ -62,13 +62,15 @@ end
 
 (** {1 Event Structure Tracking} *)
 
-(** Structure tracking events globally during interpretation.
+(** The interpreter's working record of an interpretation: every event it has
+    created, in the order it created them.
 
-    This improves efficiency as events and symbols (and thus origins) are
-    enumerated from the start of the program, but event structures are
-    constructed from the end as continuations. Thus creating the event and
-    origin tables at the end requires repeated merging. The last labels are
-    anyways defined inductively from the start. *)
+    Events and symbols are enumerated from the start of the program, while event
+    structures are constructed from the end, as continuations, so an event is
+    labelled and recorded here before the structure it will be prefixed to
+    exists. {!prefix} reads what was recorded for an event when the time comes
+    to put it in a structure; the structure's own tables are built there and
+    describe the events that made it in, which these tables do not promise. *)
 type events_t = {
   defacto : expr list;  (** Optional de facto constraints from litmus tests. *)
   events : (int, event) Hashtbl.t;  (** Events indexed by label. *)
@@ -207,29 +209,43 @@ let ub_assume events env e =
     @return The event with its newly assigned label. *)
 let add_event (events : events_t) event env (annotation : ir_node_ann) =
   let lbl = Allocator.next_label events.alloc in
-    let event' : event = { event with label = lbl } in
-      Hashtbl.replace events.events lbl event';
-      Hashtbl.replace events.env_by_evt lbl (Hashtbl.copy env);
-      ( match annotation.source_span with
-      | Some span -> Hashtbl.replace events.source_spans lbl span
-      | None -> ()
-      );
-      (* The index is the interpreter's, not the annotation's [tid]. The parser
+  let event' : event = { event with label = lbl } in
+    Hashtbl.replace events.events lbl event';
+    Hashtbl.replace events.env_by_evt lbl (Hashtbl.copy env);
+    ( match annotation.source_span with
+    | Some span -> Hashtbl.replace events.source_spans lbl span
+    | None -> ()
+    );
+    (* The index is the interpreter's, not the annotation's [tid]. The parser
          annotates a thread body before the enclosing [threads] rule has
          advanced [tid] -- Menhir reduces bottom-up -- so every body carried
          [tid = 0] and every event of every thread shared one index. Memory
          models that ask whether two events are in the same thread had nothing
          to ask. The annotation still says whether the event belongs to the
          program at all: terminal events carry none and stay unindexed. *)
-      ( match annotation.thread_ctx with
-      | Some _ -> Hashtbl.replace events.thread_index lbl events.current_thread
-      | None -> ()
-      );
-      ( match annotation.loop_ctx with
-      | Some loop_ctx -> Hashtbl.replace events.loop_indices lbl loop_ctx.loops
-      | None -> ()
-      );
-      event'
+    ( match annotation.thread_ctx with
+    | Some _ -> Hashtbl.replace events.thread_index lbl events.current_thread
+    | None -> ()
+    );
+    ( match annotation.loop_ctx with
+    | Some loop_ctx -> Hashtbl.replace events.loop_indices lbl loop_ctx.loops
+    | None -> ()
+    );
+    event'
+
+(** [prefix events event structure phi defacto] is [structure] prefixed with
+    [event], which {!add_event} has added to [events]:
+    {!SymbolicEventStructure.dot} with the register environment, loops and
+    thread that were recorded for the event's label.
+
+    This is how the structure's own tables get built. The ones in [events] are
+    the interpreter's working record of every event it has created; the
+    structure's describe the events that are in it. *)
+let prefix (events : events_t) (event : event) structure phi defacto =
+  let find tbl = Hashtbl.find_opt tbl event.label in
+    SymbolicEventStructure.dot ?env:(find events.env_by_evt)
+      ?loops:(find events.loop_indices) ?thread:(find events.thread_index) event
+      structure phi defacto
 
 (** Record a loop's continuation guard for one occurrence of the loop.
 
@@ -390,7 +406,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   @ ub_facts env
               in
               let cont = recurse rest env phi events in
-                SymbolicEventStructure.dot event' cont phi defacto
+                prefix events event' cont phi defacto
         | DerefStore { address; expr; assign } ->
             let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
             let wval, env = ub_assume events env expr in
@@ -411,7 +427,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 @ ub_facts env
             in
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | DerefLoad { register; address; load } ->
             let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
@@ -435,7 +451,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let env' = Hashtbl.copy env in
                 Hashtbl.replace env' register (Expr.of_value rval);
                 let cont = recurse rest env' phi events in
-                  SymbolicEventStructure.dot event' cont phi defacto
+                  prefix events event' cont phi defacto
         | GlobalLoad { register; global; load } ->
             let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
@@ -462,7 +478,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
                   let cont = recurse rest env' phi events in
-                    SymbolicEventStructure.dot event' cont phi defacto
+                    prefix events event' cont phi defacto
         | Fadd { register; address; operand; rmw_mode; load_mode; assign_mode }
           ->
             let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
@@ -517,8 +533,8 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Hashtbl.replace env' register result_expr;
                 let cont = recurse rest env' phi events in
                   add_rmw_edge
-                    (SymbolicEventStructure.dot event_load'
-                       (SymbolicEventStructure.dot event_store' cont phi defacto)
+                    (prefix events event_load'
+                       (prefix events event_store' cont phi defacto)
                        phi defacto
                     )
                     event_load'.label (EBoolean true) event_store'.label
@@ -584,11 +600,11 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Hashtbl.replace env_fail register (ENum Z.zero);
                 let cont_succ = recurse rest env_succ phi_succ events in
                 let cont_fail = recurse rest env_fail phi_fail events in
-                  SymbolicEventStructure.dot event_load'
-                    (SymbolicEventStructure.dot branch_event'
+                  prefix events event_load'
+                    (prefix events branch_event'
                        (SymbolicEventStructure.plus
                           (add_rmw_edge
-                             (SymbolicEventStructure.dot event_store' cont_succ
+                             (prefix events event_store' cont_succ
                                 phi_succ defacto
                              )
                              event_load'.label cond_expr event_store'.label
@@ -653,7 +669,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 | _ ->
                     let then_structure = then_structure events in
                     let else_structure = else_structure events in
-                      SymbolicEventStructure.dot branch_event'
+                      prefix events branch_event'
                         (SymbolicEventStructure.plus then_structure
                            else_structure
                         )
@@ -666,7 +682,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 | _ ->
                     let then_structure = then_structure events in
                     let rest_structure = recurse rest env new_else_phi events in
-                      SymbolicEventStructure.dot branch_event'
+                      prefix events branch_event'
                         (SymbolicEventStructure.plus then_structure
                            rest_structure
                         )
@@ -685,7 +701,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             in
 
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | Lock { global } ->
             let base_evt : event = Event.create Lock 0 () in
             let evt =
@@ -704,7 +720,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             in
 
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | Unlock { global } ->
             let base_evt : event = Event.create Unlock 0 () in
             let evt =
@@ -723,7 +739,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             in
 
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | RegMalloc { register; size } ->
             let symbol = Allocator.next_zh events.alloc in
             let rval = VSymbol symbol in
@@ -750,7 +766,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Hashtbl.replace env' register (Expr.of_value rval);
                 let cont = recurse rest env' phi events in
 
-                SymbolicEventStructure.dot event' cont phi defacto
+                prefix events event' cont phi defacto
         | GlobalMalloc { global; size } ->
             (* The allocation, then a store of its address to the global: two
                events, as [r := malloc n; x := r] would be. The store used to be
@@ -787,8 +803,8 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
 
               let cont = recurse rest env phi events in
 
-              SymbolicEventStructure.dot event'
-                (SymbolicEventStructure.dot store' cont phi defacto)
+              prefix events event'
+                (prefix events store' cont phi defacto)
                 phi defacto
         | Free { register } ->
             let base_evt : event = Event.create Free 0 () in
@@ -803,7 +819,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             in
 
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | Skip ->
             let cont = recurse rest env phi events in
               cont
@@ -880,24 +896,13 @@ let make_generic_terminal_structure ~add_event env phi events =
       @ distinct_pairs locations
   in
   let constraints = global_constraints @ allocation_constraints in
-  let cont =
-    {
-      structure with
-      events = events.events;
-      origin = events.origin;
-      loop_indices = events.loop_indices;
-      loop_conditions = events.loop_conditions;
-      thread_index = events.thread_index;
-      p = events.env_by_evt;
-      constraints;
-    }
-  in
+  let cont = { structure with constraints } in
   let defacto =
     List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
     @ ub_facts env
   in
 
-  SymbolicEventStructure.dot terminal_evt cont phi defacto
+  prefix events terminal_evt cont phi defacto
 
 (** {1 Basic Interpretation} *)
 
@@ -951,19 +956,13 @@ let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
     List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
     @ ub_facts env
   in
-  let structure = SymbolicEventStructure.dot init_event' structure [] defacto in
+  let structure = prefix events init_event' structure [] defacto in
 
-  (* Add data from the events context *)
+  (* The per-event tables are the structure's own by now; [dot] built them.
+     The loop guards are the one thing still handed over whole: they are keyed
+     by loop, not by event, and accumulate one per interpreted occurrence. *)
   let structure =
-    {
-      structure with
-      events = events.events;
-      origin = events.origin;
-      loop_indices = events.loop_indices;
-      loop_conditions = events.loop_conditions;
-      thread_index = events.thread_index;
-      p = events.env_by_evt;
-    }
+    { structure with loop_conditions = events.loop_conditions }
   in
 
   (structure, events.source_spans)
@@ -1467,7 +1466,7 @@ end = struct
           let branch_event' = add_event events branch_event env annotations in
           let enter_structure = enter_structure events in
           let exit_structure = exit_structure events in
-            SymbolicEventStructure.dot branch_event'
+            prefix events branch_event'
               (SymbolicEventStructure.plus enter_structure exit_structure)
               phi defacto
 
