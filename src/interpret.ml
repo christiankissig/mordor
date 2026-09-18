@@ -1257,6 +1257,16 @@ end
 
 (** {1 Symbolic Loop Semantics} *)
 
+(** S8 (#20): with [compositional_po_iter] set, each interpreted occurrence of a
+    loop adds to its own structure's [po_iter] the pairs of its body's events,
+    and interpretation keeps that rather than rebuilding [po_iter] from
+    [loop_indices] at the end. Off by default; enabled via
+    [MORDOR_S8_COMPOSITIONAL_PO_ITER]. *)
+module S8 = struct
+  let compositional_po_iter =
+    ref (Option.is_some (Sys.getenv_opt "MORDOR_S8_COMPOSITIONAL_PO_ITER"))
+end
+
 (** Symbolic loop semantics for unbounded loops.
 
     Loop iterations are tracked symbolically: all branches are evaluated.
@@ -1484,6 +1494,31 @@ end = struct
     let loop_index =
       annotations.loop_ctx |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
     in
+    (* S8: this occurrence's iterations, from its own body alone -- the events
+       of the entering branch that are in the loop -- rather than from every
+       event of the program the loop's index was ever stamped on. *)
+    let iterations (s : symbolic_event_structure) =
+      match (!S8.compositional_po_iter, loop_index) with
+      | true, Some lid ->
+          let body =
+            USet.filter
+              (fun e ->
+                Hashtbl.find_opt s.loop_indices e
+                |> Option.fold ~none:false ~some:(List.mem lid)
+              )
+              s.e
+          in
+            {
+              s with
+              po_iter =
+                USet.union s.po_iter
+                  (USet.set_minus
+                     (URelation.cross body body)
+                     (URelation.identity body)
+                  );
+            }
+      | _ -> s
+    in
     let defacto =
       List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
       @ ub_facts env
@@ -1528,14 +1563,14 @@ end = struct
         exit_phi events
     in
       match cond_val with
-      | EBoolean true -> enter_structure events
+      | EBoolean true -> iterations (enter_structure events)
       | EBoolean false -> exit_structure events
       | _ ->
           let branch_event =
             { (Event.create Branch 0 ()) with cond = Some cond_val }
           in
           let branch_event' = add_event events branch_event env annotations in
-          let enter_structure = enter_structure events in
+          let enter_structure = iterations (enter_structure events) in
           let exit_structure = exit_structure events in
             prefix events branch_event'
               (EventStructure.choice enter_structure exit_structure)
@@ -1549,12 +1584,13 @@ end = struct
     in
     let lwt_ctx = generic_step_interpret ~stmt_semantics lwt_ctx in
       let* ctx = lwt_ctx in
-        ctx.structure <-
-          Some
-            {
-              (Option.get ctx.structure) with
-              po_iter = generate_po_iter (Option.get ctx.structure);
-            };
+        if not !S8.compositional_po_iter then
+          ctx.structure <-
+            Some
+              {
+                (Option.get ctx.structure) with
+                po_iter = generate_po_iter (Option.get ctx.structure);
+              };
         Lwt.return ctx
 end
 

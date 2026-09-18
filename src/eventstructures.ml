@@ -68,7 +68,7 @@ module SymbolicEventStructure = struct
       po =
         USet.union structure.po
           (USet.map (fun e -> (event.label, e)) structure.e);
-      po_iter = USet.create ();
+      po_iter = structure.po_iter;
       rmw = structure.rmw;
       lo = structure.lo;
       restrict = with_binding structure.restrict event.label phi;
@@ -181,7 +181,7 @@ module SymbolicEventStructure = struct
       e = join a.e b.e;
       events = merged a.events b.events;
       po = join a.po b.po;
-      po_iter = USet.create ();
+      po_iter = join a.po_iter b.po_iter;
       rmw = join a.rmw b.rmw;
       lo = join a.lo b.lo;
       restrict = merged a.restrict b.restrict;

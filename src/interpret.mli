@@ -139,6 +139,16 @@ val interpret :
   ir_node list ->
   symbolic_event_structure * (int, source_span) Hashtbl.t
 
+(** {1 Spike Instrumentation} *)
+
+(** S8 (#20): with [compositional_po_iter] set, each interpreted occurrence of a
+    loop produces the [po_iter] pairs of its own body, and symbolic loop
+    semantics keeps those rather than rebuilding [po_iter] from [loop_indices].
+    Enabled via [MORDOR_S8_COMPOSITIONAL_PO_ITER]. *)
+module S8 : sig
+  val compositional_po_iter : bool ref
+end
+
 (** {1 Pipeline Step} *)
 
 (** Main interpretation pipeline step. Selects the loop semantics from the
