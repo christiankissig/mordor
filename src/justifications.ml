@@ -123,16 +123,16 @@ end = struct
       let c = compare a1 a2 in
         if c <> 0 then c else compare b1 b2
     in
-    let result =
-      Hashtbl.hash
+      (* [Hashtbl.hash] looks at no more than ten meaningful values, which here
+       were the write and the heads of the lists: justifications of one write
+       that differ further in hashed alike. *)
+      Hashtbl.hash_param 1000 1000
         ( j.w,
           USet.to_list j.fwd |> List.sort compare_pairs,
           USet.to_list j.we |> List.sort compare_pairs,
           USet.to_list j.d |> List.sort String.compare,
           List.map hash_expr j.p
         )
-    in
-      result
 
   let get_symbols (just : justification) : string uset =
     let symbols = USet.create () in
