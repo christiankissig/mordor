@@ -26,6 +26,65 @@ val parallel_compute : Lwt_domain.pool -> compute_fn
     This module provides facilities for generating and analyzing symbolic
     executions. *)
 
+(** {2 Validation} *)
+
+(** The checks an execution's read-from relation is validated by, over explicit
+    inputs, as {!Freeze.freeze} asks them.
+
+    Each has a [_delta] form, shaped for a fragment merge that knows what it is
+    adding to relations already checked: the plain arguments are what was
+    checked, and the [d] arguments what is added. Those are stubs: they check
+    the union from scratch. *)
+module Validation : sig
+  (** [rf_respects_ppo ~rf ~ppo]: every rf edge [(w, r)] that is in [ppo] has
+      [r] among [w]'s successors in [ppo]. As stated this never fails. *)
+  val rf_respects_ppo : rf:(int * int) uset -> ppo:(int * int) uset -> bool
+
+  val rf_respects_ppo_delta :
+    rf:(int * int) uset ->
+    ppo:(int * int) uset ->
+    drf:(int * int) uset ->
+    dppo:(int * int) uset ->
+    bool
+
+  (** [rf_not_elided ~rf ~delta]: no read reads from a write that [delta], the
+      forwarding and write-elision edges, elides. *)
+  val rf_not_elided : rf:(int * int) uset -> delta:(int * int) uset -> bool
+
+  val rf_not_elided_delta :
+    rf:(int * int) uset ->
+    delta:(int * int) uset ->
+    drf:(int * int) uset ->
+    ddelta:(int * int) uset ->
+    bool
+
+  (** [rf_total ~rf ~reads ~delta]: every read of [reads] that [delta] does not
+      elide reads from something. *)
+  val rf_total :
+    rf:(int * int) uset -> reads:int uset -> delta:(int * int) uset -> bool
+
+  val rf_total_delta :
+    rf:(int * int) uset ->
+    reads:int uset ->
+    delta:(int * int) uset ->
+    drf:(int * int) uset ->
+    dreads:int uset ->
+    ddelta:(int * int) uset ->
+    bool
+
+  (** [rhb ~dp ~ppo ~rf] is reads-happen-before, [dp ∪ ppo ∪ rf]. *)
+  val rhb :
+    dp:(int * int) uset ->
+    ppo:(int * int) uset ->
+    rf:(int * int) uset ->
+    (int * int) uset
+
+  (** [rhb_acyclic rhb]: no event reads-happens-before itself. *)
+  val rhb_acyclic : (int * int) uset -> bool
+
+  val rhb_acyclic_delta : (int * int) uset -> drhb:(int * int) uset -> bool
+end
+
 (** {2 Freeze Module} *)
 
 module FreezeResult : sig
