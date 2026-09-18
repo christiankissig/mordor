@@ -12,6 +12,37 @@ open Uset
     environment variable or by setting this ref. Shared by {!Executions}. *)
 let s4_counters = ref (Option.is_some (Sys.getenv_opt "MORDOR_S4_COUNTERS"))
 
+(** S6 (branch and bound over coherence orders): when [prune] is set, the search
+    asks the model about each partial coherence order it builds, and abandons it
+    when the model already rejects it. Off by default; enabled via
+    [MORDOR_S6_PRUNE]. The counters record what the search did.
+
+    Sound only for a model whose violations grow with co. od-lso's do not: its
+    C++11 release sequence subtracts [coe;coe], so more co can mean less hb.
+    Slower than the exhaustive search on every corpus measured; see
+    spike/s6_coherence_bb/RESULTS.md. *)
+module S6 = struct
+  let prune = ref (Option.is_some (Sys.getenv_opt "MORDOR_S6_PRUNE"))
+
+  (* Ask about a partial order only when at least this many complete orders
+     extend it: below that, a check costs as much as the leaves it could
+     save. *)
+  let min_leaves =
+    ref
+      (Option.bind (Sys.getenv_opt "MORDOR_S6_MIN_LEAVES") int_of_string_opt
+      |> Option.value ~default:1
+      )
+
+  let partial_checks = ref 0
+  let pruned = ref 0
+  let leaf_checks = ref 0
+
+  let reset () =
+    partial_checks := 0;
+    pruned := 0;
+    leaf_checks := 0
+end
+
 (** {1 Core Abstractions} *)
 
 module type MEMORY_MODEL = sig
@@ -2079,8 +2110,38 @@ let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
           )
       in
 
+      (* S6: a model whose violations only grow as co grows rejects every
+         completion of a partial order it rejects, so the subtree can go. The
+         prune never accepts: an order is admitted only at a leaf, on the
+         whole of it. *)
+      (* leaves_below.(i): how many complete orders extend a choice made for
+         every location from the last down to [i]. *)
+      let leaves_below =
+        lazy
+          (let n = List.length writes_per_location in
+           let a = Array.make (n + 1) 1 in
+             List.iteri
+               (fun i perms -> a.(i + 1) <- a.(i) * max 1 (List.length perms))
+               writes_per_location;
+             a
+          )
+      in
+      let rejected ~below vals =
+        !S6.prune
+        && (Lazy.force leaves_below).(below) >= !S6.min_leaves
+        && begin
+          incr S6.partial_checks;
+          let co = URelation.transitive_closure (USet.of_list vals) in
+            (not (check_coherence cache co))
+            &&
+            ( incr S6.pruned;
+              true
+            )
+        end
+      in
       let rec choose_one i vals =
         if i < 0 then (
+          incr S6.leaf_checks;
           let co = URelation.transitive_closure (USet.of_list vals) in
             if check_coherence cache co then (
               Logs_safe.debug (fun m ->
@@ -2100,14 +2161,19 @@ let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
           let rec try_perms = function
             | [] -> None
             | p :: ps -> (
-                match choose_one (i - 1) (vals @ p) with
-                | Some co -> Some co
-                | None -> try_perms ps
+                let vals' = vals @ p in
+                  if i > 0 && rejected ~below:i vals' then try_perms ps
+                  else
+                    match choose_one (i - 1) vals' with
+                    | Some co -> Some co
+                    | None -> try_perms ps
               )
           in
             try_perms (List.nth writes_per_location i)
       in
-        choose_one (List.length writes_per_location - 1) []
+      let last = List.length writes_per_location - 1 in
+        if last >= 0 && rejected ~below:(last + 1) [] then None
+        else choose_one last []
 
 (** {1 Coherence Checking Entry Point} *)
 

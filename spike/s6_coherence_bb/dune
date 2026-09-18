@@ -1,0 +1,6 @@
+; S6 (#18) -- branch and bound over coherence orders. Run from the repo root:
+;   dune exec spike/s6_coherence_bb/s6_coherence_bb.exe -- FILE
+
+(executable
+ (name s6_coherence_bb)
+ (libraries mordor_lib lwt lwt.unix unix))

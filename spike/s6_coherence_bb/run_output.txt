@@ -1,0 +1,57 @@
+# Every node, all 414 programs (per-model totals)
+model        execs  diff    t_full   t_prune  ratio    leaves  leaves_p   partial   pruned
+causal       20050     0      6.82      6.70   0.98         0         0         0        0
+cc           20050     0      5.84      5.73   0.98         0         0         0        0
+clighttso    20050     0      8.07     10.98   1.36     27535     21617     38091     2774
+coherence    20050     0      4.36      4.84   1.11     25478     21244     37822     1577
+imm          20050     0      9.56     11.44   1.20     25836     21420     37918     1706
+local        20050     0      4.23      4.64   1.10         0         0         0        0
+mr           20050     0      4.01      4.01   1.00         0         0         0        0
+mrd          20050     0      5.81      6.12   1.05     35492     22348     41256     5349
+mw           20050     0      4.14      4.18   1.01         0         0         0        0
+od-lso       20050    17     19.78     35.10   1.78     24899     20518     36471     1688
+pc           20050     0      5.06      6.49   1.28     27110     20992     38545     2553
+pocausal     20050     0      3.99      4.17   1.05     25478     21244     37822     1577
+pram         20050     0      4.39      4.47   1.02         0         0         0        0
+ra           20050     0      4.58      5.20   1.14     20525     20375     36349      148
+rc11         20050     0     18.39     26.54   1.44     24919     20520     36474     1689
+rc11c        20050     0     18.47     26.64   1.44     24919     20520     36474     1689
+rc11z        20050     0     18.59     27.02   1.45     25330     20403     37293     2217
+rc17         20050     0     18.01     26.09   1.45     24875     20557     36465     1654
+ryw          20050     0      4.04      4.03   1.00         0         0         0        0
+sc           20050     0     12.64     16.57   1.31     27565     21643     38121     2778
+slow         20050     0      4.41      4.44   1.01         0         0         0        0
+smrd         20050     0      6.03      6.30   1.05     35492     22348     41256     5349
+sra          20050     0      6.27      9.72   1.55     20543     20385     36357      152
+tso          20050     0      8.22     10.31   1.25     27535     21617     38091     2774
+undefined    20050     0      3.56      3.46   0.97     20340     20224     36361      116
+vbd          20050     0     14.48     16.56   1.14     27565     21643     38121     2778
+wfr          20050     0      4.08      4.03   0.99         0         0         0        0
+wra          20050     0      4.23      4.18   0.99         0         0         0        0
+x86-tso      20050     0      7.41     10.86   1.47     27535     21617     38091     2774
+total t_full 239.47 t_pruned 310.83 ratio 1.298
+diffs: 8
+  ('od-lso', 1, 'litmus-tests-cpp_models_cpp-release-sequences_mp-rs-add-est-atomic.lit')
+  ('od-lso', 1, 'litmus-tests-cpp_models_cpp-release-sequences_mp-rs-add-est.lit')
+  ('od-lso', 2, 'litmus-tests-cpp_models_cpp-release-sequences_mp-rs-st-est-atomics.lit')
+  ('od-lso', 2, 'litmus-tests-cpp_models_cpp-release-sequences_mp-rs-st-est.lit')
+  ('od-lso', 2, 'litmus-tests_c20_rs-example.lit')
+  ('od-lso', 3, 'litmus-tests-cpp_models_cpp-release-sequences_mp-rs-st-eadd-atomics.lit')
+  ('od-lso', 3, 'litmus-tests-cpp_models_cpp-release-sequences_mp-rs-st-eadd.lit')
+  ('od-lso', 3, 'litmus-tests_rmm-zoo_models_rc11-rc17_RS17.lit')
+top files by t_full:
+  litmus-tests_3.2W.lit                                           91.57   115.12  1.26
+  litmus-tests-jmm_jctc_JCTC11.lit                                14.41    18.61  1.29
+  programs_uaf-bug-fixed-extended.lit                             10.79    14.40  1.33
+  litmus-tests_avoidoota_listing15.lit                            10.08    13.82  1.37
+  programs_uaf-bug-extended.lit                                    9.74    13.26  1.36
+  litmus-tests-jmm_jctc_JCTC15.lit                                 5.99     7.83  1.31
+  programs_rcu-1.lit                                               5.88     7.75  1.32
+  litmus-tests_sevcik_thesis_Roach_Motel_Semantics.lit             4.85     6.39  1.32
+  litmus-tests_avoidoota_additional_nonlb.lit                      4.13     5.23  1.27
+  litmus-tests-promising_Upd-Stuck.lit                             3.84     5.39  1.40
+  litmus-tests-jmm_jctc_JCTC5.lit                                  3.48     4.76  1.37
+  litmus-tests-review_popl_promising_Upd-Stuck.lit                 2.95     3.96  1.34
+  litmus-tests_requests_1MR_opBNP_(2+2W_with_obs_thread).lit       2.89     3.86  1.33
+  programs_cas-increment-race.lit                                  2.54     3.14  1.24
+  litmus-tests_requests_E8OKvIVLN_(2+2W_with_obs_thread).lit       1.96     2.56  1.31
