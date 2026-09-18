@@ -695,16 +695,32 @@ end
 (** {1 Freezing} *)
 
 module Freeze = struct
-  (** [compute_path_rf structure path ~elided ~constraints statex ppo dp
+  type scope = { reads : int uset; writes : int uset }
+
+  let path_scope structure path ~elided =
+    let reads =
+      USet.set_minus (USet.intersection structure.read_events path.path) elided
+    in
+    let writes =
+      USet.union structure.write_events structure.free_events
+      |> USet.intersection path.path
+      |> fun writes -> USet.set_minus writes elided
+    in
+      { reads; writes = USet.add writes 0 (* include init write *) }
+
+  (** [compute_path_rf structure path ~scope ~elided ~constraints statex ppo dp
        p_combined] computes candidate read-from relations.
 
-      Generates all valid read-from combinations for the given path by: 1.
-      Filtering potential RF edges by location equality 2. Checking edges don't
-      violate program order 3. Verifying writes aren't shadowed 4. Building
-      combinations incrementally with satisfiability checking
+      Generates all valid read-from combinations for the reads of [scope], each
+      reading from a write of [scope], by: 1. Filtering potential RF edges by
+      location equality 2. Checking edges don't violate program order 3.
+      Verifying writes aren't shadowed 4. Building combinations incrementally
+      with satisfiability checking
 
       @param structure The event structure.
       @param path Current path.
+      @param scope
+        The reads to choose a write for, and the writes to choose among.
       @param elided Set of elided events.
       @param constraints Additional constraints.
       @param statex Static constraints.
@@ -714,20 +730,10 @@ module Freeze = struct
       @return
         Promise of list of RF combinations (as lists of [(read, write)] pairs).
   *)
-  let compute_path_rf structure path ~elided ~constraints statex ppo dp
-      p_combined =
-    let write_events =
-      USet.union structure.write_events structure.free_events
-      |> USet.intersection path.path
-      |> fun writes ->
-      USet.set_minus writes elided |> fun writes ->
-      USet.add writes 0 (* include init write *)
-    in
-    let read_events =
-      USet.set_minus (USet.intersection structure.read_events path.path) elided
-    in
-    let w_with_init = USet.union write_events (USet.singleton 0) in
-    let w_cross_r = URelation.cross w_with_init read_events in
+  let compute_path_rf structure (path : path_info) ~scope ~elided ~constraints
+      statex ppo dp p_combined =
+    let { reads = read_events; writes = write_events } = scope in
+    let w_cross_r = URelation.cross write_events read_events in
 
     Logs_safe.debug (fun m ->
         m
@@ -1342,8 +1348,9 @@ module Freeze = struct
 
       let all_fr =
         if include_rf then
-          compute_path_rf structure path ~elided ~constraints statex ppo dp
-            p_combined
+          compute_path_rf structure path
+            ~scope:(path_scope structure path ~elided)
+            ~elided ~constraints statex ppo dp p_combined
         else [ [] ]
       in
       let all_rf =
@@ -1379,19 +1386,23 @@ module Freeze = struct
           filtered_results
 end
 
-(** [compute_justification_combinations fwd_es_ctx structure paths statex
-     justmap] computes justification combinations for all paths.
+let justifiable structure path =
+  USet.union structure.write_events structure.malloc_events
+  |> USet.union structure.free_events
+  |> USet.intersection path.path
 
-    For each path, builds all valid combinations of justifications for the write
-    events on that path. Returns a stream of [(path, justifications)] pairs.
+(** [compute_justification_combinations compute structure paths ~scope justmap]
+    computes justification combinations for all paths.
 
-    @param fwd_es_ctx Forwarding event structure context for PPO computation.
+    For each path, builds all valid combinations of justifications for the
+    events [scope path]. Returns a stream of [(path, justifications)] pairs.
+
     @param structure The event structure.
     @param paths List of all paths through the structure.
-    @param statex Static constraints.
+    @param scope The events of a path to choose a justification for.
     @param justmap Hash table mapping write event IDs to justification lists.
     @return Stream of [(path, justification list)] pairs. *)
-let compute_justification_combinations compute fwd_es_ctx structure paths statex
+let compute_justification_combinations compute structure paths ~scope
     (justmap : (int, justification list) Hashtbl.t) =
   (* Given a path, combine justifications for each write on the path. *)
   let combine_justifications_for_path path =
@@ -1404,15 +1415,7 @@ let compute_justification_combinations compute fwd_es_ctx structure paths statex
           )
     );
 
-    let justifiable_events =
-      USet.union structure.write_events structure.malloc_events
-      |> USet.union structure.free_events
-      |> USet.intersection path.path
-    in
-
-    let path_writes =
-      USet.intersection path.path justifiable_events |> USet.values
-    in
+    let path_writes = USet.intersection path.path (scope path) |> USet.values in
 
     (* Selecting justifications for events the combination will elide is
        waste, but not removable here: build_combinations produces total
@@ -1854,8 +1857,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
 
     (* Build justcombos for all paths *)
     let* executions =
-      compute_justification_combinations compute fwd_es_ctx structure paths
-        statex justmap
+      compute_justification_combinations compute structure paths
+        ~scope:(justifiable structure) justmap
       |> count_stage "justification-combos"
       |> stream_freeze
       |> count_stage "freeze-results (rf-combos)"
