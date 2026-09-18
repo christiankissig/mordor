@@ -1026,16 +1026,6 @@ module StepCounterSemantics : sig
       @param ctx The Mordor context.
       @return Updated context with interpretation results. *)
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
-
-  (** Interpret a program with a specific step counter.
-
-      @param step_counter The maximum number of loop iterations to unroll.
-      @param ctx The Mordor context.
-      @return A tuple of (symbolic event structure, source spans table). *)
-  val interpret :
-    step_counter:int ->
-    mordor_ctx ->
-    symbolic_event_structure * (int, source_span) Hashtbl.t
 end = struct
   (** Create an IR node with no annotations.
 
@@ -1185,25 +1175,6 @@ end = struct
       generic_step_interpret
         ~stmt_semantics:(interpret_statements_step_counter step_counter per_loop)
         lwt_ctx
-
-  let interpret ~step_counter lwt_ctx =
-    let ctx = lwt_ctx in
-      greek_counter := 0;
-      zh_counter := 0;
-      let stmt_semantics =
-        interpret_statements_step_counter step_counter true
-      in
-
-      match ctx.program_stmts with
-      | Some stmts ->
-          let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
-          let constraints = ctx.litmus_constraints in
-          let structure, source_spans =
-            interpret_generic ~ubopt:ctx.options.ubopt ~stmt_semantics ~defacto
-            ~constraints stmts
-          in
-            (structure, source_spans)
-      | _ -> failwith "No program statements or constraints for interpretation."
 end
 
 (** {1 Symbolic Loop Semantics} *)
@@ -1219,13 +1190,6 @@ module SymbolicLoopSemantics : sig
       @param ctx The Mordor context.
       @return Updated context with interpretation results. *)
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
-
-  (** Interpret a program with symbolic loop semantics.
-
-      @param ctx The Mordor context.
-      @return A tuple of (symbolic event structure, source spans table). *)
-  val interpret :
-    mordor_ctx -> symbolic_event_structure * (int, source_span) Hashtbl.t
 end = struct
   (** Generate program order relations for a symbolic event structure.
 
@@ -1514,28 +1478,6 @@ end = struct
               po_iter = generate_po_iter (Option.get ctx.structure);
             };
         Lwt.return ctx
-
-  let interpret ctx =
-    greek_counter := 0;
-    zh_counter := 0;
-    let stmt_semantics =
-      interpret_statements_symbolic_loop
-        ~final_structure:make_generic_terminal_structure ~add_event
-    in
-
-    match ctx.program_stmts with
-    | Some stmts ->
-        let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
-        let constraints = ctx.litmus_constraints in
-        let structure, source_spans =
-          interpret_generic ~ubopt:ctx.options.ubopt ~stmt_semantics ~defacto
-            ~constraints stmts
-        in
-        let structure =
-          { structure with po_iter = generate_po_iter structure }
-        in
-          (structure, source_spans)
-    | _ -> failwith "No program statements or constraints for interpretation."
 end
 
 (** {1 Main Pipeline Step} *)
