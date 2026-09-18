@@ -197,6 +197,71 @@ let test_cross () =
     Alcotest.(check bool) "has event 1" true (USet.mem result.e 1);
     Alcotest.(check bool) "has event 4" true (USet.mem result.e 4)
 
+(** A structure that owns its tables: one event [label], known to [events],
+    [origin] (under [symbol]), [p], [restrict] and [defacto]. *)
+let owned_structure label symbol =
+  let s =
+    { (SymbolicEventStructure.create ()) with e = USet.of_list [ label ] }
+  in
+    Hashtbl.replace s.events label (Event.create Read label ());
+    Hashtbl.replace s.origin symbol label;
+    Hashtbl.replace s.p label (Hashtbl.create 0);
+    Hashtbl.replace s.restrict label [ EBoolean true ];
+    Hashtbl.replace s.defacto label [];
+    s
+
+(** [plus] and [cross] merge their operands' tables rather than keeping the left
+    one's: operands that own their tables come out with the union, in tables
+    that are neither operand's, and the operands are left alone. *)
+let test_combinators_merge_owned_tables () =
+  List.iter
+    (fun (name, combine) ->
+      let a = owned_structure 1 "α" and b = owned_structure 2 "β" in
+      let r : SymbolicEventStructure.t = combine a b in
+      let has tbl k = Hashtbl.mem tbl k in
+        Alcotest.(check bool)
+          (name ^ ": events of both")
+          true
+          (has r.events 1 && has r.events 2);
+        Alcotest.(check bool)
+          (name ^ ": origins of both")
+          true
+          (has r.origin "α" && has r.origin "β");
+        Alcotest.(check bool)
+          (name ^ ": envs of both") true
+          (has r.p 1 && has r.p 2);
+        Alcotest.(check bool)
+          (name ^ ": restrict of both")
+          true
+          (has r.restrict 1 && has r.restrict 2);
+        Alcotest.(check bool)
+          (name ^ ": defacto of both")
+          true
+          (has r.defacto 1 && has r.defacto 2);
+        Alcotest.(check bool)
+          (name ^ ": tables are fresh")
+          true
+          (r.events != a.events && r.origin != a.origin && r.p != a.p);
+        Alcotest.(check bool)
+          (name ^ ": operands untouched")
+          false
+          (has a.events 2 || has a.origin "β" || has a.p 2 || has b.events 1)
+    )
+    [
+      ("plus", SymbolicEventStructure.plus);
+      ("cross", SymbolicEventStructure.cross);
+    ]
+
+(** The case interpretation is in today: both operands hold the same tables.
+    Merging a table with itself gives a copy of it and nothing more. *)
+let test_combinators_merge_shared_tables () =
+  let a = owned_structure 1 "α" in
+  let b = { a with e = USet.of_list [ 2 ] } in
+  let r = SymbolicEventStructure.plus a b in
+    Alcotest.(check int) "one event, once" 1 (Hashtbl.length r.events);
+    Alcotest.(check int) "one origin, once" 1 (Hashtbl.length r.origin);
+    Alcotest.(check int) "one env, once" 1 (Hashtbl.length r.p)
+
 (** Test interpret_statements with empty list *)
 let test_interpret_empty_statements =
   run_lwt (fun () ->
@@ -631,6 +696,10 @@ let suite =
       Alcotest.test_case "Plus operation" `Quick test_plus;
       Alcotest.test_case "Plus with relations" `Quick test_plus_with_relations;
       Alcotest.test_case "Cross operation" `Quick test_cross;
+      Alcotest.test_case "Combinators merge owned tables" `Quick
+        test_combinators_merge_owned_tables;
+      Alcotest.test_case "Combinators merge shared tables" `Quick
+        test_combinators_merge_shared_tables;
       Alcotest.test_case "Interpret empty statements" `Quick
         test_interpret_empty_statements;
       Alcotest.test_case "Interpret GlobalStore" `Quick

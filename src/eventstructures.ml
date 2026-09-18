@@ -116,90 +116,66 @@ module SymbolicEventStructure = struct
         );
     }
 
-  let plus a b : t =
-    let restrict = Hashtbl.copy a.restrict in
-      Hashtbl.iter (fun k v -> Hashtbl.replace restrict k v) b.restrict;
-      let defacto = Hashtbl.copy a.defacto in
-        Hashtbl.iter (fun k v -> Hashtbl.replace defacto k v) b.defacto;
-        {
-          e = USet.union a.e b.e;
-          events = a.events;
-          (* a and b share the same events table *)
-          po = USet.union a.po b.po;
-          po_iter = USet.create ();
-          rmw = USet.union a.rmw b.rmw;
-          lo = USet.union a.lo b.lo;
-          restrict;
-          defacto;
-          fj = USet.union a.fj b.fj;
-          (* Empty on purpose, and harmless: p is not built compositionally.
-             Interpretation keeps one env_by_evt table on the side and stamps
-             it onto the structure when it returns (interpret.ml), so whatever
-             stands here is overwritten before the only reader -- the final_env
-             construction in Executions -- looks at it. Same reasoning as the
-             shared events and origin tables below. *)
-          p = Hashtbl.create 0;
-          constraints = a.constraints @ b.constraints;
-          conflict =
-            USet.union a.conflict b.conflict
-            |> (fun acc -> USet.inplace_union ~into:acc (URelation.cross a.e b.e))
-            |> (fun acc -> USet.inplace_union ~into:acc (URelation.cross b.e a.e));
-          (* a and b share the same origin table *)
-          origin = a.origin;
-          loop_indices = a.loop_indices;
-          loop_conditions = a.loop_conditions;
-          thread_index = a.thread_index;
-          write_events = USet.union a.write_events b.write_events;
-          read_events = USet.union a.read_events b.read_events;
-          rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
-          rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
-          fence_events = USet.union a.fence_events b.fence_events;
-          branch_events = USet.union a.branch_events b.branch_events;
-          malloc_events = USet.union a.malloc_events b.malloc_events;
-          free_events = USet.union a.free_events b.free_events;
-          terminal_events = USet.union a.terminal_events b.terminal_events;
-        }
+  (* [merged a b] is a fresh table with [a]'s bindings and then [b]'s, [b]
+     winning where both bind a key.
 
-  let cross a b : t =
-    let restrict = Hashtbl.copy a.restrict in
-      Hashtbl.iter (fun k v -> Hashtbl.replace restrict k v) b.restrict;
-      let defacto = Hashtbl.copy a.defacto in
-        Hashtbl.iter (fun k v -> Hashtbl.replace defacto k v) b.defacto;
-        {
-          e = USet.union a.e b.e;
-          events = a.events;
-          (* a and b share the same events table *)
-          po = USet.union a.po b.po;
-          po_iter = USet.create ();
-          rmw = USet.union a.rmw b.rmw;
-          lo = USet.union a.lo b.lo;
-          restrict;
-          defacto;
-          fj = USet.union a.fj b.fj;
-          (* Empty on purpose, and harmless: p is not built compositionally.
-             Interpretation keeps one env_by_evt table on the side and stamps
-             it onto the structure when it returns (interpret.ml), so whatever
-             stands here is overwritten before the only reader -- the final_env
-             construction in Executions -- looks at it. Same reasoning as the
-             shared events and origin tables below. *)
-          p = Hashtbl.create 0;
-          constraints = a.constraints @ b.constraints;
-          conflict = USet.union a.conflict b.conflict;
-          (* a and b share the same origin table *)
-          origin = a.origin;
-          loop_indices = a.loop_indices;
-          loop_conditions = a.loop_conditions;
-          thread_index = a.thread_index;
-          write_events = USet.union a.write_events b.write_events;
-          read_events = USet.union a.read_events b.read_events;
-          rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
-          rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
-          fence_events = USet.union a.fence_events b.fence_events;
-          branch_events = USet.union a.branch_events b.branch_events;
-          malloc_events = USet.union a.malloc_events b.malloc_events;
-          free_events = USet.union a.free_events b.free_events;
-          terminal_events = USet.union a.terminal_events b.terminal_events;
-        }
+     While interpretation keeps one program-wide table of each kind, both
+     operands of a combinator hold that very table, and the merge is a copy of
+     it: the test for physical equality is what keeps that case from walking the
+     table twice. Operands that own their tables get the union. *)
+  let merged a b =
+    let tbl = Hashtbl.copy a in
+      if b != a then Hashtbl.iter (Hashtbl.replace tbl) b;
+      tbl
+
+  (* What [plus] and [cross] agree on: every set and relation is the union of
+     the operands', and the per-event tables are merged. They differ in
+     [conflict] alone.
+
+     [loop_indices], [loop_conditions] and [thread_index] are still taken from
+     [a]. They are program-wide tables that interpretation stamps onto the
+     structure when it returns (interpret.ml), and moving them in here is R6's.
+  *)
+  let union (a : t) (b : t) ~conflict : t =
+    {
+      e = USet.union a.e b.e;
+      events = merged a.events b.events;
+      po = USet.union a.po b.po;
+      po_iter = USet.create ();
+      rmw = USet.union a.rmw b.rmw;
+      lo = USet.union a.lo b.lo;
+      restrict = merged a.restrict b.restrict;
+      defacto = merged a.defacto b.defacto;
+      fj = USet.union a.fj b.fj;
+      p = merged a.p b.p;
+      constraints = a.constraints @ b.constraints;
+      conflict;
+      origin = merged a.origin b.origin;
+      loop_indices = a.loop_indices;
+      loop_conditions = a.loop_conditions;
+      thread_index = a.thread_index;
+      write_events = USet.union a.write_events b.write_events;
+      read_events = USet.union a.read_events b.read_events;
+      rlx_write_events = USet.union a.rlx_write_events b.rlx_write_events;
+      rlx_read_events = USet.union a.rlx_read_events b.rlx_read_events;
+      fence_events = USet.union a.fence_events b.fence_events;
+      branch_events = USet.union a.branch_events b.branch_events;
+      malloc_events = USet.union a.malloc_events b.malloc_events;
+      free_events = USet.union a.free_events b.free_events;
+      terminal_events = USet.union a.terminal_events b.terminal_events;
+    }
+
+  let plus a b : t =
+    let conflict = USet.union a.conflict b.conflict in
+    let conflict =
+      USet.inplace_union ~into:conflict (URelation.cross a.e b.e)
+    in
+    let conflict =
+      USet.inplace_union ~into:conflict (URelation.cross b.e a.e)
+    in
+      union a b ~conflict
+
+  let cross a b : t = union a b ~conflict:(USet.union a.conflict b.conflict)
 
   (* Intersected with [e]. [loop_indices] is one of the program-wide tables
      interpret.ml hands over whole -- every event it ever creates is stamped
