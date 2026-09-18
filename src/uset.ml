@@ -627,6 +627,14 @@ module URelation : sig
 
   (** {2 Properties} *)
 
+  (** [restrict s rel] is [rel ∩ (s × s)], the pairs of [rel] with both ends in
+      [s], without building [s × s].
+
+      @param s The set.
+      @param rel The relation.
+      @return The pairs of [rel] within [s]. *)
+  val restrict : 'a USet.t -> 'a t -> 'a t
+
   (** [acyclic rel] checks if relation is acyclic.
 
       A relation is acyclic if its transitive closure contains no reflexive
@@ -915,6 +923,9 @@ end = struct
               ok
       in
         Hashtbl.fold (fun v _ acc -> acc && visit v) succ true
+
+  let restrict s rel =
+    USet.filter (fun (a, b) -> USet.mem s a && USet.mem s b) rel
 
   let is_irreflexive s = USet.for_all (fun (a, b) -> not (a = b)) s
 
