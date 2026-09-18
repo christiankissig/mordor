@@ -35,13 +35,21 @@ module SymbolicEventStructure = struct
       terminal_events = USet.create ();
     }
 
-  let dot (event : event) structure phi defacto : symbolic_event_structure =
+  (* [with_binding tbl k v] is a copy of [tbl] in which [k] is bound to [v].
+     Copy on write: [dot] used to write into its operand's [restrict] and
+     [defacto], so the operand came back changed, and a structure prefixed
+     twice, or combined again after being prefixed, had its two results writing
+     into each other. *)
+  let with_binding tbl k v =
+    let tbl = Hashtbl.copy tbl in
+      Hashtbl.replace tbl k v;
+      tbl
+
+  let dot (event : event) (structure : t) phi defacto : t =
     if List.exists (fun p -> p = EBoolean false) phi then
       Logs_safe.warn (fun m ->
           m "Adding event %d under unsatisfiable path condition.\n" event.label
       );
-    Hashtbl.replace structure.restrict event.label phi;
-    Hashtbl.replace structure.defacto event.label defacto;
     {
       e = USet.union structure.e (USet.singleton event.label);
       events = structure.events;
@@ -51,8 +59,8 @@ module SymbolicEventStructure = struct
       po_iter = USet.create ();
       rmw = structure.rmw;
       lo = structure.lo;
-      restrict = structure.restrict;
-      defacto = structure.defacto;
+      restrict = with_binding structure.restrict event.label phi;
+      defacto = with_binding structure.defacto event.label defacto;
       fj = structure.fj;
       p = structure.p;
       constraints = structure.constraints;

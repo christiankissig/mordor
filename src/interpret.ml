@@ -269,14 +269,20 @@ let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr
 
 (** Add a read-modify-write edge to a symbolic event structure.
 
-    @param structure The event structure to modify.
+    [structure] is left as it was: [dot] hands its operand's [rmw] set on to its
+    result, so adding to that set in place would also add the edge to every
+    structure the operand was ever prefixed into.
+
+    @param structure The event structure to extend.
     @param er The label of the read event.
     @param ew The label of the write event.
     @return A new event structure with the RMW edge added. *)
 let add_rmw_edge (structure : symbolic_event_structure) (er : int) (cond : expr)
     (ew : int) =
-  USet.add structure.rmw (er, cond, ew) |> ignore;
-  structure
+  {
+    structure with
+    rmw = USet.union structure.rmw (USet.singleton (er, cond, ew));
+  }
 
 (** {1 Statement Interpretation} *)
 
