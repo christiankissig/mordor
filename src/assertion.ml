@@ -257,26 +257,12 @@ module JSONSerialization = struct
         let pairs = USet.fold (fun acc pair -> pair :: acc) upd_reasons [] in
           upd_json_to_yojson { upd = pairs }
 
-  (** [ub_reason_to_json ub_reason] converts UB reason to JSON string.
-
-      @param ub_reason The UB reason.
-      @return JSON string. *)
-  let ub_reason_to_json (ub_reason : ub_reason) : string =
-    Yojson.Safe.to_string (ub_reason_to_yojson ub_reason)
-
   (** [ub_reasons_to_yojson ub_reasons] converts list to Yojson.
 
       @param ub_reasons List of UB reasons.
       @return Yojson list. *)
   let ub_reasons_to_yojson (ub_reasons : ub_reason list) : Yojson.Safe.t =
     `List (List.map ub_reason_to_yojson ub_reasons)
-
-  (** [ub_reasons_to_json ub_reasons] converts list to JSON string.
-
-      @param ub_reasons List of UB reasons.
-      @return JSON string. *)
-  let ub_reasons_to_json (ub_reasons : ub_reason list) : string =
-    Yojson.Safe.to_string (ub_reasons_to_yojson ub_reasons)
 end
 
 (** {1 Event Location Helper} *)
@@ -786,6 +772,10 @@ module Refinement = struct
     events : (int, event) Hashtbl.t;  (** Event table. *)
     valid : bool;  (** Whether refinement holds. *)
   }
+  [@@warning "-69"]
+  (* Only [valid] is read today. The rest is the refined program as the chain
+     left it, and stays part of the result: with the module sealed by its
+     interface the compiler would otherwise call the fields unused. *)
 
   (** One program of a chain, run through the pipeline. *)
   type run = {
@@ -1695,17 +1685,8 @@ let check_assertion = AssertionChecker.check
 
 (** JSON serialization functions for UB reasons. *)
 
-(** [ub_reason_to_yojson ub] converts UB reason to Yojson. *)
-let ub_reason_to_yojson = JSONSerialization.ub_reason_to_yojson
-
-(** [ub_reason_to_json ub] converts UB reason to JSON string. *)
-let ub_reason_to_json = JSONSerialization.ub_reason_to_json
-
 (** [ub_reasons_to_yojson ubs] converts UB reason list to Yojson. *)
 let ub_reasons_to_yojson = JSONSerialization.ub_reasons_to_yojson
-
-(** [ub_reasons_to_json ubs] converts UB reason list to JSON string. *)
-let ub_reasons_to_json = JSONSerialization.ub_reasons_to_json
 
 (** [describe_assertion assertion] is an outcome assertion as a test writes
     it, [forbid (r0 = 1) [ra]], naming one model. *)

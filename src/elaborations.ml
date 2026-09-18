@@ -546,13 +546,6 @@ module LiftElab : sig
       @return Promise of list of lifted justifications. *)
   val elab : context -> justification -> justification -> justification list
 
-  (** [relabel expr pairs] applies symbol relabeling to an expression.
-
-      @param expr The expression to relabel.
-      @param pairs Set of [(from, to)] symbol substitution pairs.
-      @return The relabeled expression. *)
-  val relabel : expr -> (string * string) USet.t -> expr
-
   (** [find_distinguishing_predicate p1 p2] finds distinguishing predicate.
 
       Finds a predicate that is positive in [p1] and negative in [p2], or vice
@@ -588,9 +581,6 @@ module LiftElab : sig
     ForwardingContext.t ->
     (string, string) Hashtbl.t uset
 end = struct
-  let relabel expr pairs =
-    USet.fold (fun acc (f, t) -> Expr.subst acc f (ESymbol t)) pairs expr
-
   (** [is_expr_relab_equiv elab_ctx relab p1 expr1 p2 expr2] checks expression
       equivalence.
 
