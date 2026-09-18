@@ -28,6 +28,19 @@ module type MEMORY_MODEL = sig
     cache
 
   val check_coherence : cache -> (int * int) uset -> bool
+
+  (** One candidate coherence order, with the cache it is checked against and
+      the relations the axioms derive from the two. Each is computed once, and
+      only if an axiom asks for it. *)
+  type candidate
+
+  val candidate : cache -> (int * int) uset -> candidate
+
+  (** The model's axioms, by name, in the order {!check_coherence} asks them:
+      [check_coherence cache co] holds when every one holds of
+      [candidate cache co]. Each can be asked on its own. *)
+  val axioms : (string * (candidate -> bool)) list
+
   val check_thin_air : cache -> symbolic_execution -> bool
 
   val uses_co : bool
@@ -52,6 +65,36 @@ module type MEMORY_MODEL = sig
     int uset ->
     (int, expr list) Hashtbl.t ->
     (int * int) uset
+end
+
+(** A model that can be asked about a coherence order while it is being built.
+
+    [start] is what is known before any edge; [extend] adds edges and answers
+    [None] once no completion can be coherent, so that a search can stop there;
+    [finalize] decides the complete order. {!Incremental} is the adapter every
+    model has until it says more: it never prunes, and decides at the end with
+    [check_coherence]. *)
+module type INCREMENTAL_MODEL = sig
+  include MEMORY_MODEL
+
+  type partial
+
+  val start : cache -> partial
+  val extend : partial -> (int * int) uset -> partial option
+  val finalize : partial -> (int * int) uset -> bool
+end
+
+(** The default adapter: nothing is known of a partial order but the cache. *)
+module Incremental (M : MEMORY_MODEL) :
+  INCREMENTAL_MODEL with type cache = M.cache and type partial = M.cache =
+struct
+  include M
+
+  type partial = cache
+
+  let start cache = cache
+  let extend partial _ = Some partial
+  let finalize partial co = M.check_coherence partial co
 end
 
 (** {1 Shared logic} *)
@@ -207,6 +250,10 @@ module CoherenceChecks = struct
       URelation.is_irreflexive
         (USet.inplace_union ~into:(URelation.compose [ hb; eco ]) hb)
 end
+
+(** [holds axioms c] is whether every one of [axioms] holds of [c], asked in
+    order and no further than the first that does not. *)
+let holds axioms c = List.for_all (fun (_, axiom) -> axiom c) axioms
 
 (** {1 Memory Model Implementations} *)
 
@@ -385,95 +432,108 @@ module IMM : MEMORY_MODEL = struct
 
     { hb; rf; rfi = URelation.inverse rf; ar_; po; psc_a; psc_b; rmw }
 
-  (** IMM coherence checker *)
-  let check_coherence (cache : cache) (co : (int * int) uset) : bool =
-    let { hb; rfi; po; rf; ar_; psc_a; psc_b; rmw; _ } = cache in
+  type candidate = {
+    cache : cache;
+    fr : (int * int) uset Lazy.t;  (** [rf⁻¹;co] *)
+    eco : (int * int) uset Lazy.t;  (** [rf ∪ co;rf ∪ co ∪ fr;rf ∪ fr] *)
+    eco_adj_map : (int, int uset) Hashtbl.t Lazy.t;
+    coe : (int * int) uset Lazy.t;  (** [co] less [po] *)
+  }
 
-    let result =
-      let ( let*? ) (condition, msg) f = if condition then f () else false in
+  let candidate (cache : cache) co =
+    let fr = lazy (URelation.compose [ cache.rfi; co ]) in
+    (* Written as a pipeline against the old unlabelled [inplace_union], this
+       folded eco into [rf] and then into [co] rather than into the
+       accumulator. [rf] is a cache field shared by every candidate coherence
+       order, so the first candidate checked left it holding eco and every
+       later candidate was checked against a corrupted [rf]; and [co] itself
+       came out of the line holding eco, which is what [coe] and [detour] then
+       read. The search's answer depended on the order candidates were tried
+       in, which for an exhaustive search it cannot.
 
-      let thread_external_restriction x = USet.set_minus x po in
-
-      let dummy_adj_map = Hashtbl.create 0 in
-
-      let co_adj_map = URelation.adjacency_map co in
-      let rf_adj_map = URelation.adjacency_map rf in
-
-      (* fr = rf⁻¹;co *)
-      let fr = URelation.compose [ rfi; co ] in
-      let fre = thread_external_restriction fr in
-
-      (* eco = rf ∪ co;rf ∪ co ∪ fr;rf ∪ fr
-
-         Written as a pipeline against the old unlabelled [inplace_union],
-         this folded eco into [rf] and then into [co] rather than into the
-         accumulator.  [rf] is a cache field shared by every candidate coherence
-         order, so the first candidate checked left it holding eco and every
-         later candidate was checked against a corrupted [rf]; and [co] itself
-         came out of the line holding eco, which is what [coe] and [detour]
-         below then read.  The search's answer depended on the order candidates
-         were tried in, which for an exhaustive search it cannot.
-
-         [~into] now names the mutated set at every call, and the pipeline form
-         that caused this does not typecheck (github #88). *)
-      let eco =
-        let acc = URelation.compose [ co; rf ] in
-        let acc = USet.inplace_union ~into:acc rf in
-        let acc = USet.inplace_union ~into:acc co in
-        let acc = USet.inplace_union ~into:acc (URelation.compose [ fr; rf ]) in
-          USet.inplace_union ~into:acc fr
-      in
-
-      let eco_adj_map = URelation.adjacency_map eco in
-      let hb_adj_map = URelation.adjacency_map hb in
-
-      (* Coherence: hb;eco ∪ hb is irreflexive *)
-      let hb_eco_hb =
-        USet.inplace_union
-          ~into:
-            (URelation.compose_adj_map [ (hb, hb_adj_map); (eco, eco_adj_map) ])
-          hb
-      in
-      let hb_eco_hb_irreflexive = URelation.is_irreflexive hb_eco_hb in
-        let*? () = (hb_eco_hb_irreflexive, "hb;eco ∪ hb is irreflexive") in
-
-        (* Thin-air *)
-        let coe = thread_external_restriction co in
-        let coe_adj_map = URelation.adjacency_map coe in
-        let rfe = thread_external_restriction rf in
-        let rfe_adj_map = URelation.adjacency_map rfe in
-        let detour =
-          URelation.compose_adj_map [ (coe, coe_adj_map); (rfe, rfe_adj_map) ]
-          |> USet.intersection po
-        in
-        let psc_b_adj_map = URelation.adjacency_map psc_b in
-        let psc =
-          URelation.compose_adj_map
-            [
-              (psc_a, dummy_adj_map); (eco, eco_adj_map); (psc_b, psc_b_adj_map);
-            ]
-        in
-        let ar = USet.inplace_union ~into:(USet.union ar_ psc) detour in
-
-        let*? () = (URelation.acyclic ar, "ar is acyclic") in
-
-        if
-          (* Atomicity *)
-          USet.size rmw = 0
-        then true
-        else
-          let rmw_fre_coe_empty =
-            USet.size
-              (URelation.compose_adj_map
-                 [ (fre, dummy_adj_map); (coe, coe_adj_map) ]
-              |> USet.intersection rmw
-              )
-            = 0
-          in
-            let*? () = (rmw_fre_coe_empty, "rmw ∩ (fre;coe) = ∅") in
-              true
+       [~into] now names the mutated set at every call, and the pipeline form
+       that caused this does not typecheck (github #88). *)
+    let eco =
+      lazy
+        (let fr = Lazy.force fr in
+         let acc = URelation.compose [ co; cache.rf ] in
+         let acc = USet.inplace_union ~into:acc cache.rf in
+         let acc = USet.inplace_union ~into:acc co in
+         let acc =
+           USet.inplace_union ~into:acc (URelation.compose [ fr; cache.rf ])
+         in
+           USet.inplace_union ~into:acc fr
+        )
     in
-      result
+      {
+        cache;
+        fr;
+        eco;
+        eco_adj_map = lazy (URelation.adjacency_map (Lazy.force eco));
+        coe = lazy (USet.set_minus co cache.po);
+      }
+
+  (* The first relation of a [compose_adj_map] is not looked up by its
+     adjacency map. *)
+  let dummy_adj_map = Hashtbl.create 0
+
+  (** Coherence: [hb;eco ∪ hb] is irreflexive. *)
+  let coherence x =
+    let { hb; _ } = x.cache in
+    let eco = Lazy.force x.eco in
+      USet.inplace_union
+        ~into:
+          (URelation.compose_adj_map
+             [
+               (hb, URelation.adjacency_map hb); (eco, Lazy.force x.eco_adj_map);
+             ]
+          )
+        hb
+      |> URelation.is_irreflexive
+
+  (** No thin air: [ar = ar_ ∪ psc ∪ detour] is acyclic. *)
+  let ar_acyclic x =
+    let { rf; po; ar_; psc_a; psc_b; _ } = x.cache in
+    let eco = Lazy.force x.eco and coe = Lazy.force x.coe in
+    let rfe = USet.set_minus rf po in
+    let detour =
+      URelation.compose_adj_map
+        [
+          (coe, URelation.adjacency_map coe); (rfe, URelation.adjacency_map rfe);
+        ]
+      |> USet.intersection po
+    in
+    let psc =
+      URelation.compose_adj_map
+        [
+          (psc_a, dummy_adj_map);
+          (eco, Lazy.force x.eco_adj_map);
+          (psc_b, URelation.adjacency_map psc_b);
+        ]
+    in
+      URelation.acyclic (USet.inplace_union ~into:(USet.union ar_ psc) detour)
+
+  (** Atomicity: [rmw ∩ (fre;coe) = ∅]. Vacuous with no RMWs to violate it. *)
+  let atomicity x =
+    let { rmw; po; _ } = x.cache in
+      USet.size rmw = 0
+      ||
+      let fre = USet.set_minus (Lazy.force x.fr) po
+      and coe = Lazy.force x.coe in
+        URelation.compose_adj_map
+          [ (fre, dummy_adj_map); (coe, URelation.adjacency_map coe) ]
+        |> USet.intersection rmw
+        |> USet.size
+        = 0
+
+  let axioms =
+    [
+      ("hb;eco ∪ hb is irreflexive", coherence);
+      ("ar is acyclic", ar_acyclic);
+      ("rmw ∩ (fre;coe) = ∅", atomicity);
+    ]
+
+  let check_coherence cache co = holds axioms (candidate cache co)
 
   let check_thin_air _ _ = true
   let uses_co = true
@@ -719,110 +779,131 @@ end) : MEMORY_MODEL = struct
       loc_restrict;
     }
 
-  (** Check coherence *)
-  let check_coherence (cache : cache) (co : (int * int) uset) : bool =
+  type candidate = {
+    cache : cache;
+    co : (int * int) uset;
+    hb : (int * int) uset Lazy.t;
+    rb : (int * int) uset Lazy.t;  (** [rf⁻¹;co] *)
+    eco : (int * int) uset Lazy.t;  (** [(rf ∪ co ∪ rb)⁺] *)
+  }
+
+  let candidate (cache : cache) co =
     let { sb; hb; rfi; rf; e; events; thread_index; rmw; loc_restrict } =
       cache
     in
     let hb =
       match hb with
-      | Some hb -> hb
+      | Some hb -> Lazy.from_val hb
       | None ->
-          build_hb ~co ~events ~e ~sb ~rf ~rmw ~loc_restrict ~thread_index ()
+          lazy
+            (build_hb ~co ~events ~e ~sb ~rf ~rmw ~loc_restrict ~thread_index ())
     in
-
-    (* rb = rf⁻¹;co *)
-    let rb = URelation.compose [ rfi; co ] in
-
-    (* eco = (rf ∪ co ∪ rb)⁺ *)
+    let rb = lazy (URelation.compose [ rfi; co ]) in
     let eco =
-      URelation.transitive_closure (USet.inplace_union ~into:(USet.union rf co) rb)
+      lazy
+        (URelation.transitive_closure
+           (USet.inplace_union ~into:(USet.union rf co) (Lazy.force rb))
+        )
+    in
+      { cache; co; hb; rb; eco }
+
+  (** Atomicity: [rmw ∩ (rb;co) = ∅]. Vacuous with no RMWs to violate it. *)
+  let atomicity x =
+    let { rf; rfi; rmw; _ } = x.cache in
+      USet.size rmw = 0
+      || CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co:x.co ()
+
+  (* Coherence: [hb;eco ∪ hb] is irreflexive.
+
+     This used to sit inside the RMW arm, and the arm without RMWs spelled it
+     out inline in a different form. The two were not the same check: the
+     shared one omitted the [∪ hb] term, so an execution containing an RMW
+     was never asked whether hb was irreflexive -- for hb = (sw ∪ sb)⁺,
+     whether sb ∪ sw is acyclic. One check now, outside the split.
+
+     SC consistency did not depend on rmw either: both arms ran the same
+     thirty-five lines of it, which is how they came to disagree in the first
+     place. *)
+  let coherence x =
+    let { rf; rfi; _ } = x.cache in
+      CoherenceChecks.coherence_axiom ~eco:(Lazy.force x.eco) ~rf ~rfi ~co:x.co
+        ~hb:(Lazy.force x.hb) ()
+
+  (** SC consistency: [psc] is acyclic. Asked last, so that only an execution
+      which has passed atomicity and coherence pays for it. *)
+  let sc_consistent x =
+    let { sb; e; events; loc_restrict; _ } = x.cache in
+    let co = x.co and hb = Lazy.force x.hb in
+    let rb = Lazy.force x.rb and eco = Lazy.force x.eco in
+    let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
+    (* scb = sb ∪ sbl;hb;sbl ∪ hbl ∪ co ∪ rb, with sbl = sb \ loc and
+       hbl = hb ∩ loc, as in herd's rc11.cat.
+
+       The middle term was sbl;hb, which contains sbl;hb;sbl and more: it
+       let an event reach any hb-later one at another location, where RC11
+       asks for an sb step at another location on both sides. At a fence end
+       of psc_base the hb? there absorbs the difference; at an SC access it
+       does not, and those ends were missing until the fix below. *)
+    let scb =
+      USet.union sb (URelation.compose [ sb_non_loc; hb; sb_non_loc ])
+      |> USet.union (loc_restrict hb)
+      |> USet.union co
+      |> USet.union rb
     in
 
-    (* SC consistency: psc is acyclic.
+    (* E_sc, every access in mode sc: RC11's [SC], of any event type.
 
-       Behind a closure so that only an execution which has already passed
-       atomicity and coherence pays for it, as was the case when each arm of
-       the RMW split below carried its own copy of this. *)
-    let sc_consistent () =
-      let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
-      (* scb = sb ∪ sbl;hb;sbl ∪ hbl ∪ co ∪ rb, with sbl = sb \ loc and
-         hbl = hb ∩ loc, as in herd's rc11.cat.
+       This asked for [Init] events in mode sc, which never exist, so E_sc
+       was empty and psc_base reduced to its fence terms. Store buffering
+       over sc stores and loads came out allowed: psc is the only axiom that
+       forbids it, and without the accesses it had nothing to order. *)
+    let sc_events =
+      USet.union
+        (ModelUtils.match_events events e Read (Some SC) None None)
+        (ModelUtils.match_events events e Write (Some SC) None None)
+      |> USet.union (ModelUtils.match_events events e Fence (Some SC) None None)
+    in
+    let f_sc = ModelUtils.match_events events e Fence (Some SC) None None in
 
-         The middle term was sbl;hb, which contains sbl;hb;sbl and more: it
-         let an event reach any hb-later one at another location, where RC11
-         asks for an sb step at another location on both sides. At a fence end
-         of psc_base the hb? there absorbs the difference; at an SC access it
-         does not, and those ends were missing until the fix below. *)
-      let scb =
-        USet.union sb (URelation.compose [ sb_non_loc; hb; sb_non_loc ])
-        |> USet.union (loc_restrict hb)
-        |> USet.union co
-        |> USet.union rb
-      in
+    (* psc_base = [E_sc U (F_sc;hb?)] ; scb ; [E_sc U (hb?;F_sc)]
 
-      (* E_sc, every access in mode sc: RC11's [SC], of any event type.
-
-         This asked for [Init] events in mode sc, which never exist, so E_sc
-         was empty and psc_base reduced to its fence terms. Store buffering
-         over sc stores and loads came out allowed: psc is the only axiom that
-         forbids it, and without the accesses it had nothing to order. *)
-      let sc_events =
-        USet.union
-          (ModelUtils.match_events events e Read (Some SC) None None)
-          (ModelUtils.match_events events e Write (Some SC) None None)
-        |> USet.union
-             (ModelUtils.match_events events e Fence (Some SC) None None)
-      in
-      let f_sc = ModelUtils.match_events events e Fence (Some SC) None None in
-
-      (* psc_base = [E_sc U (F_sc;hb?)] ; scb ; [E_sc U (hb?;F_sc)]
-
-         Both unions have to copy. [USet.inplace_union] mutates [~into], so
-         building these two with it left sc_events holding
-         E_sc U (F_sc;hb?) U (hb?;F_sc) and both ends of the composition
-         pointing at that one set -- each end carrying the other's term. Which
-         of the two got there first was not even determined: OCaml does not
-         specify the evaluation order of list elements. *)
-      let psc_base =
-        URelation.compose
-          [
-            USet.union sc_events
-              (URelation.compose [ f_sc; URelation.reflexive_closure e hb ]);
-            scb;
-            USet.union sc_events
-              (URelation.compose [ URelation.reflexive_closure e hb; f_sc ]);
-          ]
-      in
-
-      let psc_f =
-        URelation.compose
-          [
-            f_sc;
-            USet.inplace_union ~into:(URelation.compose [ hb; eco; hb ]) hb;
-            f_sc;
-          ]
-      in
-
-      let psc = USet.union psc_base psc_f in
-        URelation.acyclic psc
+       Both unions have to copy. [USet.inplace_union] mutates [~into], so
+       building these two with it left sc_events holding
+       E_sc U (F_sc;hb?) U (hb?;F_sc) and both ends of the composition
+       pointing at that one set -- each end carrying the other's term. Which
+       of the two got there first was not even determined: OCaml does not
+       specify the evaluation order of list elements. *)
+    let psc_base =
+      URelation.compose
+        [
+          USet.union sc_events
+            (URelation.compose [ f_sc; URelation.reflexive_closure e hb ]);
+          scb;
+          USet.union sc_events
+            (URelation.compose [ URelation.reflexive_closure e hb; f_sc ]);
+        ]
     in
 
-    (* Atomicity: rmw ∩ (rb;co) = ∅. Vacuous with no RMWs to violate it. *)
-    (USet.size rmw = 0 || CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ())
-    (* Coherence: hb;eco ∪ hb is irreflexive.
+    let psc_f =
+      URelation.compose
+        [
+          f_sc;
+          USet.inplace_union ~into:(URelation.compose [ hb; eco; hb ]) hb;
+          f_sc;
+        ]
+    in
 
-       This used to sit inside the RMW arm, and the arm without RMWs spelled it
-       out inline in a different form. The two were not the same check: the
-       shared one omitted the [∪ hb] term, so an execution containing an RMW
-       was never asked whether hb was irreflexive -- for hb = (sw ∪ sb)⁺,
-       whether sb ∪ sw is acyclic. One check now, outside the split.
+    let psc = USet.union psc_base psc_f in
+      URelation.acyclic psc
 
-       The rest of this function did not depend on rmw either: both arms ran
-       the same thirty-five lines of SC consistency, which is how they came to
-       disagree in the first place. *)
-    && CoherenceChecks.coherence_axiom ~eco ~rf ~rfi ~co ~hb ()
-    && sc_consistent ()
+  let axioms =
+    [
+      ("rmw ∩ (rb;co) = ∅", atomicity);
+      ("hb;eco ∪ hb is irreflexive", coherence);
+      ("psc is acyclic", sc_consistent);
+    ]
+
+  let check_coherence cache co = holds axioms (candidate cache co)
 
   let check_thin_air (cache : cache) (execution : symbolic_execution) =
     let { hb; rf; sb; _ } = cache in
@@ -891,13 +972,23 @@ module SMRD : MEMORY_MODEL = struct
 
     { rf; rfi; hb; rmw }
 
-  let check_coherence cache co =
-    let { rf; rfi; hb; rmw; _ } = cache in
-    let result =
-      CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()
-      && CoherenceChecks.coherence_axiom ~rf ~rfi ~co ~hb ()
-    in
-      result
+  type candidate = cache * (int * int) uset
+
+  let candidate cache co = (cache, co)
+
+  let axioms =
+    [
+      ( "rmw ∩ (rb;co) = ∅",
+        fun ({ rf; rfi; rmw; _ }, co) ->
+          CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()
+      );
+      ( "hb;eco ∪ hb is irreflexive",
+        fun ({ rf; rfi; hb; _ }, co) ->
+          CoherenceChecks.coherence_axiom ~rf ~rfi ~co ~hb ()
+      );
+    ]
+
+  let check_coherence cache co = holds axioms (candidate cache co)
 
   let check_thin_air cache execution =
     let { rf; hb; _ } = cache in
@@ -931,10 +1022,19 @@ module Undefined : MEMORY_MODEL = struct
     let { rf; rmw; _ } : symbolic_execution = execution in
       { rf; rfi = URelation.inverse rf; rmw }
 
-  (** Check coherence *)
-  let check_coherence (cache : cache) (co : (int * int) uset) : bool =
-    let { rf; rfi; rmw; _ } = cache in
-      CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()
+  type candidate = cache * (int * int) uset
+
+  let candidate cache co = (cache, co)
+
+  let axioms =
+    [
+      ( "rmw ∩ (rb;co) = ∅",
+        fun ({ rf; rfi; rmw }, co) ->
+          CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()
+      );
+    ]
+
+  let check_coherence cache co = holds axioms (candidate cache co)
 
   let check_thin_air execution cache = true
   let uses_co = true
@@ -1082,6 +1182,16 @@ module Vocab = struct
     |> URelation.identity
 end
 
+(** A candidate coherence order as an axiomatic model sees it: the vocabulary,
+    what the model prepared from it, and the order as {!Vocab.co} gives it, with
+    [fr] derived when an axiom first asks. *)
+type 'd axiomatic_candidate = {
+  v : Vocab.t;
+  d : 'd;
+  co : (int * int) uset;
+  fr : (int * int) uset Lazy.t;
+}
+
 (** A model whose cache is {!Vocab.t} plus what [prepare] derives from it once
     per execution. *)
 module Axiomatic (A : sig
@@ -1091,7 +1201,7 @@ module Axiomatic (A : sig
   type derived
 
   val prepare : Vocab.t -> derived
-  val check : Vocab.t -> derived -> (int * int) uset -> bool
+  val axioms : (string * (derived axiomatic_candidate -> bool)) list
 end) : MEMORY_MODEL = struct
   type cache = Vocab.t * A.derived
   type config = unit
@@ -1103,7 +1213,14 @@ end) : MEMORY_MODEL = struct
     let v = Vocab.make execution structure loc_restrict in
       (v, A.prepare v)
 
-  let check_coherence (v, d) co = A.check v d (Vocab.co v co)
+  type candidate = A.derived axiomatic_candidate
+
+  let candidate (v, d) co =
+    let co = Vocab.co v co in
+      { v; d; co; fr = lazy (Vocab.fr v co) }
+
+  let axioms = A.axioms
+  let check_coherence cache co = holds axioms (candidate cache co)
   let check_thin_air _ _ = true
   let uses_co = A.uses_co
   let orders_allocations = false
@@ -1124,9 +1241,13 @@ Axiomatic (struct
 
   let prepare (v : Vocab.t) = Vocab.union [ v.po; v.rf ]
 
-  let check (v : Vocab.t) base co =
-    Vocab.atomicity v co
-    && URelation.acyclic (Vocab.union [ base; co; Vocab.fr v co ])
+  let axioms =
+    [
+      ("rmw ∩ (fr;co) = ∅", fun x -> Vocab.atomicity x.v x.co);
+      ( "po ∪ rf ∪ co ∪ fr is acyclic",
+        fun x -> URelation.acyclic (Vocab.union [ x.d; x.co; Lazy.force x.fr ])
+      );
+    ]
 end)
 
 (** Total store order, as herd's [tso.cat]:
@@ -1167,11 +1288,18 @@ Axiomatic (struct
         ghb = Vocab.union [ ppo; Vocab.external_ v v.rf ];
       }
 
-  let check (v : Vocab.t) d co =
-    let fr = Vocab.fr v co in
-      URelation.acyclic (Vocab.union [ d.scperloc; co; fr ])
-      && Vocab.atomicity v co
-      && URelation.acyclic (Vocab.union [ d.ghb; co; fr ])
+  let axioms =
+    [
+      ( "po-loc ∪ rf ∪ co ∪ fr is acyclic",
+        fun x ->
+          URelation.acyclic (Vocab.union [ x.d.scperloc; x.co; Lazy.force x.fr ])
+      );
+      ("rmw ∩ (fr;co) = ∅", fun x -> Vocab.atomicity x.v x.co);
+      ( "ppo ∪ rfe ∪ co ∪ fr is acyclic",
+        fun x ->
+          URelation.acyclic (Vocab.union [ x.d.ghb; x.co; Lazy.force x.fr ])
+      );
+    ]
 end)
 
 (** Per-location cache coherence, herd's [scperloc] alone:
@@ -1184,8 +1312,12 @@ module CoherenceModel = Axiomatic (struct
 
   let prepare (v : Vocab.t) = Vocab.union [ v.loc_restrict v.po; v.rf ]
 
-  let check (v : Vocab.t) base co =
-    URelation.acyclic (Vocab.union [ base; co; Vocab.fr v co ])
+  let axioms =
+    [
+      ( "po-loc ∪ rf ∪ co ∪ fr is acyclic",
+        fun x -> URelation.acyclic (Vocab.union [ x.d; x.co; Lazy.force x.fr ])
+      );
+    ]
 end)
 
 (** The release-acquire family, as Lahav and Boker tabulate it (TOPLAS 2022,
@@ -1228,31 +1360,52 @@ Axiomatic (struct
     let hb = URelation.transitive_closure (Vocab.union [ v.po; sw ]) in
       { hb; hb_ok = URelation.is_irreflexive hb }
 
-  let check (v : Vocab.t) { hb; hb_ok } co =
-    hb_ok
-    &&
-    match F.variant with
+  let co_hb_rfi (x : derived axiomatic_candidate) =
+    URelation.is_irreflexive (URelation.compose [ x.co; x.d.hb; x.v.rfi ])
+
+  let atomicity (x : derived axiomatic_candidate) = Vocab.atomicity x.v x.co
+
+  let weak_read_coherence (x : derived axiomatic_candidate) =
+    let v = x.v and hb = x.d.hb in
+      URelation.is_irreflexive
+        (URelation.compose [ v.loc_restrict hb; v.w; hb; v.rfi ])
+
+  (* no two RMWs read one write: ((rf;[RMW])⁻¹;(rf;[RMW])) \ id = ∅ *)
+  let weak_atomicity (x : derived axiomatic_candidate) =
+    let v = x.v in
+    let rmw_reads = URelation.identity (URelation.pi_1 v.rmw) in
+    let rf_rmw = URelation.compose [ v.rf; rmw_reads ] in
+      URelation.compose [ URelation.inverse rf_rmw; rf_rmw ]
+      |> USet.for_all (fun (a, b) -> a = b)
+
+  let axioms =
+    ("hb is irreflexive", fun (x : derived axiomatic_candidate) -> x.d.hb_ok)
+    ::
+    ( match F.variant with
     | `RA ->
-        URelation.is_irreflexive (URelation.compose [ co; hb ])
-        && URelation.is_irreflexive (URelation.compose [ co; hb; v.rfi ])
-        && Vocab.atomicity v co
+        [
+          ( "co;hb is irreflexive",
+            fun x ->
+              URelation.is_irreflexive (URelation.compose [ x.co; x.d.hb ])
+          );
+          ("co;hb;rf⁻¹ is irreflexive", co_hb_rfi);
+          ("rmw ∩ (fr;co) = ∅", atomicity);
+        ]
     | `SRA ->
-        URelation.acyclic (Vocab.union [ hb; co ])
-        && URelation.is_irreflexive (URelation.compose [ co; hb; v.rfi ])
-        && Vocab.atomicity v co
-    | `WRA | `CC ->
-        let weak_read_coherence =
-          URelation.is_irreflexive
-            (URelation.compose [ v.loc_restrict hb; v.w; hb; v.rfi ])
-        in
-        (* no two RMWs read one write: ((rf;[RMW])⁻¹;(rf;[RMW])) \ id = ∅ *)
-        let weak_atomicity () =
-          let rmw_reads = URelation.identity (URelation.pi_1 v.rmw) in
-          let rf_rmw = URelation.compose [ v.rf; rmw_reads ] in
-            URelation.compose [ URelation.inverse rf_rmw; rf_rmw ]
-            |> USet.for_all (fun (a, b) -> a = b)
-        in
-          weak_read_coherence && (F.variant = `CC || weak_atomicity ())
+        [
+          ( "hb ∪ co is acyclic",
+            fun x -> URelation.acyclic (Vocab.union [ x.d.hb; x.co ])
+          );
+          ("co;hb;rf⁻¹ is irreflexive", co_hb_rfi);
+          ("rmw ∩ (fr;co) = ∅", atomicity);
+        ]
+    | `WRA ->
+        [
+          ("(hb ∩ loc);[W];hb;rf⁻¹ is irreflexive", weak_read_coherence);
+          ("no two RMWs read one write", weak_atomicity);
+        ]
+    | `CC -> [ ("(hb ∩ loc);[W];hb;rf⁻¹ is irreflexive", weak_read_coherence) ]
+    )
 end)
 
 (** Per-process views, for the Steinke--Nutt lattice (JPDC 2004).
@@ -1432,9 +1585,16 @@ Axiomatic (struct
           in
             search 0 []
 
-  let check (v : Vocab.t) d co =
-    let co = if F.variant = `PC then co else USet.create () in
-      List.for_all (fun (_, own) -> view_exists v d ~co own) d.processes
+  let axioms =
+    [
+      ( "every process has a view",
+        fun (x : derived axiomatic_candidate) ->
+          let co = if F.variant = `PC then x.co else USet.create () in
+            List.for_all
+              (fun (_, own) -> view_exists x.v x.d ~co own)
+              x.d.processes
+      );
+    ]
 end)
 
 (** Per-object causal consistency (Burckhardt et al., POPL 2014, §7), over
@@ -1470,10 +1630,18 @@ module POCausal = Axiomatic (struct
     in
       { hbo; acyclic = URelation.is_irreflexive hbo }
 
-  let check (v : Vocab.t) { hbo; acyclic } co =
-    acyclic
-    && URelation.is_irreflexive (URelation.compose [ co; hbo ])
-    && URelation.is_irreflexive (URelation.compose [ Vocab.fr v co; hbo ])
+  let axioms =
+    [
+      ("hbo is acyclic", fun (x : derived axiomatic_candidate) -> x.d.acyclic);
+      ( "co;hbo is irreflexive",
+        fun x -> URelation.is_irreflexive (URelation.compose [ x.co; x.d.hbo ])
+      );
+      ( "fr;hbo is irreflexive",
+        fun x ->
+          URelation.is_irreflexive
+            (URelation.compose [ Lazy.force x.fr; x.d.hbo ])
+      );
+    ]
 end)
 
 (** Terry et al.'s session guarantees (PDIS 1994), in Viotti and Vukolić's
@@ -1578,11 +1746,21 @@ Axiomatic (struct
     in
       { arbitration; per_reader }
 
-  let check _ { arbitration; per_reader } _ =
-    URelation.acyclic arbitration
-    && List.for_all
-         (fun (_, edges) -> URelation.acyclic (USet.union arbitration edges))
-         per_reader
+  let axioms =
+    [
+      ( "arbitration is acyclic",
+        fun (x : derived axiomatic_candidate) ->
+          URelation.acyclic x.d.arbitration
+      );
+      ( "every reader's arbitration is acyclic",
+        fun x ->
+          List.for_all
+            (fun (_, edges) ->
+              URelation.acyclic (USet.union x.d.arbitration edges)
+            )
+            x.d.per_reader
+      );
+    ]
 end)
 
 (** MRD: sMRD's axioms, on the programs where sMRD and MRD are one model.
@@ -1637,6 +1815,22 @@ module ModelRegistry = struct
     match Hashtbl.find_opt models name with
     | Some create -> Some (create ())
     | None -> None
+
+  (* No model registers one of its own yet. *)
+  let incremental : (string, unit -> (module INCREMENTAL_MODEL)) Hashtbl.t =
+    Hashtbl.create 10
+
+  let lookup_incremental name =
+    match Hashtbl.find_opt incremental name with
+    | Some create -> Some (create ())
+    | None ->
+        lookup name
+        |> Option.map (fun model ->
+            let module M = (val model : MEMORY_MODEL) in
+            (module Incremental (M) : INCREMENTAL_MODEL)
+        )
+
+  let names () = Hashtbl.fold (fun name _ acc -> name :: acc) models []
 
   let () =
     register "imm" (fun () -> (module IMM : MEMORY_MODEL));
