@@ -234,18 +234,21 @@ let add_event (events : events_t) event env (annotation : ir_node_ann) =
     event'
 
 (** [prefix events event structure phi defacto] is [structure] prefixed with
-    [event], which {!add_event} has added to [events]:
-    {!SymbolicEventStructure.dot} with the register environment, loops and
-    thread that were recorded for the event's label.
+    [event], which {!add_event} has added to [events]: the {!EventStructure}
+    of the event alone -- with the register environment, loops and thread that
+    were recorded for its label -- followed by [structure].
 
     This is how the structure's own tables get built. The ones in [events] are
     the interpreter's working record of every event it has created; the
     structure's describe the events that are in it. *)
 let prefix (events : events_t) (event : event) structure phi defacto =
   let find tbl = Hashtbl.find_opt tbl event.label in
-    SymbolicEventStructure.dot ?env:(find events.env_by_evt)
-      ?loops:(find events.loop_indices) ?thread:(find events.thread_index) event
-      structure phi defacto
+    EventStructure.seq
+      (EventStructure.singleton ?env:(find events.env_by_evt)
+         ?loops:(find events.loop_indices) ?thread:(find events.thread_index)
+         event phi defacto
+      )
+      structure
 
 (** Record a loop's continuation guard for one occurrence of the loop.
 
@@ -344,9 +347,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                       (fun () -> recurse t env phi events)
                   in
                   let acc_structure = acc in
-                    SymbolicEventStructure.cross acc_structure t_structure
+                    EventStructure.par acc_structure t_structure
                 )
-                (SymbolicEventStructure.create ())
+                (EventStructure.empty ())
                 ts
             in
             let threads_structure = interpret_threads threads in
@@ -368,7 +371,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               if rest = [] then threads_structure
               else
                 let cont = recurse rest env phi events in
-                  SymbolicEventStructure.seq threads_structure cont
+                  EventStructure.seq ~join:true threads_structure cont
         | RegisterStore { register; expr } ->
             let expr_value, env = ub_assume events env expr in
             let env' = update_env env register expr_value in
@@ -602,7 +605,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let cont_fail = recurse rest env_fail phi_fail events in
                   prefix events event_load'
                     (prefix events branch_event'
-                       (SymbolicEventStructure.plus
+                       (EventStructure.choice
                           (add_rmw_edge
                              (prefix events event_store' cont_succ
                                 phi_succ defacto
@@ -670,7 +673,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                     let then_structure = then_structure events in
                     let else_structure = else_structure events in
                       prefix events branch_event'
-                        (SymbolicEventStructure.plus then_structure
+                        (EventStructure.choice then_structure
                            else_structure
                         )
                         phi defacto
@@ -683,7 +686,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                     let then_structure = then_structure events in
                     let rest_structure = recurse rest env new_else_phi events in
                       prefix events branch_event'
-                        (SymbolicEventStructure.plus then_structure
+                        (EventStructure.choice then_structure
                            rest_structure
                         )
                         phi defacto
@@ -828,7 +831,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             Logs_safe.err (fun m ->
                 m "Statement not handled: %s" (ir_node_to_string node)
             );
-            SymbolicEventStructure.create ()
+            EventStructure.empty ()
       in
         structure
 
@@ -845,7 +848,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
     @param events The global events structure.
     @return A symbolic event structure with a terminal event. *)
 let make_generic_terminal_structure ~add_event env phi events =
-  let structure = SymbolicEventStructure.create () in
+  let structure = EventStructure.empty () in
   let terminal_evt = Event.create Terminal 0 () in
   let terminal_evt : event =
     add_event events terminal_evt env
@@ -1135,7 +1138,7 @@ end = struct
   let rec interpret_statements_step_counter step_counter per_loop nodes env phi
       events =
     assert (step_counter >= 0);
-    if step_counter = 0 then SymbolicEventStructure.create ()
+    if step_counter = 0 then EventStructure.empty ()
     else
       match nodes with
       | node :: rest -> (
@@ -1467,7 +1470,7 @@ end = struct
           let enter_structure = enter_structure events in
           let exit_structure = exit_structure events in
             prefix events branch_event'
-              (SymbolicEventStructure.plus enter_structure exit_structure)
+              (EventStructure.choice enter_structure exit_structure)
               phi defacto
 
   let step_interpret lwt_ctx =

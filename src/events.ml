@@ -233,6 +233,9 @@ end = struct
       loc = Option.map (Expr.relabel ~relab) e.loc;
       rval = Option.map (Value.relabel ~relab) e.rval;
       wval = Option.map (Expr.relabel ~relab) e.wval;
+      (* A branch event's guard. It was left alone, which no caller could see:
+         the one there was relabels a justification's write. S1 (#14) could. *)
+      cond = Option.map (Expr.relabel ~relab) e.cond;
     }
 end
 
