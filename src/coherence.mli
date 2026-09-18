@@ -16,6 +16,23 @@ open Uset
     ref. Shared by {!Executions}. *)
 val s4_counters : bool ref
 
+(** S6 (branch and bound over coherence orders): when [prune] is set, the search
+    abandons a partial coherence order the model already rejects. Enabled via
+    [MORDOR_S6_PRUNE]; the counters record what the search did.
+
+    Sound only for a model whose violations grow with co. od-lso's do not: its
+    C++11 release sequence subtracts [coe;coe], so more co can mean less hb.
+    Slower than the exhaustive search on every corpus measured; see
+    spike/s6_coherence_bb/RESULTS.md. *)
+module S6 : sig
+  val prune : bool ref
+  val min_leaves : int ref
+  val partial_checks : int ref
+  val pruned : int ref
+  val leaf_checks : int ref
+  val reset : unit -> unit
+end
+
 (** {1 Core Abstractions} *)
 
 module type MEMORY_MODEL = sig
