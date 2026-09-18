@@ -506,6 +506,54 @@ let test_push_pop () =
               (Alcotest.fail "expected (sat, unsat, sat) for push/pop test")
   )
 
+(** A scope retracts what it asserts, when it returns and when it raises, so one
+    query cannot see another's assertions. *)
+let test_scopes_retract () =
+  let x = EVar "x" in
+  let asserting v =
+    scoped (fun solver ->
+        ignore (add_assertions solver [ EBinOp (x, "=", ENum (Z.of_int v)) ]);
+        check_asserted solver
+    )
+  in
+    Alcotest.(check (option bool)) "x = 1" (Some true) (asserting 1);
+    Alcotest.(check (option bool))
+      "x = 2, with x = 1 gone" (Some true) (asserting 2);
+    ( try
+        scoped (fun solver ->
+            ignore (add_assertions solver [ EBinOp (x, "=", ENum Z.one) ]);
+            failwith "raised in a scope"
+        )
+      with Failure _ -> ()
+    );
+    Alcotest.(check (option bool))
+      "x = 3, after a scope raised" (Some true) (asserting 3)
+
+(** Solving in a scope and in a fresh solver give the same answers. *)
+let test_scoped_agrees_with_fresh () =
+  let x = EVar "x" and y = EVar "y" in
+  let queries =
+    [
+      [ EBinOp (x, "=", ENum Z.one); EBinOp (x, "=", ENum (Z.of_int 2)) ];
+      [ EBinOp (x, "<", y); EBinOp (y, "<", x) ];
+      [ EBinOp (x, "!=", y); EBinOp (x, ">", ENum Z.zero) ];
+      [];
+      [ EBoolean false ];
+    ]
+  in
+  let answers () = List.map quick_check queries in
+  let scoped_answers = answers () in
+  let fresh_answers =
+    fresh_solvers := true;
+    Fun.protect ~finally:(fun () -> fresh_solvers := false) answers
+  in
+    Alcotest.(check (list (option bool)))
+      "same answers" fresh_answers scoped_answers;
+    Alcotest.(check (list (option bool)))
+      "the answers"
+      [ Some false; Some false; Some true; Some true; Some false ]
+      scoped_answers
+
 let suite =
   ( "Solver",
     [
@@ -558,5 +606,8 @@ let suite =
       Alcotest.test_case "solve_for_vars" `Quick test_solve_for_vars;
       Alcotest.test_case "model_to_string" `Quick test_model_to_string;
       Alcotest.test_case "push/pop" `Quick test_push_pop;
+      Alcotest.test_case "scopes retract" `Quick test_scopes_retract;
+      Alcotest.test_case "scoped agrees with fresh" `Quick
+        test_scoped_agrees_with_fresh;
     ]
   )

@@ -343,15 +343,31 @@ let check solver =
         failwith "Z3 solver error"
     )
 
+(** {1 Scoped Solving} *)
+
+(** This domain's long-lived solver: a Z3 solver that queries are pushed onto
+    and popped off, and the variables they have named. *)
+let scoped_solver_key = Domain.DLS.new_key (fun () -> create [])
+
+let fresh_solvers = ref (Option.is_some (Sys.getenv_opt "MORDOR_FRESH_SOLVER"))
+
+let scoped f =
+  let solver = Domain.DLS.get scoped_solver_key in
+    ignore (push solver);
+    Fun.protect ~finally:(fun () -> ignore (pop solver)) (fun () -> f solver)
+
 (** Quick satisfiability check (uncached).
 
-    Creates a solver and immediately checks satisfiability.
+    Checks [exprs] in a scope of this domain's long-lived solver, or, with
+    {!fresh_solvers}, in a fresh one. Building a Z3 solver costs about as much
+    as the queries asked here take to solve, and a scope gives the same answers:
+    S7 (#19) replayed 1.13 million queries from real runs both ways.
 
     @param exprs Constraint expressions
     @return SAT/UNSAT/UNKNOWN result *)
 let quick_check exprs =
-  let solver = create exprs in
-    check solver
+  if !fresh_solvers then check (create exprs)
+  else scoped (fun solver -> check { solver with expressions = exprs })
 
 (** Cache for conjunction satisfiability results. *)
 let quick_check_cache = ConjunctionCache.create 256
