@@ -1,0 +1,63 @@
+== 3.2W
+19180 relations; edges p50 55 p95 65 max 72; nodes p50 20 p95 21 max 22
+  Executions.JustValidation.check_final                            144 calls, max 6 edges
+  Coherence.try_all_coherence_orders.choose_one                   3375 calls, max 6 edges
+  Executions.Validation.rhb_acyclic                              15661 calls, max 72 edges
+from scratch: URelation.acyclic 0.899s, dfs 0.135s (7x), disagree 0
+merges of   1 edges:  dfs 4.972s  bounded 0.197s  pk 0.209s
+merges of   8 edges:  dfs 0.856s  bounded 0.192s  pk 0.197s
+merges of  64 edges:  dfs 0.262s  bounded 0.190s  pk 0.196s
+== JCTC11
+73677 relations; edges p50 7 p95 28 max 57; nodes p50 10 p95 12 max 15
+  Coherence.check_for_coherence                                   1447 calls, max 57 edges
+  Executions.JustValidation.check_final                          48048 calls, max 10 edges
+  Executions.Validation.rhb_acyclic                              24182 calls, max 45 edges
+from scratch: URelation.acyclic 0.452s, dfs 0.137s (3x), disagree 0
+merges of   1 edges:  dfs 1.628s  bounded 0.179s  pk 0.201s
+merges of   8 edges:  dfs 0.390s  bounded 0.173s  pk 0.194s
+merges of  64 edges:  dfs 0.233s  bounded 0.171s  pk 0.190s
+== listing15
+99828 relations; edges p50 7 p95 29 max 71; nodes p50 9 p95 11 max 15
+  Coherence.check_for_coherence                                   1083 calls, max 71 edges
+  Executions.JustValidation.check_final                          78160 calls, max 10 edges
+  Executions.Validation.rhb_acyclic                              20585 calls, max 48 edges
+from scratch: URelation.acyclic 0.606s, dfs 0.149s (4x), disagree 0
+merges of   1 edges:  dfs 1.640s  bounded 0.199s  pk 0.222s
+merges of   8 edges:  dfs 0.418s  bounded 0.194s  pk 0.214s
+merges of  64 edges:  dfs 0.265s  bounded 0.189s  pk 0.211s
+== cas-increment-race
+26 relations; edges p50 47 p95 58 max 58; nodes p50 14 p95 15 max 15
+  Coherence.check_for_coherence                                      8 calls, max 58 edges
+  Executions.JustValidation.check_final                              6 calls, max 2 edges
+  Executions.Validation.rhb_acyclic                                 12 calls, max 55 edges
+from scratch: URelation.acyclic 0.003s, dfs 0.001s (6x), disagree 0
+merges of   1 edges:  dfs 0.007s  bounded 0.000s  pk 0.000s
+merges of   8 edges:  dfs 0.001s  bounded 0.000s  pk 0.000s
+merges of  64 edges:  dfs 0.001s  bounded 0.001s  pk 0.001s
+== rcu-1
+20 relations; edges p50 240 p95 263 max 263; nodes p50 24 p95 25 max 25
+  Coherence.check_for_coherence                                      8 calls, max 263 edges
+  Executions.JustValidation.check_final                              4 calls, max 2 edges
+  Executions.Validation.rhb_acyclic                                  8 calls, max 260 edges
+from scratch: URelation.acyclic 0.016s, dfs 0.002s (10x), disagree 0
+merges of   1 edges:  dfs 0.078s  bounded 0.002s  pk 0.001s
+merges of   8 edges:  dfs 0.011s  bounded 0.002s  pk 0.001s
+merges of  64 edges:  dfs 0.002s  bounded 0.002s  pk 0.001s
+== uaf-bug-extended
+108 relations; edges p50 113 p95 138 max 139; nodes p50 17 p95 19 max 19
+  Coherence.check_for_coherence                                     24 calls, max 139 edges
+  Executions.JustValidation.check_final                             16 calls, max 2 edges
+  Executions.Validation.rhb_acyclic                                 68 calls, max 139 edges
+from scratch: URelation.acyclic 0.040s, dfs 0.001s (30x), disagree 0
+merges of   1 edges:  dfs 0.093s  bounded 0.004s  pk 0.003s
+merges of   8 edges:  dfs 0.015s  bounded 0.004s  pk 0.002s
+merges of  64 edges:  dfs 0.004s  bounded 0.003s  pk 0.002s
+== Upd-Stuck
+2362 relations; edges p50 22 p95 40 max 48; nodes p50 10 p95 14 max 15
+  Coherence.check_for_coherence                                    372 calls, max 48 edges
+  Executions.JustValidation.check_final                            966 calls, max 8 edges
+  Executions.Validation.rhb_acyclic                               1024 calls, max 46 edges
+from scratch: URelation.acyclic 0.029s, dfs 0.006s (5x), disagree 0
+merges of   1 edges:  dfs 0.120s  bounded 0.010s  pk 0.010s
+merges of   8 edges:  dfs 0.025s  bounded 0.009s  pk 0.010s
+merges of  64 edges:  dfs 0.012s  bounded 0.009s  pk 0.010s

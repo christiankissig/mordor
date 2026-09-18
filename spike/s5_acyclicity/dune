@@ -1,0 +1,7 @@
+; S5 (#17) -- incremental cycle detection at MoRDor's sizes. Run from the
+; repo root, on traces captured with MORDOR_S5_TRACE=<file>:
+;   dune exec spike/s5_acyclicity/s5_acyclicity.exe -- TRACE ...
+
+(executable
+ (name s5_acyclicity)
+ (libraries mordor_lib unix))

@@ -851,7 +851,41 @@ end = struct
   let reflexive_closure domain s = identity domain |> USet.union s
   let symmetric_closure s = inverse s |> USet.union s
 
+  (* S5 (#17): with [MORDOR_S5_TRACE] set to a path, every relation asked
+     [acyclic] about is written there, with the function that asked:
+     [Marshal]led [(site, pairs)], one per call. The relations are over event
+     labels. *)
+  let s5_trace =
+    Option.map
+      (fun path ->
+        let oc = open_out_bin path in
+          at_exit (fun () -> close_out oc);
+          (oc, Mutex.create ())
+      )
+      (Sys.getenv_opt "MORDOR_S5_TRACE")
+
+  let s5_site () =
+    Printexc.get_callstack 16
+    |> Printexc.backtrace_slots
+    |> Option.value ~default:[||]
+    |> Array.to_list
+    |> List.find_map (fun slot ->
+        match Printexc.Slot.location slot with
+        | Some loc
+          when String.starts_with ~prefix:"src/" loc.filename
+               && not (String.ends_with ~suffix:"uset.ml" loc.filename) ->
+            Some (Option.value (Printexc.Slot.name slot) ~default:loc.filename)
+        | _ -> None
+    )
+    |> Option.value ~default:"?"
+
   let acyclic s =
+    Option.iter
+      (fun (oc, lock) ->
+        let record = (s5_site (), USet.values s) in
+          Mutex.protect lock (fun () -> Marshal.to_channel oc record [])
+      )
+      s5_trace;
     let s_tc = transitive_closure s in
     let result = USet.for_all (fun (a, b) -> not (a = b)) s_tc in
       result
