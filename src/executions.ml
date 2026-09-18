@@ -314,8 +314,11 @@ module FreezeResultCache = Hashtbl.Make (FreezeResultCacheKey)
     @param val2 Second value (unused, kept for symmetry).
     @return Expression asserting locations are unequal. *)
 let disjoint (loc1, val1) (loc2, val2) =
-  (* Two memory accesses are disjoint if their locations differ *)
-  EBinOp (loc1, "!=", loc2)
+  (* Two memory accesses are disjoint if their locations differ. Written with
+     the lesser location first, so that the same fact reached from either end
+     is the same predicate. *)
+  if Expr.compare loc1 loc2 <= 0 then EBinOp (loc1, "!=", loc2)
+  else EBinOp (loc2, "!=", loc1)
 
 (** {1 RF Validation} *)
 
@@ -837,7 +840,8 @@ module Freeze = struct
                 in
                   Solver.is_sat_cached combined_preds
           )
-          (USet.values read_events) ()
+          (USet.values read_events |> List.sort compare)
+          ()
       in
         Logs_safe.debug (fun m ->
             m "[compute_path_rf] Generated %d RF combinations"
@@ -1118,17 +1122,18 @@ module Freeze = struct
 
                   (* Success! Return the freeze result *)
                   let freeze_result : FreezeResult.t =
-                    (* Sets of its own, not the ones every candidate of the
-                       combination shares: with them shared, the parallel
-                       pipeline chose a different witnessing execution from
-                       the sequential one (Integration Tests - Parallel,
-                       lb.lit). What depends on the sharing was not found. *)
+                    (* Every candidate of the combination shares [e], [dp], [ppo] and
+                       [rmw]. That once made the parallel pipeline pick a
+                       different witnessing execution from the sequential one
+                       (lb.lit): Base's hash sets wrote to themselves while
+                       being read, and the hash of an execution read what they
+                       wrote. USet's sets do neither. *)
                     {
-                      e = USet.clone e;
-                      dp = USet.clone dp;
-                      ppo = USet.clone ppo;
+                      e;
+                      dp;
+                      ppo;
                       rf;
-                      rmw = USet.clone rmw;
+                      rmw;
                       (* Filled in by the caller, which is what knows the
                      justification combination these came from. *)
                       fwd = USet.create ();
@@ -1438,7 +1443,15 @@ let compute_justification_combinations compute structure paths ~scope
           )
     );
 
-    let path_writes = USet.intersection path.path (scope path) |> USet.values in
+    (* In label order. The partial check prunes a justification as superseded
+       by what the combination built so far already forwards, so which
+       combinations survive depends on the order the writes come in, and the
+       order a set gives is its own. *)
+    let path_writes =
+      USet.intersection path.path (scope path)
+      |> USet.values
+      |> List.sort (fun a b -> compare b a)
+    in
 
     (* Selecting justifications for events the combination will elide is
        waste, but not removable here: build_combinations produces total
@@ -1847,42 +1860,60 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
       Logs_safe.debug (fun m -> m "Deduplicating executions...");
       let* stream = stream in
       let seen = ExecutionCache.create 1024 in
+      let predicates (ex : symbolic_execution) =
+        List.map Expr.to_string ex.ex_p
+      in
 
       (* As in dedup_freeze_results: merge the forwarding contexts of executions
-         that collapse together instead of keeping one arbitrarily. *)
-      List.filter_map
-        (fun (ex : symbolic_execution) ->
-          match ExecutionCache.find_opt seen ex with
-          | Some (kept : symbolic_execution) ->
-              ignore (USet.inplace_union ~into:kept.fwd ex.fwd);
-              ignore (USet.inplace_union ~into:kept.we ex.we);
-              (* Same reason the forwarding contexts are merged: the duplicate
-                 is this execution reached from a different justification
-                 combination, and keeping only the survivor's would under-report
-                 what justified it. *)
-              let seen = Hashtbl.create (List.length kept.justifications) in
-                List.iter
-                  (fun j -> Hashtbl.replace seen (Justification.to_string j) ())
-                  kept.justifications;
-                kept.justifications <-
-                  kept.justifications
-                  @ List.filter
+         that collapse together instead of keeping one arbitrarily.
+
+         Duplicates agree on events and relations but not always on how their
+         predicates are written: equivalent predicates reached along different
+         justifications come out in different forms. The survivor takes the
+         least in rendering, so which form it reports does not depend on the
+         order duplicates arrive in -- which is the order some set happened to
+         be iterated in. It keeps the id of the first. *)
+      let kept =
+        List.filter_map
+          (fun (ex : symbolic_execution) ->
+            match ExecutionCache.find_opt seen ex with
+            | Some kept ->
+                let (k : symbolic_execution) = !kept in
+                  ignore (USet.inplace_union ~into:k.fwd ex.fwd);
+                  ignore (USet.inplace_union ~into:k.we ex.we);
+                  (* Same reason the forwarding contexts are merged: the
+                     duplicate is this execution reached from a different
+                     justification combination, and keeping only the
+                     survivor's would under-report what justified it. *)
+                  let seen = Hashtbl.create (List.length k.justifications) in
+                    List.iter
                       (fun j ->
-                        let key = Justification.to_string j in
-                          if Hashtbl.mem seen key then false
-                          else (
-                            Hashtbl.replace seen key ();
-                            true
-                          )
+                        Hashtbl.replace seen (Justification.to_string j) ()
                       )
-                      ex.justifications;
-                None
-          | None ->
-              ExecutionCache.add seen ex ex;
-              Some ex
-        )
-        stream
-      |> Lwt.return
+                      k.justifications;
+                    k.justifications <-
+                      k.justifications
+                      @ List.filter
+                          (fun j ->
+                            let key = Justification.to_string j in
+                              if Hashtbl.mem seen key then false
+                              else (
+                                Hashtbl.replace seen key ();
+                                true
+                              )
+                          )
+                          ex.justifications;
+                    if compare (predicates ex) (predicates k) < 0 then
+                      kept := { k with ex_p = ex.ex_p };
+                    None
+            | None ->
+                let kept = ref ex in
+                  ExecutionCache.add seen ex kept;
+                  Some kept
+          )
+          stream
+      in
+        List.map ( ! ) kept |> Lwt.return
     in
 
     let stream_filter_coherent_executions input_stream =
@@ -2007,7 +2038,10 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
     event.
     *)
   let malloc_locs =
+    (* In label order: each pair below is written in the order the two come
+       in, and a set's own order would decide which way round. *)
     USet.values structure.malloc_events
+    |> List.sort compare
     |> List.filter_map (fun eid ->
         match Hashtbl.find_opt structure.events eid with
         | Some evt -> Option.map Expr.of_value evt.rval
