@@ -222,6 +222,107 @@ let test_integration () =
 
 (** Test suite *)
 
+(** {1 Scoped choice points} *)
+
+(* SB, interpreted and elaborated: its structure, its one path, and its
+   justifications by the write they justify. *)
+let store_buffering () =
+  let ctx =
+    Context.make_context
+      { Context.default_options with allow_unknown_model = true }
+      ()
+  in
+    ctx.litmus <-
+      Some
+        "x := 0; y := 0; { x := 1; r1 := y } ||| { y := 1; r2 := x } %% allow \
+         (r1 = 0 && r2 = 0) [sc]";
+    let ctx =
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Elaborations.step_generate_justifications
+        )
+    in
+    let structure = Option.get ctx.structure in
+    let justmap = Hashtbl.create 8 in
+      List.iter
+        (fun (j : justification) ->
+          Hashtbl.replace justmap j.w.label
+            (j
+            :: (Hashtbl.find_opt justmap j.w.label |> Option.value ~default:[])
+            )
+        )
+        (Option.get ctx.justifications);
+      (structure, List.hd (generate_max_conflictfree_sets structure), justmap)
+
+let access structure typ loc =
+  Hashtbl.fold
+    (fun label (e : event) acc ->
+      if e.typ = typ && e.loc = Some (EVar loc) then label else acc
+    )
+    structure.events (-1)
+
+(* A scope of one write enumerates that write's justifications alone, and
+   every one the whole path's enumeration chose for it. *)
+let test_justification_combinations_in_a_scope () =
+  let structure, path, justmap = store_buffering () in
+  let x1 = access structure Write "x" in
+  let combos scope =
+    Lwt_main.run
+      (compute_justification_combinations sequential_compute structure [ path ]
+         ~scope justmap
+      )
+    |> List.map snd
+  in
+  let whole = combos (justifiable structure) in
+  let local = combos (fun _ -> USet.singleton x1) in
+  let chosen_for_x1 combo =
+    List.filter (fun (j : justification) -> j.w.label = x1) combo
+  in
+  (* Both draw from [justmap], and a justification holds sets that [=] cannot
+     compare. *)
+  let same a b = List.length a = List.length b && List.for_all2 ( == ) a b in
+    check bool "the whole path has combinations" true (whole <> []);
+    check bool "each local combination justifies x := 1 alone" true
+      (List.for_all
+         (fun combo ->
+           List.map (fun (j : justification) -> j.w.label) combo = [ x1 ]
+         )
+         local
+      );
+    check bool "every choice for x := 1 is enumerated locally" true
+      (List.for_all
+         (fun combo -> List.exists (same (chosen_for_x1 combo)) local)
+         whole
+      )
+
+(* A scope of one read enumerates the writes that read can read from, and
+   they are the ones the whole path's enumeration gives it. *)
+let test_path_rf_in_a_scope () =
+  let structure, path, _ = store_buffering () in
+  let r1 = access structure Read "y" in
+  let rf (scope : Freeze.scope) =
+    Freeze.compute_path_rf structure path ~scope ~elided:(USet.create ())
+      ~constraints:structure.constraints [] (USet.create ()) (USet.create ())
+      (path.p @ structure.constraints)
+  in
+  let whole = Freeze.path_scope structure path ~elided:(USet.create ()) in
+  let local = { whole with reads = USet.singleton r1 } in
+  let sources combos =
+    List.concat_map
+      (List.filter_map (fun (r, w) -> if r = r1 then Some w else None))
+      combos
+    |> List.sort_uniq compare
+  in
+  let local_rf = rf local in
+    check bool "each local relation reads r1 alone" true
+      (List.for_all (fun c -> List.map fst c = [ r1 ]) local_rf);
+    check (list int) "r1 reads from the writes it could on the whole path"
+      (sources (rf whole))
+      (sources local_rf);
+    check bool "r1 has a write to read" true (sources local_rf <> [])
+
 let suite =
   [
     (* Parameterized origin tests *)
@@ -243,6 +344,11 @@ let suite =
     [
       ("justification properties", `Quick, test_justification_properties);
       ("integration", `Quick, test_integration);
+      ( "justification combinations in a scope",
+        `Quick,
+        test_justification_combinations_in_a_scope
+      );
+      ("read-from in a scope", `Quick, test_path_rf_in_a_scope);
     ];
   ]
   |> List.flatten

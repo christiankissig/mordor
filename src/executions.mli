@@ -55,6 +55,33 @@ module FreezeResult : sig
 end
 
 module Freeze : sig
+  (** What an enumeration of read-from relations ranges over: the reads it
+      chooses a write for, and the writes it chooses among. *)
+  type scope = { reads : int uset; writes : int uset }
+
+  (** [path_scope structure path ~elided] is the scope of a whole path: every
+      read of [path] that is not elided, and every write and free of it that is
+      not, with the initial write. *)
+  val path_scope :
+    symbolic_event_structure -> path_info -> elided:int uset -> scope
+
+  (** [compute_path_rf structure path ~scope ~elided ~constraints statex ppo dp
+       p_combined] is every read-from relation, as lists of [(read, write)]
+      pairs, that gives each read of [scope] one write of [scope] -- at a
+      location it can share, not po-after it and not shadowed -- consistent with
+      [p_combined]. {!freeze} asks for the scope of the whole path. *)
+  val compute_path_rf :
+    symbolic_event_structure ->
+    path_info ->
+    scope:scope ->
+    elided:int uset ->
+    constraints:expr list ->
+    expr list ->
+    (int * int) uset ->
+    (int * int) uset ->
+    expr list ->
+    (int * int) list list
+
   (** [freeze structure context path justs statex ~elided ~constraints
        ~include_rf] freezes executions to dependency relations.
 
@@ -106,6 +133,25 @@ module Freeze : sig
   val freeze_dp :
     symbolic_event_structure -> justification -> (int * int) USet.t
 end
+
+(** {2 Justification Combinations} *)
+
+(** [justifiable structure path] is every event of [path] a justification is
+    chosen for: its writes, allocations and frees. *)
+val justifiable : symbolic_event_structure -> path_info -> int uset
+
+(** [compute_justification_combinations compute structure paths ~scope justmap]
+    is, for each of [paths], every combination of one justification from
+    [justmap] for each event of [scope path] that the combination checks accept,
+    paired with the path. {!generate_executions} asks for the scope
+    {!justifiable}. *)
+val compute_justification_combinations :
+  compute_fn ->
+  symbolic_event_structure ->
+  path_info list ->
+  scope:(path_info -> int uset) ->
+  (int, justification list) Hashtbl.t ->
+  (path_info * justification list) list Lwt.t
 
 (** {2 Execution Module} *)
 
