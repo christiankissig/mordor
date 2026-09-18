@@ -25,8 +25,8 @@ let ir_node_to_string = Ir.to_string ~ann_to_string:(fun _ -> "")
     references that every entry point had to remember to reset, and that two
     interpretations running at once would have shared.
 
-    It is a value so that it can be swapped: fragment-local labels are this same
-    interface over an allocator the fragment owns. *)
+    A thread is interpreted as a fragment, with labels of its own from [0], and
+    relabelled into place; see {!interpret_thread}. *)
 module Allocator = struct
   type t = { mutable label : int; mutable greek : int; mutable zh : int }
 
@@ -58,6 +58,20 @@ module Allocator = struct
     let n = t.zh in
       t.zh <- n + 1;
       nth_symbol zh_alpha 3 n
+
+  (* The labels handed out so far. *)
+  let labels t = t.label
+
+  (* [fragment t] is an allocator for a fragment interpreted where [t] is: its
+     labels are its own, from [0]; its symbols carry on from [t]'s. *)
+  let fragment t = { t with label = 0 }
+
+  (* [resume t ~after] carries [t] on past everything [after], an allocator
+     made by [fragment t], has handed out. *)
+  let resume t ~after =
+    t.label <- t.label + after.label;
+    t.greek <- after.greek;
+    t.zh <- after.zh
 end
 
 (** {1 Event Structure Tracking} *)
@@ -79,13 +93,14 @@ type events_t = {
   env_by_evt : (int, (string, expr) Hashtbl.t) Hashtbl.t;
       (** Register environment at each event label. *)
   thread_index : (int, int) Hashtbl.t;
-      (** Mapping from event labels to thread indices. *)
-  mutable current_thread : int;
-      (** The thread the events being added belong to: [0] outside every
-          parallel block, and a fresh index for each thread of each block
-          interpreted, nested ones included. *)
+      (** Mapping from event labels to thread indices. An event is added to
+          thread [0], the thread being interpreted: the program's own outside
+          every parallel block, or the fragment's inside one, which relabelling
+          moves to the thread's index. *)
   mutable threads_allocated : int;
-      (** The last thread index handed out; see {!current_thread}. *)
+      (** The last thread index handed out, counting from [1] for the first
+          thread of the first parallel block interpreted, nested ones included.
+      *)
   loop_indices : (int, int list) Hashtbl.t;
       (** Mapping from event labels to loop indices. *)
   loop_conditions : (int, expr list) Hashtbl.t;
@@ -117,7 +132,6 @@ let create_events ?(ubopt = false) defacto =
     env_by_evt = Hashtbl.create 256;
     source_spans = Hashtbl.create 256;
     thread_index = Hashtbl.create 256;
-    current_thread = 0;
     threads_allocated = 0;
     loop_indices = Hashtbl.create 256;
     loop_conditions = Hashtbl.create 256;
@@ -224,7 +238,7 @@ let add_event (events : events_t) event env (annotation : ir_node_ann) =
          to ask. The annotation still says whether the event belongs to the
          program at all: terminal events carry none and stay unindexed. *)
     ( match annotation.thread_ctx with
-    | Some _ -> Hashtbl.replace events.thread_index lbl events.current_thread
+    | Some _ -> Hashtbl.replace events.thread_index lbl 0
     | None -> ()
     );
     ( match annotation.loop_ctx with
@@ -305,6 +319,59 @@ let add_rmw_edge (structure : symbolic_event_structure) (er : int) (cond : expr)
     rmw = USet.union structure.rmw (USet.singleton (er, cond, ew));
   }
 
+(** {1 Threads as Fragments} *)
+
+(** [interpret_thread events interpret env phi] is the structure [interpret]
+    builds for one thread of a parallel block, entered in [env] under [phi].
+
+    The thread is interpreted as a fragment: in an [events_t] of its own, whose
+    allocator hands out labels from [0] and adds events to thread [0]. The
+    fragment is then relabelled into place -- its labels shifted by the number
+    [events] has handed out, its thread indices by the number of threads -- and
+    its working tables added to [events]. The offset counts what was handed out,
+    not what made it into a structure: an elided branch has taken a label too.
+    Laid out in program order like this, the relabelled fragment is the
+    structure interpreting the thread in place would have built (S1, #14).
+
+    Symbols are not the fragment's own: its allocator carries on from where the
+    enclosing one is, and the enclosing one then carries on from where the
+    fragment's stopped. A symbol's name is not only a name. [Expr.evaluate]
+    orders operands by it, so naming the fragment's symbols from α and renaming
+    them afterwards gives [(一 != β)] where interpreting in place gives
+    [(β != 一)] (programs/cas-increment-race.lit). Labels appear in no expression
+    and can be shifted freely. *)
+let interpret_thread (events : events_t) interpret env phi =
+  let fragment =
+    {
+      (create_events ~ubopt:events.ubopt events.defacto) with
+      globals = events.globals;
+      alloc = Allocator.fragment events.alloc;
+    }
+  in
+  let structure = interpret env phi fragment in
+  let off = Allocator.labels events.alloc
+  and thread_off = events.threads_allocated + 1 in
+  let label l = l + off in
+  let into tbl k v =
+    Hashtbl.iter (fun x y -> Hashtbl.replace tbl (k x) (v y))
+  in
+    into events.events label
+      (fun (ev : event) -> { ev with label = label ev.label })
+      fragment.events;
+    into events.origin Fun.id label fragment.origin;
+    into events.env_by_evt label Fun.id fragment.env_by_evt;
+    into events.thread_index label (( + ) thread_off) fragment.thread_index;
+    into events.loop_indices label Fun.id fragment.loop_indices;
+    into events.source_spans label Fun.id fragment.source_spans;
+    Hashtbl.iter
+      (fun lid guards ->
+        List.iter (fun g -> record_loop_condition events (Some lid) g) guards
+      )
+      fragment.loop_conditions;
+    Allocator.resume events.alloc ~after:fragment.alloc;
+    events.threads_allocated <- thread_off + fragment.threads_allocated;
+    EventStructure.relabel ~off ~thread_off structure
+
 (** {1 Statement Interpretation} *)
 
 (** Interpret programs as lists of IR nodes depth-first using open recursion.
@@ -335,24 +402,14 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
       let structure =
         match stmt with
         | Threads { threads } ->
-            let interpret_threads ts =
-              let parent = events.current_thread in
+            let threads_structure =
               List.fold_left
                 (fun acc t ->
-                  events.threads_allocated <- events.threads_allocated + 1;
-                  events.current_thread <- events.threads_allocated;
-                  let t_structure =
-                    Fun.protect
-                      ~finally:(fun () -> events.current_thread <- parent)
-                      (fun () -> recurse t env phi events)
-                  in
-                  let acc_structure = acc in
-                    EventStructure.par acc_structure t_structure
+                  EventStructure.par acc
+                    (interpret_thread events (recurse t) env phi)
                 )
-                (EventStructure.empty ())
-                ts
+                (EventStructure.empty ()) threads
             in
-            let threads_structure = interpret_threads threads in
               (* The continuation is the join.  Every other branch here composes
                  with [recurse rest ...]; this one used to return the cross
                  product and stop, so a statement after a parallel block

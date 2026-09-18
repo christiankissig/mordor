@@ -192,3 +192,27 @@ merge would pay it once per level of nesting. Two ways out, either enough:
 - `Canonicalize.canonical_order` should be made independent of label order (a
   topological order of `po` within a thread) *before* R8, so that the gate is
   not the thing R8 silently depends on.
+
+## Addendum: what R8 found (#28)
+
+R8 interprets every thread of a parallel block as a fragment and relabels it
+into place inside the interpreter, which reaches the programs the prototype
+skipped: loops, CAS, nested blocks and branching prefixes. Two things above
+turned out wrong there.
+
+- **Renaming symbols is not shape-preserving, so symbols cannot be
+  fragment-local.** With the placeholder scheme of answer 2.3,
+  `programs/cas-increment-race.lit` came out with `(一 != β)` where classic
+  has `(β != 一)`, on 14 restricts. `Expr.evaluate` orders operands by
+  symbol name, and a placeholder does not sort where the name it stands for
+  does. R8 therefore keeps labels fragment-local and lets a fragment's
+  symbols carry on from the enclosing allocator: labels appear in no
+  expression and can be shifted freely.
+- **`Expr.relabel` evaluating (answer 2.4) does change things.** A CAS guard
+  is built unevaluated as `(δ = β)` and comes back from `Expr.relabel` as
+  `(β = δ)`, which changed `cond`, `restrict` and `rmw` on 7 programs with a
+  CAS in a loop. Relabelling a structure now goes through `Expr.rename`,
+  which renames and does nothing else.
+
+With both, every field of the interpreted structure, source spans included, is
+identical to the classic one on all 421 programs under both loop semantics.

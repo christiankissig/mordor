@@ -301,18 +301,18 @@ module EventStructure = struct
         fj = (if join then USet.union c.fj ordered else c.fj);
       }
 
-  let relabel ?(off = 0) ?(relab = fun _ -> None) ?(env_key = Fun.id) ?thread
-      (s : t) : t =
+  let relabel ?(off = 0) ?(relab = fun _ -> None) ?(env_key = Fun.id)
+      ?(thread_off = 0) (s : t) : t =
     let l x = x + off in
     let pair (a, b) = (l a, l b) in
-    let ex = Expr.relabel ~relab in
+    let ex = Expr.rename ~relab in
     let map fk fv tbl =
       let t = Hashtbl.create (max 16 (Hashtbl.length tbl)) in
         Hashtbl.iter (fun k v -> Hashtbl.replace t (fk k) (fv v)) tbl;
         t
     in
     let event (ev : event) =
-      { (Event.relabel ~relab ev) with label = l ev.label }
+      { (Event.rename ~relab ev) with label = l ev.label }
     in
       {
         e = USet.map l s.e;
@@ -330,8 +330,7 @@ module EventStructure = struct
         origin = map (fun x -> Option.value (relab x) ~default:x) l s.origin;
         loop_indices = map l Fun.id s.loop_indices;
         loop_conditions = s.loop_conditions;
-        thread_index =
-          map l (fun t -> Option.value thread ~default:t) s.thread_index;
+        thread_index = map l (( + ) thread_off) s.thread_index;
         write_events = USet.map l s.write_events;
         read_events = USet.map l s.read_events;
         rlx_write_events = USet.map l s.rlx_write_events;

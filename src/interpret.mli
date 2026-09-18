@@ -20,7 +20,8 @@ open Uset
 
     One allocator is made for each interpretation and handed down the recursion
     inside {!events_t}, so labels and symbols are fresh within an interpretation
-    and start over with the next one. *)
+    and start over with the next one. Each thread of a parallel block is
+    interpreted with labels of its own and relabelled into place. *)
 module Allocator : sig
   type t
 
@@ -58,13 +59,14 @@ type events_t = {
   env_by_evt : (int, (string, expr) Hashtbl.t) Hashtbl.t;
       (** Register environment at each event label. *)
   thread_index : (int, int) Hashtbl.t;
-      (** Mapping from event labels to thread indices. *)
-  mutable current_thread : int;
-      (** The thread the events being added belong to: [0] outside every
-          parallel block, and a fresh index for each thread of each block
-          interpreted, nested ones included. *)
+      (** Mapping from event labels to thread indices. An event is added to
+          thread [0], the thread being interpreted: the program's own outside
+          every parallel block, or the fragment's inside one, which relabelling
+          moves to the thread's index. *)
   mutable threads_allocated : int;
-      (** The last thread index handed out; see {!current_thread}. *)
+      (** The last thread index handed out, counting from [1] for the first
+          thread of the first parallel block interpreted, nested ones included.
+      *)
   loop_indices : (int, int list) Hashtbl.t;
       (** Mapping from event labels to loop indices. *)
   loop_conditions : (int, expr list) Hashtbl.t;

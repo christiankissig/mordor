@@ -100,11 +100,12 @@ module EventStructure : sig
   (** [par a b] is [a] beside [b], unordered and without conflict. *)
   val par : t -> t -> t
 
-  (** [relabel ?off ?relab ?env_key ?thread s] is [s] with every event label
-      shifted by [off], every symbol renamed by [relab], and every indexed event
-      moved to [thread]. Labels and symbols are rewritten wherever they occur:
-      in the sets and relations, as keys and values of the tables, and inside
-      events, conditions, environments and constraints.
+  (** [relabel ?off ?relab ?env_key ?thread_off s] is [s] with every event label
+      shifted by [off], every symbol renamed by [relab], and every thread index
+      shifted by [thread_off]. Labels and symbols are rewritten wherever they
+      occur: in the sets and relations, as keys and values of the tables, and
+      inside events, conditions, environments and constraints. Nothing else
+      changes: expressions are renamed, not evaluated ({!Expr.rename}).
 
       [env_key] rewrites the keys of the register environments, for the ones
       that spell out a symbol's name, which no traversal of an expression finds.
@@ -113,7 +114,7 @@ module EventStructure : sig
     ?off:int ->
     ?relab:(string -> string option) ->
     ?env_key:(string -> string) ->
-    ?thread:int ->
+    ?thread_off:int ->
     t ->
     t
 

@@ -105,6 +105,7 @@ and Expr : sig
   val of_value : value_type -> t
   val simplify_dnf : t list list -> t list list
   val relabel : ?relab:(string -> string option) -> t -> t
+  val rename : relab:(string -> string option) -> t -> t
   val simplify_disjunction : t list -> t list -> t list
   val extract_constraints : t -> t list
   val apply_constraints : t -> t
@@ -581,9 +582,9 @@ end = struct
     in
       result
 
-  (** Relabel symbols in an expression using a relabelling function *)
-
-  let relabel ?(relab = fun s -> None) expr =
+  (** [rename ~relab expr] is [expr] with its symbols renamed by [relab], and
+      nothing else changed. *)
+  let rename ~relab expr =
     let rec aux e =
       match e with
       | ESymbol v -> (
@@ -596,7 +597,13 @@ end = struct
       | EOr clauses -> EOr (List.map aux clauses)
       | _ -> e
     in
-      aux expr |> evaluate
+      aux expr
+
+  (** [relabel ~relab expr] is [expr] with its symbols renamed by [relab], and
+      evaluated. Evaluation orders operands by name, so the result need not have
+      the shape [expr] had even when [relab] renames nothing: the guard of a
+      [cas] is built unevaluated, and comes back with its sides swapped. *)
+  let relabel ?(relab = fun _ -> None) expr = rename ~relab expr |> evaluate
 
   (** DNF Simplification *)
 
