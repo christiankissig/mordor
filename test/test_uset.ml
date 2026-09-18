@@ -37,8 +37,47 @@ module TestURelation = struct
       check int "result size" 1 (USet.size result);
       ()
 
+  let rel = USet.of_list
+
+  (** Cycles of every length, and none. *)
+  let test_acyclic_cases () =
+    check bool "empty" true (URelation.acyclic (rel []));
+    check bool "a self-loop" false (URelation.acyclic (rel [ (1, 1) ]));
+    check bool "two events" false (URelation.acyclic (rel [ (1, 2); (2, 1) ]));
+    check bool "three events" false
+      (URelation.acyclic (rel [ (1, 2); (2, 3); (3, 1) ]));
+    check bool "a chain" true
+      (URelation.acyclic (rel [ (1, 2); (2, 3); (3, 4) ]));
+    check bool "a diamond" true
+      (URelation.acyclic (rel [ (1, 2); (1, 3); (2, 4); (3, 4) ]));
+    check bool "a cycle away from the first event" false
+      (URelation.acyclic (rel [ (1, 2); (3, 4); (4, 5); (5, 3) ]))
+
+  (** [acyclic] is what it says it is: no event reaches itself in the transitive
+      closure. Random relations over up to 8 events, seeded. *)
+  let test_acyclic_is_closure_irreflexive () =
+    let rng = Random.State.make [| 17 |] in
+      for case = 1 to 500 do
+        let n = 1 + Random.State.int rng 8 in
+        let edges =
+          List.init
+            (Random.State.int rng (2 * n))
+            (fun _ -> (Random.State.int rng n, Random.State.int rng n))
+        in
+        let r = rel edges in
+        let by_closure =
+          USet.for_all (fun (a, b) -> a <> b) (URelation.transitive_closure r)
+        in
+          check bool
+            (Printf.sprintf "case %d" case)
+            by_closure (URelation.acyclic r)
+      done
+
   let suite =
     [
+      test_case "acyclic: cases" `Quick test_acyclic_cases;
+      test_case "acyclic is the closure irreflexive" `Quick
+        test_acyclic_is_closure_irreflexive;
       test_case "compose with empty list" `Quick test_semicolon_empty;
       test_case "compose with single relation" `Quick test_semicolon_single;
       test_case "compose composition" `Quick test_semicolon_compose;

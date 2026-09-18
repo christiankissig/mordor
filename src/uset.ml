@@ -630,7 +630,8 @@ module URelation : sig
   (** [acyclic rel] checks if relation is acyclic.
 
       A relation is acyclic if its transitive closure contains no reflexive
-      edges (no element reaches itself).
+      edges (no element reaches itself). Decided by a depth-first search, in
+      time linear in the size of the relation.
 
       @param rel The relation.
       @return [true] if acyclic. *)
@@ -886,9 +887,34 @@ end = struct
           Mutex.protect lock (fun () -> Marshal.to_channel oc record [])
       )
       s5_trace;
-    let s_tc = transitive_closure s in
-    let result = USet.for_all (fun (a, b) -> not (a = b)) s_tc in
-      result
+    (* A three-colour depth-first search: a successor still on the search's
+       path closes a cycle. This used to close the relation transitively, by
+       fixpoint iteration, and look for a pair [(a, a)] -- the same answer at
+       a cost of O(n * m^2) against O(n + m). S5 (#17) compared the two on
+       195,201 relations from real runs: no disagreement, 3 to 30 times
+       faster. *)
+    let succ = Hashtbl.create (max 16 (USet.size s)) in
+      USet.iter
+        (fun (a, b) ->
+          Hashtbl.replace succ a
+            (b :: (Hashtbl.find_opt succ a |> Option.value ~default:[]))
+        )
+        s;
+      let colour = Hashtbl.create (max 16 (Hashtbl.length succ)) in
+      let rec visit v =
+        match Hashtbl.find_opt colour v with
+        | Some `On_path -> false
+        | Some `Done -> true
+        | None ->
+            Hashtbl.replace colour v `On_path;
+            let ok =
+              List.for_all visit
+                (Hashtbl.find_opt succ v |> Option.value ~default:[])
+            in
+              Hashtbl.replace colour v `Done;
+              ok
+      in
+        Hashtbl.fold (fun v _ acc -> acc && visit v) succ true
 
   let is_irreflexive s = USet.for_all (fun (a, b) -> not (a = b)) s
 
