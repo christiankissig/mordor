@@ -732,6 +732,105 @@ module JustValidation = struct
       true
 end
 
+(** S10 (step 0 of per-thread read-from enumeration): with
+    [MORDOR_S10_RF_SAMPLES=k], {!Freeze.freeze} keeps k read-from relations per
+    justification combination, each the first valid one of a depth-first search
+    in a random order, instead of every one; with [MORDOR_S10_COMBO_STRIDE=n],
+    only every n-th combination is frozen. The rest of the pipeline, coherence
+    included, runs on that sample, and [S10] lines on stderr report each
+    combination's read-from alternatives, by thread, and each execution's
+    coherence check. Measurement only; off by default. *)
+module S10 = struct
+  let int_env name = Option.bind (Sys.getenv_opt name) int_of_string_opt
+  let samples = int_env "MORDOR_S10_RF_SAMPLES"
+
+  let combo_stride =
+    int_env "MORDOR_S10_COMBO_STRIDE" |> Option.value ~default:1
+
+  let lock = Mutex.create ()
+
+  let print fmt =
+    Printf.ksprintf
+      (fun line -> Mutex.protect lock (fun () -> prerr_endline line))
+      fmt
+
+  exception Found of (int * int) list * FreezeResult.t
+
+  (** A try's budget of extension steps: a random order can make a choice early
+      that leaves no write for a read much later, and the search then exhausts
+      everything between before it backs out. A try over budget is abandoned for
+      a new order. *)
+  exception Over_budget
+
+  let budget = int_env "MORDOR_S10_BUDGET" |> Option.value ~default:2000
+  let hex s = String.sub (Digest.to_hex (Digest.string s)) 0 12
+
+  (* Each read's alternatives: the writes of its own thread, of another
+     thread, and outside every thread (Init, before the fork). And, per
+     thread, a digest of its reads' alternatives, alone and with the
+     combination's predicates: what a per-thread enumeration would be keyed
+     on, at most and at least. *)
+  let report_alternatives structure p_combined
+      (alternatives : (int, int list) Hashtbl.t) reads =
+    let thread e = Hashtbl.find_opt structure.thread_index e in
+    let per_read =
+      List.map
+        (fun r ->
+          let ws = try Hashtbl.find alternatives r with Not_found -> [] in
+          let same, other, outside =
+            List.fold_left
+              (fun (s, o, x) w ->
+                match (thread r, thread w) with
+                | Some tr, Some tw when tr = tw -> (s + 1, o, x)
+                | Some _, Some _ -> (s, o + 1, x)
+                | _ -> (s, o, x + 1)
+              )
+              (0, 0, 0) ws
+          in
+            (r, thread r, List.sort compare ws, same, other, outside)
+        )
+        reads
+    in
+    let log10 f =
+      List.fold_left
+        (fun a x -> a +. log10 (float_of_int (max 1 (f x))))
+        0. per_read
+    in
+      print "S10 alts reads=%d log10=%.1f local_log10=%.1f [%s]"
+        (List.length reads)
+        (log10 (fun (_, _, ws, _, _, _) -> List.length ws))
+        (log10 (fun (_, _, _, s, _, x) -> s + x))
+        (String.concat " "
+           (List.map
+              (fun (r, t, _, s, o, x) ->
+                Printf.sprintf "%d@%s:%d/%d/%d" r
+                  (Option.fold ~none:"-" ~some:string_of_int t)
+                  s o x
+              )
+              per_read
+           )
+        );
+      let threads =
+        List.sort_uniq compare
+          (List.filter_map (fun (_, t, _, _, _, _) -> t) per_read)
+      in
+      let preds = hex (Marshal.to_string p_combined [ Marshal.No_sharing ]) in
+        List.iter
+          (fun t ->
+            let own =
+              List.filter_map
+                (fun (r, t', ws, _, _, _) ->
+                  if t' = Some t then Some (r, ws) else None
+                )
+                per_read
+            in
+            let key = Marshal.to_string own [ Marshal.No_sharing ] in
+              print "S10 key thread=%d alts=%s alts+p=%s" t (hex key)
+                (hex (key ^ preds))
+          )
+          threads
+end
+
 (** {1 Freezing} *)
 
 module Freeze = struct
@@ -784,8 +883,8 @@ module Freeze = struct
       @param f
         Called as [f acc indices rf], with [rf] as a list of [(read, write)]
         pairs. *)
-  let fold_path_rf structure (path : path_info) ~scope ~elided ~constraints
-      statex ppo dp p_combined f init =
+  let fold_path_rf ?shuffle ?inspect structure (path : path_info) ~scope ~elided
+      ~constraints statex ppo dp p_combined f init =
     let { reads = read_events; writes = write_events } = scope in
     let w_cross_r = URelation.cross write_events read_events in
 
@@ -863,10 +962,38 @@ module Freeze = struct
         |> URelation.adjacency_map
       in
 
-      ListMapCombinationBuilder.fold_combinations all_rf_inv_map
-        ~check_partial:(fun combo ?alternatives pair ->
-          let r, w = pair in
-            (* discard the combination if we have alternatives to reading
+      (* S10 only: a random order, and a look at the alternatives. *)
+      Option.iter
+        (fun rng ->
+          Hashtbl.filter_map_inplace
+            (fun _ ws ->
+              let a = Array.of_list ws in
+                for i = Array.length a - 1 downto 1 do
+                  let j = Random.State.int rng (i + 1) in
+                  let x = a.(i) in
+                    a.(i) <- a.(j);
+                    a.(j) <- x
+                done;
+                Some (Array.to_list a)
+            )
+            all_rf_inv_map
+        )
+        shuffle;
+      Option.iter
+        (fun inspect ->
+          inspect all_rf_inv_map (USet.values read_events |> List.sort compare)
+        )
+        inspect;
+
+      let steps = ref 0 in
+        ListMapCombinationBuilder.fold_combinations all_rf_inv_map
+          ~check_partial:(fun combo ?alternatives pair ->
+            if Option.is_some shuffle then (
+              incr steps;
+              if !steps > S10.budget then raise S10.Over_budget
+            );
+            let r, w = pair in
+              (* discard the combination if we have alternatives to reading
                  from init *)
             if
               w = 0
@@ -1453,7 +1580,51 @@ module Freeze = struct
          order the list had, which the executions' ids follow. *)
       let candidates = ref 0 in
       let valid =
-        if include_rf then
+        if include_rf && Option.is_some S10.samples then (
+          let k = Option.get S10.samples in
+          let seen = Hashtbl.create k in
+          let found = ref [] in
+          let seed = Hashtbl.hash (List.map (fun j -> j.w.label) j_list) in
+          let tries = ref 0 and over = ref 0 in
+            for i = 0 to (20 * k) - 1 do
+              if List.length !found < k then
+                try
+                  incr tries;
+                  fold_path_rf
+                    ~shuffle:(Random.State.make [| seed; i |])
+                    ?inspect:
+                      ( if i = 0 then
+                          Some (S10.report_alternatives structure p_combined)
+                        else None
+                      )
+                    structure path
+                    ~scope:(path_scope structure path ~elided)
+                    ~elided ~constraints statex ppo dp p_combined
+                    (fun () _ fr ->
+                      incr candidates;
+                      match
+                        instantiate
+                          (List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
+                      with
+                      | Some result -> raise (S10.Found (fr, result))
+                      | None -> ()
+                    )
+                    ()
+                with
+                | S10.Over_budget -> incr over
+                | S10.Found (fr, result) ->
+                    let key = List.sort compare fr in
+                      if not (Hashtbl.mem seen key) then (
+                        Hashtbl.add seen key ();
+                        found := ([], result) :: !found
+                      )
+            done;
+            S10.print
+              "S10 sampled distinct=%d of %d tries, %d complete, %d over budget"
+              (Hashtbl.length seen) !tries !candidates !over;
+            List.rev !found
+        )
+        else if include_rf then
           fold_path_rf structure path
             ~scope:(path_scope structure path ~elided)
             ~elided ~constraints statex ppo dp p_combined
@@ -1652,6 +1823,16 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
 
     let stream_freeze input_stream =
       let* input_stream = input_stream in
+      let input_stream =
+        if Option.is_none S10.samples then input_stream
+        else
+          let kept =
+            List.filteri (fun i _ -> i mod S10.combo_stride = 0) input_stream
+          in
+            S10.print "S10 combos=%d frozen=%d" (List.length input_stream)
+              (List.length kept);
+            kept
+      in
       let freeze_just_combo (path, just_combo) =
         let fwd =
           List.fold_left
@@ -2009,7 +2190,17 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             )
             compare_models
         in
-          (exec, check_for_coherence structure exec restrictions, admitted_by)
+          if Option.is_none S10.samples then
+            (exec, check_for_coherence structure exec restrictions, admitted_by)
+          else
+            let t = Unix.gettimeofday () in
+            let co = check_for_coherence structure exec restrictions in
+              S10.print
+                "S10 coherence id=%d events=%d rf=%d admitted=%b ms=%.0f"
+                exec.id (USet.size exec.e) (USet.size exec.rf)
+                (Option.is_some co)
+                ((Unix.gettimeofday () -. t) *. 1000.);
+              (exec, co, admitted_by)
       in
         let* results = compute.run check_exec input_stream in
           Option.iter
