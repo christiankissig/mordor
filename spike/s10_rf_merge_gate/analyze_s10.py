@@ -127,3 +127,44 @@ if local:
           f"{statistics.median([l[3] for l in local]):.0f}, max {max(l[3] for l in local)}")
     print(f"- rejecting locations per locally rejected execution: "
           f"{Counter(l[2] for l in local if l[0] and l[2] > 0).most_common()}")
+
+loc = []
+for line in lines:
+    if m := re.match(r"S10 local model=(\S+) reads=(\d+) full=(\w+) d_rf=(\S+) d_p=(\S+) "
+                     r"cut_rf=(\S+) cut_p=(\S+)\s+total=([\d.]+) calls=(\d+) ms_per_call=(\d+)", line):
+        opt = lambda x, f: None if x == "-" else f(x)
+        loc.append(dict(reads=int(m[2]), full=m[3] == "true", d_rf=opt(m[4], int),
+                        d_p=opt(m[5], int), cut_rf=opt(m[6], float), cut_p=opt(m[7], float),
+                        total=float(m[8]), ms=int(m[10])))
+if loc:
+    print("\n## A per-location check during enumeration\n")
+    n = len(loc)
+    print(f"- sampled relations: {n}; rejected by one location, whole: "
+          f"{sum(1 for l in loc if l['full'])}")
+    for key, cut, label in (("d_rf", "cut_rf", "with the edges' predicates"),
+                            ("d_p", "cut_p", "with the combination's predicates only")):
+        hit = [l for l in loc if l[key] is not None]
+        print(f"- {label}: rejected {len(hit)} of {n}")
+        if hit:
+            frac = [l[key] / l["reads"] for l in hit]
+            print(f"  - rejected after a median {statistics.median([l[key] for l in hit]):.0f} "
+                  f"of {statistics.median([l['reads'] for l in hit]):.0f} reads "
+                  f"(median fraction {statistics.median(frac):.2f}, max {max(frac):.2f})")
+            print(f"  - log10 of the choices below that point: median "
+                  f"{statistics.median([l[cut] for l in hit]):.1f}, of a median total "
+                  f"{statistics.median([l['total'] for l in hit]):.1f}")
+    print(f"- ms per check: median {statistics.median([l['ms'] for l in loc]):.0f}, "
+          f"max {max(l['ms'] for l in loc)}")
+
+sound = Counter()
+for line in lines:
+    if m := re.match(r"S10 soundness model=(\S+) admitted=(\w+) local=(\w+)", line):
+        sound[(m[1], m[2], m[3])] += 1
+if sound:
+    print("\n## Soundness: the per-location check against coherence\n")
+    print("| model | admitted, not local | rejected, local | rejected, not local | **admitted, local** |")
+    print("|---|--:|--:|--:|--:|")
+    for model in sorted(set(k[0] for k in sound)):
+        g = lambda a, l: sound[(model, a, l)]
+        print(f"| {model} | {g('true','false')} | {g('false','true')} | {g('false','false')} | "
+              f"**{g('true','true')}** |")

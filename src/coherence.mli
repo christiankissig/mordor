@@ -200,6 +200,16 @@ val check_for_coherence :
   restrictions ->
   int URelation.t option
 
+(** [rejected_by_one_location structure execution restrictions]: the model
+    rejects [execution] whatever the coherence order at other locations: its
+    thin-air check fails, or some location has no po-respecting order the
+    axioms accept with every other location unordered. For a model whose
+    violations only grow with co, rf and hb, it holds of every completion of a
+    partial execution it holds of, when the completion's predicates include the
+    partial one's. *)
+val rejected_by_one_location :
+  symbolic_event_structure -> symbolic_execution -> restrictions -> bool
+
 (** [check_model_program structure name] fails, with the model's reason, when
     the coherence model [name] cannot answer for the program [structure] is the
     event structure of. Unknown names are left to {!check_for_coherence}. *)
