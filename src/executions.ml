@@ -795,7 +795,11 @@ module S10 = struct
 
   let print fmt =
     Printf.ksprintf
-      (fun line -> Mutex.protect lock (fun () -> prerr_endline line))
+      (fun line ->
+        Mutex.protect lock (fun () ->
+            Progress.while_writing (fun () -> prerr_endline line)
+        )
+      )
       fmt
 
   exception Found of (int * int) list * FreezeResult.t
@@ -1080,6 +1084,59 @@ module S11 = struct
               (dom @ List.filter (fun c -> not (List.memq c dom)) duplicates)
 end
 
+(** S12 (thread scaling): a fixed piece of a large program's work. With
+    [MORDOR_S12_FREEZE_CAP=k] a combination's enumeration stops at its k-th
+    execution, and with [MORDOR_S10_COMBO_STRIDE=n] only every n-th combination
+    is frozen, without S10's sampling. Measurement only; off by default. *)
+module S12 = struct
+  let freeze_cap = S10.int_env "MORDOR_S12_FREEZE_CAP"
+  let stride = S10.int_env "MORDOR_S10_COMBO_STRIDE"
+
+  (* [MORDOR_S12_STEP_CAP=k]: and at its k-th extension step. *)
+  let step_cap = S10.int_env "MORDOR_S12_STEP_CAP"
+
+  exception Capped of (int list * FreezeResult.t) list
+  exception Out_of_steps
+end
+
+(** S13 (work estimate): with [MORDOR_S13_PROBES=k], {!Freeze.enumerate}
+    enumerates nothing. It estimates, by Knuth's method, how many valid
+    executions its read-from search would produce and how many extension steps
+    it would take: k random descents, each multiplying the number of writes that
+    pass at each read, averaged. Unbiased; its variance is what the probes'
+    spread says. Measurement only; off by default. *)
+module S13 = struct
+  let probes = S10.int_env "MORDOR_S13_PROBES"
+
+  (* One descent: the product of passing choices at each read, if it reaches a
+     valid leaf, else 0; and the sum of the products at each depth, the
+     number of extension steps' nodes. *)
+  let probe rng alternatives reads
+      ~(check_partial :
+         (int * int) list -> ?alternatives:int list -> int * int -> bool
+         ) ~valid =
+    let rec go combo reads weight nodes =
+      match reads with
+      | [] -> ((if valid (List.rev combo) then weight else 0.), nodes)
+      | r :: rest -> (
+          let alts = try Hashtbl.find alternatives r with Not_found -> [] in
+          let ok =
+            List.filter
+              (fun w -> check_partial combo ~alternatives:alts (r, w))
+              alts
+          in
+            match ok with
+            | [] -> (0., nodes)
+            | _ ->
+                let b = float_of_int (List.length ok) in
+                let w = List.nth ok (Random.State.int rng (List.length ok)) in
+                  go ((r, w) :: combo) rest (weight *. b)
+                    (nodes +. (weight *. b))
+        )
+    in
+      go [] reads 1. 1.
+end
+
 (** {1 Freezing} *)
 
 module Freeze = struct
@@ -1143,8 +1200,8 @@ module Freeze = struct
       @param f
         Called as [f acc indices rf], with [rf] as a list of [(read, write)]
         pairs. *)
-  let fold_path_rf ?shuffle ?inspect ?prune structure (path : path_info) ~scope
-      ~elided ~constraints statex ppo dp p_combined f init =
+  let rf_search ?shuffle ?inspect ?prune structure (path : path_info) ~scope
+      ~elided ~constraints statex ppo dp p_combined =
     let { reads = read_events; writes = write_events } = scope in
     let w_cross_r = URelation.cross write_events read_events in
 
@@ -1265,49 +1322,63 @@ module Freeze = struct
           | Some prune when product >= !coherence_prune_min -> prune ()
           | _ -> None
       in
-        ListMapCombinationBuilder.fold_combinations all_rf_inv_map
-          ~check_partial:(fun combo ?alternatives pair ->
-            if Option.is_some shuffle then (
-              incr steps;
-              if !steps > S10.budget then raise S10.Over_budget
-            );
-            let r, w = pair in
-              (* discard the combination if we have alternatives to reading
+      let check_partial combo ?alternatives pair =
+        ( match S12.step_cap with
+        | Some cap ->
+            incr steps;
+            if !steps > cap then raise S12.Out_of_steps
+        | None -> ()
+        );
+        if Option.is_some shuffle then (
+          incr steps;
+          if !steps > S10.budget then raise S10.Over_budget
+        );
+        let r, w = pair in
+          (* discard the combination if we have alternatives to reading
                  from init *)
-              if
-                w = 0
-                && Option.map (fun alts -> List.length alts > 1) alternatives
-                   |> Option.value ~default:false
-              then false
-              else if
-                !rf_prune_rhb
-                && Validation.rf_closes_rhb_cycle ~succ:rhb_succ ~rf:combo (w, r)
-              then false
-              else
-                let new_combo_inv =
-                  URelation.inverse (USet.of_list (pair :: combo))
-                in
-                let env_rf =
-                  ReadFromValidation.env_rf structure new_combo_inv
-                in
-                let check_rf =
-                  ReadFromValidation.check_rf structure new_combo_inv
-                in
-                let combined_preds =
-                  USet.of_list p_combined
-                  |> USet.union env_rf
-                  |> USet.union check_rf
-                  |> USet.values
-                in
-                  Solver.is_sat_cached combined_preds
-                  && not
-                       ( match prune with
-                       | Some rejected -> rejected (pair :: combo)
-                       | None -> false
-                       )
-          )
-          (USet.values read_events |> List.sort compare)
-          f init
+          if
+            w = 0
+            && Option.map (fun alts -> List.length alts > 1) alternatives
+               |> Option.value ~default:false
+          then false
+          else if
+            !rf_prune_rhb
+            && Validation.rf_closes_rhb_cycle ~succ:rhb_succ ~rf:combo (w, r)
+          then false
+          else
+            let new_combo_inv =
+              URelation.inverse (USet.of_list (pair :: combo))
+            in
+            let env_rf = ReadFromValidation.env_rf structure new_combo_inv in
+            let check_rf =
+              ReadFromValidation.check_rf structure new_combo_inv
+            in
+            let combined_preds =
+              USet.of_list p_combined
+              |> USet.union env_rf
+              |> USet.union check_rf
+              |> USet.values
+            in
+              Solver.is_sat_cached combined_preds
+              && not
+                   ( match prune with
+                   | Some rejected -> rejected (pair :: combo)
+                   | None -> false
+                   )
+      in
+        ( all_rf_inv_map,
+          USet.values read_events |> List.sort compare,
+          check_partial
+        )
+
+  let fold_path_rf ?shuffle ?inspect ?prune structure path ~scope ~elided
+      ~constraints statex ppo dp p_combined f init =
+    let alternatives, reads, check_partial =
+      rf_search ?shuffle ?inspect ?prune structure path ~scope ~elided
+        ~constraints statex ppo dp p_combined
+    in
+      ListMapCombinationBuilder.fold_combinations alternatives ~check_partial
+        reads f init
 
   (** [compute_path_rf structure path ~scope ~elided ~constraints statex ppo dp
        p_combined] is the list of relations {!fold_path_rf} folds over, in the
@@ -2160,62 +2231,118 @@ module Freeze = struct
                     ()
                 with
                 | S10.Over_budget -> incr over
-                | S10.Found (fr, result) ->
-                    let key = List.sort compare fr in
-                      if not (Hashtbl.mem seen key) then (
-                        Hashtbl.add seen key ();
-                        if S10.locality then
-                          S10.report_locality structure result p_combined fr
-                            !alternatives;
-                        found := ([], result) :: !found
-                      )
-            done;
-            S10.print
-              "S10 sampled distinct=%d of %d tries, %d complete, %d over budget"
-              (Hashtbl.length seen) !tries !candidates !over;
-            List.rev !found
-        )
-        else if include_rf then
-          fold_path_rf
-            ~prune:(fun () ->
-              coherence_prune structure path dp ppo p_combined elided
-                coherence_models
-            )
-            structure path
-            ~scope:(path_scope structure path ~elided)
-            ~elided ~constraints statex ppo dp p_combined
-            (fun acc indices fr ->
-              incr candidates;
-              match
-                instantiate (List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
-              with
-              | Some result ->
-                  Progress.found ~unit:"executions" 1;
-                  (indices, result) :: acc
-              | None -> acc
-            )
-            []
-        else (
-          incr candidates;
-          Option.to_list (instantiate (USet.create ()))
-          |> List.map (fun r -> ([], r))
-        )
-      in
-      let filtered_results =
-        List.stable_sort
-          (fun (a, _) (b, _) ->
-            ListMapCombinationBuilder.compare_build_order a b
+                  | S10.Found (fr, result) ->
+                      let key = List.sort compare fr in
+                        if not (Hashtbl.mem seen key) then (
+                          Hashtbl.add seen key ();
+                          if S10.locality then
+                            S10.report_locality structure result p_combined fr
+                              !alternatives;
+                          found := ([], result) :: !found
+                        )
+              done;
+              S10.print
+                "S10 sampled distinct=%d of %d tries, %d complete, %d over \
+                 budget"
+                (Hashtbl.length seen) !tries !candidates !over;
+              List.rev !found
           )
-          valid
-        |> List.map snd
-      in
-        Logs_safe.debug (fun m ->
-            m
-              "[freeze] instantiate_execution produced %d valid results from \
-               %d RF combos"
-              (List.length filtered_results)
-              !candidates
-        );
+          else if include_rf && Option.is_some S13.probes then (
+            let k = Option.get S13.probes in
+            let alternatives, reads, check_partial =
+              rf_search
+                ~prune:(fun () ->
+                  coherence_prune structure path dp ppo p_combined elided
+                    coherence_models
+                )
+                structure path
+                ~scope:(path_scope structure path ~elided)
+                ~elided ~constraints statex ppo dp p_combined
+            in
+            let rng =
+              Random.State.make
+                [| Hashtbl.hash (List.map (fun j -> j.w.label) j_list) |]
+            in
+            let t = Unix.gettimeofday () in
+            let results =
+              List.init k (fun _ ->
+                  S13.probe rng alternatives reads ~check_partial
+                    ~valid:(fun fr ->
+                      Option.is_some
+                        (instantiate
+                           (List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
+                        )
+                  )
+              )
+            in
+            let leaves = List.map fst results
+            and nodes = List.map snd results in
+            let mean l = List.fold_left ( +. ) 0. l /. float_of_int k in
+              S10.print
+                "S13 reads=%d probes=%d reached=%d leaves_mean=%.4g \
+                 leaves_max=%.4g nodes_mean=%.4g secs=%.1f"
+                (List.length reads) k
+                (List.length (List.filter (fun x -> x > 0.) leaves))
+                (mean leaves)
+                (List.fold_left max 0. leaves)
+                (mean nodes)
+                (Unix.gettimeofday () -. t);
+              []
+          )
+          else if include_rf then
+            let s12_found = ref [] in
+              try
+                fold_path_rf
+                  ~prune:(fun () ->
+                    coherence_prune structure path dp ppo p_combined elided
+                      coherence_models
+                  )
+                  structure path
+                  ~scope:(path_scope structure path ~elided)
+                  ~elided ~constraints statex ppo dp p_combined
+                  (fun acc indices fr ->
+                    incr candidates;
+                    match
+                      instantiate
+                        (List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
+                    with
+                    | Some result ->
+                        Progress.found ~unit:"executions" 1;
+                        let acc = (indices, result) :: acc in
+                          s12_found := acc;
+                          ( match S12.freeze_cap with
+                          | Some cap when List.length acc >= cap ->
+                              raise (S12.Capped acc)
+                          | _ -> ()
+                          );
+                          acc
+                    | None -> acc
+                  )
+                  []
+              with
+              | S12.Capped acc -> acc
+              | S12.Out_of_steps -> !s12_found
+          else (
+            incr candidates;
+            Option.to_list (instantiate (USet.create ()))
+            |> List.map (fun r -> ([], r))
+          )
+        in
+        let filtered_results =
+          List.stable_sort
+            (fun (a, _) (b, _) ->
+              ListMapCombinationBuilder.compare_build_order a b
+            )
+            valid
+          |> List.map snd
+        in
+          Logs_safe.debug (fun m ->
+              m
+                "[freeze] instantiate_execution produced %d valid results from \
+                 %d RF combos"
+                (List.length filtered_results)
+                !candidates
+          );
 
         filtered_results
 
@@ -2414,7 +2541,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     let stream_freeze input_stream =
       let* input_stream = input_stream in
       let input_stream =
-        if Option.is_none S10.samples then input_stream
+        if Option.is_none S10.samples && Option.is_none S12.stride then
+          input_stream
         else
           let kept =
             List.filteri (fun i _ -> i mod S10.combo_stride = 0) input_stream
