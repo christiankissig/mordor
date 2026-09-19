@@ -1027,27 +1027,38 @@ end = struct
   let identity s = USet.map (fun x -> (x, x)) s
   let inverse s = USet.map (fun (a, b) -> (b, a)) s
 
+  (* By a depth-first search from each element with a successor: [(a, b)]
+     for every [b] it reaches. This used to add [(a, d)] for every [(a, b)],
+     [(b, d)] until nothing changed, comparing every pair with every pair each
+     round: on rcu-2, a coherence model's hb of 1,500 pairs took tens of
+     milliseconds, and it is closed once per candidate order. *)
   let transitive_closure s =
-    let result = USet.clone s in
-    let changed = ref true in
-      while !changed do
-        changed := false;
-        let vals = USet.to_list result in
-          List.iter
-            (fun (a, b) ->
+    let successors = Hashtbl.create (USet.size s) in
+      USet.iter
+        (fun (a, b) ->
+          Hashtbl.replace successors a
+            (b :: (Hashtbl.find_opt successors a |> Option.value ~default:[]))
+        )
+        s;
+      let result = USet.clone s in
+        Hashtbl.iter
+          (fun a _ ->
+            let reached = Hashtbl.create 16 in
+            let rec visit x =
               List.iter
-                (fun (c, d) ->
-                  if b = c && not (USet.mem result (a, d)) then (
-                    USet.add result (a, d) |> ignore;
-                    changed := true;
-                    ()
+                (fun y ->
+                  if not (Hashtbl.mem reached y) then (
+                    Hashtbl.replace reached y ();
+                    ignore (USet.add result (a, y));
+                    visit y
                   )
                 )
-                vals
-            )
-            vals
-      done;
-      result
+                (Hashtbl.find_opt successors x |> Option.value ~default:[])
+            in
+              visit a
+          )
+          successors;
+        result
 
   let transitive_reduction rel =
     USet.filter
