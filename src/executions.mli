@@ -141,6 +141,25 @@ module Freeze : sig
     expr list ->
     (int * int) list list
 
+  (** [fold_path_rf ... f init] folds [f] over the relations
+      {!compute_path_rf} lists, as each is built, depth-first and in a different
+      order: [f acc indices rf], where
+      {!Algorithms.ListMapCombinationBuilder.compare_build_order} on [indices]
+      gives back the list's order. *)
+  val fold_path_rf :
+    symbolic_event_structure ->
+    path_info ->
+    scope:scope ->
+    elided:int uset ->
+    constraints:expr list ->
+    expr list ->
+    (int * int) uset ->
+    (int * int) uset ->
+    expr list ->
+    ('a -> int list -> (int * int) list -> 'a) ->
+    'a ->
+    'a
+
   (** [freeze structure context path justs statex ~elided ~constraints
        ~include_rf] freezes executions to dependency relations.
 

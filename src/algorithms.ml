@@ -125,6 +125,56 @@ module ListMapCombinationBuilder = struct
     let result = combine_and_check [ [] ] keys in
       (* OPTIMIZATION 5: Reverse each combination to restore original order *)
       List.map List.rev result
+
+  (** [fold_combinations listmap keys ?check_partial f init] folds [f] over the
+      combinations {!build_combinations} returns, without [check_final], built
+      depth-first: each is passed to [f] as soon as it is complete, with the
+      index of each value it chose in its key's alternatives, and dropped.
+
+      {!build_combinations} holds every partial combination for the keys so far
+      at once. Where the check prunes little that is exponential in the keys:
+      the read-from relations of rcu-2 grew 2-5 fold per read and ran to 50GB.
+      This holds one partial combination.
+
+      [check_partial] is called with the same arguments as there, and results
+      are the same set. They come in a different order: {!compare_build_order}
+      on the indices gives back the order {!build_combinations} has. *)
+  let fold_combinations (type a b c) (listmap : (a, b list) Hashtbl.t)
+      (keys : a list) ?(check_partial = fun _ ?alternatives:_ _ -> true)
+      (f : c -> int list -> (a * b) list -> c) (init : c) =
+    let rec extend acc combo indices keys =
+      match keys with
+      | [] -> f acc (List.rev indices) (List.rev combo)
+      | key :: rest_keys ->
+          let alternatives = try Hashtbl.find listmap key with Not_found -> [] in
+            snd
+              (List.fold_left
+                 (fun (i, acc) value ->
+                   ( i + 1,
+                     if check_partial combo ~alternatives (key, value) then
+                       extend acc ((key, value) :: combo) (i :: indices)
+                         rest_keys
+                     else acc
+                   )
+                 )
+                 (0, acc) alternatives
+              )
+    in
+      extend init [] [] keys
+
+  (** [compare_build_order a b] orders two combinations of the same keys, given
+      as {!fold_combinations} gives their indices, as {!build_combinations}
+      returns them: by the last key's index, descending, then the one before's,
+      ascending, and so on alternating. Each key it adds walks its alternatives
+      back to front and, for each, the combinations so far back to front. *)
+  let compare_build_order (a : int list) (b : int list) =
+    let rec go descending = function
+      | x :: xs, y :: ys ->
+          let c = if descending then compare y x else compare x y in
+            if c <> 0 then c else go (not descending) (xs, ys)
+      | _ -> 0
+    in
+      go true (List.rev a, List.rev b)
 end
 
 (** {1 USet-Based Combination Builder} *)
