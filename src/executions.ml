@@ -924,6 +924,139 @@ module S10 = struct
           threads
 end
 
+(** S11 (combination dominance): with [MORDOR_S11_DOMINANCE] set,
+    {!Freeze.freeze} enumerates nothing. It records, for each justification
+    combination, what minimality compares its results by -- their events, and dp
+    and ppo restricted to them -- with the combination's predicates and each
+    read's choice of writes, and the freeze stage then reports how many
+    combinations another dominates: one whose results would all be removed by
+    minimality, or be duplicates, so that it could be skipped. Measurement only;
+    off by default. *)
+module S11 = struct
+  let enabled = Option.is_some (Sys.getenv_opt "MORDOR_S11_DOMINANCE")
+
+  type record = {
+    e : int list;
+    dp : (int * int) uset;
+    ppo : (int * int) uset;
+    preds : string list;  (** sorted, distinct *)
+    choices : (int * int list) list;  (** by read, each sorted *)
+    product : float;
+  }
+
+  let lock = Mutex.create ()
+  let records : record list ref = ref []
+  let unsatisfiable = Atomic.make 0
+
+  exception Stop of (int, int list) Hashtbl.t * int list
+
+  let record r = Mutex.protect lock (fun () -> records := r :: !records)
+
+  let rec subset_sorted a b =
+    match (a, b) with
+    | [], _ -> true
+    | _, [] -> false
+    | x :: a', y :: b' ->
+        if x = y then subset_sorted a' b'
+        else if x > y then subset_sorted a b'
+        else false
+
+  (* [c'] dominates [c]: the levels a skip needs, cumulatively. *)
+  let frame c' c =
+    USet.subset c'.dp c.dp
+    && USet.subset c'.ppo c.ppo
+    && not (USet.equal c'.dp c.dp && USet.equal c'.ppo c.ppo)
+
+  let predicates c' c = subset_sorted c'.preds c.preds
+
+  (* Every write a read of [c] may read, [c'] offers too, and a read [c] lets
+     read Init only because Init is its sole write is so in [c'] too: [c']
+     drops Init where a read has another write. *)
+  let choices c' c =
+    List.for_all
+      (fun (r, ws) ->
+        let ws' = List.assoc_opt r c'.choices |> Option.value ~default:[] in
+          subset_sorted ws ws' && (ws <> [ 0 ] || ws' = [ 0 ])
+      )
+      c.choices
+
+  let same c' c =
+    USet.equal c'.dp c.dp
+    && USet.equal c'.ppo c.ppo
+    && c'.preds = c.preds
+    && c'.choices = c.choices
+
+  let report () =
+    (* One program's: several can be run in one process. *)
+    let all = Mutex.protect lock (fun () -> !records) in
+      Mutex.protect lock (fun () -> records := []);
+      let n = List.length all in
+      let groups = Hashtbl.create 64 in
+        List.iter
+          (fun c ->
+            Hashtbl.replace groups c.e
+              (c :: (Hashtbl.find_opt groups c.e |> Option.value ~default:[]))
+          )
+          all;
+        let dominated test =
+          Hashtbl.fold
+            (fun _ cs acc ->
+              List.filter
+                (fun c -> List.exists (fun c' -> c' != c && test c' c) cs)
+                cs
+              @ acc
+            )
+            groups []
+        in
+        let weight cs = List.fold_left (fun a c -> a +. c.product) 0. cs in
+        let total = weight all in
+        let line name cs =
+          Printf.eprintf
+            "S11 %-40s %6d of %d combinations, %.3g of %.3g relations\n%!" name
+            (List.length cs) n (weight cs) total
+        in
+        (* Duplicates: all but the first of each class of equals. *)
+        let duplicates =
+          Hashtbl.fold
+            (fun _ cs acc ->
+              let rec go kept acc = function
+                | [] -> acc
+                | c :: rest ->
+                    if List.exists (fun k -> same k c) kept then
+                      go kept (c :: acc) rest
+                    else go (c :: kept) acc rest
+              in
+                go [] acc (List.rev cs)
+            )
+            groups []
+        in
+        let sizes =
+          Hashtbl.fold (fun _ cs acc -> List.length cs :: acc) groups []
+        in
+          Printf.eprintf
+            "S11 combinations=%d (plus %d with unsatisfiable predicates) \
+             event-sets=%d largest=%d\n\
+             %!"
+            n
+            (Atomic.exchange unsatisfiable 0)
+            (Hashtbl.length groups)
+            (List.fold_left max 0 sizes);
+          line "dominated: frame" (dominated frame);
+          line "dominated: frame+predicates"
+            (dominated (fun c' c -> frame c' c && predicates c' c));
+          line "dominated: frame+predicates+choices"
+            (dominated (fun c' c ->
+                 frame c' c && predicates c' c && choices c' c
+             )
+            );
+          line "duplicates (frame, predicates, choices equal)" duplicates;
+          let dom =
+            dominated (fun c' c -> frame c' c && predicates c' c && choices c' c)
+          in
+            line "skippable (dominated fully, or duplicate)"
+              (dom @ List.filter (fun c -> not (List.memq c dom)) duplicates)
+end
+
 (** {1 Freezing} *)
 
 module Freeze = struct
@@ -1711,24 +1844,24 @@ module Freeze = struct
 
     (ppo, ppo_loc)
 
-  (** [freeze structure path j_list statex ~elided ~constraints ~include_rf]
-      creates executions from justifications.
+  (** What {!enumerate} needs of a justification combination, and all it reads:
+      two combinations with equal ones freeze to equal results. *)
+  type prepared = {
+    prep_path : path_info;
+    prep_justs : justification list;
+    prep_statex : expr list;
+    prep_elided : int uset;
+    prep_constraints : expr list;
+    prep_dp : (int * int) uset;
+    prep_ppo : (int * int) uset;
+    prep_p_combined : expr list;
+  }
 
-      The "freeze" operation converts a list of justifications for a path into
-      concrete executions by: 1. Computing dependency and PPO relations 2.
-      Generating valid read-from combinations 3. Validating each combination 4.
-      Creating freeze results for valid combinations
-
-      @param structure The event structure.
-      @param path Current path.
-      @param j_list List of justifications for writes on path.
-      @param statex Static constraints.
-      @param elided Set of elided events.
-      @param constraints Additional constraints.
-      @param include_rf Whether to compute RF relations (false for testing).
-      @return Promise of list of valid freeze results. *)
-  let freeze ?(coherence_models = []) structure fwd_es_ctx path j_list statex
-      ~elided ~constraints ~include_rf =
+  (** [prepare structure fwd_es_ctx path j_list statex ~elided ~constraints]
+      computes a combination's dependencies, preserved program order and
+      predicates, or [None] if the predicates are unsatisfiable and it has no
+      executions. *)
+  let prepare structure fwd_es_ctx path j_list statex ~elided ~constraints =
     Logs_safe.debug (fun m ->
         m
           "[freeze] Starting freeze for path with %d events, %d \
@@ -1743,7 +1876,7 @@ module Freeze = struct
       else (
         Logs_safe.debug (fun m -> m "[freeze] Early exit: %s" msg);
 
-        []
+        None
       )
     in
 
@@ -1845,8 +1978,108 @@ module Freeze = struct
              predicates)"
             combined_p_sat (List.length p_combined)
       );
+      if S11.enabled && not combined_p_sat then Atomic.incr S11.unsatisfiable;
       let*? () = (combined_p_sat, "predicates unsatisfiable") in
-      let ppo, ppo_loc = freeze_ppo structure path j_list fwd_ctx p_combined in
+      let ppo, _ = freeze_ppo structure path j_list fwd_ctx p_combined in
+        Some
+          {
+            prep_path = path;
+            prep_justs = j_list;
+            prep_statex = statex;
+            prep_elided = elided;
+            prep_constraints = constraints;
+            prep_dp = dp;
+            prep_ppo = ppo;
+            prep_p_combined = p_combined;
+          }
+
+  (** Whether the freeze stage freezes each kind of combination once
+      ({!duplicate_key}). On by default; [MORDOR_FREEZE_NO_MERGE] turns it off.
+  *)
+  let merge_duplicates =
+    ref (Option.is_none (Sys.getenv_opt "MORDOR_FREEZE_NO_MERGE"))
+
+  (** [duplicate_key prepared] is equal for two combinations exactly when
+      everything {!enumerate} reads of them is. They then freeze to the same
+      results, and differ only in the forwarding and elision edges and the
+      justifications attached to those afterwards, which deduplication merges in
+      any case. *)
+  let duplicate_key p =
+    let sorted u = USet.values u |> List.sort compare in
+    let strings l = List.map Expr.to_string l |> List.sort_uniq compare in
+      Digest.string
+        (Marshal.to_string
+           ( sorted p.prep_path.path,
+             strings p.prep_path.p,
+             sorted p.prep_elided,
+             strings p.prep_constraints,
+             strings p.prep_statex,
+             sorted p.prep_dp,
+             sorted p.prep_ppo,
+             strings p.prep_p_combined
+           )
+           [ Marshal.No_sharing ]
+        )
+
+  (** [enumerate structure prepared ~include_rf] is the combination's valid
+      executions, one per read-from relation that passes. *)
+  let enumerate ?(coherence_models = []) structure prep ~include_rf =
+    let {
+      prep_path = path;
+      prep_justs = j_list;
+      prep_statex = statex;
+      prep_elided = elided;
+      prep_constraints = constraints;
+      prep_dp = dp;
+      prep_ppo = ppo;
+      prep_p_combined = p_combined;
+    } =
+      prep
+    in
+      if S11.enabled then (
+        let e, dp_e, ppo_e, _, _ =
+          frame structure path dp ppo p_combined elided
+        in
+        let alternatives, reads =
+          try
+            fold_path_rf
+              ~inspect:(fun map reads ->
+                raise (S11.Stop (Hashtbl.copy map, reads))
+              )
+              structure path
+              ~scope:(path_scope structure path ~elided)
+              ~elided ~constraints statex ppo dp p_combined
+              (fun () _ _ -> ())
+              ();
+            (Hashtbl.create 1, [])
+          with S11.Stop (map, reads) -> (map, reads)
+        in
+        let choices =
+          List.map
+            (fun r ->
+              ( r,
+                (try Hashtbl.find alternatives r with Not_found -> [])
+                |> List.sort_uniq compare
+              )
+            )
+            (List.sort compare reads)
+        in
+          S11.record
+            {
+              S11.e = USet.values e |> List.sort compare;
+              dp = dp_e;
+              ppo = ppo_e;
+              preds =
+                List.map Expr.to_string p_combined |> List.sort_uniq compare;
+              choices;
+              product =
+                List.fold_left
+                  (fun a (_, ws) -> a *. float_of_int (List.length ws))
+                  1. choices;
+            };
+          []
+      )
+      else
 
       let instantiate =
         instantiate_execution structure path dp ppo j_list path.p p_combined
@@ -1960,6 +2193,33 @@ module Freeze = struct
         );
 
         filtered_results
+
+  (** [freeze structure path j_list statex ~elided ~constraints ~include_rf]
+      creates executions from justifications.
+
+      The "freeze" operation converts a list of justifications for a path into
+      concrete executions by: 1. Computing dependency and PPO relations 2.
+      Generating valid read-from combinations 3. Validating each combination 4.
+      Creating freeze results for valid combinations
+
+      @param structure The event structure.
+      @param path Current path.
+      @param j_list List of justifications for writes on path.
+      @param statex Static constraints.
+      @param elided Set of elided events.
+      @param constraints Additional constraints.
+      @param include_rf Whether to compute RF relations (false for testing).
+      @return Promise of list of valid freeze results.
+
+      It is {!enumerate} of {!prepare}. The freeze stage calls the two
+      separately, to freeze each kind of combination once. *)
+  let freeze ?coherence_models structure fwd_es_ctx path j_list statex ~elided
+      ~constraints ~include_rf =
+    match
+      prepare structure fwd_es_ctx path j_list statex ~elided ~constraints
+    with
+    | None -> []
+    | Some prep -> enumerate ?coherence_models structure prep ~include_rf
 end
 
 let justifiable structure path =
@@ -2133,7 +2393,13 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
               (List.length kept);
             kept
       in
-      let freeze_just_combo (path, just_combo) =
+      (* Every model an execution will be asked about, so that a relation is
+         dropped early only if each of them would reject it. *)
+      let coherence_models =
+        List.sort_uniq String.compare
+          ((restrictions : Coherence.restrictions).coherent :: compare_models)
+      in
+      let prepare_combo (path, just_combo) =
         let fwd =
           List.fold_left
             (fun acc j -> USet.union acc j.fwd)
@@ -2152,40 +2418,100 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
         let constraints =
           List.flatten (List.map (fun (j : justification) -> j.p) just_combo)
         in
-
-        let freeze_results =
-          (* Every model an execution will be asked about, so that a relation
-             is dropped early only if each of them would reject it. *)
-          Freeze.freeze
-            ~coherence_models:
-              (List.sort_uniq String.compare
-                 ((restrictions : Coherence.restrictions).coherent
-                 :: compare_models
-                 )
-              )
-            structure fwd_es_ctx path j_remapped statex ~elided ~constraints
-            ~include_rf
+        let prepared =
+          Freeze.prepare structure fwd_es_ctx path j_remapped statex ~elided
+            ~constraints
         in
-          Logs_safe.debug (fun m ->
-              m
-                "Computed %d freeze results with %d justifications over path \
-                 with %d events"
-                (List.length freeze_results)
-                (List.length just_combo) (USet.size path.path)
-          );
-          (* The forwarding context is the combination's, not the freeze's, so
-             it is attached here.  Each result gets its own copy: deduplication
-             unions into whichever it keeps, and sharing would make that union
-             visible to results it never applied to. *)
-          List.map
-            (fun (fr : FreezeResult.t) ->
-              { fr with fwd = USet.clone fwd; we = USet.clone we; justs = just_combo }
-            )
-            freeze_results
+          ( fwd,
+            we,
+            just_combo,
+            Option.map (fun p -> (Freeze.duplicate_key p, p)) prepared
+          )
       in
+        let* prepared = compute.run prepare_combo input_stream in
 
-      let* results = compute.run freeze_just_combo input_stream in
-        List.flatten results |> Lwt.return
+        (* Combinations that differ only in their forwarding and elision edges
+         freeze to the same results, and deduplication merged those results
+         afterwards. Each is frozen once, the first of its kind, and its
+         results are given to every combination of the kind. On the litmus
+         corpus that is more than half of all combinations (S11). *)
+        (* S11 measures duplicates, so it sees every combination. *)
+        let merge = !Freeze.merge_duplicates && not S11.enabled in
+        let distinct =
+          let seen = Hashtbl.create 64 in
+            List.filter_map
+              (fun (_, _, _, prepared) ->
+                match prepared with
+                | Some (key, p) when merge && not (Hashtbl.mem seen key) ->
+                    Hashtbl.replace seen key ();
+                    Some (key, p)
+                | Some (key, p) when not merge -> Some (key, p)
+                | _ -> None
+              )
+              prepared
+        in
+          if !s4_counters then
+            Logs_safe.info (fun m ->
+                m "[S4] combinations frozen: %d of %d" (List.length distinct)
+                  (List.length prepared)
+            );
+          let* frozen =
+            compute.run
+              (fun (key, p) ->
+                (key, Freeze.enumerate ~coherence_models structure p ~include_rf)
+              )
+              distinct
+          in
+          let by_key = Hashtbl.create 64 in
+            List.iter
+              (fun (key, results) -> Hashtbl.replace by_key key results)
+              frozen;
+            (* Without merging, keys still repeat; each combination then takes its
+           own results, in order. *)
+            let own = ref frozen in
+            let results_of key =
+              if merge then Hashtbl.find by_key key
+              else
+                match !own with
+                | (_, results) :: rest ->
+                    own := rest;
+                    results
+                | [] -> assert false
+            in
+            let results =
+              List.map
+                (fun (fwd, we, just_combo, prepared) ->
+                  match prepared with
+                  | None -> []
+                  | Some (key, _) ->
+                      let freeze_results = results_of key in
+                        Logs_safe.debug (fun m ->
+                            m
+                              "Computed %d freeze results with %d \
+                               justifications"
+                              (List.length freeze_results)
+                              (List.length just_combo)
+                        );
+                        (* The forwarding context is the combination's, not the
+                       freeze's, so it is attached here.  Each result gets its
+                       own copy: deduplication unions into whichever it keeps,
+                       and sharing would make that union visible to results it
+                       never applied to. *)
+                        List.map
+                          (fun (fr : FreezeResult.t) ->
+                            {
+                              fr with
+                              fwd = USet.clone fwd;
+                              we = USet.clone we;
+                              justs = just_combo;
+                            }
+                          )
+                          freeze_results
+                )
+                prepared
+            in
+              if S11.enabled then S11.report ();
+              List.flatten results |> Lwt.return
     in
 
     let stream_freeze_to_execution input_stream =

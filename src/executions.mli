@@ -214,6 +214,42 @@ module Freeze : sig
       coherence prune: [MORDOR_RF_COHERENCE_PRUNE_MIN], 10,000 by default. *)
   val coherence_prune_min : float ref
 
+  (** What {!enumerate} needs of a justification combination, and all it
+      reads. *)
+  type prepared
+
+  (** [prepare structure context path justs statex ~elided ~constraints]
+      computes a combination's dependencies, preserved program order and
+      predicates, or [None] if the predicates are unsatisfiable. *)
+  val prepare :
+    symbolic_event_structure ->
+    Forwarding.event_structure_context ->
+    path_info ->
+    justification list ->
+    expr list ->
+    elided:int USet.t ->
+    constraints:expr list ->
+    prepared option
+
+  (** [duplicate_key prepared] is equal for two combinations exactly when
+      everything {!enumerate} reads of them is, so that they freeze to the same
+      results. *)
+  val duplicate_key : prepared -> Digest.t
+
+  (** [enumerate structure prepared ~include_rf] is the combination's valid
+      executions. *)
+  val enumerate :
+    ?coherence_models:string list ->
+    symbolic_event_structure ->
+    prepared ->
+    include_rf:bool ->
+    FreezeResult.t list
+
+  (** Whether the freeze stage freezes each kind of combination once, by
+      {!duplicate_key}. On by default; [MORDOR_FREEZE_NO_MERGE] turns it off. *)
+  val merge_duplicates : bool ref
+
+  (** [freeze ...] is {!enumerate} of {!prepare}. *)
   val freeze :
     ?coherence_models:string list ->
     symbolic_event_structure ->
