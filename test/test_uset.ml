@@ -73,8 +73,48 @@ module TestURelation = struct
             by_closure (URelation.acyclic r)
       done
 
+  (** [transitive_closure] is the least transitive relation containing the
+      relation: what adding [(a, d)] for every [(a, b)], [(b, d)] until nothing
+      changes gives. Random relations over up to 8 events, cycles and
+      self-loops included, seeded. *)
+  let test_transitive_closure_is_fixpoint () =
+    let rng = Random.State.make [| 23 |] in
+      for case = 1 to 500 do
+        let n = 1 + Random.State.int rng 8 in
+        let edges =
+          List.init
+            (Random.State.int rng (2 * n))
+            (fun _ -> (Random.State.int rng n, Random.State.int rng n))
+        in
+        let rec fixpoint pairs =
+          let added =
+            List.concat_map
+              (fun (a, b) ->
+                List.filter_map
+                  (fun (c, d) ->
+                    if b = c && not (List.mem (a, d) pairs) then Some (a, d)
+                    else None
+                  )
+                  pairs
+              )
+              pairs
+            |> List.sort_uniq compare
+          in
+            if added = [] then pairs else fixpoint (pairs @ added)
+        in
+          check
+            (list (pair int int))
+            (Printf.sprintf "case %d" case)
+            (fixpoint (List.sort_uniq compare edges) |> List.sort_uniq compare)
+            (USet.values (URelation.transitive_closure (rel edges))
+            |> List.sort compare
+            )
+      done
+
   let suite =
     [
+      test_case "transitive_closure is the fixpoint" `Quick
+        test_transitive_closure_is_fixpoint;
       test_case "acyclic: cases" `Quick test_acyclic_cases;
       test_case "acyclic is the closure irreflexive" `Quick
         test_acyclic_is_closure_irreflexive;
