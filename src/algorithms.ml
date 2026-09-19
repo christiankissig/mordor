@@ -273,6 +273,34 @@ let rec permutations = function
              perms
           )
 
+(** [linear_extensions before lst] is the permutations of [lst] in which [a]
+    comes before [b] whenever [before a b]: the same list as filtering
+    {!permutations} by that, up to order, but built without the permutations
+    that fail. Each is built by choosing next an element nothing remaining must
+    precede. A pair [before a a] admits no permutation, as the filter admits
+    none.
+
+    Filtering {!permutations} built all [n!] first: for a coherence search over
+    10 writes, 3.6 million lists, of which 28 respected po. *)
+let linear_extensions before lst =
+  if List.exists (fun a -> before a a) lst then []
+  else
+    let rec extend remaining =
+      match remaining with
+      | [] -> [ [] ]
+      | _ ->
+          List.concat_map
+            (fun x ->
+              if List.exists (fun y -> y <> x && before y x) remaining then []
+              else
+                List.map
+                  (fun rest -> x :: rest)
+                  (extend (List.filter (fun y -> y <> x) remaining))
+            )
+            remaining
+    in
+      extend lst
+
 (** {1 Map Operations} *)
 
 (** Computes the transitive closure of a mapping represented as a hash table.

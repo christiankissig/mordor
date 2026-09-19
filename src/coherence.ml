@@ -2063,29 +2063,12 @@ let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
                 | x :: (y :: _ as rest) -> to_pairs ((x, y) :: acc) rest
               in
 
-              (* Generate only permutations that respect po *)
+              (* Only the permutations that respect po: every (w1, w2) in po
+                 has w1 before w2. *)
               let valid_perms =
-                permutations writes_list
-                |> List.filter (fun perm ->
-                    (* Check: for each (w1,w2) in po, w1 comes before w2 in perm *)
-                    USet.for_all
-                      (fun (w1, w2) ->
-                        (* Find positions of w1 and w2 in permutation *)
-                        let rec find_index x lst idx =
-                          match lst with
-                          | [] -> None
-                          | h :: t ->
-                              if h = x then Some idx
-                              else find_index x t (idx + 1)
-                        in
-                        let idx1 = find_index w1 perm 0 in
-                        let idx2 = find_index w2 perm 0 in
-                          match (idx1, idx2) with
-                          | Some i1, Some i2 -> i1 < i2
-                          | _ -> true
-                      )
-                      po_edges_in_group
-                )
+                linear_extensions
+                  (fun w1 w2 -> USet.mem po_edges_in_group (w1, w2))
+                  writes_list
               in
 
               (* S4: per-location write-set size and the number of po-respecting
