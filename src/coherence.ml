@@ -2246,12 +2246,16 @@ let location_equality structure execution =
     too, as long as the completion's locations are grouped at least as coarsely
     ([ex_p] only grows). A location's orders are checked on their own, so this
     never searches the product over locations. *)
-let rejected_by_one_location structure execution restrictions =
+let rejected_by_one_location ?eqlocs structure execution restrictions =
   match ModelRegistry.lookup restrictions.coherent with
   | None -> false
   | Some model ->
       let module M = (val model : MEMORY_MODEL) in
-      let eqlocs = location_equality structure execution in
+      let eqlocs =
+        match eqlocs with
+        | Some eqlocs -> eqlocs
+        | None -> location_equality structure execution
+      in
       let cache =
         M.build_cache execution structure
           (build_location_restriction structure execution eqlocs)
@@ -2277,6 +2281,14 @@ let rejected_by_one_location structure execution restrictions =
                   )
               )
               (po_orders_per_location structure execution eqlocs writes)
+
+(** [rejects_partial_executions name]: {!rejected_by_one_location} holding of
+    a partial execution means model [name] rejects every completion of it. It
+    does for a model whose violations only grow with co, rf and hb; S6 found
+    that of every registered model but od-lso, whose C++11 release sequence
+    subtracts [coe;coe]. *)
+let rejects_partial_executions name =
+  (not (String.equal name "od-lso")) && Option.is_some (ModelRegistry.lookup name)
 
 (** [check_for_coherence structure execution restrictions] is the coherence
     order under which the model admits [execution], or [None] if it does not.

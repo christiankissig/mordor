@@ -732,6 +732,27 @@ module JustValidation = struct
       true
 end
 
+(** [partial_execution ~e ~dp ~ppo ~rmw ~rf ~ex_p] is an execution with these
+    relations and nothing else, for asking a coherence model about a read-from
+    relation still being built. *)
+let partial_execution ~e ~dp ~ppo ~rmw ~rf ~ex_p : symbolic_execution =
+  {
+    id = -1;
+    e;
+    rf;
+    dp;
+    ppo;
+    rmw;
+    fwd = USet.create ();
+    we = USet.create ();
+    ex_p;
+    justifications = [];
+    co = None;
+    fix_rf_map = Hashtbl.create 1;
+    pointer_map = None;
+    final_env = Hashtbl.create 1;
+  }
+
 (** S10 (step 0 of per-thread read-from enumeration): with
     [MORDOR_S10_RF_SAMPLES=k], {!Freeze.freeze} keeps k read-from relations per
     justification combination, each the first valid one of a depth-first search
@@ -777,23 +798,9 @@ module S10 = struct
   let report_locality structure (result : FreezeResult.t) p_combined fr
       alternatives =
     let restrictions = { Coherence.coherent = model } in
-    let execution rf ex_p : symbolic_execution =
-      {
-        id = -1;
-        e = result.e;
-        rf;
-        dp = result.dp;
-        ppo = result.ppo;
-        rmw = result.rmw;
-        fwd = USet.create ();
-        we = USet.create ();
-        ex_p;
-        justifications = [];
-        co = None;
-        fix_rf_map = Hashtbl.create 1;
-        pointer_map = None;
-        final_env = Hashtbl.create 1;
-      }
+    let execution rf ex_p =
+      partial_execution ~e:result.e ~dp:result.dp ~ppo:result.ppo
+        ~rmw:result.rmw ~rf ~ex_p
     in
     let n = List.length fr in
     let prefix d =
@@ -933,6 +940,17 @@ module Freeze = struct
     in
       { reads; writes = USet.add writes 0 (* include init write *) }
 
+  (** How many read-from relations a combination must have before
+      {!fold_path_rf} prunes by coherence: [MORDOR_RF_COHERENCE_PRUNE_MIN],
+      10,000 by default. *)
+  let coherence_prune_min =
+    ref
+      (Option.bind
+         (Sys.getenv_opt "MORDOR_RF_COHERENCE_PRUNE_MIN")
+         float_of_string_opt
+      |> Option.value ~default:10_000.
+      )
+
   (** Whether {!fold_path_rf} prunes a read-from relation as soon as it closes a
       cycle in reads-happen-before. On by default; [MORDOR_RF_NO_RHB_PRUNE]
       turns it off, to measure what it prunes.
@@ -969,8 +987,8 @@ module Freeze = struct
       @param f
         Called as [f acc indices rf], with [rf] as a list of [(read, write)]
         pairs. *)
-  let fold_path_rf ?shuffle ?inspect structure (path : path_info) ~scope ~elided
-      ~constraints statex ppo dp p_combined f init =
+  let fold_path_rf ?shuffle ?inspect ?prune structure (path : path_info) ~scope
+      ~elided ~constraints statex ppo dp p_combined f init =
     let { reads = read_events; writes = write_events } = scope in
     let w_cross_r = URelation.cross write_events read_events in
 
@@ -1072,6 +1090,25 @@ module Freeze = struct
         inspect;
 
       let steps = ref 0 in
+      (* Set up only where the relations are many: it asks the solver about
+         every pair of events once, and a combination with a handful of
+         relations is enumerated sooner than that. *)
+      let prune =
+        let product =
+          List.fold_left
+            (fun acc r ->
+              acc
+              *. float_of_int
+                   (List.length
+                      (try Hashtbl.find all_rf_inv_map r with Not_found -> [])
+                   )
+            )
+            1. (USet.values read_events)
+        in
+          match prune with
+          | Some prune when product >= !coherence_prune_min -> prune ()
+          | _ -> None
+      in
         ListMapCombinationBuilder.fold_combinations all_rf_inv_map
           ~check_partial:(fun combo ?alternatives pair ->
             if Option.is_some shuffle then (
@@ -1081,33 +1118,40 @@ module Freeze = struct
             let r, w = pair in
               (* discard the combination if we have alternatives to reading
                  from init *)
-            if
-              w = 0
-              && Option.map (fun alts -> List.length alts > 1) alternatives
-                 |> Option.value ~default:false
-            then false
-            else if
-              !rf_prune_rhb
-              && Validation.rf_closes_rhb_cycle ~succ:rhb_succ ~rf:combo (w, r)
-            then false
-            else
-              let new_combo_inv =
-                URelation.inverse (USet.of_list (pair :: combo))
-              in
-              let env_rf = ReadFromValidation.env_rf structure new_combo_inv in
-              let check_rf =
-                ReadFromValidation.check_rf structure new_combo_inv
-              in
-              let combined_preds =
-                USet.of_list p_combined
-                |> USet.union env_rf
-                |> USet.union check_rf
-                |> USet.values
-              in
-                Solver.is_sat_cached combined_preds
-        )
-        (USet.values read_events |> List.sort compare)
-        f init
+              if
+                w = 0
+                && Option.map (fun alts -> List.length alts > 1) alternatives
+                   |> Option.value ~default:false
+              then false
+              else if
+                !rf_prune_rhb
+                && Validation.rf_closes_rhb_cycle ~succ:rhb_succ ~rf:combo (w, r)
+              then false
+              else
+                let new_combo_inv =
+                  URelation.inverse (USet.of_list (pair :: combo))
+                in
+                let env_rf =
+                  ReadFromValidation.env_rf structure new_combo_inv
+                in
+                let check_rf =
+                  ReadFromValidation.check_rf structure new_combo_inv
+                in
+                let combined_preds =
+                  USet.of_list p_combined
+                  |> USet.union env_rf
+                  |> USet.union check_rf
+                  |> USet.values
+                in
+                  Solver.is_sat_cached combined_preds
+                  && not
+                       ( match prune with
+                       | Some rejected -> rejected (pair :: combo)
+                       | None -> false
+                       )
+          )
+          (USet.values read_events |> List.sort compare)
+          f init
 
   (** [compute_path_rf structure path ~scope ~elided ~constraints statex ppo dp
        p_combined] is the list of relations {!fold_path_rf} folds over, in the
@@ -1130,6 +1174,168 @@ module Freeze = struct
       );
 
       rf_candidates
+
+  (** [frame structure path dp ppo p_combined elided] is what every execution of
+      one justification combination shares: its events, the path's less what the
+      combination elides; [dp] and [ppo] restricted to them; its reads; and the
+      rmw pairs whose condition [p_combined] entails. *)
+  let frame (structure : symbolic_event_structure) path dp ppo p_combined elided
+      =
+    (* remove elided events from execution *)
+    let e = USet.set_minus path.path elided in
+
+    (* Filter dp and ppo to execution events only *)
+    let dp = URelation.restrict e dp in
+    let ppo = URelation.restrict e ppo in
+    let read_events = USet.intersection structure.read_events e in
+
+    (* Filter RMW relation to execution events and predicates only *)
+    let rmw_filtered =
+      USet.filter
+        (fun (er, expr, ew) ->
+          Solver.exeq ~state:p_combined expr (EBoolean true)
+        )
+        structure.rmw
+    in
+    let rmw = USet.map (fun (er, _, ew) -> (er, ew)) rmw_filtered in
+      (e, dp, ppo, read_events, rmw)
+
+  (** Whether {!freeze} drops a read-from relation, while it is being built,
+      that every model its executions will be asked about rejects at one
+      location ({!Coherence.rejected_by_one_location}). On by default;
+      [MORDOR_RF_NO_COHERENCE_PRUNE] turns it off. *)
+  let rf_prune_coherence =
+    ref (Option.is_none (Sys.getenv_opt "MORDOR_RF_NO_COHERENCE_PRUNE"))
+
+  (** [coherence_prune structure path dp ppo p_combined elided models] is the
+      check {!fold_path_rf} prunes a partial read-from relation by, when there
+      is one: that each of [models] rejects it at one location, whatever the
+      reads still without a write read. There is none when a model is one a
+      partial relation's rejection says nothing about the completions of
+      ({!Coherence.rejects_partial_executions}).
+
+      Locations are grouped by what the partial execution's predicates entail,
+      so that a completion's, which include them, group at least as coarsely and
+      the rejection carries over. What [p_combined] entails is asked of the
+      solver once per combination. What the read-from edges add, that a read's
+      value is its write's, is taken by substituting the one for the other in
+      the locations and comparing them: on rcu-2 which locations are equal turns
+      on the values pointers are read with, and grouping by [p_combined] alone
+      let 113 of 114 sampled incoherent relations through. Asking the solver
+      about every pair at every step cost 160ms a check (S10).
+
+      The check sees [po] restricted to the execution's events. [po] is
+      transitive, so no pair among them is lost, and on rcu-2 it is 12,135 pairs
+      where an execution's events have at most a few thousand. *)
+  let coherence_prune structure path dp ppo p_combined elided models =
+    if
+      (not !rf_prune_coherence)
+      || models = []
+      || not (List.for_all Coherence.rejects_partial_executions models)
+    then None
+    else
+      let e, dp, ppo, _, rmw = frame structure path dp ppo p_combined elided in
+      let structure =
+        { structure with po = URelation.restrict e structure.po }
+      in
+      let execution rf =
+        partial_execution ~e ~dp ~ppo ~rmw ~rf ~ex_p:p_combined
+      in
+      let entailed =
+        Coherence.location_equality structure (execution (USet.create ()))
+      in
+      let located =
+        USet.values e
+        |> List.filter_map (fun ev ->
+            Option.map (fun loc -> (ev, loc)) (get_loc structure ev)
+        )
+      in
+      (* Classes of events whose locations are equal, by union-find: what
+         [p_combined] entails, merged once; then, per relation, a read with its
+         write, and locations equal once each read's value is replaced by its
+         write's. *)
+      let find parent x =
+        let rec go x =
+          match Hashtbl.find_opt parent x with
+          | Some y when y <> x -> go y
+          | _ -> x
+        in
+          go x
+      in
+      let union parent a b =
+        let a = find parent a and b = find parent b in
+          if a <> b then Hashtbl.replace parent (max a b) (min a b)
+      in
+      let entailed_classes = Hashtbl.create 64 in
+        USet.iter (fun (a, b) -> union entailed_classes a b) entailed;
+        let eqlocs rf_inv =
+          let parent = Hashtbl.copy entailed_classes in
+          let values = Hashtbl.create 16 in
+            List.iter
+              (fun (r, w) ->
+                if w <> 0 then (
+                  union parent r w;
+                  match get_val structure r with
+                  | Some (ESymbol s | EVar s) ->
+                      Hashtbl.replace values s (vale structure w r)
+                  | _ -> ()
+                )
+              )
+              rf_inv;
+            let rec normal fuel expr =
+              let expr' = Expr.evaluate ~env:(Hashtbl.find_opt values) expr in
+                if fuel = 0 || Expr.equal expr expr' then expr'
+                else normal (fuel - 1) expr'
+            in
+            let by_location = Hashtbl.create 16 in
+              List.iter
+                (fun (ev, loc) ->
+                  let key = Expr.to_string (normal 8 loc) in
+                    match Hashtbl.find_opt by_location key with
+                    | Some first -> union parent first ev
+                    | None -> Hashtbl.replace by_location key ev
+                )
+                located;
+              let classes = Hashtbl.create 16 in
+                List.iter
+                  (fun (ev, _) ->
+                    let root = find parent ev in
+                      Hashtbl.replace classes root
+                        (ev
+                        :: (Hashtbl.find_opt classes root
+                           |> Option.value ~default:[]
+                           )
+                        )
+                  )
+                  located;
+                let eqlocs = USet.clone entailed in
+                  Hashtbl.iter
+                    (fun _ evs ->
+                      List.iter
+                        (fun a ->
+                          List.iter
+                            (fun b -> ignore (USet.add eqlocs (a, b)))
+                            evs
+                        )
+                        evs
+                    )
+                    classes;
+                  eqlocs
+        in
+          Some
+            (fun rf_inv ->
+              let execution =
+                execution
+                  (List.map (fun (r, w) -> (w, r)) rf_inv |> USet.of_list)
+              in
+              let eqlocs = eqlocs rf_inv in
+                List.for_all
+                  (fun coherent ->
+                    Coherence.rejected_by_one_location ~eqlocs structure
+                      execution { Coherence.coherent }
+                  )
+                  models
+            )
 
   (** [instantiate_execution structure path dp ppo j_list pp p_combined elided
        rf] creates execution from justifications and RF.
@@ -1160,23 +1366,9 @@ module Freeze = struct
       combinations, it was half the run. *)
   let instantiate_execution (structure : symbolic_event_structure) path dp ppo
       j_list (pp : expr list) p_combined elided =
-    (* remove elided events from execution *)
-    let e = USet.set_minus path.path elided in
-
-    (* Filter dp and ppo to execution events only *)
-    let dp = URelation.restrict e dp in
-    let ppo = URelation.restrict e ppo in
-    let read_events = USet.intersection structure.read_events e in
-
-    (* Filter RMW relation to execution events and predicates only *)
-    let rmw_filtered =
-      USet.filter
-        (fun (er, expr, ew) ->
-          Solver.exeq ~state:p_combined expr (EBoolean true)
-        )
-        structure.rmw
+    let e, dp, ppo, read_events, rmw =
+      frame structure path dp ppo p_combined elided
     in
-    let rmw = USet.map (fun (er, _, ew) -> (er, ew)) rmw_filtered in
 
     (* Check 1.1: Various consistency checks *)
     let delta =
@@ -1535,8 +1727,8 @@ module Freeze = struct
       @param constraints Additional constraints.
       @param include_rf Whether to compute RF relations (false for testing).
       @return Promise of list of valid freeze results. *)
-  let freeze structure fwd_es_ctx path j_list statex ~elided ~constraints
-      ~include_rf =
+  let freeze ?(coherence_models = []) structure fwd_es_ctx path j_list statex
+      ~elided ~constraints ~include_rf =
     Logs_safe.debug (fun m ->
         m
           "[freeze] Starting freeze for path with %d events, %d \
@@ -1728,7 +1920,12 @@ module Freeze = struct
             List.rev !found
         )
         else if include_rf then
-          fold_path_rf structure path
+          fold_path_rf
+            ~prune:(fun () ->
+              coherence_prune structure path dp ppo p_combined elided
+                coherence_models
+            )
+            structure path
             ~scope:(path_scope structure path ~elided)
             ~elided ~constraints statex ppo dp p_combined
             (fun acc indices fr ->
@@ -1957,8 +2154,17 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
         in
 
         let freeze_results =
-          Freeze.freeze structure fwd_es_ctx path j_remapped statex ~elided
-            ~constraints ~include_rf
+          (* Every model an execution will be asked about, so that a relation
+             is dropped early only if each of them would reject it. *)
+          Freeze.freeze
+            ~coherence_models:
+              (List.sort_uniq String.compare
+                 ((restrictions : Coherence.restrictions).coherent
+                 :: compare_models
+                 )
+              )
+            structure fwd_es_ctx path j_remapped statex ~elided ~constraints
+            ~include_rf
         in
           Logs_safe.debug (fun m ->
               m

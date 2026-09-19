@@ -208,7 +208,23 @@ val check_for_coherence :
     partial execution it holds of, when the completion's predicates include the
     partial one's. *)
 val rejected_by_one_location :
-  symbolic_event_structure -> symbolic_execution -> restrictions -> bool
+  ?eqlocs:(int * int) uset ->
+  symbolic_event_structure ->
+  symbolic_execution ->
+  restrictions ->
+  bool
+
+(** [location_equality structure execution] is the pairs of [execution]'s
+    events whose locations its predicates entail equal. More predicates only
+    add pairs, so the relation of a partial execution's predicates can stand in
+    for a completion's in {!rejected_by_one_location}. *)
+val location_equality :
+  symbolic_event_structure -> symbolic_execution -> (int * int) uset
+
+(** [rejects_partial_executions name]: {!rejected_by_one_location} holding of a
+    partial execution means model [name] rejects every completion of it. True
+    of every registered model but od-lso (S6). *)
+val rejects_partial_executions : string -> bool
 
 (** [check_model_program structure name] fails, with the model's reason, when
     the coherence model [name] cannot answer for the program [structure] is the

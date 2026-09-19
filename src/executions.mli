@@ -153,11 +153,15 @@ module Freeze : sig
       {!compute_path_rf} lists, as each is built, depth-first and in a different
       order: [f acc indices rf], where
       {!Algorithms.ListMapCombinationBuilder.compare_build_order} on [indices]
-      gives back the list's order. [shuffle] and [inspect] are S10's: each
-      read's alternatives in a random order, and a look at them. *)
+      gives back the list's order. [prune] is asked for a check, when the
+      product of the reads' choices is at least {!coherence_prune_min}, and
+      the check drops a partial relation, given as [(read, write)] pairs, when
+      it holds of it. [shuffle] and [inspect] are
+      S10's: each read's alternatives in a random order, and a look at them. *)
   val fold_path_rf :
     ?shuffle:Random.State.t ->
     ?inspect:((int, int list) Hashtbl.t -> int list -> unit) ->
+    ?prune:(unit -> ((int * int) list -> bool) option) ->
     symbolic_event_structure ->
     path_info ->
     scope:scope ->
@@ -195,8 +199,23 @@ module Freeze : sig
       @param include_rf
         Whether to include the reads-from relation in the output (default is
         typically true)
+      @param coherence_models
+        The models the executions will be asked about. A read-from relation
+        each of them rejects at one location is dropped while it is being
+        built (default: none, so nothing is).
       @return Lwt promise resolving to a list of frozen execution candidates *)
+  (** Whether {!freeze} drops, while building it, a read-from relation every
+      model in [coherence_models] rejects at one location. On by default;
+      [MORDOR_RF_NO_COHERENCE_PRUNE] turns it off. Execution ids follow what
+      is kept, so with it on they depend on the models a run asks about. *)
+  val rf_prune_coherence : bool ref
+
+  (** The product of the reads' choices from which {!fold_path_rf} asks for a
+      coherence prune: [MORDOR_RF_COHERENCE_PRUNE_MIN], 10,000 by default. *)
+  val coherence_prune_min : float ref
+
   val freeze :
+    ?coherence_models:string list ->
     symbolic_event_structure ->
     Forwarding.event_structure_context ->
     path_info ->
