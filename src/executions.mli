@@ -153,8 +153,11 @@ module Freeze : sig
       {!compute_path_rf} lists, as each is built, depth-first and in a different
       order: [f acc indices rf], where
       {!Algorithms.ListMapCombinationBuilder.compare_build_order} on [indices]
-      gives back the list's order. *)
+      gives back the list's order. [shuffle] and [inspect] are S10's: each
+      read's alternatives in a random order, and a look at them. *)
   val fold_path_rf :
+    ?shuffle:Random.State.t ->
+    ?inspect:((int, int list) Hashtbl.t -> int list -> unit) ->
     symbolic_event_structure ->
     path_info ->
     scope:scope ->

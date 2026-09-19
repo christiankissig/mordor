@@ -12,6 +12,10 @@ open Uset
     environment variable or by setting this ref. Shared by {!Executions}. *)
 let s4_counters = ref (Option.is_some (Sys.getenv_opt "MORDOR_S4_COUNTERS"))
 
+(* S10 (see Executions.S10): coherence stage timings and locality. *)
+let s10_stages = Option.is_some (Sys.getenv_opt "MORDOR_S10_RF_SAMPLES")
+let s10_lock = Mutex.create ()
+
 (** S6 (branch and bound over coherence orders): when [prune] is set, the search
     asks the model about each partial coherence order it builds, and abandons it
     when the model already rejects it. Off by default; enabled via
@@ -2171,6 +2175,34 @@ let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
           in
             try_perms (List.nth writes_per_location i)
       in
+      (* S10: is the rejection local? The model's violations only grow with
+         co, so a location none of whose orders passes on its own, every other
+         location unordered, rejects the execution whatever the rest. *)
+      if s10_stages then (
+        let passes vals =
+          check_coherence cache (URelation.transitive_closure (USet.of_list vals))
+        in
+        let empty_ok = passes [] in
+        let per_loc =
+          List.map
+            (fun perms ->
+              ( List.length perms,
+                List.length (List.filter passes perms)
+              ))
+            writes_per_location
+        in
+        let rejecting = List.filter (fun (_, ok) -> ok = 0) per_loc in
+          Mutex.protect s10_lock (fun () ->
+              Printf.eprintf
+                "S10 coherence-local id=%d empty_ok=%b locations=%d \
+                 rejecting=%d leaves=%d [%s]\n%!"
+                execution.id empty_ok (List.length per_loc)
+                (List.length rejecting)
+                (List.fold_left (fun a (n, _) -> a * max 1 n) 1 per_loc)
+                (String.concat " "
+                   (List.map (fun (n, ok) -> Printf.sprintf "%d/%d" ok n) per_loc))
+          )
+      );
       let last = List.length writes_per_location - 1 in
         if last >= 0 && rejected ~below:(last + 1) [] then None
         else choose_one last []
@@ -2191,6 +2223,7 @@ let check_for_coherence structure execution restrictions =
         None
     | Some model ->
         let module M = (val model : MEMORY_MODEL) in
+        let s10_t0 = Unix.gettimeofday () in
         (* Create location equivalence relation using semantic equality *)
         let eqlocs =
           let all_events = execution.e in
@@ -2227,13 +2260,33 @@ let check_for_coherence structure execution restrictions =
         (* Build cache *)
         let cache = M.build_cache execution structure loc_restrict in
 
+        let s10_t1 = Unix.gettimeofday () in
         (* Check thin-air *)
-        if not (M.check_thin_air cache execution) then None
-        else
-          (* Try all coherence orders *)
-          try_all_coherence_orders ~uses_co:M.uses_co
-            ~orders_allocations:M.orders_allocations cache structure execution
-            M.check_coherence eqlocs
+        let thin_air = M.check_thin_air cache execution in
+        let s10_t2 = Unix.gettimeofday () in
+        let result =
+          if not thin_air then None
+          else
+            (* Try all coherence orders *)
+            try_all_coherence_orders ~uses_co:M.uses_co
+              ~orders_allocations:M.orders_allocations cache structure execution
+              M.check_coherence eqlocs
+        in
+          (* S10 (see Executions.S10): where the time goes, and which check
+             rejects. *)
+          if s10_stages then
+            Mutex.protect s10_lock (fun () ->
+                Printf.eprintf
+                  "S10 coherence-stages id=%d model=%s setup_ms=%.0f \
+                   thin_air=%b thin_air_ms=%.0f search_ms=%.0f admitted=%b\n%!"
+                  execution.id restrictions.coherent
+                  ((s10_t1 -. s10_t0) *. 1000.)
+                  thin_air
+                  ((s10_t2 -. s10_t1) *. 1000.)
+                  ((Unix.gettimeofday () -. s10_t2) *. 1000.)
+                  (Option.is_some result)
+            );
+          result
 
 (** [check_model_program structure name] fails, with the model's reason, when
     the coherence model [name] cannot answer for the program [structure] is the
