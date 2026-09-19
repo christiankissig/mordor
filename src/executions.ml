@@ -379,6 +379,30 @@ module Validation = struct
   let rhb_acyclic rhb = URelation.acyclic rhb
 
   let rhb_acyclic_delta rhb ~drhb = rhb_acyclic (USet.union rhb drhb)
+
+  (** [rf_closes_rhb_cycle ~succ ~rf (w, r)]: the read-from edge [(w, r)] closes
+      a cycle in reads-happen-before, that is [r] reaches [w] through [succ],
+      the successors in [dp ∪ ppo], and [rf], the edges so far as
+      [(read, write)] pairs.
+
+      rhb only grows as edges are added, so a read-from relation that has one
+      has a cyclic rhb however it is completed, and {!rhb_acyclic} rejects every
+      completion. *)
+  let rf_closes_rhb_cycle ~succ ~rf (w, r) =
+    let visited = Hashtbl.create 64 in
+    let rec reaches x =
+      x = w
+      || (not (Hashtbl.mem visited x))
+         && begin
+           Hashtbl.replace visited x ();
+           ( match Hashtbl.find_opt succ x with
+             | Some next -> USet.exists reaches next
+             | None -> false
+             )
+           || List.exists (fun (r', w') -> w' = x && reaches r') rf
+         end
+    in
+      reaches r
 end
 
 (** Read-from relation validation.
@@ -724,6 +748,16 @@ module Freeze = struct
     in
       { reads; writes = USet.add writes 0 (* include init write *) }
 
+  (** Whether {!fold_path_rf} prunes a read-from relation as soon as it closes a
+      cycle in reads-happen-before. On by default; [MORDOR_RF_NO_RHB_PRUNE]
+      turns it off, to measure what it prunes.
+
+      Measured 2026-09-19: on rcu-2's futures it stopped a third of the steps
+      that extend a relation, before the solver was asked about them, and
+      complete relations came twice as fast. On listing15, 307 of 39,972. *)
+  let rf_prune_rhb =
+    ref (Option.is_none (Sys.getenv_opt "MORDOR_RF_NO_RHB_PRUNE"))
+
   (** [fold_path_rf structure path ~scope ~elided ~constraints statex ppo dp
        p_combined f init] folds [f] over candidate read-from relations.
 
@@ -731,7 +765,8 @@ module Freeze = struct
       reading from a write of [scope], by: 1. Filtering potential RF edges by
       location equality 2. Checking edges don't violate program order 3.
       Verifying writes aren't shadowed 4. Building combinations incrementally,
-      depth-first, dropping one as soon as it is unsatisfiable.
+      depth-first, dropping one as soon as it is unsatisfiable or closes a cycle
+      in [dp ∪ ppo ∪ rf].
 
       Each relation is passed to [f] as it is completed and not kept, with the
       indices {!ListMapCombinationBuilder.fold_combinations} gives it.
@@ -815,6 +850,19 @@ module Freeze = struct
 
       let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
 
+      (* The immediate cycles are excluded above; a longer one, through other
+         reads' writes, used to be found only once every read had its write, by
+         instantiate_execution. Checked on each edge as it is added, it prunes
+         the relations that would all be rejected there. Over its [dp] and
+         [ppo], restricted as there to the events the combination does not
+         elide: the relations above are not, and a cycle through an elided event
+         is not one there. *)
+      let rhb_succ =
+        USet.union dp ppo
+        |> URelation.restrict (USet.set_minus path.path elided)
+        |> URelation.adjacency_map
+      in
+
       ListMapCombinationBuilder.fold_combinations all_rf_inv_map
         ~check_partial:(fun combo ?alternatives pair ->
           let r, w = pair in
@@ -824,6 +872,10 @@ module Freeze = struct
               w = 0
               && Option.map (fun alts -> List.length alts > 1) alternatives
                  |> Option.value ~default:false
+            then false
+            else if
+              !rf_prune_rhb
+              && Validation.rf_closes_rhb_cycle ~succ:rhb_succ ~rf:combo (w, r)
             then false
             else
               let new_combo_inv =
