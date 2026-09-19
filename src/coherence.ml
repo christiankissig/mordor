@@ -1978,6 +1978,110 @@ let build_location_restriction structure execution eqlocs :
     (int * int) uset -> (int * int) uset =
  fun x -> USet.filter (fun (a, b) -> USet.mem eqlocs (a, b)) x
 
+(** [coherence_writes ~orders_allocations structure execution] is the events
+    of [execution] a coherence order orders: its writes, and with
+    [orders_allocations] its allocations and frees. *)
+let coherence_writes ~orders_allocations structure execution =
+  USet.filter
+    (fun ev_id ->
+      try
+        let event = Hashtbl.find structure.events ev_id in
+          event.typ = Write
+          || orders_allocations && (event.typ = Malloc || event.typ = Free)
+      with Not_found -> false
+    )
+    execution.e
+
+(** [po_orders_per_location structure execution eqlocs writes] is, for each
+    location with more than one of [writes] ([eqlocs] deciding which share
+    one), the po-respecting orders of its writes as lists of consecutive
+    pairs, Init first where the execution reads from it, sorted. *)
+let po_orders_per_location structure execution eqlocs writes =
+  let ({ po; _ } : symbolic_event_structure) = structure in
+  (* Check if reads from init *)
+  let reads_from_init = USet.exists (fun (_, w) -> w = 0) execution.rf in
+
+  (* Group writes by location *)
+  let writes_per_location =
+    let groups = ref [] in
+      USet.iter
+        (fun w ->
+          let found = ref false in
+            List.iter
+              (fun group ->
+                if USet.mem eqlocs (List.hd !group, w) then (
+                  group := w :: !group;
+                  found := true
+                )
+              )
+              !groups;
+            if not !found then
+              groups :=
+                ref (if reads_from_init then [ w; 0 ] else [ w ]) :: !groups
+        )
+        writes;
+      List.filter (fun g -> List.length !g > 1) !groups
+      (* After grouping writes by location *)
+      |> List.map (fun g ->
+          (* The init write (event 0) is always the co-minimal write to its
+             location. Never permute it into a non-minimal position — that
+             would yield bogus coherence orders in which a real write is
+             co-before init. Permute only the real writes, then prepend
+             init. *)
+          let group = !g in
+          let has_init = List.mem 0 group in
+          let writes_list = List.filter (fun w -> w <> 0) group in
+
+          (* Extract po edges among these writes *)
+          let po_edges_in_group =
+            USet.filter
+              (fun (a, b) ->
+                List.mem a writes_list && List.mem b writes_list
+              )
+              po
+          in
+
+          (* Helper function to convert permutation to pairs *)
+          let rec to_pairs acc = function
+            | [] | [ _ ] -> List.rev acc
+            | x :: (y :: _ as rest) -> to_pairs ((x, y) :: acc) rest
+          in
+
+          (* Only the permutations that respect po: every (w1, w2) in po
+             has w1 before w2. *)
+          let valid_perms =
+            linear_extensions
+              (fun w1 w2 -> USet.mem po_edges_in_group (w1, w2))
+              writes_list
+          in
+
+          (* S4: per-location write-set size and the number of po-respecting
+             permutations it expands into (the coherence permutation-blowup
+             that S6/R9b target). *)
+          if !s4_counters then
+            Logs_safe.info (fun m ->
+                m "[S4] coherence-location: writes=%d perms=%d"
+                  (List.length group) (List.length valid_perms)
+            );
+
+          (* Convert each valid permutation to pairs, keeping init
+             co-minimal by prepending it before the real writes. *)
+          (* Sorted, so that the first accepted combination below is the
+             canonically least one rather than whichever [permutations]
+             happened to yield first. That is what makes the exported order
+             a function of the execution and the model. *)
+          (* Sorted, so the first accepted combination below is the
+             canonically least one rather than whichever [permutations]
+             happened to yield first. That is what makes the order this
+             function returns a function of the execution and the model. *)
+          List.map
+            (fun perm -> to_pairs [] (if has_init then 0 :: perm else perm))
+            valid_perms
+          |> List.sort compare
+      )
+  in
+    writes_per_location
+
 (** [try_all_coherence_orders ...] is the coherence order that admits
     [execution], or [None] if none does.
 
@@ -1991,20 +2095,7 @@ let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
     cache structure execution check_coherence eqlocs =
   if USet.size execution.e = 0 then None
   else
-    let ({ po; restrict; _ } : symbolic_event_structure) = structure in
-    let writes =
-      USet.filter
-        (fun ev_id ->
-          try
-            let event = Hashtbl.find structure.events ev_id in
-              event.typ = Write
-              || orders_allocations
-                 && (event.typ = Malloc || event.typ = Free)
-          with Not_found -> false
-        )
-        execution.e
-    in
-
+    let writes = coherence_writes ~orders_allocations structure execution in
     if (not uses_co) || USet.size writes < 2 then
       (* 0 or 1 writes: the only possible coherence order is empty (co only
          orders two writes to the same location), but we must still run the
@@ -2014,87 +2105,8 @@ let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
       let empty = USet.create () in
         if check_coherence cache empty then Some empty else None
     else
-      (* Check if reads from init *)
-      let reads_from_init = USet.exists (fun (_, w) -> w = 0) execution.rf in
-
-      (* Group writes by location *)
       let writes_per_location =
-        let groups = ref [] in
-          USet.iter
-            (fun w ->
-              let found = ref false in
-                List.iter
-                  (fun group ->
-                    if USet.mem eqlocs (List.hd !group, w) then (
-                      group := w :: !group;
-                      found := true
-                    )
-                  )
-                  !groups;
-                if not !found then
-                  groups :=
-                    ref (if reads_from_init then [ w; 0 ] else [ w ]) :: !groups
-            )
-            writes;
-          List.filter (fun g -> List.length !g > 1) !groups
-          (* After grouping writes by location *)
-          |> List.map (fun g ->
-              (* The init write (event 0) is always the co-minimal write to its
-                 location. Never permute it into a non-minimal position — that
-                 would yield bogus coherence orders in which a real write is
-                 co-before init. Permute only the real writes, then prepend
-                 init. *)
-              let group = !g in
-              let has_init = List.mem 0 group in
-              let writes_list = List.filter (fun w -> w <> 0) group in
-
-              (* Extract po edges among these writes *)
-              let po_edges_in_group =
-                USet.filter
-                  (fun (a, b) ->
-                    List.mem a writes_list && List.mem b writes_list
-                  )
-                  po
-              in
-
-              (* Helper function to convert permutation to pairs *)
-              let rec to_pairs acc = function
-                | [] | [ _ ] -> List.rev acc
-                | x :: (y :: _ as rest) -> to_pairs ((x, y) :: acc) rest
-              in
-
-              (* Only the permutations that respect po: every (w1, w2) in po
-                 has w1 before w2. *)
-              let valid_perms =
-                linear_extensions
-                  (fun w1 w2 -> USet.mem po_edges_in_group (w1, w2))
-                  writes_list
-              in
-
-              (* S4: per-location write-set size and the number of po-respecting
-                 permutations it expands into (the coherence permutation-blowup
-                 that S6/R9b target). *)
-              if !s4_counters then
-                Logs_safe.info (fun m ->
-                    m "[S4] coherence-location: writes=%d perms=%d"
-                      (List.length group) (List.length valid_perms)
-                );
-
-              (* Convert each valid permutation to pairs, keeping init
-                 co-minimal by prepending it before the real writes. *)
-              (* Sorted, so that the first accepted combination below is the
-                 canonically least one rather than whichever [permutations]
-                 happened to yield first. That is what makes the exported order
-                 a function of the execution and the model. *)
-              (* Sorted, so the first accepted combination below is the
-                 canonically least one rather than whichever [permutations]
-                 happened to yield first. That is what makes the order this
-                 function returns a function of the execution and the model. *)
-              List.map
-                (fun perm -> to_pairs [] (if has_init then 0 :: perm else perm))
-                valid_perms
-              |> List.sort compare
-          )
+        po_orders_per_location structure execution eqlocs writes
       in
 
       (* S6: a model whose violations only grow as co grows rejects every
@@ -2192,6 +2204,80 @@ let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
 
 (** {1 Coherence Checking Entry Point} *)
 
+(** [location_equality structure execution] is the pairs of [execution]'s
+    events whose locations are equal under its predicates, [ex_p]: which writes
+    a coherence order orders together. *)
+let location_equality structure execution =
+  let eqlocs =
+    let all_events = execution.e in
+      USet.filter
+        (fun (a, b) ->
+          if a = b then true
+          else
+            try
+              let ev_a = Hashtbl.find structure.events a in
+              let ev_b = Hashtbl.find structure.events b in
+                match (ev_a.loc, ev_b.loc) with
+                | Some loc_a, Some loc_b ->
+                    (* Equal under the execution's own predicates. Asked
+                       without them, a write through a pointer never
+                       shared a location with a write to the location it
+                       points at, so co never ordered the two and a read
+                       could take the value the pointer write had
+                       overwritten. *)
+                    exeq ~state:execution.ex_p loc_a loc_b
+                | _ -> false
+            with Not_found -> false
+        )
+        (URelation.cross all_events all_events
+        |> USet.filter (fun (a, b) -> a <= b)
+        )
+  in
+  USet.inplace_union ~into:eqlocs (URelation.inverse eqlocs)
+
+(** [rejected_by_one_location structure execution restrictions]: the model
+    rejects [execution] whatever the coherence order at other locations,
+    because its thin-air check fails, or because some location has no
+    po-respecting order its axioms accept with every other location left
+    unordered.
+
+    Sound for a model whose violations only grow with co (S6: all but od-lso),
+    rf and hb: every completion of a partial execution it holds of is rejected
+    too, as long as the completion's locations are grouped at least as coarsely
+    ([ex_p] only grows). A location's orders are checked on their own, so this
+    never searches the product over locations. *)
+let rejected_by_one_location structure execution restrictions =
+  match ModelRegistry.lookup restrictions.coherent with
+  | None -> false
+  | Some model ->
+      let module M = (val model : MEMORY_MODEL) in
+      let eqlocs = location_equality structure execution in
+      let cache =
+        M.build_cache execution structure
+          (build_location_restriction structure execution eqlocs)
+      in
+        (not (M.check_thin_air cache execution))
+        ||
+        let writes =
+          coherence_writes ~orders_allocations:M.orders_allocations structure
+            execution
+        in
+          if (not M.uses_co) || USet.size writes < 2 then
+            not (M.check_coherence cache (USet.create ()))
+          else
+            List.exists
+              (fun orders ->
+                not
+                  (List.exists
+                     (fun order ->
+                       M.check_coherence cache
+                         (URelation.transitive_closure (USet.of_list order))
+                     )
+                     orders
+                  )
+              )
+              (po_orders_per_location structure execution eqlocs writes)
+
 (** [check_for_coherence structure execution restrictions] is the coherence
     order under which the model admits [execution], or [None] if it does not.
 
@@ -2207,33 +2293,7 @@ let check_for_coherence structure execution restrictions =
     | Some model ->
         let module M = (val model : MEMORY_MODEL) in
         let s10_t0 = Unix.gettimeofday () in
-        (* Create location equivalence relation using semantic equality *)
-        let eqlocs =
-          let all_events = execution.e in
-            USet.filter
-              (fun (a, b) ->
-                if a = b then true
-                else
-                  try
-                    let ev_a = Hashtbl.find structure.events a in
-                    let ev_b = Hashtbl.find structure.events b in
-                      match (ev_a.loc, ev_b.loc) with
-                      | Some loc_a, Some loc_b ->
-                          (* Equal under the execution's own predicates. Asked
-                             without them, a write through a pointer never
-                             shared a location with a write to the location it
-                             points at, so co never ordered the two and a read
-                             could take the value the pointer write had
-                             overwritten. *)
-                          exeq ~state:execution.ex_p loc_a loc_b
-                      | _ -> false
-                  with Not_found -> false
-              )
-              (URelation.cross all_events all_events
-              |> USet.filter (fun (a, b) -> a <= b)
-              )
-        in
-        let eqlocs = USet.inplace_union ~into:eqlocs (URelation.inverse eqlocs) in
+        let eqlocs = location_equality structure execution in
 
         (* Build location restriction once *)
         let loc_restrict =

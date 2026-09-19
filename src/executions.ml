@@ -763,6 +763,92 @@ module S10 = struct
   exception Over_budget
 
   let budget = int_env "MORDOR_S10_BUDGET" |> Option.value ~default:2000
+  let model = Sys.getenv_opt "MORDOR_S10_MODEL" |> Option.value ~default:"smrd"
+  let locality = Sys.getenv_opt "MORDOR_S10_LOCALITY" <> None
+
+  (* How early a per-location coherence check, made during read-from
+     enumeration, would reject [fr]: the least number of its reads, in
+     enumeration order, whose edges alone make
+     {!Coherence.rejected_by_one_location} hold. Once with the predicates
+     those edges add, which a check during enumeration has; once with the
+     combination's alone, which it could compute once per combination. Found
+     by bisection: rejection only grows with edges. [alternatives] is how many
+     writes each read had, to say how much a rejection at that point cuts. *)
+  let report_locality structure (result : FreezeResult.t) p_combined fr
+      alternatives =
+    let restrictions = { Coherence.coherent = model } in
+    let execution rf ex_p : symbolic_execution =
+      {
+        id = -1;
+        e = result.e;
+        rf;
+        dp = result.dp;
+        ppo = result.ppo;
+        rmw = result.rmw;
+        fwd = USet.create ();
+        we = USet.create ();
+        ex_p;
+        justifications = [];
+        co = None;
+        fix_rf_map = Hashtbl.create 1;
+        pointer_map = None;
+        final_env = Hashtbl.create 1;
+      }
+    in
+    let n = List.length fr in
+    let prefix d =
+      List.filteri (fun i _ -> i < d) fr
+      |> List.map (fun (r, w) -> (w, r))
+      |> USet.of_list
+    in
+    let with_edges rf =
+      USet.of_list p_combined
+      |> USet.union (ReadFromValidation.env_rf structure rf)
+      |> USet.union (ReadFromValidation.check_rf structure rf)
+      |> USet.values
+    in
+    let calls = ref 0 in
+    let rejected preds d =
+      incr calls;
+      let rf = prefix d in
+        Coherence.rejected_by_one_location structure
+          (execution rf (preds rf))
+          restrictions
+    in
+    (* The least d in [0, n] rejected, or None if n is not. *)
+    let least preds =
+      if not (rejected preds n) then None
+      else
+        let rec go lo hi =
+          if lo >= hi then hi
+          else
+            let mid = (lo + hi) / 2 in
+              if rejected preds mid then go lo mid else go (mid + 1) hi
+        in
+          Some (go 0 n)
+    in
+    let cut d =
+      List.filteri (fun i _ -> i >= d) alternatives
+      |> List.fold_left (fun a k -> a +. log10 (float_of_int (max 1 k))) 0.
+    in
+    let t = Unix.gettimeofday () in
+    let full =
+      Coherence.rejected_by_one_location structure
+        (execution (prefix n) result.pp)
+        restrictions
+    in
+    let d_rf = least with_edges in
+    let d_p = least (fun _ -> p_combined) in
+    let show = Option.fold ~none:"-" ~some:string_of_int in
+    let show_cut =
+      Option.fold ~none:"-" ~some:(fun d -> Printf.sprintf "%.1f" (cut d))
+    in
+      print
+        "S10 local model=%s reads=%d full=%b d_rf=%s d_p=%s cut_rf=%s cut_p=%s \
+         total=%.1f calls=%d ms_per_call=%.0f"
+        model n full (show d_rf) (show d_p) (show_cut d_rf) (show_cut d_p)
+        (cut 0) (!calls + 1)
+        ((Unix.gettimeofday () -. t) *. 1000. /. float_of_int (!calls + 1))
   let hex s = String.sub (Digest.to_hex (Digest.string s)) 0 12
 
   (* Each read's alternatives: the writes of its own thread, of another
@@ -1586,6 +1672,7 @@ module Freeze = struct
           let found = ref [] in
           let seed = Hashtbl.hash (List.map (fun j -> j.w.label) j_list) in
           let tries = ref 0 and over = ref 0 in
+          let alternatives = ref [] in
             for i = 0 to (20 * k) - 1 do
               if List.length !found < k then
                 try
@@ -1594,7 +1681,20 @@ module Freeze = struct
                     ~shuffle:(Random.State.make [| seed; i |])
                     ?inspect:
                       ( if i = 0 then
-                          Some (S10.report_alternatives structure p_combined)
+                          Some
+                            (fun map reads ->
+                              alternatives :=
+                                List.map
+                                  (fun r ->
+                                    List.length
+                                      ( try Hashtbl.find map r
+                                        with Not_found -> []
+                                      )
+                                  )
+                                  reads;
+                              S10.report_alternatives structure p_combined map
+                                reads
+                            )
                         else None
                       )
                     structure path
@@ -1616,6 +1716,9 @@ module Freeze = struct
                     let key = List.sort compare fr in
                       if not (Hashtbl.mem seen key) then (
                         Hashtbl.add seen key ();
+                        if S10.locality then
+                          S10.report_locality structure result p_combined fr
+                            !alternatives;
                         found := ([], result) :: !found
                       )
             done;
@@ -2190,16 +2293,25 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             )
             compare_models
         in
-          if Option.is_none S10.samples then
+          if Option.is_none S10.samples && not S10.locality then
             (exec, check_for_coherence structure exec restrictions, admitted_by)
           else
             let t = Unix.gettimeofday () in
             let co = check_for_coherence structure exec restrictions in
-              S10.print
-                "S10 coherence id=%d events=%d rf=%d admitted=%b ms=%.0f"
-                exec.id (USet.size exec.e) (USet.size exec.rf)
-                (Option.is_some co)
-                ((Unix.gettimeofday () -. t) *. 1000.);
+              if Option.is_some S10.samples then
+                S10.print
+                  "S10 coherence id=%d events=%d rf=%d admitted=%b ms=%.0f"
+                  exec.id (USet.size exec.e) (USet.size exec.rf)
+                  (Option.is_some co)
+                  ((Unix.gettimeofday () -. t) *. 1000.);
+              (* The per-location check must never reject what the model
+                 admits. *)
+              if S10.locality then
+                S10.print "S10 soundness model=%s admitted=%b local=%b"
+                  restrictions.coherent (Option.is_some co)
+                  (Coherence.rejected_by_one_location structure exec
+                     restrictions
+                  );
               (exec, co, admitted_by)
       in
         let* results = compute.run check_exec input_stream in
