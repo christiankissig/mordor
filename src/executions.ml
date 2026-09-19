@@ -724,14 +724,17 @@ module Freeze = struct
     in
       { reads; writes = USet.add writes 0 (* include init write *) }
 
-  (** [compute_path_rf structure path ~scope ~elided ~constraints statex ppo dp
-       p_combined] computes candidate read-from relations.
+  (** [fold_path_rf structure path ~scope ~elided ~constraints statex ppo dp
+       p_combined f init] folds [f] over candidate read-from relations.
 
       Generates all valid read-from combinations for the reads of [scope], each
       reading from a write of [scope], by: 1. Filtering potential RF edges by
       location equality 2. Checking edges don't violate program order 3.
-      Verifying writes aren't shadowed 4. Building combinations incrementally
-      with satisfiability checking
+      Verifying writes aren't shadowed 4. Building combinations incrementally,
+      depth-first, dropping one as soon as it is unsatisfiable.
+
+      Each relation is passed to [f] as it is completed and not kept, with the
+      indices {!ListMapCombinationBuilder.fold_combinations} gives it.
 
       @param structure The event structure.
       @param path Current path.
@@ -743,11 +746,11 @@ module Freeze = struct
       @param ppo Preserved program order.
       @param dp Dependency relation.
       @param p_combined Combined predicates.
-      @return
-        Promise of list of RF combinations (as lists of [(read, write)] pairs).
-  *)
-  let compute_path_rf structure (path : path_info) ~scope ~elided ~constraints
-      statex ppo dp p_combined =
+      @param f
+        Called as [f acc indices rf], with [rf] as a list of [(read, write)]
+        pairs. *)
+  let fold_path_rf structure (path : path_info) ~scope ~elided ~constraints
+      statex ppo dp p_combined f init =
     let { reads = read_events; writes = write_events } = scope in
     let w_cross_r = URelation.cross write_events read_events in
 
@@ -811,44 +814,57 @@ module Freeze = struct
       in
 
       let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
-      let rf_candidates =
-        ListMapCombinationBuilder.build_combinations all_rf_inv_map
-          ~check_partial:(fun combo ?alternatives pair ->
-            let r, w = pair in
-              (* discard the combination if we have alternatives to reading
-                   from init *)
-              if
-                w = 0
-                && Option.map (fun alts -> List.length alts > 1) alternatives
-                   |> Option.value ~default:false
-              then false
-              else
-                let new_combo_inv =
-                  URelation.inverse (USet.of_list (pair :: combo))
-                in
-                let env_rf =
-                  ReadFromValidation.env_rf structure new_combo_inv
-                in
-                let check_rf =
-                  ReadFromValidation.check_rf structure new_combo_inv
-                in
-                let combined_preds =
-                  USet.of_list p_combined
-                  |> USet.union env_rf
-                  |> USet.union check_rf
-                  |> USet.values
-                in
-                  Solver.is_sat_cached combined_preds
-          )
-          (USet.values read_events |> List.sort compare)
-          ()
-      in
-        Logs_safe.debug (fun m ->
-            m "[compute_path_rf] Generated %d RF combinations"
-              (List.length rf_candidates)
-        );
 
-        rf_candidates
+      ListMapCombinationBuilder.fold_combinations all_rf_inv_map
+        ~check_partial:(fun combo ?alternatives pair ->
+          let r, w = pair in
+            (* discard the combination if we have alternatives to reading
+                 from init *)
+            if
+              w = 0
+              && Option.map (fun alts -> List.length alts > 1) alternatives
+                 |> Option.value ~default:false
+            then false
+            else
+              let new_combo_inv =
+                URelation.inverse (USet.of_list (pair :: combo))
+              in
+              let env_rf = ReadFromValidation.env_rf structure new_combo_inv in
+              let check_rf =
+                ReadFromValidation.check_rf structure new_combo_inv
+              in
+              let combined_preds =
+                USet.of_list p_combined
+                |> USet.union env_rf
+                |> USet.union check_rf
+                |> USet.values
+              in
+                Solver.is_sat_cached combined_preds
+        )
+        (USet.values read_events |> List.sort compare)
+        f init
+
+  (** [compute_path_rf structure path ~scope ~elided ~constraints statex ppo dp
+       p_combined] is the list of relations {!fold_path_rf} folds over, in the
+      order they were built in before it was depth-first. *)
+  let compute_path_rf structure path ~scope ~elided ~constraints statex ppo dp
+      p_combined =
+    let rf_candidates =
+      fold_path_rf structure path ~scope ~elided ~constraints statex ppo dp
+        p_combined
+        (fun acc indices rf -> (indices, rf) :: acc)
+        []
+      |> List.stable_sort (fun (a, _) (b, _) ->
+          ListMapCombinationBuilder.compare_build_order a b
+      )
+      |> List.map snd
+    in
+      Logs_safe.debug (fun m ->
+          m "[compute_path_rf] Generated %d RF combinations"
+            (List.length rf_candidates)
+      );
+
+      rf_candidates
 
   (** [instantiate_execution structure path dp ppo j_list pp p_combined elided
        rf] creates execution from justifications and RF.
@@ -1375,43 +1391,52 @@ module Freeze = struct
       let*? () = (combined_p_sat, "predicates unsatisfiable") in
       let ppo, ppo_loc = freeze_ppo structure path j_list fwd_ctx p_combined in
 
-      let all_fr =
+      let instantiate =
+        instantiate_execution structure path dp ppo j_list path.p p_combined
+          elided
+      in
+      (* Each relation is instantiated as it is built, and only the executions
+         kept: the relations were a list, and on rcu-2 one combination's ran to
+         tens of GB before the first was instantiated. Sorted back into the
+         order the list had, which the executions' ids follow. *)
+      let candidates = ref 0 in
+      let valid =
         if include_rf then
-          compute_path_rf structure path
+          fold_path_rf structure path
             ~scope:(path_scope structure path ~elided)
             ~elided ~constraints statex ppo dp p_combined
-        else [ [] ]
-      in
-      let all_rf =
-        List.map
-          (fun fr -> List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
-          all_fr
-      in
-        Logs_safe.debug (fun m ->
-            m "[freeze] Computed %d RF combination for path" (List.length all_rf)
-        );
-        Logs_safe.debug (fun m ->
-            m "[freeze] Starting instantiate_execution for %d RF combinations"
-              (List.length all_rf)
-        );
-        let all_validations =
-          List.map
-            (instantiate_execution structure path dp ppo j_list path.p
-               p_combined elided
+            (fun acc indices fr ->
+              incr candidates;
+              match
+                instantiate (List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
+              with
+              | Some result -> (indices, result) :: acc
+              | None -> acc
             )
-            all_rf
-        in
-        let results = all_validations in
-        let filtered_results = List.filter_map Fun.id results in
-          Logs_safe.debug (fun m ->
-              m
-                "[freeze] instantiate_execution produced %d valid results from \
-                 %d RF combos"
-                (List.length filtered_results)
-                (List.length all_rf)
-          );
+            []
+        else (
+          incr candidates;
+          Option.to_list (instantiate (USet.create ()))
+          |> List.map (fun r -> ([], r))
+        )
+      in
+      let filtered_results =
+        List.stable_sort
+          (fun (a, _) (b, _) ->
+            ListMapCombinationBuilder.compare_build_order a b
+          )
+          valid
+        |> List.map snd
+      in
+        Logs_safe.debug (fun m ->
+            m
+              "[freeze] instantiate_execution produced %d valid results from \
+               %d RF combos"
+              (List.length filtered_results)
+              !candidates
+        );
 
-          filtered_results
+        filtered_results
 end
 
 let justifiable structure path =

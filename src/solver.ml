@@ -369,8 +369,42 @@ let quick_check exprs =
   if !fresh_solvers then check (create exprs)
   else scoped (fun solver -> check { solver with expressions = exprs })
 
-(** Cache for conjunction satisfiability results. *)
-let quick_check_cache = ConjunctionCache.create 256
+(** Cache for conjunction satisfiability results, in two generations.
+
+    Unbounded, it grew about 20MB a second on rcu-2: a read-from enumeration there
+    asks hundreds of thousands of conjunctions, most of them once, and an entry
+    holds its conjunction, several KB. New entries go to the young generation;
+    when that is full it becomes the old one and the old one is dropped, and an
+    entry hit in the old one moves back to the young. So what is asked again
+    stays, and at most twice {!generation_size} entries are held. *)
+module GenerationalCache = struct
+  type t = {
+    mutable young : bool option ConjunctionCache.t;
+    mutable old : bool option ConjunctionCache.t;
+  }
+
+  let generation_size = 1 lsl 16
+
+  let create () =
+    { young = ConjunctionCache.create 256; old = ConjunctionCache.create 1 }
+
+  let add cache exprs result =
+    if ConjunctionCache.length cache.young >= generation_size then (
+      cache.old <- cache.young;
+      cache.young <- ConjunctionCache.create 256
+    );
+    ConjunctionCache.replace cache.young exprs result
+
+  let find_opt cache exprs =
+    match ConjunctionCache.find_opt cache.young exprs with
+    | Some _ as hit -> hit
+    | None ->
+        let hit = ConjunctionCache.find_opt cache.old exprs in
+          Option.iter (add cache exprs) hit;
+          hit
+end
+
+let quick_check_cache = GenerationalCache.create ()
 
 let cache_mutex = Mutex.create ()
 
@@ -426,7 +460,7 @@ let quick_check_cached exprs =
      solving. *)
   let cached_result =
     Mutex.protect cache_mutex (fun () ->
-        ConjunctionCache.find_opt quick_check_cache exprs
+        GenerationalCache.find_opt quick_check_cache exprs
     )
   in
     S7.record ~hit:(Option.is_some cached_result) asked;
@@ -435,7 +469,7 @@ let quick_check_cached exprs =
     | None ->
         let result = quick_check exprs in
           Mutex.protect cache_mutex (fun () ->
-              ConjunctionCache.add quick_check_cache exprs result
+              GenerationalCache.add quick_check_cache exprs result
           );
           result
 
