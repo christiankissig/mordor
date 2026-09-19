@@ -45,6 +45,7 @@
   parser
   parser_state
   pretty
+  progress
   solver
   source_info
   types

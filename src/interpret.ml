@@ -1605,6 +1605,7 @@ end
     @return Updated context with interpretation results. *)
 let step_interpret lwt_ctx =
   let* ctx = lwt_ctx in
+  Progress.stage ~unit:"" "interpret" @@ fun () ->
     Logs_safe.debug (fun m ->
         m "Interpreting program with %s loop semantics."
           ( match ctx.options.loop_semantics with

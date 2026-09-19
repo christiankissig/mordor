@@ -197,6 +197,10 @@ MoRDor supports several commands for analyzing litmus tests and generating outpu
 
 #### Logging
 - `--debug` / `--info` / `--warning` / `--error`: Log verbosity level
+- `--progress` / `--no-progress`: Show, or hide, a progress line on stderr:
+  the current stage, how far through it is, and what it has found so far.
+  Shown by default when stderr is a terminal. With the default debug logging
+  the log fills the screen; `--warning` leaves the progress line on its own.
 
 ### Usage Examples
 

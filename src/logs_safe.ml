@@ -13,7 +13,12 @@ let mutex = Mutex.create ()
 
 (** [with_lock f] runs [f ()] with the logging mutex held, releasing it even if
     [f] raises. *)
-let with_lock f = Mutex.protect mutex f
+let with_lock f =
+  Mutex.protect mutex (fun () ->
+      (* A progress line shares stderr: take it down while logging, and the
+         next update puts it back below what was logged. *)
+      Progress.while_writing f
+  )
 
 let debug msgf =
   if Logs.level () >= Some Logs.Debug then with_lock (fun () -> Logs.debug msgf)

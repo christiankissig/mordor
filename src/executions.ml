@@ -36,16 +36,39 @@ open Uset
     - [sequential]: applies the worker with [List.map], no parallelism.
     - [parallel pool]: dispatches the items to a domain pool in chunks, via
       {!Parallel.map}. *)
-type compute_fn = { run : 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
+type compute_fn = {
+  run : 'a 'b. ?stage:string * string -> ('a -> 'b) -> 'a list -> 'b list Lwt.t;
+}
+
+(* [staged ?stage run f items]: with [stage], a {!Progress} stage named and
+   counted as it says, ticked as each item is done. *)
+let staged ?stage run f items =
+  match stage with
+  | None -> run f items
+  | Some (name, unit) ->
+      Progress.stage ~total:(List.length items) ~unit name (fun () ->
+          run
+            (fun x ->
+              let y = f x in
+                Progress.tick ();
+                y
+            )
+            items
+      )
 
 (** [sequential_compute] is a [compute_fn] that runs items one by one. *)
 let sequential_compute : compute_fn =
-  { run = (fun f items -> List.map f items |> Lwt.return) }
+  {
+    run =
+      (fun ?stage f items ->
+        staged ?stage (fun f items -> Lwt.return (List.map f items)) f items
+      );
+  }
 
 (** [parallel_compute pool] is a [compute_fn] that dispatches items to [pool].
 *)
 let parallel_compute pool : compute_fn =
-  { run = (fun f items -> Parallel.map pool f items) }
+  { run = (fun ?stage f items -> staged ?stage (Parallel.map pool) f items) }
 
 (** {1 Basic Types} *)
 
@@ -2166,7 +2189,9 @@ module Freeze = struct
               match
                 instantiate (List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
               with
-              | Some result -> (indices, result) :: acc
+              | Some result ->
+                  Progress.found ~unit:"executions" 1;
+                  (indices, result) :: acc
               | None -> acc
             )
             []
@@ -2275,6 +2300,8 @@ let compute_justification_combinations compute structure paths ~scope
         )
         ~check_final:(fun combo ->
           JustValidation.check_final structure path combo
+          && (Progress.found ~unit:"combinations" 1;
+              true)
         )
         ()
     in
@@ -2286,7 +2313,10 @@ let compute_justification_combinations compute structure paths ~scope
     List.map (fun combo -> (path, List.map snd combo)) js_combinations
   in
 
-  let* results = compute.run combine_justifications_for_path paths in
+  let* results =
+    compute.run ~stage:("justification combinations", "paths")
+      combine_justifications_for_path paths
+  in
     List.flatten results |> Lwt.return
 
 (** {1 Generate executions} *)
@@ -2428,7 +2458,9 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             Option.map (fun p -> (Freeze.duplicate_key p, p)) prepared
           )
       in
-        let* prepared = compute.run prepare_combo input_stream in
+        let* prepared =
+        compute.run ~stage:("prepare", "combinations") prepare_combo input_stream
+      in
 
         (* Combinations that differ only in their forwarding and elision edges
          freeze to the same results, and deduplication merged those results
@@ -2456,7 +2488,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                   (List.length prepared)
             );
           let* frozen =
-            compute.run
+            compute.run ~stage:("freeze", "kinds of combination")
               (fun (key, p) ->
                 (key, Freeze.enumerate ~coherence_models structure p ~include_rf)
               )
@@ -2825,8 +2857,11 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             )
             compare_models
         in
-          if Option.is_none S10.samples && not S10.locality then
-            (exec, check_for_coherence structure exec restrictions, admitted_by)
+          if Option.is_none S10.samples && not S10.locality then (
+            let co = check_for_coherence structure exec restrictions in
+              if Option.is_some co then Progress.found ~unit:"admitted" 1;
+              (exec, co, admitted_by)
+          )
           else
             let t = Unix.gettimeofday () in
             let co = check_for_coherence structure exec restrictions in
@@ -2846,7 +2881,9 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                   );
               (exec, co, admitted_by)
       in
-        let* results = compute.run check_exec input_stream in
+        let* results =
+          compute.run ~stage:("coherence", "executions") check_exec input_stream
+        in
           Option.iter
             (fun tbl ->
               List.iter
@@ -3006,6 +3043,7 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
 let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
     =
   let* ctx = lwt_ctx in
+  Progress.stage ~unit:"" "executions" @@ fun () ->
 
   (* Create restrictions for coherence checking *)
   let coherence_restrictions = { Coherence.coherent = ctx.options.coherent } in

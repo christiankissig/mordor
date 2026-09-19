@@ -11,8 +11,12 @@ open Uset
     Pipeline stages use [compute_fn] to map a pure worker over a list of items.
 
     Use [sequential_compute] for single-threaded operation, or
-    [parallel_compute pool] to dispatch work across a domain pool. *)
-type compute_fn = { run : 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
+    [parallel_compute pool] to dispatch work across a domain pool. With
+    [~stage:(name, unit)], the items are shown as a {!Progress} stage, counted
+    as [unit] as each is done. *)
+type compute_fn = {
+  run : 'a 'b. ?stage:string * string -> ('a -> 'b) -> 'a list -> 'b list Lwt.t;
+}
 
 (** [sequential_compute] runs items sequentially with no parallelism. *)
 val sequential_compute : compute_fn
