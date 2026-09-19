@@ -490,21 +490,40 @@ forbid (r1 = 1 && r2 = 1) []|}
      primary. Load buffering tells them apart: RC11 rejects the witnesses that
      sMRD keeps. *)
   let test_compared_model_matches_own_run () =
-    let compared = run_models ~primary:"smrd" ~others:[ "rc11" ] in
-    let rc11 = run_models ~primary:"rc11" ~others:[] in
-    let admissions = Option.get compared.model_admissions in
-    let admitted_by_rc11 =
-      Hashtbl.fold
-        (fun id models acc -> if List.mem "rc11" models then id :: acc else acc)
-        admissions []
-      |> List.sort compare
+    let runs () =
+      let compared = run_models ~primary:"smrd" ~others:[ "rc11" ] in
+      let rc11 = run_models ~primary:"rc11" ~others:[] in
+      let admissions = Option.get compared.model_admissions in
+      let admitted_by_rc11 =
+        Hashtbl.fold
+          (fun id models acc ->
+            if List.mem "rc11" models then id :: acc else acc
+          )
+          admissions []
+        |> List.sort compare
+      in
+        (compared, rc11, admitted_by_rc11)
     in
-      check (list int) "rc11 admits what its own run keeps" (execution_ids rc11)
-        admitted_by_rc11;
+    (* Read-from relations every model asked about rejects are dropped before
+       executions are numbered, so which ids an execution gets depends on the
+       models a run asks about: the same executions, numbered differently. *)
+    let compared, rc11, admitted_by_rc11 = runs () in
+      check int "rc11 admits as many as its own run keeps"
+        (List.length (execution_ids rc11))
+        (List.length admitted_by_rc11);
       check bool "and sMRD keeps more" true
         (List.length (execution_ids compared) > List.length admitted_by_rc11);
       check bool "nothing is compared without models" true
-        (rc11.model_admissions = None)
+        (rc11.model_admissions = None);
+      let prune = !Executions.Freeze.rf_prune_coherence in
+        Executions.Freeze.rf_prune_coherence := false;
+        let _, rc11, admitted_by_rc11 =
+          Fun.protect
+            ~finally:(fun () -> Executions.Freeze.rf_prune_coherence := prune)
+            runs
+        in
+          check (list int) "without the prune, the very same ids"
+            (execution_ids rc11) admitted_by_rc11
 
   let suite =
     [

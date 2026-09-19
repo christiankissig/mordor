@@ -176,6 +176,38 @@ It catches 2,382 of the corpus's 2,389 rejections. The other 7 need orders at
 several locations together. od-lso, whose violations do not only grow with co
 (S6), does not appear in the corpus runs and would have to be excluded.
 
+## (h) The check, wired into enumeration
+
+`Freeze.fold_path_rf` asks `Coherence.rejected_by_one_location` of each
+partial relation, for every model the run's executions will be asked about.
+It does so only where each such model rejects every completion of what it
+rejects (all but od-lso), and only in a combination with at least
+`MORDOR_RF_COHERENCE_PRUNE_MIN` relations (10,000). `MORDOR_RF_NO_COHERENCE_PRUNE`
+turns it off.
+
+Grouping locations mattered. Grouped by what the combination's predicates
+entail, 113 of 114 sampled relations that got through were incoherent: on
+rcu-2 which locations are equal turns on the values pointers are read with.
+Grouped by a union-find over three things a completion's predicates entail
+too, what the combination's predicates entail, a read with its write, and
+locations equal once reads' values are replaced by their writes', every
+sampled relation that got through was coherent (139 of 139). A check costs
+6.5ms, from 40ms, with `po` restricted to the execution's events (exact, as
+`po` is transitive) and the closure by search (b111018).
+
+Goldens are unchanged by default, with the prune forced on for every
+combination, and with it off (27.5s, 32.7s and 29.5s); loop goldens,
+check-order and integration tests agree both ways.
+
+**rcu-2 still does not finish, and now for a different reason.** Run as
+reported (futures, 10 threads, step counter 2) for 20 minutes, 10
+combinations in flight produced 19,380 relations that pass, sampled as
+coherent, and none of the 10 finished. Survivors per depth keep growing
+(70,577 partial relations passing at depth 10). Each of the 4,374
+combinations has thousands of coherent executions, likely far more, so
+enumerating them, and then checking each for coherence at 0.4s, cannot
+finish either. Memory stayed at 2.2-2.5GB.
+
 ## What this means for the plan
 
 1. **Per-thread fragments and merge (plan steps 1-2):** not the lever. The
@@ -192,6 +224,11 @@ several locations together. od-lso, whose violations do not only grow with co
    by the combination's predicates alone costs one reject in (g) a read
    later, and makes the grouping a once-per-combination cost.
 4. **Linear extensions in the co search:** done (eee1ee4); see (f).
+5. **Wired in:** see (h). What remains on rcu-2 is the number of coherent
+   executions itself. Enumerating them one by one does not scale to it:
+   representing them symbolically or sharing them across combinations
+   would, and so would a smaller problem (step counter 1, or allocations
+   that do not overlap).
 
 Caveats: no sampled rcu-2 execution was admitted, so how many
 relations survive the per-location check at each depth, which decides whether
