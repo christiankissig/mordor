@@ -352,6 +352,26 @@ let test_validation_predicates () =
   check bool "rf_respects_ppo holds of an rf edge in ppo" true
     (Validation.rf_respects_ppo ~rf:(rel [ (1, 2) ]) ~ppo:(rel [ (1, 2) ]))
 
+(* The rf edge (w, r) closes a cycle when r reaches w, through dp and ppo and
+   through the rf edges already chosen, given as (read, write) pairs; and not
+   through edges it is not given. *)
+let test_rf_closes_rhb_cycle () =
+  let succ = URelation.adjacency_map (rel [ (2, 3); (4, 5) ]) in
+    check bool "through dp and ppo" true
+      (Validation.rf_closes_rhb_cycle ~succ ~rf:[] (3, 2));
+    check bool "through an rf edge chosen before" true
+      (Validation.rf_closes_rhb_cycle ~succ ~rf:[ (4, 3) ] (5, 2));
+    check bool "not without it" false
+      (Validation.rf_closes_rhb_cycle ~succ ~rf:[] (5, 2));
+    check bool "rhb_acyclic agrees" false
+      (Validation.rhb_acyclic
+         (Validation.rhb
+            ~dp:(rel [ (2, 3) ])
+            ~ppo:(rel [ (4, 5) ])
+            ~rf:(rel [ (3, 4); (5, 2) ])
+         )
+      )
+
 (* The delta forms decide what the plain ones decide of the union. *)
 let test_validation_deltas () =
   let base = rel [ (1, 2) ] and added = rel [ (2, 1) ] in
@@ -405,6 +425,7 @@ let suite =
       );
       ("read-from in a scope", `Quick, test_path_rf_in_a_scope);
       ("validation predicates", `Quick, test_validation_predicates);
+      ("rf closes an rhb cycle", `Quick, test_rf_closes_rhb_cycle);
       ("validation deltas", `Quick, test_validation_deltas);
     ];
   ]

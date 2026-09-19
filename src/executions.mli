@@ -83,6 +83,14 @@ module Validation : sig
   val rhb_acyclic : (int * int) uset -> bool
 
   val rhb_acyclic_delta : (int * int) uset -> drhb:(int * int) uset -> bool
+
+  (** [rf_closes_rhb_cycle ~succ ~rf (w, r)]: adding the read-from edge
+      [(w, r)] closes a cycle, [r] reaching [w] through [succ], the successors
+      in [dp ∪ ppo], and [rf], the edges already chosen as [(read, write)]
+      pairs. What {!rhb_acyclic} rejects of every completion, decided as each
+      edge is chosen. *)
+  val rf_closes_rhb_cycle :
+    succ:(int, int uset) Hashtbl.t -> rf:(int * int) list -> int * int -> bool
 end
 
 (** {2 Freeze Module} *)
