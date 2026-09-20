@@ -24,7 +24,7 @@ let s10_lock = Mutex.create ()
     Sound only for a model whose violations grow with co. od-lso's do not: its
     C++11 release sequence subtracts [coe;coe], so more co can mean less hb.
     Slower than the exhaustive search on every corpus measured; see
-    spike/s6_coherence_bb/RESULTS.md. *)
+    spike/s6_coherence_bb/RESULTS.md on the bottom-up-refactor branch. *)
 module S6 = struct
   let prune = ref (Option.is_some (Sys.getenv_opt "MORDOR_S6_PRUNE"))
 
