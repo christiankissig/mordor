@@ -52,29 +52,47 @@ let example_library =
     ("Coherence", "CoRW", "litmus-tests/test6/CoRW.lit");
     ("Coherence", "CoWR", "litmus-tests/test6/CoWR.lit");
     ("Coherence", "CoWW", "litmus-tests/test6/CoWW.lit");
-    ("Fences and access modes", "IRIW+acq+sc",
-     "litmus-tests/pldi_repairing/IRIW+acq+sc.lit");
-    ("Fences and access modes", "IRIW+Fsc+Fsc",
-     "litmus-tests/popl_bridging/IRIW+Fsc+Fsc.lit");
-    ("Fences and access modes", "IRIW+rlx",
-     "litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit");
-    ("Fences and access modes", "RWC+syncs",
-     "litmus-tests/pldi_repairing/RWC+syncs.lit");
-    ("Dependencies and thin air", "LB+deps",
-     "litmus-tests/popl_bubbly/LB+deps.lit");
-    ("Dependencies and thin air", "LB+ctrldata",
-     "litmus-tests/esop_problem/lb+ctrldat+ctrl-single.lit");
-    ("Dependencies and thin air", "Out-of-thin-air (listing12)",
-     "litmus-tests/avoidoota/listing12.lit");
-    ("Dependencies and thin air", "Volatile store is not elided",
-     "litmus-tests/own/volatile-store-not-elided.lit");
+    ( "Fences and access modes",
+      "IRIW+acq+sc",
+      "litmus-tests/pldi_repairing/IRIW+acq+sc.lit"
+    );
+    ( "Fences and access modes",
+      "IRIW+Fsc+Fsc",
+      "litmus-tests/popl_bridging/IRIW+Fsc+Fsc.lit"
+    );
+    ( "Fences and access modes",
+      "IRIW+rlx",
+      "litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit"
+    );
+    ( "Fences and access modes",
+      "RWC+syncs",
+      "litmus-tests/pldi_repairing/RWC+syncs.lit"
+    );
+    ( "Dependencies and thin air",
+      "LB+deps",
+      "litmus-tests/popl_bubbly/LB+deps.lit"
+    );
+    ( "Dependencies and thin air",
+      "LB+ctrldata",
+      "litmus-tests/esop_problem/lb+ctrldat+ctrl-single.lit"
+    );
+    ( "Dependencies and thin air",
+      "Out-of-thin-air (listing12)",
+      "litmus-tests/avoidoota/listing12.lit"
+    );
+    ( "Dependencies and thin air",
+      "Volatile store is not elided",
+      "litmus-tests/own/volatile-store-not-elided.lit"
+    );
     (* The ones cppMem cannot express at all, and which had no one-click route
        into the editor before. *)
     ("MoRDor only", "Use after free", "programs/uaf-bug.lit");
     ("MoRDor only", "Use after free (fixed)", "programs/uaf-bug-smrd.lit");
     ("MoRDor only", "Refinement chain", "litmus-tests/avoidoota/listing7.lit");
-    ("MoRDor only", "Episodicity: a register condition",
-     "programs/episodicity/register_condition/fail.lit");
+    ( "MoRDor only",
+      "Episodicity: a register condition",
+      "programs/episodicity/register_condition/fail.lit"
+    );
   ]
 
 (** [read_example path] is the file's contents, or [None] if it is not there. *)
@@ -99,13 +117,13 @@ let examples_handler _request =
         | Some source ->
             Some
               (`Assoc
-                [
-                  ("group", `String group);
-                  ("label", `String label);
-                  ("path", `String path);
-                  ("source", `String source);
-                ]
-                )
+                 [
+                   ("group", `String group);
+                   ("label", `String label);
+                   ("path", `String path);
+                   ("source", `String source);
+                 ]
+              )
         | None ->
             Logs.warn (fun m -> m "example not found, skipping: %s" path);
             None

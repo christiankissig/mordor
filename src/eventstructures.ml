@@ -250,11 +250,7 @@ module SymbolicEventStructure = struct
   let seq (a : t) (b : t) : t =
     let joined = URelation.cross a.e b.e in
     let c = cross a b in
-      {
-        c with
-        po = USet.union c.po joined;
-        fj = USet.union c.fj joined;
-      }
+      { c with po = USet.union c.po joined; fj = USet.union c.fj joined }
 
   let events_in_loop (structure : t) loop_id =
     Hashtbl.fold

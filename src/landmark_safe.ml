@@ -26,9 +26,10 @@
 let register ?id ?location name =
   if not (Domain.is_main_domain ()) then
     invalid_arg
-      ("Landmark_safe.register: " ^ name
-     ^ " registered outside the main domain; register landmarks at module \
-        initialisation"
+      ("Landmark_safe.register: "
+      ^ name
+      ^ " registered outside the main domain; register landmarks at module \
+         initialisation"
       );
   Landmark.register ?id ?location name
 

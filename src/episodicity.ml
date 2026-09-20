@@ -1520,7 +1520,7 @@ let report_loop_result on_loop_result (result : loop_episodicity_result) =
 let step_test_episodicity ?on_loop_result (lwt_ctx : mordor_ctx Lwt.t) :
     mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
-  Progress.stage ~unit:"" "episodicity" @@ fun () ->
+    Progress.stage ~unit:"" "episodicity" @@ fun () ->
     match ctx.program_stmts with
     | Some program ->
         (* Collect all loop IDs from the program *)

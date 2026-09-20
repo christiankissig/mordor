@@ -160,11 +160,11 @@ module USet : sig
       Adds all elements of [s2] to [into], mutating [into].
 
       [into] is labelled deliberately. Unlabelled, the pipeline form
-      [x |> inplace_union y] passed [y] as the set to mutate, so the
-      accumulator read like the thing being built up while being the thing
-      consumed -- which folded eco into a shared cache field in IMM's coherence
-      check and made the search order-dependent (github #88). With the label
-      that form does not typecheck and the mutated set is named at the call.
+      [x |> inplace_union y] passed [y] as the set to mutate, so the accumulator
+      read like the thing being built up while being the thing consumed -- which
+      folded eco into a shared cache field in IMM's coherence check and made the
+      search order-dependent (github #88). With the label that form does not
+      typecheck and the mutated set is named at the call.
 
       @param into Set to modify.
       @param s2 Set to add from.

@@ -143,9 +143,9 @@ let create_events ?(ubopt = false) defacto =
     exploits undefined behaviour, and leaves [e] alone otherwise.
 
     Division by zero is undefined, so under a UB-exploiting model an
-    implementation may assume [!r <> 0] -- that is, [r = 0] -- and fold
-    [1 / !r] to [1]. The fold is what breaks the dependency of the written value
-    on the read, and it is the whole content of the [LB+UB+data] family.
+    implementation may assume [!r <> 0] -- that is, [r = 0] -- and fold [1 / !r]
+    to [1]. The fold is what breaks the dependency of the written value on the
+    read, and it is the whole content of the [LB+UB+data] family.
 
     It used to be applied unconditionally, which made [UB11] and no annotation
     indistinguishable and left [avoidoota/listing27_allow.lit] and
@@ -169,8 +169,8 @@ let ub_fact_prefix = "%ub:"
 (** [ub_facts env] is every UB assumption recorded on this path, as facts.
 
     Each is [sym = 0]: the symbol a [1 / !sym] fold assumed away. They are
-    handed to elaboration as de facto constraints on the events that follow,
-    and not added to the path predicates -- a UB assumption is a permission to
+    handed to elaboration as de facto constraints on the events that follow, and
+    not added to the path predicates -- a UB assumption is a permission to
     rewrite, not a claim that the value really is zero, so the unexploited
     behaviour has to stay. Elaboration already treats de facto constraints that
     way: [ValueAssignElab] solves with them and offers the narrowed write as an
@@ -248,9 +248,9 @@ let add_event (events : events_t) event env (annotation : ir_node_ann) =
     event'
 
 (** [prefix events event structure phi defacto] is [structure] prefixed with
-    [event], which {!add_event} has added to [events]: the {!EventStructure}
-    of the event alone -- with the register environment, loops and thread that
-    were recorded for its label -- followed by [structure].
+    [event], which {!add_event} has added to [events]: the {!EventStructure} of
+    the event alone -- with the register environment, loops and thread that were
+    recorded for its label -- followed by [structure].
 
     This is how the structure's own tables get built. The ones in [events] are
     the interpreter's working record of every event it has created; the
@@ -463,7 +463,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
-                  @ ub_facts env
+                @ ub_facts env
               in
               let cont = recurse rest env phi events in
                 prefix events event' cont phi defacto
@@ -484,7 +484,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
-                @ ub_facts env
+              @ ub_facts env
             in
             let cont = recurse rest env phi events in
               prefix events event' cont phi defacto
@@ -506,7 +506,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
-                  @ ub_facts env
+                @ ub_facts env
               in
               let env' = Hashtbl.copy env in
                 Hashtbl.replace env' register (Expr.of_value rval);
@@ -532,7 +532,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   List.map
                     (Expr.evaluate ~env:(Hashtbl.find_opt env))
                     events.defacto
-                    @ ub_facts env
+                  @ ub_facts env
                 in
 
                 let env' = Hashtbl.copy env in
@@ -586,7 +586,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
-                  @ ub_facts env
+                @ ub_facts env
               in
 
               let env' = Hashtbl.copy env in
@@ -651,7 +651,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
-                  @ ub_facts env
+                @ ub_facts env
               in
 
               let env_succ = Hashtbl.copy env in
@@ -664,8 +664,8 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                     (prefix events branch_event'
                        (EventStructure.choice
                           (add_rmw_edge
-                             (prefix events event_store' cont_succ
-                                phi_succ defacto
+                             (prefix events event_store' cont_succ phi_succ
+                                defacto
                              )
                              event_load'.label cond_expr event_store'.label
                           )
@@ -710,7 +710,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
-                @ ub_facts env
+              @ ub_facts env
             in
             let branch_event =
               { (Event.create Branch 0 ()) with cond = Some cond_val }
@@ -730,9 +730,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                     let then_structure = then_structure events in
                     let else_structure = else_structure events in
                       prefix events branch_event'
-                        (EventStructure.choice then_structure
-                           else_structure
-                        )
+                        (EventStructure.choice then_structure else_structure)
                         phi defacto
               )
             | None -> (
@@ -743,9 +741,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                     let then_structure = then_structure events in
                     let rest_structure = recurse rest env new_else_phi events in
                       prefix events branch_event'
-                        (EventStructure.choice then_structure
-                           rest_structure
-                        )
+                        (EventStructure.choice then_structure rest_structure)
                         phi defacto
               )
           )
@@ -757,7 +753,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
-                @ ub_facts env
+              @ ub_facts env
             in
 
             let cont = recurse rest env phi events in
@@ -776,7 +772,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
-                @ ub_facts env
+              @ ub_facts env
             in
 
             let cont = recurse rest env phi events in
@@ -795,7 +791,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
-                @ ub_facts env
+              @ ub_facts env
             in
 
             let cont = recurse rest env phi events in
@@ -811,7 +807,12 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                it. *)
             let size' = Expr.evaluate ~env:(Hashtbl.find_opt env) size in
             let evt =
-              { base_evt with rval = Some rval; loc = Some loc; wval = Some size' }
+              {
+                base_evt with
+                rval = Some rval;
+                loc = Some loc;
+                wval = Some size';
+              }
             in
             let event' : event = add_event events evt env annotation in
               Hashtbl.replace events.origin symbol event'.label;
@@ -819,7 +820,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
-                  @ ub_facts env
+                @ ub_facts env
               in
 
               let env' = Hashtbl.copy env in
@@ -838,7 +839,12 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             let base_evt : event = Event.create Malloc 0 () in
             let size' = Expr.evaluate ~env:(Hashtbl.find_opt env) size in
             let evt =
-              { base_evt with rval = Some rval; loc = Some loc; wval = Some size' }
+              {
+                base_evt with
+                rval = Some rval;
+                loc = Some loc;
+                wval = Some size';
+              }
             in
             let event' : event = add_event events evt env annotation in
               USet.add events.globals global |> ignore;
@@ -858,7 +864,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 List.map
                   (Expr.evaluate ~env:(Hashtbl.find_opt env))
                   events.defacto
-                  @ ub_facts env
+                @ ub_facts env
               in
 
               let cont = recurse rest env phi events in
@@ -875,7 +881,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               List.map
                 (Expr.evaluate ~env:(Hashtbl.find_opt env))
                 events.defacto
-                @ ub_facts env
+              @ ub_facts env
             in
 
             let cont = recurse rest env phi events in
@@ -962,8 +968,7 @@ let distinctness globals (structure : symbolic_event_structure) =
          *p and x be told apart, and so lets the two accesses be reordered. *)
       List.concat_map
         (fun loc ->
-          USet.values globals
-          |> List.map (fun g -> Expr.binop loc "!=" (EVar g))
+          USet.values globals |> List.map (fun g -> Expr.binop loc "!=" (EVar g))
         )
         locations
       @ distinct_pairs locations
@@ -1605,7 +1610,7 @@ end
     @return Updated context with interpretation results. *)
 let step_interpret lwt_ctx =
   let* ctx = lwt_ctx in
-  Progress.stage ~unit:"" "interpret" @@ fun () ->
+    Progress.stage ~unit:"" "interpret" @@ fun () ->
     Logs_safe.debug (fun m ->
         m "Interpreting program with %s loop semantics."
           ( match ctx.options.loop_semantics with

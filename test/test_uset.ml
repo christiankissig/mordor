@@ -75,8 +75,8 @@ module TestURelation = struct
 
   (** [transitive_closure] is the least transitive relation containing the
       relation: what adding [(a, d)] for every [(a, b)], [(b, d)] until nothing
-      changes gives. Random relations over up to 8 events, cycles and
-      self-loops included, seeded. *)
+      changes gives. Random relations over up to 8 events, cycles and self-loops
+      included, seeded. *)
   let test_transitive_closure_is_fixpoint () =
     let rng = Random.State.make [| 23 |] in
       for case = 1 to 500 do

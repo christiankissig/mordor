@@ -218,9 +218,9 @@ module Display = struct
       @return Unit wrapped in Lwt *)
   let print_results (lwt_ctx : mordor_ctx Lwt.t) =
     let* ctx = lwt_ctx in
-    (* The progress line shares the terminal; results go under it, and a
+      (* The progress line shares the terminal; results go under it, and a
        directory run counts the program done. *)
-    Progress.interrupt ();
+      Progress.interrupt ();
       Printf.printf "=== Verification Results ===\n";
       ( match ctx.structure with
       | None -> ()
@@ -254,7 +254,9 @@ module Display = struct
       );
       List.iter
         (fun (assertion, holds) ->
-          Printf.printf "  %s %s\n" (if holds then "holds:" else "FAILS:") assertion
+          Printf.printf "  %s %s\n"
+            (if holds then "holds:" else "FAILS:")
+            assertion
         )
         ctx.assertion_verdicts;
       ( match ctx.assertion_instances with
@@ -583,9 +585,9 @@ module Pipeline = struct
   (** Dump the program's justification set and how each was derived.
 
       The set is on the context as soon as elaboration has run, and the
-      derivation with it (see [Context.justification_derivations]); until
-      github #80 neither reached any output, so the only way to see them was a
-      debug log.
+      derivation with it (see [Context.justification_derivations]); until github
+      #80 neither reached any output, so the only way to see them was a debug
+      log.
 
       @param name Program name
       @param program Program source
@@ -594,48 +596,48 @@ module Pipeline = struct
   let export_justifications name program config =
     Logs.info (fun m -> m "Generating justifications for program %s." name);
     let context = make_program_context name program config in
-    let* ctx =
-      Lwt.return context
-      |> Parse.step_parse_litmus
-      |> Interpret.step_interpret
-      |> Elaborations.step_generate_justifications
-    in
-    let derivations =
-      Option.value ctx.justification_derivations ~default:[]
-    in
-      ( match config.Config.output_mode with
-      | Some Json ->
-          let json =
-            `Assoc
-              [
-                ("program", `String ctx.litmus_name);
-                ( "justifications",
-                  `List
-                    (List.map
-                       (fun (justification, derivation) ->
-                         `Assoc
-                           [
-                             ("justification", `String justification);
-                             ("derivation", `String derivation);
-                           ]
-                       )
-                       derivations
-                    )
-                );
-              ]
-          in
-            print_string (Yojson.Safe.pretty_to_string json)
-      | _ ->
-          Printf.printf "=== Justifications for %s (%d) ===\n" ctx.litmus_name
-            (List.length derivations);
-          List.iter
-            (fun (justification, derivation) ->
-              Printf.printf "%s\n    <- %s\n" justification derivation
-            )
-            derivations
-      );
-      print_newline ();
-      Lwt.return_unit
+      let* ctx =
+        Lwt.return context
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Elaborations.step_generate_justifications
+      in
+      let derivations =
+        Option.value ctx.justification_derivations ~default:[]
+      in
+        ( match config.Config.output_mode with
+        | Some Json ->
+            let json =
+              `Assoc
+                [
+                  ("program", `String ctx.litmus_name);
+                  ( "justifications",
+                    `List
+                      (List.map
+                         (fun (justification, derivation) ->
+                           `Assoc
+                             [
+                               ("justification", `String justification);
+                               ("derivation", `String derivation);
+                             ]
+                         )
+                         derivations
+                      )
+                  );
+                ]
+            in
+              print_string (Yojson.Safe.pretty_to_string json)
+        | _ ->
+            Printf.printf "=== Justifications for %s (%d) ===\n" ctx.litmus_name
+              (List.length derivations);
+            List.iter
+              (fun (justification, derivation) ->
+                Printf.printf "%s\n    <- %s\n" justification derivation
+              )
+              derivations
+        );
+        print_newline ();
+        Lwt.return_unit
 
   (** {2 Dependencies Command} *)
 
@@ -695,57 +697,60 @@ module Pipeline = struct
     (* A directory's programs, as one stage, each counted as it is reported. *)
     let programs f =
       if List.length tests > 1 then
-        Progress.stage ~total:(List.length tests) ~unit:"programs" "litmus tests"
-          f
+        Progress.stage ~total:(List.length tests) ~unit:"programs"
+          "litmus tests" f
       else f ()
     in
-    match config.Config.command with
-    | Config.Run -> programs (fun () -> run_tests tests config)
-    | Config.Parse -> programs (fun () -> parse_tests tests config)
-    | Config.Interpret -> programs (fun () -> interpret_tests tests config)
-    | Config.Episodicity ->
-        if List.length tests <> 1 then
-          failwith
-            "Episodicity command requires exactly one input program (use \
-             --single)";
-        let name, program = List.hd tests in
-          check_episodicity name program config
-    | Config.VisualEs ->
-        if List.length tests <> 1 then
-          failwith
-            "VisualEs command requires exactly one input program (use --single)";
-        let name, program = List.hd tests in
-          visualize_es name program config
-    | Config.Futures ->
-        if List.length tests <> 1 then
-          failwith
-            "Futures command requires exactly one input program (use --single)";
-        let name, program = List.hd tests in
-          compute_futures name program config
-    | Config.Dependencies ->
-        (* One document per program is one document too many for a consumer
+      match config.Config.command with
+      | Config.Run -> programs (fun () -> run_tests tests config)
+      | Config.Parse -> programs (fun () -> parse_tests tests config)
+      | Config.Interpret -> programs (fun () -> interpret_tests tests config)
+      | Config.Episodicity ->
+          if List.length tests <> 1 then
+            failwith
+              "Episodicity command requires exactly one input program (use \
+               --single)";
+          let name, program = List.hd tests in
+            check_episodicity name program config
+      | Config.VisualEs ->
+          if List.length tests <> 1 then
+            failwith
+              "VisualEs command requires exactly one input program (use \
+               --single)";
+          let name, program = List.hd tests in
+            visualize_es name program config
+      | Config.Futures ->
+          if List.length tests <> 1 then
+            failwith
+              "Futures command requires exactly one input program (use \
+               --single)";
+          let name, program = List.hd tests in
+            compute_futures name program config
+      | Config.Dependencies ->
+          (* One document per program is one document too many for a consumer
            reading a single JSON object, so json takes the same single-program
            restriction the executions command has. The text report labels each
            program, and is fine over a whole directory. *)
-        if config.Config.output_mode = Some Json && List.length tests <> 1 then
-          failwith
-            "Dependencies command with --output-mode json requires exactly one \
-             input program (use --single)";
-        programs (fun () -> dependencies_tests tests config)
-    | Config.Justifications ->
-        if List.length tests <> 1 then
-          failwith
-            "Justifications command requires exactly one input program (use \
-             --single)";
-        let name, program = List.hd tests in
-          export_justifications name program config
-    | Config.Executions ->
-        if List.length tests <> 1 then
-          failwith
-            "Executions command requires exactly one input program (use \
-             --single)";
-        let name, program = List.hd tests in
-          export_executions name program config
+          if config.Config.output_mode = Some Json && List.length tests <> 1
+          then
+            failwith
+              "Dependencies command with --output-mode json requires exactly \
+               one input program (use --single)";
+          programs (fun () -> dependencies_tests tests config)
+      | Config.Justifications ->
+          if List.length tests <> 1 then
+            failwith
+              "Justifications command requires exactly one input program (use \
+               --single)";
+          let name, program = List.hd tests in
+            export_justifications name program config
+      | Config.Executions ->
+          if List.length tests <> 1 then
+            failwith
+              "Executions command requires exactly one input program (use \
+               --single)";
+          let name, program = List.hd tests in
+            export_executions name program config
 end
 
 (** {1 Command Line Interface} *)
@@ -913,22 +918,23 @@ module CLI = struct
             if n < 1 then
               raise
                 (Arg.Bad
-                   (Printf.sprintf "--threads: expected a positive count, got %d"
-                      n
+                   (Printf.sprintf
+                      "--threads: expected a positive count, got %d" n
                    )
                 );
             let cap = Domain.recommended_domain_count () in
               if n > cap then (
                 Printf.eprintf
                   "mordor: --threads %d is more than the %d domains this \
-                   machine recommends; using %d\n%!"
+                   machine recommends; using %d\n\
+                   %!"
                   n cap cap;
                 state.num_threads <- cap
               )
               else state.num_threads <- n
           ),
-        " Number of threads for parallel execution (default: 1, capped at \
-         the machine's recommended domain count)"
+        " Number of threads for parallel execution (default: 1, capped at the \
+         machine's recommended domain count)"
       );
       (* Loop semantics - these are mutually exclusive *)
       ( "--symbolic-loop-semantics",
@@ -1072,11 +1078,11 @@ let main () =
     Runs the main function in the Lwt runtime. All async operations are handled
     by Lwt's cooperative threading. *)
 let () =
-  try Lwt_main.run (main ()) with
-  | Failure msg ->
-      (* [Failure] is how the pipeline reports a litmus test it will not run:
+  try Lwt_main.run (main ())
+  with Failure msg ->
+    (* [Failure] is how the pipeline reports a litmus test it will not run:
          an unknown memory model, a thread spawn under a loop, more than one
          assertion. These are the user's problem, not a crash, so print the
          message rather than a backtrace. *)
-      Printf.eprintf "Error: %s\n" msg;
-      exit 1
+    Printf.eprintf "Error: %s\n" msg;
+    exit 1

@@ -146,7 +146,9 @@ module ListMapCombinationBuilder = struct
       match keys with
       | [] -> f acc (List.rev indices) (List.rev combo)
       | key :: rest_keys ->
-          let alternatives = try Hashtbl.find listmap key with Not_found -> [] in
+          let alternatives =
+            try Hashtbl.find listmap key with Not_found -> []
+          in
             snd
               (List.fold_left
                  (fun (i, acc) value ->

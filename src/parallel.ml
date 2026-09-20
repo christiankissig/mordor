@@ -14,13 +14,12 @@
     waking a domain for. On seqlock-1, best of three: 1.27s to 1.03s at
     [--threads 4], 1.42s to 1.16s at [--threads 8].
 
-    It is worth being clear about what this does not fix. The futex traffic
-    that a parallel run spends most of its syscall time in barely moved, 14573
-    calls to 14776, so that time is contention on the shared caches -- the one
-    mutex in {!Forwarding}'s PPO cache and {!Solver}'s conjunction cache -- and
-    not task dispatch. Parallel runs are now about level with sequential rather
-    than slower than it; making them actually faster is that contention's to
-    give. *)
+    It is worth being clear about what this does not fix. The futex traffic that
+    a parallel run spends most of its syscall time in barely moved, 14573 calls
+    to 14776, so that time is contention on the shared caches -- the one mutex
+    in {!Forwarding}'s PPO cache and {!Solver}'s conjunction cache -- and not
+    task dispatch. Parallel runs are now about level with sequential rather than
+    slower than it; making them actually faster is that contention's to give. *)
 
 open Lwt.Syntax
 
@@ -31,8 +30,8 @@ open Lwt.Syntax
     between its queues, so the surplus chunks are what it balances with. *)
 let chunks_per_domain = 4
 
-(** [split ~size items] cuts [items] into consecutive runs of at most [size],
-    in order. *)
+(** [split ~size items] cuts [items] into consecutive runs of at most [size], in
+    order. *)
 let split ~size items =
   let rec take n taken rest =
     match rest with
@@ -54,26 +53,27 @@ let split ~size items =
     [f] must be pure enough to run on any domain: it may read shared state, but
     anything it mutates has to be its own or synchronised.
 
-    An item that raises takes its chunk down with it and the failure surfaces
-    on the returned promise, so the items after it in that chunk do not run.
+    An item that raises takes its chunk down with it and the failure surfaces on
+    the returned promise, so the items after it in that chunk do not run.
     Dispatching per item ran all of them before failing; either way the
     exception reaches the caller, and here it reaches it sooner. *)
+
 (** {1 What limits the speedup}
 
     Measured on seqlock-1, because it is worth knowing before anyone tunes this
     further.
 
     The share of a sequential run that happens inside these dispatches is high:
-    73% on seqlock-1, 93% on uaf-bug-extended, 96% on rcu-1. There is no
-    Amdahl ceiling worth worrying about at the level of stages, and no shortage
-    of items either -- seqlock-1 makes 31 dispatches carrying 2227 items, five
-    of them with more than 128.
+    73% on seqlock-1, 93% on uaf-bug-extended, 96% on rcu-1. There is no Amdahl
+    ceiling worth worrying about at the level of stages, and no shortage of
+    items either -- seqlock-1 makes 31 dispatches carrying 2227 items, five of
+    them with more than 128.
 
     The cost of those items is what does not divide. One dispatch of 66 items
     holds 0.738s of seqlock-1's 1.14s, and within it three items account for
     0.387s, 0.182s and 0.144s while the other 63 together take 0.005s. A
-    dispatch cannot finish before its largest item does, so that stage cannot
-    go below 0.387s however many domains are given to it, and the run cannot go
+    dispatch cannot finish before its largest item does, so that stage cannot go
+    below 0.387s however many domains are given to it, and the run cannot go
     below about 0.79s: a ceiling of roughly 1.45x, set by one item.
 
     That also explains the CPU. While one domain spends 0.387s on that item the
@@ -91,23 +91,21 @@ let split ~size items =
 
     It is short of items as well as skewed: freeze is dispatched with 66 items
     on seqlock-1 and 64 on lb-uaf, but 16 on uaf-bug-extended and 4 on rcu-1.
-    Four items cannot occupy eight domains however they are chunked. Chunking
-    by count, which is what {!map} does, can balance neither that nor an item
-    that dominates; both want a finer unit of work out of [Freeze.freeze]
-    itself. *)
+    Four items cannot occupy eight domains however they are chunked. Chunking by
+    count, which is what {!map} does, can balance neither that nor an item that
+    dominates; both want a finer unit of work out of [Freeze.freeze] itself. *)
 
 (** {1 The pool} *)
 
 (** The pool this process dispatches on, and the thread count it was built for.
 
-    A run used to set up a pool in [Elaborations.batch_elaborations] and
-    another in [Executions.calculate_dependencies], and tear each down again.
-    Spawning a domain costs a few milliseconds, so a run paid for
-    [2 * num_threads] of them before doing any work: on spinlock-1, which has
-    no work to speak of, that was the whole runtime, growing with the thread
-    count from 0.02s at one to 0.09s at eight. Over a directory of litmus
-    tests, which is one process and hundreds of programs, it was paid on every
-    one of them.
+    A run used to set up a pool in [Elaborations.batch_elaborations] and another
+    in [Executions.calculate_dependencies], and tear each down again. Spawning a
+    domain costs a few milliseconds, so a run paid for [2 * num_threads] of them
+    before doing any work: on spinlock-1, which has no work to speak of, that
+    was the whole runtime, growing with the thread count from 0.02s at one to
+    0.09s at eight. Over a directory of litmus tests, which is one process and
+    hundreds of programs, it was paid on every one of them.
 
     One pool, kept for the process, is spawned once however many programs the
     process analyses. It also removes the leak that {!Lwt.finalize} was
@@ -126,7 +124,9 @@ let acquire ~num_threads =
         match !pool_in_use with
         | Some (n, pool) when n = num_threads -> Some pool
         | existing ->
-            Option.iter (fun (_, pool) -> Lwt_domain.teardown_pool pool) existing;
+            Option.iter
+              (fun (_, pool) -> Lwt_domain.teardown_pool pool)
+              existing;
             let pool = Lwt_domain.setup_pool num_threads in
               pool_in_use := Some (num_threads, pool);
               Some pool
@@ -139,7 +139,9 @@ let acquire ~num_threads =
 let () =
   at_exit (fun () ->
       Mutex.protect pool_mutex (fun () ->
-          Option.iter (fun (_, pool) -> Lwt_domain.teardown_pool pool) !pool_in_use;
+          Option.iter
+            (fun (_, pool) -> Lwt_domain.teardown_pool pool)
+            !pool_in_use;
           pool_in_use := None
       )
   )
@@ -168,5 +170,5 @@ let map pool f items =
           )
           (split ~size items)
       in
-      let+ results = Lwt.all promises in
-        List.concat results
+        let+ results = Lwt.all promises in
+          List.concat results

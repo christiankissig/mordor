@@ -88,11 +88,11 @@ module Validation : sig
 
   val rhb_acyclic_delta : (int * int) uset -> drhb:(int * int) uset -> bool
 
-  (** [rf_closes_rhb_cycle ~succ ~rf (w, r)]: adding the read-from edge
-      [(w, r)] closes a cycle, [r] reaching [w] through [succ], the successors
-      in [dp ∪ ppo], and [rf], the edges already chosen as [(read, write)]
-      pairs. What {!rhb_acyclic} rejects of every completion, decided as each
-      edge is chosen. *)
+  (** [rf_closes_rhb_cycle ~succ ~rf (w, r)]: adding the read-from edge [(w, r)]
+      closes a cycle, [r] reaching [w] through [succ], the successors in
+      [dp ∪ ppo], and [rf], the edges already chosen as [(read, write)] pairs.
+      What {!rhb_acyclic} rejects of every completion, decided as each edge is
+      chosen. *)
   val rf_closes_rhb_cycle :
     succ:(int, int uset) Hashtbl.t -> rf:(int * int) list -> int * int -> bool
 end
@@ -153,15 +153,15 @@ module Freeze : sig
     expr list ->
     (int * int) list list
 
-  (** [fold_path_rf ... f init] folds [f] over the relations
-      {!compute_path_rf} lists, as each is built, depth-first and in a different
-      order: [f acc indices rf], where
+  (** [fold_path_rf ... f init] folds [f] over the relations {!compute_path_rf}
+      lists, as each is built, depth-first and in a different order:
+      [f acc indices rf], where
       {!Algorithms.ListMapCombinationBuilder.compare_build_order} on [indices]
       gives back the list's order. [prune] is asked for a check, when the
-      product of the reads' choices is at least {!coherence_prune_min}, and
-      the check drops a partial relation, given as [(read, write)] pairs, when
-      it holds of it. [shuffle] and [inspect] are
-      S10's: each read's alternatives in a random order, and a look at them. *)
+      product of the reads' choices is at least {!coherence_prune_min}, and the
+      check drops a partial relation, given as [(read, write)] pairs, when it
+      holds of it. [shuffle] and [inspect] are S10's: each read's alternatives
+      in a random order, and a look at them. *)
   val fold_path_rf :
     ?shuffle:Random.State.t ->
     ?inspect:((int, int list) Hashtbl.t -> int list -> unit) ->
@@ -179,47 +179,18 @@ module Freeze : sig
     'a ->
     'a
 
-  (** [freeze structure context path justs statex ~elided ~constraints
-       ~include_rf] freezes executions to dependency relations.
-
-      @param structure
-        The symbolic event structure containing events and metadata
-      @param context Event structure context with forwarding information
-      @param path
-        Information about the path through the event structure, including event
-        sequence and predicates
-      @param justs
-        List of justifications for symbolic reads, representing possible values
-        read from memory locations
-      @param statex
-        List of state predicates (expressions) that must hold for the execution
-        to be valid
-      @param elided
-        Set of event labels that are elided (not included in the final
-        execution)
-      @param constraints
-        List of additional constraints (expressions) that must hold for the
-        execution to be valid
-      @param include_rf
-        Whether to include the reads-from relation in the output (default is
-        typically true)
-      @param coherence_models
-        The models the executions will be asked about. A read-from relation
-        each of them rejects at one location is dropped while it is being
-        built (default: none, so nothing is).
-      @return Lwt promise resolving to a list of frozen execution candidates *)
   (** Whether {!freeze} drops, while building it, a read-from relation every
       model in [coherence_models] rejects at one location. On by default;
-      [MORDOR_RF_NO_COHERENCE_PRUNE] turns it off. Execution ids follow what
-      is kept, so with it on they depend on the models a run asks about. *)
+      [MORDOR_RF_NO_COHERENCE_PRUNE] turns it off. Execution ids follow what is
+      kept, so with it on they depend on the models a run asks about. *)
   val rf_prune_coherence : bool ref
 
   (** The product of the reads' choices from which {!fold_path_rf} asks for a
       coherence prune: [MORDOR_RF_COHERENCE_PRUNE_MIN], 10,000 by default. *)
   val coherence_prune_min : float ref
 
-  (** What {!enumerate} needs of a justification combination, and all it
-      reads. *)
+  (** What {!enumerate} needs of a justification combination, and all it reads.
+  *)
   type prepared
 
   (** [prepare structure context path justs statex ~elided ~constraints]
@@ -253,7 +224,21 @@ module Freeze : sig
       {!duplicate_key}. On by default; [MORDOR_FREEZE_NO_MERGE] turns it off. *)
   val merge_duplicates : bool ref
 
-  (** [freeze ...] is {!enumerate} of {!prepare}. *)
+  (** [freeze ...] is {!enumerate} of {!prepare}: the combination's valid
+      executions, or none where its predicates are unsatisfiable.
+
+      @param structure The symbolic event structure the path is through.
+      @param context The forwarding information of that structure.
+      @param path The path's events and predicates.
+      @param justs A justification for each of the path's symbolic reads.
+      @param statex The state predicates the execution holds under.
+      @param elided The labels elided by forwarding.
+      @param constraints Further predicates the execution holds under.
+      @param include_rf Whether to enumerate the reads-from relation at all.
+      @param coherence_models
+        The models the executions will be asked about. A read-from relation each
+        of them rejects at one location is dropped while it is being built
+        (default: none, so nothing is). *)
   val freeze :
     ?coherence_models:string list ->
     symbolic_event_structure ->

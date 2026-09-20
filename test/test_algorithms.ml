@@ -74,7 +74,8 @@ let test_linear_extensions () =
           (fun a ->
             List.filter_map
               (fun b ->
-                if a < b && Random.State.int rng 4 = 0 then Some (a, b) else None
+                if a < b && Random.State.int rng 4 = 0 then Some (a, b)
+                else None
               )
               elems
           )

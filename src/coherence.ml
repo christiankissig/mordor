@@ -78,20 +78,20 @@ module type MEMORY_MODEL = sig
 
   val check_thin_air : cache -> symbolic_execution -> bool
 
-  val uses_co : bool
   (** Whether [check_coherence] reads the coherence order it is given. A model
       whose axioms quantify over orders of their own -- a view per process, an
       arbitration per session -- does not, and the search then asks it once
       rather than once per candidate order. *)
+  val uses_co : bool
 
-  val orders_allocations : bool
   (** Whether allocations and deallocations are writes to the coherence order,
       as RC11z makes them. *)
+  val orders_allocations : bool
 
-  val check_program : symbolic_event_structure -> (unit, string) result
-  (** [Error reason] when the model cannot answer for this program at all. It
-      is asked once, before any execution is, and the pipeline fails with the
+  (** [Error reason] when the model cannot answer for this program at all. It is
+      asked once, before any execution is, and the pipeline fails with the
       reason rather than returning a verdict that is not the model's. *)
+  val check_program : symbolic_event_structure -> (unit, string) result
 
   val compute_dependencies :
     symbolic_execution ->
@@ -245,8 +245,8 @@ module ModelUtils = struct
     | Some ta, Some tb -> ta = tb
     | _ -> false
 
-  (** [int] and [ext] of a relation by thread identity, where
-      {!thread_internal} and {!thread_external} approximate them by [po]. *)
+  (** [int] and [ext] of a relation by thread identity, where {!thread_internal}
+      and {!thread_external} approximate them by [po]. *)
   let thread_internal_of thread_index x =
     USet.filter (fun (a, b) -> same_thread thread_index a b) x
 
@@ -413,10 +413,10 @@ module IMM : MEMORY_MODEL = struct
             ModelUtils.match_events events e Write None None None;
           ]
       in
-        let acc = USet.union p1 p2 in
-        let acc = USet.inplace_union ~into:acc p3 in
-        let acc = USet.inplace_union ~into:acc p4 in
-          USet.inplace_union ~into:acc p5
+      let acc = USet.union p1 p2 in
+      let acc = USet.inplace_union ~into:acc p3 in
+      let acc = USet.inplace_union ~into:acc p4 in
+        USet.inplace_union ~into:acc p5
     in
 
     let deps = execution.dp in
@@ -569,7 +569,6 @@ module IMM : MEMORY_MODEL = struct
     ]
 
   let check_coherence cache co = holds axioms (candidate cache co)
-
   let check_thin_air _ _ = true
   let uses_co = true
   let orders_allocations = false
@@ -641,9 +640,9 @@ end
 module RC11Config = struct
   (** Which release sequence [rs] a model synchronises over.
 
-      - [Rc11]: [\[W\];(sb ∩ loc)?;\[W_rlx⁺\];(rf;rmw)*], as herd's [rc11.cat].
-      - [Rc17]: [\[W_rlx⁺\];(rf;rmw)*], C++17's, where a later same-thread
-        relaxed store no longer continues the sequence ([rc17.cat]).
+      - [Rc11]: [[W];(sb ∩ loc)?;[W_rlx⁺];(rf;rmw)*], as herd's [rc11.cat].
+      - [Rc17]: [[W_rlx⁺];(rf;rmw)*], C++17's, where a later same-thread relaxed
+        store no longer continues the sequence ([rc17.cat]).
       - [Cpp11]: RC11's, less the pairs another thread's write intervenes in,
         [rs \ (coe;coe)] ([cpp11.cat]). It depends on the coherence order, so
         [hb] is built per candidate order rather than once per execution. *)
@@ -654,8 +653,8 @@ module RC11Config = struct
     name : string;
     release_sequence : release_sequence;
     allocations_are_writes : bool;
-        (** RC11z: allocations and deallocations are writes to the location
-            they allocate or free, ordered by [co] with the stores to it. *)
+        (** RC11z: allocations and deallocations are writes to the location they
+            allocate or free, ordered by [co] with the stores to it. *)
     no_thin_air : [ `Hb_rf | `Sb_rf ];
         (** [acyclic(hb ∪ rf)], as MoRDor's RC11 has always checked it, or the
             literal [acyclic(sb ∪ rf)] of Ou and Demsky's load-store ordering.
@@ -679,7 +678,12 @@ module RC11Config = struct
   (** Ou and Demsky's load-store ordering criterion, [acyclic(sb ∪ rf)], over
       the C/C++11 model it constrains. *)
   let od_lso =
-    { base with name = "od-lso"; release_sequence = Cpp11; no_thin_air = `Sb_rf }
+    {
+      base with
+      name = "od-lso";
+      release_sequence = Cpp11;
+      no_thin_air = `Sb_rf;
+    }
 end
 
 module RC11 (Config : sig
@@ -714,8 +718,8 @@ end) : MEMORY_MODEL = struct
         |> USet.union (ModelUtils.match_events events e Free None None None)
       else w
 
-  (** [build_hb ~co ...] is [hb = (sw ∪ sb)⁺]. [co] is asked only by the
-      [Cpp11] release sequence. *)
+  (** [build_hb ~co ...] is [hb = (sw ∪ sb)⁺]. [co] is asked only by the [Cpp11]
+      release sequence. *)
   let build_hb ?co ~events ~e ~sb ~rf ~rmw ~loc_restrict ~thread_index () =
     (* rs = [W];[po ∩ loc]?;[W_rlx⁺];(rf;rmw)⁺? *)
     let rs =
@@ -798,8 +802,7 @@ end) : MEMORY_MODEL = struct
       match Config.config.release_sequence with
       | Cpp11 -> None
       | Rc11 | Rc17 ->
-          Some
-            (build_hb ~events ~e ~sb ~rf ~rmw ~loc_restrict ~thread_index ())
+          Some (build_hb ~events ~e ~sb ~rf ~rmw ~loc_restrict ~thread_index ())
     in
 
     {
@@ -1002,7 +1005,8 @@ module SMRD : MEMORY_MODEL = struct
 
     (* hb = (ppo ∪ dp ∪ sw)⁺ *)
     let hb =
-      USet.inplace_union ~into:(USet.union ppo dp) sw |> URelation.transitive_closure
+      USet.inplace_union ~into:(USet.union ppo dp) sw
+      |> URelation.transitive_closure
     in
 
     { rf; rfi; hb; rmw }
@@ -1070,7 +1074,6 @@ module Undefined : MEMORY_MODEL = struct
     ]
 
   let check_coherence cache co = holds axioms (candidate cache co)
-
   let check_thin_air execution cache = true
   let uses_co = true
   let orders_allocations = false
@@ -1089,9 +1092,9 @@ end
     Two limits apply to all of them, and neither is theirs. A model here is a
     filter on sMRD's candidate executions, so a model weaker than sMRD's
     thin-air discipline cannot exhibit an out-of-thin-air execution sMRD never
-    generates. And the distributed consistency models are stated over
-    histories; reading one as a shared-memory predicate needs an encoding,
-    which each module's comment states. *)
+    generates. And the distributed consistency models are stated over histories;
+    reading one as a shared-memory predicate needs an encoding, which each
+    module's comment states. *)
 
 (** The vocabulary shared by the models below: one execution's events and
     relations, restricted to the execution. *)
@@ -1106,10 +1109,10 @@ module Vocab = struct
     rmw : (int * int) uset;
     reads : int uset;
     writes : int uset;
-        (** Stores, and the initial event when it is one: event [0] is the
-            write every uninitialised location reads from. *)
-    r : (int * int) uset;  (** [\[R\]] *)
-    w : (int * int) uset;  (** [\[W\]] *)
+        (** Stores, and the initial event when it is one: event [0] is the write
+            every uninitialised location reads from. *)
+    r : (int * int) uset;  (** [[R]] *)
+    w : (int * int) uset;  (** [[W]] *)
     loc_restrict : (int * int) uset -> (int * int) uset;
     same_loc : (int * int) uset;  (** same location, over reads and writes *)
     initial : int option;
@@ -1140,7 +1143,9 @@ module Vocab = struct
     let stores = typed Write in
     let writes = USet.clone stores in
       Option.iter (fun i -> USet.add writes i |> ignore) initial;
-      let po = USet.filter (fun (a, b) -> USet.mem e a && USet.mem e b) structure.po in
+      let po =
+        USet.filter (fun (a, b) -> USet.mem e a && USet.mem e b) structure.po
+      in
       let rf = USet.clone execution.rf in
       let mem = USet.union reads stores in
       let atomic =
@@ -1177,11 +1182,11 @@ module Vocab = struct
   (** [po] within a thread: program order as a process or session sees it. *)
   let po_int v = internal v v.po
 
-  (** [po] between threads: what a block's threads inherit from the code
-      before it, and what the code after it inherits from them. The
-      initialising stores are the case that matters. They are program order,
-      not another process's writes, and a view that could place [x := 0] after
-      a thread's [x := 1] would let a reader see 1 and then 0. *)
+  (** [po] between threads: what a block's threads inherit from the code before
+      it, and what the code after it inherits from them. The initialising stores
+      are the case that matters. They are program order, not another process's
+      writes, and a view that could place [x := 0] after a thread's [x := 1]
+      would let a reader see 1 and then 0. *)
   let fork_order v = external_ v v.po
 
   (** [co], with the initial event first at every location. The search puts it
@@ -1192,7 +1197,9 @@ module Vocab = struct
     | None -> co
     | Some i ->
         let co = USet.clone co in
-          USet.iter (fun w -> if w <> i then USet.add co (i, w) |> ignore) v.writes;
+          USet.iter
+            (fun w -> if w <> i then USet.add co (i, w) |> ignore)
+            v.writes;
           co
 
   (** [fr = (rf⁻¹;co) \ id]: from a read to the writes after the one it read. *)
@@ -1204,7 +1211,9 @@ module Vocab = struct
     || CoherenceChecks.rmw_atomicity ~rf:v.rf ~rfi:v.rfi ~rmw:v.rmw ~co ()
 
   let union rels =
-    List.fold_left (fun acc r -> USet.inplace_union ~into:acc r) (USet.create ()) rels
+    List.fold_left
+      (fun acc r -> USet.inplace_union ~into:acc r)
+      (USet.create ()) rels
 
   let fences v =
     USet.filter
@@ -1263,8 +1272,8 @@ end) : MEMORY_MODEL = struct
   let compute_dependencies _ _ _ _ _ = USet.create ()
 end
 
-(** Sequential consistency: [acyclic(po ∪ rf ∪ co ∪ fr)], with herd's
-    [sc.cat] atomicity for RMWs. *)
+(** Sequential consistency: [acyclic(po ∪ rf ∪ co ∪ fr)], with herd's [sc.cat]
+    atomicity for RMWs. *)
 module SCAxioms (N : sig
   val name : string
 end) =
@@ -1290,9 +1299,9 @@ end)
     - [acyclic(po-loc ∪ rf ∪ co ∪ fr)]
     - [rmw ∩ (fre;coe) = ∅], checked as the other models check atomicity
     - [acyclic(ppo ∪ rfe ∪ co ∪ fr)], with
-      [ppo = \[R\];po;\[R\] ∪ \[M\];po;\[W\] ∪ \[M\];po;\[F\];po;\[M\] ∪ implied]
-      and [implied = \[W\];po;\[R\];\[A\] ∪ \[A\];\[W\];po;\[R\]], the store buffer
-      flushed by an atomic instruction.
+      [ppo = [R];po;[R] ∪ [M];po;[W] ∪ [M];po;[F];po;[M] ∪ implied] and
+      [implied = [W];po;[R];[A] ∪ [A];[W];po;[R]], the store buffer flushed by
+      an atomic instruction.
 
     Every fence is a full fence: on x86 C11's fences compile to [mfence]. *)
 module TSOAxioms (N : sig
@@ -1358,15 +1367,15 @@ end)
 (** The release-acquire family, as Lahav and Boker tabulate it (TOPLAS 2022,
     Table 1) and the zoo's [ra.cat], [sra.cat] and [wra.cat] state it:
 
-    - [sw = \[W_rel⁺\];rf;\[R_acq⁺\]] and [hb = (po ∪ sw)⁺]; MoRDor's [po]
-      already puts the initialisation before every thread
+    - [sw = [W_rel⁺];rf;[R_acq⁺]] and [hb = (po ∪ sw)⁺]; MoRDor's [po] already
+      puts the initialisation before every thread
     - RA: [irreflexive hb], [irreflexive co;hb], [irreflexive co;hb;rf⁻¹],
       atomicity
     - SRA: RA with [acyclic(hb ∪ co)] for [irreflexive co;hb]
-    - WRA: [irreflexive hb], [irreflexive (hb ∩ loc);\[W\];hb;rf⁻¹], and no
-      two RMWs reading one write. [co] plays no part.
-    - CC, Bouajjani et al.'s weak causal consistency, which Lahav and Boker
-      show WRA equivalent to: WRA's axioms with every access synchronising,
+    - WRA: [irreflexive hb], [irreflexive (hb ∩ loc);[W];hb;rf⁻¹], and no two
+      RMWs reading one write. [co] plays no part.
+    - CC, Bouajjani et al.'s weak causal consistency, which Lahav and Boker show
+      WRA equivalent to: WRA's axioms with every access synchronising,
       [sw = rf]. CC's histories have no RMWs, so it has no atomicity axiom. *)
 module ReleaseAcquire (F : sig
   val name : string
@@ -1374,7 +1383,11 @@ module ReleaseAcquire (F : sig
 end) =
 Axiomatic (struct
   let name = F.name
-  let uses_co = match F.variant with `RA | `SRA -> true | `WRA | `CC -> false
+
+  let uses_co =
+    match F.variant with
+    | `RA | `SRA -> true
+    | `WRA | `CC -> false
 
   type derived = { hb : (int * int) uset; hb_ok : bool }
 
@@ -1388,8 +1401,8 @@ Axiomatic (struct
               ModelUtils.match_events v.events v.e Write (Some Release)
                 (Some ">") None;
               v.rf;
-              ModelUtils.match_events v.events v.e Read (Some Acquire) (Some ">")
-                None;
+              ModelUtils.match_events v.events v.e Read (Some Acquire)
+                (Some ">") None;
             ]
     in
     let hb = URelation.transitive_closure (Vocab.union [ v.po; sw ]) in
@@ -1445,8 +1458,8 @@ end)
 
 (** Per-process views, for the Steinke--Nutt lattice (JPDC 2004).
 
-    A process's view is a total order over every write of the execution and
-    that process's own reads, in which each read reads the latest write to its
+    A process's view is a total order over every write of the execution and that
+    process's own reads, in which each read reads the latest write to its
     location before it. The models differ in what every view must respect:
 
     - Local: the process's own program order, and nothing else
@@ -1456,13 +1469,13 @@ end)
     - PC: PRAM's, and one order of the writes to each location shared by every
       view -- that order is the candidate [co]
 
-    A process is a thread. The initial event is before everything in every
-    view, and so is program order between threads: the stores before a
-    parallel block precede its threads' events, as the threads' events precede
-    what follows the block. Nothing here makes an RMW atomic: the histories these models are
+    A process is a thread. The initial event is before everything in every view,
+    and so is program order between threads: the stores before a parallel block
+    precede its threads' events, as the threads' events precede what follows the
+    block. Nothing here makes an RMW atomic: the histories these models are
     stated over have none. Existence of a view is decided by search over the
-    order its events are placed in, memoised on the events placed and the
-    latest write at each location. *)
+    order its events are placed in, memoised on the events placed and the latest
+    write at each location. *)
 module Views (F : sig
   val name : string
   val variant : [ `Local | `Slow | `PRAM | `Causal | `PC ]
@@ -1530,8 +1543,8 @@ Axiomatic (struct
       if n > Sys.int_size - 1 then
         failwith
           (Printf.sprintf
-             "Memory model %s: a view of %d events is more than the search \
-              can represent."
+             "Memory model %s: a view of %d events is more than the search can \
+              represent."
              F.name n
           );
       let index = Hashtbl.create n in
@@ -1544,13 +1557,17 @@ Axiomatic (struct
         in
           (* the process's own program order *)
           USet.iter
-            (fun (a, b) -> if USet.mem own a && USet.mem own b then add_pred (a, b))
+            (fun (a, b) ->
+              if USet.mem own a && USet.mem own b then add_pred (a, b)
+            )
             v.po;
           USet.iter add_pred d.precedence;
           USet.iter add_pred co;
           let locs =
             Array.map
-              (fun id -> Hashtbl.find_opt d.loc_of id |> Option.value ~default:id)
+              (fun id ->
+                Hashtbl.find_opt d.loc_of id |> Option.value ~default:id
+              )
               nodes
           in
           let is_read = Array.map (fun id -> USet.mem v.reads id) nodes in
@@ -1562,8 +1579,7 @@ Axiomatic (struct
                 if not (USet.mem v.reads id) then -2
                 else
                   match
-                    USet.values v.rf
-                    |> List.find_opt (fun (_, r) -> r = id)
+                    USet.values v.rf |> List.find_opt (fun (_, r) -> r = id)
                   with
                   | Some (w, _) when Some w = v.initial -> -1
                   | Some (w, _) -> (
@@ -1584,7 +1600,8 @@ Axiomatic (struct
                 if Hashtbl.mem failed key then false
                 else
                   let enabled i =
-                    placed land (1 lsl i) = 0 && preds.(i) land placed = preds.(i)
+                    placed land (1 lsl i) = 0
+                    && preds.(i) land placed = preds.(i)
                   in
                   let latest_at l =
                     List.assoc_opt l latest |> Option.value ~default:(-1)
@@ -1637,15 +1654,15 @@ end)
 
     - [hbo = ((po ∩ loc) ∪ rf)⁺], a session's order at one location with what
       its reads saw, is acyclic. Program order between threads counts as a
-      session's own: a block's threads follow what came before it, and the
-      code after the join follows them.
+      session's own: a block's threads follow what came before it, and the code
+      after the join follows them.
     - POCA: [irreflexive co;hbo] -- arbitration respects it
     - return values: [irreflexive fr;hbo] -- nothing [hbo]-before a read is
       arbitrated after the write it read
 
-    [vis] is taken least, which is the choice every axiom here is weakest
-    under. Eventual consistency's liveness clause says nothing of a finite
-    execution. *)
+    [vis] is taken least, which is the choice every axiom here is weakest under.
+    Eventual consistency's liveness clause says nothing of a finite execution.
+*)
 module POCausal = Axiomatic (struct
   let name = "pocausal"
   let uses_co = true
@@ -1679,34 +1696,34 @@ module POCausal = Axiomatic (struct
     ]
 end)
 
-(** Terry et al.'s session guarantees (PDIS 1994), in Viotti and Vukolić's
-    form (ACM CSUR 2016) over an arbitration order and a visibility per read.
+(** Terry et al.'s session guarantees (PDIS 1994), in Viotti and Vukolić's form
+    (ACM CSUR 2016) over an arbitration order and a visibility per read.
 
     A session is a thread. Visibility is taken least, closed under what the
     guarantees demand:
 
-    [vis = (rf ∪ RYW) ; MR?], with [RYW = \[W\];po_int;\[R\]] and
-    [MR = po_int;\[R\]], each present when its guarantee is. MW and WFR
-    constrain arbitration and not visibility.
+    [vis = (rf ∪ RYW) ; MR?], with [RYW = [W];po_int;[R]] and [MR = po_int;[R]],
+    each present when its guarantee is. MW and WFR constrain arbitration and not
+    visibility.
 
     Each reader has its own arbitration: a replica applies other sessions'
     writes in an order of its own. It exists when these are acyclic, with the
     initial event first and writes in program order across a fork or join:
 
-    - return values: [((vis ∩ loc);\[R_p\];rf⁻¹) \ id], every write a read of
+    - return values: [((vis ∩ loc);[R_p];rf⁻¹) \ id], every write a read of
       session [p] saw is before the one it read
-    - MW: [\[W\];po_int;\[W\]], every session's writes in the order issued
-    - WFR: [vis;po_int;\[W\]], a session's writes after what it had read
+    - MW: [[W];po_int;[W]], every session's writes in the order issued
+    - WFR: [vis;po_int;[W]], a session's writes after what it had read
 
-    Arbitration is per reader rather than Viotti and Vukolić's one global
-    order. With one order, RYW forbids two threads each reading the other's
-    write after writing their own, which PRAM as Steinke and Nutt state it
-    allows, and the zoo's edge from PRAM to RYW would not hold.
+    Arbitration is per reader rather than Viotti and Vukolić's one global order.
+    With one order, RYW forbids two threads each reading the other's write after
+    writing their own, which PRAM as Steinke and Nutt state it allows, and the
+    zoo's edge from PRAM to RYW would not hold.
 
     A consequence worth knowing: MW alone forbids nothing. Least visibility
     gives a read only the write it read, so no reader has two writes of one
-    session to arbitrate between, and the order MW adds can close no cycle.
-    WFR can, since its edges run between sessions: load buffering orders each
+    session to arbitrate between, and the order MW adds can close no cycle. WFR
+    can, since its edges run between sessions: load buffering orders each
     thread's store after the other's. MW bites in conjunction, which is how
     Brzezinski et al. (2003) obtain PRAM from RYW, MR and MW; PRAM itself is
     implemented by [Views]. *)
@@ -1731,19 +1748,23 @@ Axiomatic (struct
     let mw = URelation.compose [ v.w; po_int; v.w ] in
     let vis =
       let seen =
-        if F.ryw then Vocab.union [ v.rf; URelation.compose [ v.w; po_int; v.r ] ]
+        if F.ryw then
+          Vocab.union [ v.rf; URelation.compose [ v.w; po_int; v.r ] ]
         else USet.clone v.rf
       in
         if F.mr then
           URelation.compose
-            [ seen; URelation.reflexive_closure v.reads (URelation.compose [ po_int; v.r ]) ]
+            [
+              seen;
+              URelation.reflexive_closure v.reads
+                (URelation.compose [ po_int; v.r ]);
+            ]
         else seen
     in
     let initial_first =
       match v.initial with
       | Some i ->
-          USet.filter (fun w -> w <> i) v.writes
-          |> USet.map (fun w -> (i, w))
+          USet.filter (fun w -> w <> i) v.writes |> USet.map (fun w -> (i, w))
       | None -> USet.create ()
     in
     let arbitration =
@@ -1752,8 +1773,9 @@ Axiomatic (struct
           initial_first;
           URelation.compose [ v.w; Vocab.fork_order v; v.w ];
           (if F.mw then mw else USet.create ());
-          (if F.wfr then URelation.compose [ vis; po_int; v.w ]
-           else USet.create ());
+          ( if F.wfr then URelation.compose [ vis; po_int; v.w ]
+            else USet.create ()
+          );
         ]
     in
     let vis_loc = USet.intersection vis v.same_loc in
@@ -1776,7 +1798,9 @@ Axiomatic (struct
           in
             ( t,
               URelation.compose [ of_reader; v.rfi ]
-              |> USet.filter (fun (w, s) -> w <> s) ))
+              |> USet.filter (fun (w, s) -> w <> s)
+            )
+        )
         readers
     in
       { arbitration; per_reader }
@@ -1801,8 +1825,8 @@ end)
 (** MRD: sMRD's axioms, on the programs where sMRD and MRD are one model.
 
     sMRD extends MRD with symbolic and dynamic memory: alias analysis, the
-    undefined-behaviour fold and allocation. On a program with none of those
-    -- every access to a named global, nothing allocated or freed -- the two
+    undefined-behaviour fold and allocation. On a program with none of those --
+    every access to a named global, nothing allocated or freed -- the two
     compute the same dependencies, and this is sMRD. On any other program sMRD
     admits executions MRD does not, and nothing here can tell which, so the
     model refuses the program. The undefined-behaviour fold is off under this
@@ -1890,7 +1914,7 @@ module ModelRegistry = struct
       let module M = RC11 (struct
         let config = config
       end) in
-        (module M : MEMORY_MODEL)
+      (module M : MEMORY_MODEL)
     in
       register "rc17" (fun () -> rc11_variant RC11Config.rc17);
       register "rc11z" (fun () -> rc11_variant RC11Config.rc11z);
@@ -1969,8 +1993,8 @@ module ModelRegistry = struct
           ("wfr", false, false, false, true);
         ];
 
-    register "undefined" (fun () -> (module Undefined : MEMORY_MODEL));
-    register "" (fun () -> (module Undefined : MEMORY_MODEL))
+      register "undefined" (fun () -> (module Undefined : MEMORY_MODEL));
+      register "" (fun () -> (module Undefined : MEMORY_MODEL))
 end
 
 (** Build location restrictions *)
@@ -1978,8 +2002,8 @@ let build_location_restriction structure execution eqlocs :
     (int * int) uset -> (int * int) uset =
  fun x -> USet.filter (fun (a, b) -> USet.mem eqlocs (a, b)) x
 
-(** [coherence_writes ~orders_allocations structure execution] is the events
-    of [execution] a coherence order orders: its writes, and with
+(** [coherence_writes ~orders_allocations structure execution] is the events of
+    [execution] a coherence order orders: its writes, and with
     [orders_allocations] its allocations and frees. *)
 let coherence_writes ~orders_allocations structure execution =
   USet.filter
@@ -1987,15 +2011,15 @@ let coherence_writes ~orders_allocations structure execution =
       try
         let event = Hashtbl.find structure.events ev_id in
           event.typ = Write
-          || orders_allocations && (event.typ = Malloc || event.typ = Free)
+          || (orders_allocations && (event.typ = Malloc || event.typ = Free))
       with Not_found -> false
     )
     execution.e
 
 (** [po_orders_per_location structure execution eqlocs writes] is, for each
-    location with more than one of [writes] ([eqlocs] deciding which share
-    one), the po-respecting orders of its writes as lists of consecutive
-    pairs, Init first where the execution reads from it, sorted. *)
+    location with more than one of [writes] ([eqlocs] deciding which share one),
+    the po-respecting orders of its writes as lists of consecutive pairs, Init
+    first where the execution reads from it, sorted. *)
 let po_orders_per_location structure execution eqlocs writes =
   let ({ po; _ } : symbolic_event_structure) = structure in
   (* Check if reads from init *)
@@ -2035,9 +2059,7 @@ let po_orders_per_location structure execution eqlocs writes =
           (* Extract po edges among these writes *)
           let po_edges_in_group =
             USet.filter
-              (fun (a, b) ->
-                List.mem a writes_list && List.mem b writes_list
-              )
+              (fun (a, b) -> List.mem a writes_list && List.mem b writes_list)
               po
           in
 
@@ -2096,117 +2118,122 @@ let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
   if USet.size execution.e = 0 then None
   else
     let writes = coherence_writes ~orders_allocations structure execution in
-    if (not uses_co) || USet.size writes < 2 then
-      (* 0 or 1 writes: the only possible coherence order is empty (co only
+      if (not uses_co) || USet.size writes < 2 then
+        (* 0 or 1 writes: the only possible coherence order is empty (co only
          orders two writes to the same location), but we must still run the
          model's coherence / thin-air axioms. Returning [true] unconditionally
          was unsound — e.g. a read reading from a write that happens-after it is
          a coherence violation even with co = ∅. *)
-      let empty = USet.create () in
-        if check_coherence cache empty then Some empty else None
-    else
-      let writes_per_location =
-        po_orders_per_location structure execution eqlocs writes
-      in
+        let empty = USet.create () in
+          if check_coherence cache empty then Some empty else None
+      else
+        let writes_per_location =
+          po_orders_per_location structure execution eqlocs writes
+        in
 
-      (* S6: a model whose violations only grow as co grows rejects every
+        (* S6: a model whose violations only grow as co grows rejects every
          completion of a partial order it rejects, so the subtree can go. The
          prune never accepts: an order is admitted only at a leaf, on the
          whole of it. *)
-      (* leaves_below.(i): how many complete orders extend a choice made for
+        (* leaves_below.(i): how many complete orders extend a choice made for
          every location from the last down to [i]. *)
-      let leaves_below =
-        lazy
-          (let n = List.length writes_per_location in
-           let a = Array.make (n + 1) 1 in
-             List.iteri
-               (fun i perms -> a.(i + 1) <- a.(i) * max 1 (List.length perms))
-               writes_per_location;
-             a
-          )
-      in
-      let rejected ~below vals =
-        !S6.prune
-        && (Lazy.force leaves_below).(below) >= !S6.min_leaves
-        && begin
-          incr S6.partial_checks;
-          let co = URelation.transitive_closure (USet.of_list vals) in
-            (not (check_coherence cache co))
-            &&
-            ( incr S6.pruned;
-              true
+        let leaves_below =
+          lazy
+            (let n = List.length writes_per_location in
+             let a = Array.make (n + 1) 1 in
+               List.iteri
+                 (fun i perms -> a.(i + 1) <- a.(i) * max 1 (List.length perms))
+                 writes_per_location;
+               a
             )
-        end
-      in
-      let rec choose_one i vals =
-        if i < 0 then (
-          incr S6.leaf_checks;
-          let co = URelation.transitive_closure (USet.of_list vals) in
-            if check_coherence cache co then (
-              Logs_safe.debug (fun m ->
-                  m "Coherence: execution %d admitted under co = {%s}"
-                    execution.id
-                    (USet.values co
-                    |> List.sort compare
-                    |> List.map (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
-                    |> String.concat "; "
-                    )
-              );
-              Some co
-            )
-            else None
-        )
-        else
-          let rec try_perms = function
-            | [] -> None
-            | p :: ps -> (
-                let vals' = vals @ p in
-                  if i > 0 && rejected ~below:i vals' then try_perms ps
-                  else
-                    match choose_one (i - 1) vals' with
-                    | Some co -> Some co
-                    | None -> try_perms ps
+        in
+        let rejected ~below vals =
+          !S6.prune
+          && (Lazy.force leaves_below).(below) >= !S6.min_leaves
+          && begin
+            incr S6.partial_checks;
+            let co = URelation.transitive_closure (USet.of_list vals) in
+              (not (check_coherence cache co))
+              &&
+              ( incr S6.pruned;
+                true
               )
-          in
-            try_perms (List.nth writes_per_location i)
-      in
-      (* S10: is the rejection local? The model's violations only grow with
+          end
+        in
+        let rec choose_one i vals =
+          if i < 0 then (
+            incr S6.leaf_checks;
+            let co = URelation.transitive_closure (USet.of_list vals) in
+              if check_coherence cache co then (
+                Logs_safe.debug (fun m ->
+                    m "Coherence: execution %d admitted under co = {%s}"
+                      execution.id
+                      (USet.values co
+                      |> List.sort compare
+                      |> List.map (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                      |> String.concat "; "
+                      )
+                );
+                Some co
+              )
+              else None
+          )
+          else
+            let rec try_perms = function
+              | [] -> None
+              | p :: ps -> (
+                  let vals' = vals @ p in
+                    if i > 0 && rejected ~below:i vals' then try_perms ps
+                    else
+                      match choose_one (i - 1) vals' with
+                      | Some co -> Some co
+                      | None -> try_perms ps
+                )
+            in
+              try_perms (List.nth writes_per_location i)
+        in
+          (* S10: is the rejection local? The model's violations only grow with
          co, so a location none of whose orders passes on its own, every other
          location unordered, rejects the execution whatever the rest. *)
-      if s10_stages then (
-        let passes vals =
-          check_coherence cache (URelation.transitive_closure (USet.of_list vals))
-        in
-        let empty_ok = passes [] in
-        let per_loc =
-          List.map
-            (fun perms ->
-              ( List.length perms,
-                List.length (List.filter passes perms)
-              ))
-            writes_per_location
-        in
-        let rejecting = List.filter (fun (_, ok) -> ok = 0) per_loc in
-          Mutex.protect s10_lock (fun () ->
-              Printf.eprintf
-                "S10 coherence-local id=%d empty_ok=%b locations=%d \
-                 rejecting=%d leaves=%d [%s]\n%!"
-                execution.id empty_ok (List.length per_loc)
-                (List.length rejecting)
-                (List.fold_left (fun a (n, _) -> a * max 1 n) 1 per_loc)
-                (String.concat " "
-                   (List.map (fun (n, ok) -> Printf.sprintf "%d/%d" ok n) per_loc))
-          )
-      );
-      let last = List.length writes_per_location - 1 in
-        if last >= 0 && rejected ~below:(last + 1) [] then None
-        else choose_one last []
+          ( if s10_stages then
+              let passes vals =
+                check_coherence cache
+                  (URelation.transitive_closure (USet.of_list vals))
+              in
+              let empty_ok = passes [] in
+              let per_loc =
+                List.map
+                  (fun perms ->
+                    (List.length perms, List.length (List.filter passes perms))
+                  )
+                  writes_per_location
+              in
+              let rejecting = List.filter (fun (_, ok) -> ok = 0) per_loc in
+                Mutex.protect s10_lock (fun () ->
+                    Printf.eprintf
+                      "S10 coherence-local id=%d empty_ok=%b locations=%d \
+                       rejecting=%d leaves=%d [%s]\n\
+                       %!"
+                      execution.id empty_ok (List.length per_loc)
+                      (List.length rejecting)
+                      (List.fold_left (fun a (n, _) -> a * max 1 n) 1 per_loc)
+                      (String.concat " "
+                         (List.map
+                            (fun (n, ok) -> Printf.sprintf "%d/%d" ok n)
+                            per_loc
+                         )
+                      )
+                )
+          );
+          let last = List.length writes_per_location - 1 in
+            if last >= 0 && rejected ~below:(last + 1) [] then None
+            else choose_one last []
 
 (** {1 Coherence Checking Entry Point} *)
 
-(** [location_equality structure execution] is the pairs of [execution]'s
-    events whose locations are equal under its predicates, [ex_p]: which writes
-    a coherence order orders together. *)
+(** [location_equality structure execution] is the pairs of [execution]'s events
+    whose locations are equal under its predicates, [ex_p]: which writes a
+    coherence order orders together. *)
 let location_equality structure execution =
   let eqlocs =
     let all_events = execution.e in
@@ -2233,13 +2260,12 @@ let location_equality structure execution =
         |> USet.filter (fun (a, b) -> a <= b)
         )
   in
-  USet.inplace_union ~into:eqlocs (URelation.inverse eqlocs)
+    USet.inplace_union ~into:eqlocs (URelation.inverse eqlocs)
 
 (** [rejected_by_one_location structure execution restrictions]: the model
-    rejects [execution] whatever the coherence order at other locations,
-    because its thin-air check fails, or because some location has no
-    po-respecting order its axioms accept with every other location left
-    unordered.
+    rejects [execution] whatever the coherence order at other locations, because
+    its thin-air check fails, or because some location has no po-respecting
+    order its axioms accept with every other location left unordered.
 
     Sound for a model whose violations only grow with co (S6: all but od-lso),
     rf and hb: every completion of a partial execution it holds of is rejected
@@ -2282,13 +2308,14 @@ let rejected_by_one_location ?eqlocs structure execution restrictions =
               )
               (po_orders_per_location structure execution eqlocs writes)
 
-(** [rejects_partial_executions name]: {!rejected_by_one_location} holding of
-    a partial execution means model [name] rejects every completion of it. It
-    does for a model whose violations only grow with co, rf and hb; S6 found
-    that of every registered model but od-lso, whose C++11 release sequence
-    subtracts [coe;coe]. *)
+(** [rejects_partial_executions name]: {!rejected_by_one_location} holding of a
+    partial execution means model [name] rejects every completion of it. It does
+    for a model whose violations only grow with co, rf and hb; S6 found that of
+    every registered model but od-lso, whose C++11 release sequence subtracts
+    [coe;coe]. *)
 let rejects_partial_executions name =
-  (not (String.equal name "od-lso")) && Option.is_some (ModelRegistry.lookup name)
+  (not (String.equal name "od-lso"))
+  && Option.is_some (ModelRegistry.lookup name)
 
 (** [check_for_coherence structure execution restrictions] is the coherence
     order under which the model admits [execution], or [None] if it does not.
@@ -2333,7 +2360,8 @@ let check_for_coherence structure execution restrictions =
             Mutex.protect s10_lock (fun () ->
                 Printf.eprintf
                   "S10 coherence-stages id=%d model=%s setup_ms=%.0f \
-                   thin_air=%b thin_air_ms=%.0f search_ms=%.0f admitted=%b\n%!"
+                   thin_air=%b thin_air_ms=%.0f search_ms=%.0f admitted=%b\n\
+                   %!"
                   execution.id restrictions.coherent
                   ((s10_t1 -. s10_t0) *. 1000.)
                   thin_air
@@ -2351,7 +2379,7 @@ let check_model_program structure name =
   | None -> ()
   | Some model -> (
       let module M = (val model : MEMORY_MODEL) in
-        match M.check_program structure with
-        | Ok () -> ()
-        | Error reason -> failwith reason
+      match M.check_program structure with
+      | Ok () -> ()
+      | Error reason -> failwith reason
     )

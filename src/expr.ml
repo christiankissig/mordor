@@ -841,8 +841,7 @@ end = struct
         compl_exprs2
     in
       (* final disjunction in conjunctive normal form *)
-      USet.inplace_union ~into:common_exprs cross_exprs
-      |> fun acc ->
+      USet.inplace_union ~into:common_exprs cross_exprs |> fun acc ->
       USet.inplace_union ~into:acc compl1_only2 |> fun acc ->
       USet.inplace_union ~into:acc only1_compl2
       |> USet.to_list
@@ -932,6 +931,7 @@ module ConjunctionCacheKey = struct
      keys, and the cache took 98% of the run. *)
   let hash exprs =
     List.fold_left (fun h e -> (h * 31) + hash_expr e) 17 exprs land max_int
+
   let equal exprs1 exprs2 = List.equal Expr.equal exprs1 exprs2
 end
 

@@ -1335,7 +1335,8 @@ module TestEventOrdering = struct
     let ppo_iter_sync = USet.create () in
 
     USet.inplace_union ~into:ppo_base (USet.of_list ppo_pairs) |> ignore;
-    USet.inplace_union ~into:ppo_iter_base (USet.of_list ppo_iter_pairs) |> ignore;
+    USet.inplace_union ~into:ppo_iter_base (USet.of_list ppo_iter_pairs)
+    |> ignore;
 
     {
       ppo_init;

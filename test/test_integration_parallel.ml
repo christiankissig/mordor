@@ -6,12 +6,12 @@
     domain-parallel path -- the pool, the chunked dispatch, and every cache a
     worker touches -- ran only when somebody ran it by hand.
 
-    What these tests pin down is the property that matters and that a race
-    would break: a parallel run must agree with the sequential one, exactly.
-    Analysis output is a set of executions and a verdict, and none of it is
-    supposed to depend on how the work was divided. A cache mutated without its
-    lock, or an entry read while another domain rewrites it, shows up here as
-    output that differs from [--threads 1] rather than as a crash.
+    What these tests pin down is the property that matters and that a race would
+    break: a parallel run must agree with the sequential one, exactly. Analysis
+    output is a set of executions and a verdict, and none of it is supposed to
+    depend on how the work was divided. A cache mutated without its lock, or an
+    entry read while another domain rewrites it, shows up here as output that
+    differs from [--threads 1] rather than as a crash.
 
     They compare stdout, not stderr, because stderr carries timestamped log
     lines that differ between any two runs. *)
@@ -53,8 +53,8 @@ let run_cli root args =
   in
     (status, String.concat "\n" (List.rev !lines))
 
-(** Programs picked to be quick and to still reach the parallel stages: each
-    has justifications to elaborate and executions to freeze and filter. *)
+(** Programs picked to be quick and to still reach the parallel stages: each has
+    justifications to elaborate and executions to freeze and filter. *)
 let programs = [ "lb.lit"; "lb-uaf.lit"; "spinlock-1.lit"; "uaf-bug.lit" ]
 
 (** [test_agrees_with_sequential name] checks that [name] analysed on a domain
@@ -91,7 +91,9 @@ let test_rejects_bad_thread_count () =
   | None ->
       Alcotest.fail "could not find dune-project above the working directory"
   | Some root ->
-      let program = Filename.concat root (Filename.concat "programs" "lb.lit") in
+      let program =
+        Filename.concat root (Filename.concat "programs" "lb.lit")
+      in
       let code, _ =
         run_cli root [ "run"; "--single"; program; "--threads"; "0" ]
       in

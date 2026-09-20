@@ -202,11 +202,11 @@ val check_for_coherence :
 
 (** [rejected_by_one_location structure execution restrictions]: the model
     rejects [execution] whatever the coherence order at other locations: its
-    thin-air check fails, or some location has no po-respecting order the
-    axioms accept with every other location unordered. For a model whose
-    violations only grow with co, rf and hb, it holds of every completion of a
-    partial execution it holds of, when the completion's predicates include the
-    partial one's. *)
+    thin-air check fails, or some location has no po-respecting order the axioms
+    accept with every other location unordered. For a model whose violations
+    only grow with co, rf and hb, it holds of every completion of a partial
+    execution it holds of, when the completion's predicates include the partial
+    one's. *)
 val rejected_by_one_location :
   ?eqlocs:(int * int) uset ->
   symbolic_event_structure ->
@@ -214,16 +214,16 @@ val rejected_by_one_location :
   restrictions ->
   bool
 
-(** [location_equality structure execution] is the pairs of [execution]'s
-    events whose locations its predicates entail equal. More predicates only
-    add pairs, so the relation of a partial execution's predicates can stand in
-    for a completion's in {!rejected_by_one_location}. *)
+(** [location_equality structure execution] is the pairs of [execution]'s events
+    whose locations its predicates entail equal. More predicates only add pairs,
+    so the relation of a partial execution's predicates can stand in for a
+    completion's in {!rejected_by_one_location}. *)
 val location_equality :
   symbolic_event_structure -> symbolic_execution -> (int * int) uset
 
 (** [rejects_partial_executions name]: {!rejected_by_one_location} holding of a
-    partial execution means model [name] rejects every completion of it. True
-    of every registered model but od-lso (S6). *)
+    partial execution means model [name] rejects every completion of it. True of
+    every registered model but od-lso (S6). *)
 val rejects_partial_executions : string -> bool
 
 (** [check_model_program structure name] fails, with the model's reason, when

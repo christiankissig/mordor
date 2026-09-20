@@ -118,9 +118,9 @@ let test_em_with_mode () =
     check bool "contains (1,1)" true (USet.mem result (1, 1));
     ()
 
-(** A "relaxed or stronger" match asks only the mode of the event's own type.
-    A nonatomic read leaves its write and fence modes at their [Relaxed]
-    default, and matching used to accept it on those. *)
+(** A "relaxed or stronger" match asks only the mode of the event's own type. A
+    nonatomic read leaves its write and fence modes at their [Relaxed] default,
+    and matching used to accept it on those. *)
 let test_em_relaxed_threshold_own_mode () =
   let events =
     make_events_table

@@ -244,9 +244,9 @@ module FreezeResult = struct
   (** [merge_justs kept fr] folds [fr]'s justifications into [kept]'s.
 
       Deduplication keeps one result and drops the rest, and the dropped ones
-      are the same execution reached from a different justification
-      combination. Keeping only the survivor's would under-report what
-      justified the execution. *)
+      are the same execution reached from a different justification combination.
+      Keeping only the survivor's would under-report what justified the
+      execution. *)
   let merge_justs (kept : t) (fr : t) =
     let seen = Hashtbl.create (List.length kept.justs) in
       List.iter
@@ -883,6 +883,7 @@ module S10 = struct
         model n full (show d_rf) (show d_p) (show_cut d_rf) (show_cut d_p)
         (cut 0) (!calls + 1)
         ((Unix.gettimeofday () -. t) *. 1000. /. float_of_int (!calls + 1))
+
   let hex s = String.sub (Digest.to_hex (Digest.string s)) 0 12
 
   (* Each read's alternatives: the writes of its own thread, of another
@@ -1246,7 +1247,9 @@ module Freeze = struct
               let*? () = (loc_eq, "RF locs not equal") in
               (* Check that writes are not shadowed for read-from, under the
                  same predicates the location test above just used. *)
-              let has_dslwb = dslwb ~exclude:elided ~state:preds structure w r in
+              let has_dslwb =
+                dslwb ~exclude:elided ~state:preds structure w r
+              in
                 let*? () = (not has_dslwb, "RF edge is shadowed (dslwb)") in
 
                 true
@@ -2174,63 +2177,62 @@ module Freeze = struct
           []
       )
       else
-
-      let instantiate =
-        instantiate_execution structure path dp ppo j_list path.p p_combined
-          elided
-      in
-      (* Each relation is instantiated as it is built, and only the executions
+        let instantiate =
+          instantiate_execution structure path dp ppo j_list path.p p_combined
+            elided
+        in
+        (* Each relation is instantiated as it is built, and only the executions
          kept: the relations were a list, and on rcu-2 one combination's ran to
          tens of GB before the first was instantiated. Sorted back into the
          order the list had, which the executions' ids follow. *)
-      let candidates = ref 0 in
-      let valid =
-        if include_rf && Option.is_some S10.samples then (
-          let k = Option.get S10.samples in
-          let seen = Hashtbl.create k in
-          let found = ref [] in
-          let seed = Hashtbl.hash (List.map (fun j -> j.w.label) j_list) in
-          let tries = ref 0 and over = ref 0 in
-          let alternatives = ref [] in
-            for i = 0 to (20 * k) - 1 do
-              if List.length !found < k then
-                try
-                  incr tries;
-                  fold_path_rf
-                    ~shuffle:(Random.State.make [| seed; i |])
-                    ?inspect:
-                      ( if i = 0 then
-                          Some
-                            (fun map reads ->
-                              alternatives :=
-                                List.map
-                                  (fun r ->
-                                    List.length
-                                      ( try Hashtbl.find map r
-                                        with Not_found -> []
-                                      )
-                                  )
-                                  reads;
-                              S10.report_alternatives structure p_combined map
-                                reads
-                            )
-                        else None
+        let candidates = ref 0 in
+        let valid =
+          if include_rf && Option.is_some S10.samples then (
+            let k = Option.get S10.samples in
+            let seen = Hashtbl.create k in
+            let found = ref [] in
+            let seed = Hashtbl.hash (List.map (fun j -> j.w.label) j_list) in
+            let tries = ref 0 and over = ref 0 in
+            let alternatives = ref [] in
+              for i = 0 to (20 * k) - 1 do
+                if List.length !found < k then
+                  try
+                    incr tries;
+                    fold_path_rf
+                      ~shuffle:(Random.State.make [| seed; i |])
+                      ?inspect:
+                        ( if i = 0 then
+                            Some
+                              (fun map reads ->
+                                alternatives :=
+                                  List.map
+                                    (fun r ->
+                                      List.length
+                                        ( try Hashtbl.find map r
+                                          with Not_found -> []
+                                        )
+                                    )
+                                    reads;
+                                S10.report_alternatives structure p_combined map
+                                  reads
+                              )
+                          else None
+                        )
+                      structure path
+                      ~scope:(path_scope structure path ~elided)
+                      ~elided ~constraints statex ppo dp p_combined
+                      (fun () _ fr ->
+                        incr candidates;
+                        match
+                          instantiate
+                            (List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
+                        with
+                        | Some result -> raise (S10.Found (fr, result))
+                        | None -> ()
                       )
-                    structure path
-                    ~scope:(path_scope structure path ~elided)
-                    ~elided ~constraints statex ppo dp p_combined
-                    (fun () _ fr ->
-                      incr candidates;
-                      match
-                        instantiate
-                          (List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
-                      with
-                      | Some result -> raise (S10.Found (fr, result))
-                      | None -> ()
-                    )
-                    ()
-                with
-                | S10.Over_budget -> incr over
+                      ()
+                  with
+                  | S10.Over_budget -> incr over
                   | S10.Found (fr, result) ->
                       let key = List.sort compare fr in
                         if not (Hashtbl.mem seen key) then (
@@ -2344,7 +2346,7 @@ module Freeze = struct
                 !candidates
           );
 
-        filtered_results
+          filtered_results
 
   (** [freeze structure path j_list statex ~elided ~constraints ~include_rf]
       creates executions from justifications.
@@ -2427,8 +2429,10 @@ let compute_justification_combinations compute structure paths ~scope
         )
         ~check_final:(fun combo ->
           JustValidation.check_final structure path combo
-          && (Progress.found ~unit:"combinations" 1;
-              true)
+          &&
+          ( Progress.found ~unit:"combinations" 1;
+            true
+          )
         )
         ()
     in
@@ -2441,7 +2445,8 @@ let compute_justification_combinations compute structure paths ~scope
   in
 
   let* results =
-    compute.run ~stage:("justification combinations", "paths")
+    compute.run
+      ~stage:("justification combinations", "paths")
       combine_justifications_for_path paths
   in
     List.flatten results |> Lwt.return
@@ -2483,9 +2488,8 @@ let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
       of [compare_models] that admit it -- executions [restrictions] rejects
       included.
     @param model_executions
-      Filled with, for each model of [compare_models], the executions it
-      admits, each a copy carrying the coherence order that model admitted it
-      under.
+      Filled with, for each model of [compare_models], the executions it admits,
+      each a copy carrying the coherence order that model admitted it under.
     @return Promise of list of valid coherent executions. *)
 let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     ?(compare_models = []) ?admissions ?model_executions
@@ -2587,8 +2591,10 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
           )
       in
         let* prepared =
-        compute.run ~stage:("prepare", "combinations") prepare_combo input_stream
-      in
+          compute.run
+            ~stage:("prepare", "combinations")
+            prepare_combo input_stream
+        in
 
         (* Combinations that differ only in their forwarding and elision edges
          freeze to the same results, and deduplication merged those results
@@ -2616,7 +2622,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                   (List.length prepared)
             );
           let* frozen =
-            compute.run ~stage:("freeze", "kinds of combination")
+            compute.run
+              ~stage:("freeze", "kinds of combination")
               (fun (key, p) ->
                 (key, Freeze.enumerate ~coherence_models structure p ~include_rf)
               )
@@ -3019,7 +3026,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                   List.iter
                     (fun (coherent, co) ->
                       let kept =
-                        Hashtbl.find_opt tbl coherent |> Option.value ~default:[]
+                        Hashtbl.find_opt tbl coherent
+                        |> Option.value ~default:[]
                       in
                         Hashtbl.replace tbl coherent
                           ({ exec with co = Some co } :: kept)
@@ -3032,7 +3040,9 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
           List.filter_map
             (fun (exec, co, admitted_by) ->
               Option.iter
-                (fun tbl -> Hashtbl.replace tbl exec.id (List.map fst admitted_by))
+                (fun tbl ->
+                  Hashtbl.replace tbl exec.id (List.map fst admitted_by)
+                )
                 admissions;
               match co with
               | Some co ->
@@ -3091,8 +3101,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     @return Promise of list of valid coherent executions. *)
 let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
     ?compare_models ?admissions ?model_executions
-    (structure : symbolic_event_structure)
-    (final_justs : justification list)
+    (structure : symbolic_event_structure) (final_justs : justification list)
     (fwd_es_ctx : Forwarding.event_structure_context) ~(exhaustive : bool)
     ~(restrictions : Coherence.restrictions) : symbolic_execution list Lwt.t =
   Logs_safe.debug (fun m -> m "Generating executions...");
@@ -3171,70 +3180,80 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
 let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
     =
   let* ctx = lwt_ctx in
-  Progress.stage ~unit:"" "executions" @@ fun () ->
-
-  (* Create restrictions for coherence checking *)
-  let coherence_restrictions = { Coherence.coherent = ctx.options.coherent } in
-    match (ctx.structure, ctx.justifications, ctx.num_threads) with
-    | Some structure, Some final_justs, num_threads ->
-        (* The models the assertions name, besides the primary, are checked
+    Progress.stage ~unit:"" "executions" @@ fun () ->
+    (* Create restrictions for coherence checking *)
+    let coherence_restrictions =
+      { Coherence.coherent = ctx.options.coherent }
+    in
+      match (ctx.structure, ctx.justifications, ctx.num_threads) with
+      | Some structure, Some final_justs, num_threads ->
+          (* The models the assertions name, besides the primary, are checked
            as compared models are: every execution, once enumerated. *)
-        let assertion_models =
-          List.filter (fun m -> m <> ctx.options.coherent) ctx.assertion_models
-          |> List.sort_uniq String.compare
-        in
-        let checked_models =
-          List.sort_uniq String.compare (ctx.compare_models @ assertion_models)
-        in
-        List.iter
-          (Coherence.check_model_program structure)
-          (ctx.options.coherent :: checked_models);
-        let* fwd_es_ctx =
-          match ctx.fwd_es_ctx with
-          | Some fwd_es_ctx -> Lwt.return fwd_es_ctx
-          | None ->
-              let fwd_es_ctx =
-                Forwarding.EventStructureContext.create structure
-              in
-                ctx.fwd_es_ctx <- Some fwd_es_ctx;
-                let* () = Forwarding.EventStructureContext.init fwd_es_ctx in
-                  Lwt.return fwd_es_ctx
-        in
-        let admissions =
-          match ctx.compare_models with
-          | [] -> None
-          | _ -> Some (Hashtbl.create 64)
-        in
-        let model_executions =
-          match assertion_models with
-          | [] -> None
-          | _ -> Some (Hashtbl.create 8)
-        in
-          let* executions =
-            calculate_dependencies ~num_threads ~compare_models:checked_models
-              ?admissions ?model_executions structure final_justs fwd_es_ctx
-              ~exhaustive:(ctx.options.exhaustive || false)
-              ~restrictions:coherence_restrictions
+          let assertion_models =
+            List.filter
+              (fun m -> m <> ctx.options.coherent)
+              ctx.assertion_models
+            |> List.sort_uniq String.compare
           in
-            (* Admissions report the models asked to be compared, not those
+          let checked_models =
+            List.sort_uniq String.compare (ctx.compare_models @ assertion_models)
+          in
+            List.iter
+              (Coherence.check_model_program structure)
+              (ctx.options.coherent :: checked_models);
+            let* fwd_es_ctx =
+              match ctx.fwd_es_ctx with
+              | Some fwd_es_ctx -> Lwt.return fwd_es_ctx
+              | None ->
+                  let fwd_es_ctx =
+                    Forwarding.EventStructureContext.create structure
+                  in
+                    ctx.fwd_es_ctx <- Some fwd_es_ctx;
+                    let* () =
+                      Forwarding.EventStructureContext.init fwd_es_ctx
+                    in
+                      Lwt.return fwd_es_ctx
+            in
+            let admissions =
+              match ctx.compare_models with
+              | [] -> None
+              | _ -> Some (Hashtbl.create 64)
+            in
+            let model_executions =
+              match assertion_models with
+              | [] -> None
+              | _ -> Some (Hashtbl.create 8)
+            in
+              let* executions =
+                calculate_dependencies ~num_threads
+                  ~compare_models:checked_models ?admissions ?model_executions
+                  structure final_justs fwd_es_ctx
+                  ~exhaustive:(ctx.options.exhaustive || false)
+                  ~restrictions:coherence_restrictions
+              in
+                (* Admissions report the models asked to be compared, not those
                checked only for an assertion. *)
-            Option.iter
-              (fun tbl ->
-                Hashtbl.filter_map_inplace
-                  (fun _ models ->
-                    Some (List.filter (fun m -> List.mem m ctx.compare_models) models)
+                Option.iter
+                  (fun tbl ->
+                    Hashtbl.filter_map_inplace
+                      (fun _ models ->
+                        Some
+                          (List.filter
+                             (fun m -> List.mem m ctx.compare_models)
+                             models
+                          )
+                      )
+                      tbl
                   )
-                  tbl
-              )
-              admissions;
-            ctx.executions <- Some (USet.of_list executions);
-            ctx.model_admissions <- admissions;
-            ctx.model_executions <- model_executions;
-            Lwt.return ctx
-    | _ ->
-        Logs_safe.err (fun m ->
-            m
-              "Program statements or litmus constraints not available, \
-               orjustifications not available"
-        );
-        Lwt.return ctx
+                  admissions;
+                ctx.executions <- Some (USet.of_list executions);
+                ctx.model_admissions <- admissions;
+                ctx.model_executions <- model_executions;
+                Lwt.return ctx
+      | _ ->
+          Logs_safe.err (fun m ->
+              m
+                "Program statements or litmus constraints not available, \
+                 orjustifications not available"
+          );
+          Lwt.return ctx

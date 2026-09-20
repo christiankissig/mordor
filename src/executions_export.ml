@@ -137,7 +137,11 @@ let execution_to_json (structure : symbolic_event_structure)
       rmw = USet.values exec.rmw;
       fwd = USet.values exec.fwd;
       we = USet.values exec.we;
-      co = (match exec.co with Some co -> USet.values co | None -> []);
+      co =
+        ( match exec.co with
+        | Some co -> USet.values co
+        | None -> []
+        );
     }
 
 (** Build the structured executions document from a Mordor context.
@@ -148,19 +152,15 @@ let build_executions_document (ctx : mordor_ctx) : json_executions option =
   | Some structure, Some executions ->
       let exec_list = USet.values executions in
       let exec_jsons = List.map (execution_to_json structure) exec_list in
-        let justifications =
-          ctx.justification_derivations
-          |> Option.value ~default:[]
-          |> List.map (fun (justification, derivation) ->
-              { justification; derivation }
-          )
-        in
-          Some
-            {
-              program = ctx.litmus_name;
-              justifications;
-              executions = exec_jsons;
-            }
+      let justifications =
+        ctx.justification_derivations
+        |> Option.value ~default:[]
+        |> List.map (fun (justification, derivation) ->
+            { justification; derivation }
+        )
+      in
+        Some
+          { program = ctx.litmus_name; justifications; executions = exec_jsons }
   | _ -> None
 
 (** Serialise the executions document to a JSON string.

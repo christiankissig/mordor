@@ -166,8 +166,8 @@ module EventStructureViz = struct
     undefined_behaviour : Yojson.Safe.t option; [@default None]
         (** undefined_behaviour Optional undefined behaviour information *)
     justifications : string list; [@default []]
-        (** The justifications this execution was frozen from, rendered
-            (github #3). Empty for an event structure, which has none. *)
+        (** The justifications this execution was frozen from, rendered (github
+            #3). Empty for an event structure, which has none. *)
     final_env : (string * string) list; [@default []]
         (** final_env The register environment the execution ends in, sorted by
             register name. Merged over the terminal events, so it is the
@@ -943,7 +943,7 @@ let step_send_event_structure_graph ~(send_data : string -> unit Lwt.t)
             preds = None;
             is_valid = None;
             undefined_behaviour = None;
-                      justifications = [];
+            justifications = [];
             final_env = [];
             other_models = [];
           }
@@ -971,10 +971,7 @@ module JustificationSet = struct
   type entry = { justification : string; derivation : string }
   [@@deriving yojson]
 
-  type message = {
-    type_ : string; [@key "type"]
-    justifications : entry list;
-  }
+  type message = { type_ : string; [@key "type"] justifications : entry list }
   [@@deriving yojson]
 end
 
@@ -988,18 +985,18 @@ let step_send_justification_set (lwt_ctx : mordor_ctx Lwt.t)
         JustificationSet.{ justification; derivation }
     )
   in
-  let* () =
-    send_data
-      (Yojson.Safe.to_string
-         (JustificationSet.message_to_yojson
-            { type_ = "justification_set"; justifications = entries }
-         )
-      )
-  in
-    Logs_safe.info (fun m ->
-        m "Justification set sent (%d)" (List.length entries)
-    );
-    Lwt.return ctx
+    let* () =
+      send_data
+        (Yojson.Safe.to_string
+           (JustificationSet.message_to_yojson
+              { type_ = "justification_set"; justifications = entries }
+           )
+        )
+    in
+      Logs_safe.info (fun m ->
+          m "Justification set sent (%d)" (List.length entries)
+      );
+      Lwt.return ctx
 
 (** How many executions each model admits, sent once per run when models are
     compared. The primary model's count is the number of executions sent; each
