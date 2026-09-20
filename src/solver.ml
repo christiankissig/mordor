@@ -298,14 +298,12 @@ let try_eval_constant = function
 
     @param solver The solver to check
     @return [Some true] if SAT, [Some false] if UNSAT, [None] if unknown *)
-let check solver =
+let trivially exprs =
   (* Quick check: any contradictions? *)
-  let has_contradiction =
-    List.exists Expr.is_contradiction solver.expressions
-  in
+  let has_contradiction = List.exists Expr.is_contradiction exprs in
     if has_contradiction then Some false
-    else if List.length solver.expressions = 0 then Some true
-    else if List.for_all Expr.is_tautology solver.expressions then Some true
+    else if List.length exprs = 0 then Some true
+    else if List.for_all Expr.is_tautology exprs then Some true
     else
       (* Try constant evaluation *)
       let all_constant_true =
@@ -316,63 +314,162 @@ let check solver =
             | Some false -> false
             | None -> true
           )
-          solver.expressions
+          exprs
       in
+        if not all_constant_true then Some false else None
 
-      if not all_constant_true then Some false
-      else
-        (* Convert to Z3 and solve *)
-        let z3_exprs =
-          List.map (expr_to_z3 solver.context) solver.expressions
-        in
+let check_asserted solver =
+  match Z3.Solver.check solver.context.solver [] with
+  | Z3.Solver.SATISFIABLE -> Some true
+  | Z3.Solver.UNSATISFIABLE -> Some false
+  | Z3.Solver.UNKNOWN -> None
 
-        try
-          Z3.Solver.add solver.context.solver z3_exprs;
-          let result = Z3.Solver.check solver.context.solver [] in
+let check solver =
+  match trivially solver.expressions with
+  | Some answer -> Some answer
+  | None -> (
+      (* Convert to Z3 and solve *)
+      let z3_exprs = List.map (expr_to_z3 solver.context) solver.expressions in
 
-          match result with
-          | Z3.Solver.SATISFIABLE -> Some true
-          | Z3.Solver.UNSATISFIABLE -> Some false
-          | Z3.Solver.UNKNOWN -> None
-        with e ->
-          Logs_safe.err (fun m ->
-              m "Error adding expressions to Z3 solver: %s\n %s"
-                (Printexc.to_string e)
-                (String.concat "\n" (List.map Expr.to_string solver.expressions))
-          );
-          failwith "Z3 solver error"
+      try
+        Z3.Solver.add solver.context.solver z3_exprs;
+        check_asserted solver
+      with e ->
+        Logs_safe.err (fun m ->
+            m "Error adding expressions to Z3 solver: %s\n %s"
+              (Printexc.to_string e)
+              (String.concat "\n" (List.map Expr.to_string solver.expressions))
+        );
+        failwith "Z3 solver error"
+    )
+
+(** {1 Scoped Solving} *)
+
+(** This domain's long-lived solver: a Z3 solver that queries are pushed onto
+    and popped off, and the variables they have named. *)
+let scoped_solver_key = Domain.DLS.new_key (fun () -> create [])
+
+let fresh_solvers = ref (Option.is_some (Sys.getenv_opt "MORDOR_FRESH_SOLVER"))
+
+let scoped f =
+  let solver = Domain.DLS.get scoped_solver_key in
+    ignore (push solver);
+    Fun.protect ~finally:(fun () -> ignore (pop solver)) (fun () -> f solver)
 
 (** Quick satisfiability check (uncached).
 
-    Creates a solver and immediately checks satisfiability.
+    Checks [exprs] in a scope of this domain's long-lived solver, or, with
+    {!fresh_solvers}, in a fresh one. Building a Z3 solver costs about as much
+    as the queries asked here take to solve, and a scope gives the same answers:
+    S7 (#19) replayed 1.13 million queries from real runs both ways.
 
     @param exprs Constraint expressions
     @return SAT/UNSAT/UNKNOWN result *)
 let quick_check exprs =
-  let solver = create exprs in
-    check solver
+  if !fresh_solvers then check (create exprs)
+  else scoped (fun solver -> check { solver with expressions = exprs })
 
-(** Cache for conjunction satisfiability results. *)
-let quick_check_cache = ConjunctionCache.create 256
+(** Cache for conjunction satisfiability results, in two generations.
+
+    Unbounded, it grew about 20MB a second on rcu-2: a read-from enumeration there
+    asks hundreds of thousands of conjunctions, most of them once, and an entry
+    holds its conjunction, several KB. New entries go to the young generation;
+    when that is full it becomes the old one and the old one is dropped, and an
+    entry hit in the old one moves back to the young. So what is asked again
+    stays, and at most twice {!generation_size} entries are held. *)
+module GenerationalCache = struct
+  type t = {
+    mutable young : bool option ConjunctionCache.t;
+    mutable old : bool option ConjunctionCache.t;
+  }
+
+  let generation_size = 1 lsl 16
+
+  let create () =
+    { young = ConjunctionCache.create 256; old = ConjunctionCache.create 1 }
+
+  let add cache exprs result =
+    if ConjunctionCache.length cache.young >= generation_size then (
+      cache.old <- cache.young;
+      cache.young <- ConjunctionCache.create 256
+    );
+    ConjunctionCache.replace cache.young exprs result
+
+  let find_opt cache exprs =
+    match ConjunctionCache.find_opt cache.young exprs with
+    | Some _ as hit -> hit
+    | None ->
+        let hit = ConjunctionCache.find_opt cache.old exprs in
+          Option.iter (add cache exprs) hit;
+          hit
+end
+
+let quick_check_cache = GenerationalCache.create ()
 
 let cache_mutex = Mutex.create ()
 
+(** S7 (#19): with [MORDOR_S7_TRACE] set to a path, every query to
+    {!quick_check_cached} is written there, in the order asked: where it was
+    asked from, whether the cache answered it, and the conjunction as the caller
+    built it, before sorting. [Marshal]led, one record per query. *)
+module S7 = struct
+  type record = { site : string; hit : bool; exprs : expr list }
+
+  let out =
+    Option.map
+      (fun path ->
+        let oc = open_out_bin path in
+          at_exit (fun () -> close_out oc);
+          oc
+      )
+      (Sys.getenv_opt "MORDOR_S7_TRACE")
+
+  (* The first caller in MoRDor's own code outside this file, by function
+     name: a closure passed to [Hashtbl.filteri] is reported as its caller. *)
+  let site () =
+    let slots =
+      Printexc.get_callstack 24
+      |> Printexc.backtrace_slots
+      |> Option.value ~default:[||]
+    in
+      Array.to_list slots
+      |> List.find_map (fun slot ->
+          match Printexc.Slot.location slot with
+          | Some loc
+            when String.starts_with ~prefix:"src/" loc.filename
+                 && not (String.ends_with ~suffix:"solver.ml" loc.filename) ->
+              Some (Option.value (Printexc.Slot.name slot) ~default:loc.filename)
+          | _ -> None
+      )
+      |> Option.value ~default:"?"
+
+  let record ~hit exprs =
+    Option.iter
+      (fun oc ->
+        let r = { site = site (); hit; exprs } in
+          Mutex.protect cache_mutex (fun () -> Marshal.to_channel oc r [])
+      )
+      out
+end
+
 let quick_check_cached exprs =
+  let asked = exprs in
   let exprs = USet.of_list exprs |> USet.values |> List.sort Expr.compare in
   (* The Z3 call stays outside the lock: a miss that two domains take at once
      costs a duplicated query, which is cheaper than holding the cache while
      solving. *)
   let cached_result =
     Mutex.protect cache_mutex (fun () ->
-        ConjunctionCache.find_opt quick_check_cache exprs
+        GenerationalCache.find_opt quick_check_cache exprs
     )
   in
+    S7.record ~hit:(Option.is_some cached_result) asked;
     match cached_result with
     | Some result -> result
     | None ->
         let result = quick_check exprs in
           Mutex.protect cache_mutex (fun () ->
-              ConjunctionCache.add quick_check_cache exprs result
+              GenerationalCache.add quick_check_cache exprs result
           );
           result
 

@@ -11,8 +11,12 @@ open Uset
     Pipeline stages use [compute_fn] to map a pure worker over a list of items.
 
     Use [sequential_compute] for single-threaded operation, or
-    [parallel_compute pool] to dispatch work across a domain pool. *)
-type compute_fn = { run : 'a 'b. ('a -> 'b) -> 'a list -> 'b list Lwt.t }
+    [parallel_compute pool] to dispatch work across a domain pool. With
+    [~stage:(name, unit)], the items are shown as a {!Progress} stage, counted
+    as [unit] as each is done. *)
+type compute_fn = {
+  run : 'a 'b. ?stage:string * string -> ('a -> 'b) -> 'a list -> 'b list Lwt.t;
+}
 
 (** [sequential_compute] runs items sequentially with no parallelism. *)
 val sequential_compute : compute_fn
@@ -25,6 +29,73 @@ val parallel_compute : Lwt_domain.pool -> compute_fn
 
     This module provides facilities for generating and analyzing symbolic
     executions. *)
+
+(** {2 Validation} *)
+
+(** The checks an execution's read-from relation is validated by, over explicit
+    inputs, as {!Freeze.freeze} asks them.
+
+    Each has a [_delta] form, shaped for a fragment merge that knows what it is
+    adding to relations already checked: the plain arguments are what was
+    checked, and the [d] arguments what is added. Those are stubs: they check
+    the union from scratch. *)
+module Validation : sig
+  (** [rf_respects_ppo ~rf ~ppo]: every rf edge [(w, r)] that is in [ppo] has
+      [r] among [w]'s successors in [ppo]. As stated this never fails. *)
+  val rf_respects_ppo : rf:(int * int) uset -> ppo:(int * int) uset -> bool
+
+  val rf_respects_ppo_delta :
+    rf:(int * int) uset ->
+    ppo:(int * int) uset ->
+    drf:(int * int) uset ->
+    dppo:(int * int) uset ->
+    bool
+
+  (** [rf_not_elided ~rf ~delta]: no read reads from a write that [delta], the
+      forwarding and write-elision edges, elides. *)
+  val rf_not_elided : rf:(int * int) uset -> delta:(int * int) uset -> bool
+
+  val rf_not_elided_delta :
+    rf:(int * int) uset ->
+    delta:(int * int) uset ->
+    drf:(int * int) uset ->
+    ddelta:(int * int) uset ->
+    bool
+
+  (** [rf_total ~rf ~reads ~delta]: every read of [reads] that [delta] does not
+      elide reads from something. *)
+  val rf_total :
+    rf:(int * int) uset -> reads:int uset -> delta:(int * int) uset -> bool
+
+  val rf_total_delta :
+    rf:(int * int) uset ->
+    reads:int uset ->
+    delta:(int * int) uset ->
+    drf:(int * int) uset ->
+    dreads:int uset ->
+    ddelta:(int * int) uset ->
+    bool
+
+  (** [rhb ~dp ~ppo ~rf] is reads-happen-before, [dp ∪ ppo ∪ rf]. *)
+  val rhb :
+    dp:(int * int) uset ->
+    ppo:(int * int) uset ->
+    rf:(int * int) uset ->
+    (int * int) uset
+
+  (** [rhb_acyclic rhb]: no event reads-happens-before itself. *)
+  val rhb_acyclic : (int * int) uset -> bool
+
+  val rhb_acyclic_delta : (int * int) uset -> drhb:(int * int) uset -> bool
+
+  (** [rf_closes_rhb_cycle ~succ ~rf (w, r)]: adding the read-from edge
+      [(w, r)] closes a cycle, [r] reaching [w] through [succ], the successors
+      in [dp ∪ ppo], and [rf], the edges already chosen as [(read, write)]
+      pairs. What {!rhb_acyclic} rejects of every completion, decided as each
+      edge is chosen. *)
+  val rf_closes_rhb_cycle :
+    succ:(int, int uset) Hashtbl.t -> rf:(int * int) list -> int * int -> bool
+end
 
 (** {2 Freeze Module} *)
 
@@ -55,6 +126,59 @@ module FreezeResult : sig
 end
 
 module Freeze : sig
+  (** What an enumeration of read-from relations ranges over: the reads it
+      chooses a write for, and the writes it chooses among. *)
+  type scope = { reads : int uset; writes : int uset }
+
+  (** [path_scope structure path ~elided] is the scope of a whole path: every
+      read of [path] that is not elided, and every write and free of it that is
+      not, with the initial write. *)
+  val path_scope :
+    symbolic_event_structure -> path_info -> elided:int uset -> scope
+
+  (** [compute_path_rf structure path ~scope ~elided ~constraints statex ppo dp
+       p_combined] is every read-from relation, as lists of [(read, write)]
+      pairs, that gives each read of [scope] one write of [scope] -- at a
+      location it can share, not po-after it and not shadowed -- consistent with
+      [p_combined]. {!freeze} asks for the scope of the whole path. *)
+  val compute_path_rf :
+    symbolic_event_structure ->
+    path_info ->
+    scope:scope ->
+    elided:int uset ->
+    constraints:expr list ->
+    expr list ->
+    (int * int) uset ->
+    (int * int) uset ->
+    expr list ->
+    (int * int) list list
+
+  (** [fold_path_rf ... f init] folds [f] over the relations
+      {!compute_path_rf} lists, as each is built, depth-first and in a different
+      order: [f acc indices rf], where
+      {!Algorithms.ListMapCombinationBuilder.compare_build_order} on [indices]
+      gives back the list's order. [prune] is asked for a check, when the
+      product of the reads' choices is at least {!coherence_prune_min}, and
+      the check drops a partial relation, given as [(read, write)] pairs, when
+      it holds of it. [shuffle] and [inspect] are
+      S10's: each read's alternatives in a random order, and a look at them. *)
+  val fold_path_rf :
+    ?shuffle:Random.State.t ->
+    ?inspect:((int, int list) Hashtbl.t -> int list -> unit) ->
+    ?prune:(unit -> ((int * int) list -> bool) option) ->
+    symbolic_event_structure ->
+    path_info ->
+    scope:scope ->
+    elided:int uset ->
+    constraints:expr list ->
+    expr list ->
+    (int * int) uset ->
+    (int * int) uset ->
+    expr list ->
+    ('a -> int list -> (int * int) list -> 'a) ->
+    'a ->
+    'a
+
   (** [freeze structure context path justs statex ~elided ~constraints
        ~include_rf] freezes executions to dependency relations.
 
@@ -79,8 +203,59 @@ module Freeze : sig
       @param include_rf
         Whether to include the reads-from relation in the output (default is
         typically true)
+      @param coherence_models
+        The models the executions will be asked about. A read-from relation
+        each of them rejects at one location is dropped while it is being
+        built (default: none, so nothing is).
       @return Lwt promise resolving to a list of frozen execution candidates *)
+  (** Whether {!freeze} drops, while building it, a read-from relation every
+      model in [coherence_models] rejects at one location. On by default;
+      [MORDOR_RF_NO_COHERENCE_PRUNE] turns it off. Execution ids follow what
+      is kept, so with it on they depend on the models a run asks about. *)
+  val rf_prune_coherence : bool ref
+
+  (** The product of the reads' choices from which {!fold_path_rf} asks for a
+      coherence prune: [MORDOR_RF_COHERENCE_PRUNE_MIN], 10,000 by default. *)
+  val coherence_prune_min : float ref
+
+  (** What {!enumerate} needs of a justification combination, and all it
+      reads. *)
+  type prepared
+
+  (** [prepare structure context path justs statex ~elided ~constraints]
+      computes a combination's dependencies, preserved program order and
+      predicates, or [None] if the predicates are unsatisfiable. *)
+  val prepare :
+    symbolic_event_structure ->
+    Forwarding.event_structure_context ->
+    path_info ->
+    justification list ->
+    expr list ->
+    elided:int USet.t ->
+    constraints:expr list ->
+    prepared option
+
+  (** [duplicate_key prepared] is equal for two combinations exactly when
+      everything {!enumerate} reads of them is, so that they freeze to the same
+      results. *)
+  val duplicate_key : prepared -> Digest.t
+
+  (** [enumerate structure prepared ~include_rf] is the combination's valid
+      executions. *)
+  val enumerate :
+    ?coherence_models:string list ->
+    symbolic_event_structure ->
+    prepared ->
+    include_rf:bool ->
+    FreezeResult.t list
+
+  (** Whether the freeze stage freezes each kind of combination once, by
+      {!duplicate_key}. On by default; [MORDOR_FREEZE_NO_MERGE] turns it off. *)
+  val merge_duplicates : bool ref
+
+  (** [freeze ...] is {!enumerate} of {!prepare}. *)
   val freeze :
+    ?coherence_models:string list ->
     symbolic_event_structure ->
     Forwarding.event_structure_context ->
     path_info ->
@@ -106,6 +281,25 @@ module Freeze : sig
   val freeze_dp :
     symbolic_event_structure -> justification -> (int * int) USet.t
 end
+
+(** {2 Justification Combinations} *)
+
+(** [justifiable structure path] is every event of [path] a justification is
+    chosen for: its writes, allocations and frees. *)
+val justifiable : symbolic_event_structure -> path_info -> int uset
+
+(** [compute_justification_combinations compute structure paths ~scope justmap]
+    is, for each of [paths], every combination of one justification from
+    [justmap] for each event of [scope path] that the combination checks accept,
+    paired with the path. {!generate_executions} asks for the scope
+    {!justifiable}. *)
+val compute_justification_combinations :
+  compute_fn ->
+  symbolic_event_structure ->
+  path_info list ->
+  scope:(path_info -> int uset) ->
+  (int, justification list) Hashtbl.t ->
+  (path_info * justification list) list Lwt.t
 
 (** {2 Execution Module} *)
 

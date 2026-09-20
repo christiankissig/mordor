@@ -8,7 +8,7 @@
     - Check satisfiability of constraint expressions
     - Extract concrete models (variable assignments)
     - Perform semantic equality checks
-    - Support incremental solving with push/pop
+    - Solve in scopes of a long-lived solver, one per domain
     - Cache results for performance
 
     @author Your Name
@@ -163,6 +163,30 @@ val add_assertions : solver -> expr list -> solver
       unknown/timeout *)
 val check : solver -> bool option
 
+(** [trivially exprs] is what {!check} decides of [exprs] without Z3: [false]
+    for a contradiction or a false constant comparison, [true] for none or only
+    tautologies, and [None] otherwise. *)
+val trivially : expr list -> bool option
+
+(** [check_asserted solver] asks Z3 about what has been asserted in [solver]'s
+    Z3 solver, by {!add_assertions} or earlier checks, and nothing else: no
+    syntactic shortcut and nothing added. *)
+val check_asserted : solver -> bool option
+
+(** {1 Scoped Solving} *)
+
+(** [scoped f] is [f] applied to this domain's long-lived solver, in a scope of
+    its own: whatever [f] asserts is retracted when [f] returns or raises. What
+    [f] finds asserted when it starts is what enclosing scopes asserted, which
+    at the outermost is nothing. A domain's solver is its own, so domains
+    solving at once do not share one. *)
+val scoped : (solver -> 'a) -> 'a
+
+(** Whether {!quick_check} builds a fresh Z3 solver per query instead of solving
+    in a scope of this domain's long-lived one. Off unless [MORDOR_FRESH_SOLVER]
+    is set. The answers are the same; the fresh solver is slower. *)
+val fresh_solvers : bool ref
+
 (** Quick satisfiability check without caching.
 
     Creates a solver and immediately checks satisfiability. Convenient for
@@ -184,6 +208,17 @@ val quick_check : expr list -> bool option
       [Some true] if satisfiable, [Some false] if unsatisfiable, [None] if
       unknown *)
 val quick_check_cached : expr list -> bool option
+
+(** S7 (#19): with [MORDOR_S7_TRACE] set to a path, every query to
+    {!quick_check_cached} is written there in the order asked, one [Marshal]led
+    [record] each. *)
+module S7 : sig
+  type record = {
+    site : string;  (** The function it was asked from. *)
+    hit : bool;  (** Whether the cache answered it. *)
+    exprs : expr list;  (** The conjunction as the caller built it. *)
+  }
+end
 
 (** Check if constraint expressions are satisfiable.
 

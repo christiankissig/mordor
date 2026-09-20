@@ -356,6 +356,13 @@ module USet : sig
 
   (** {2 Conversion} *)
 
+  (** Whether sets are iterated in the reverse of their usual order. A probe,
+      not a feature: the order a set is iterated in is its own, and nothing
+      MoRDor computes should depend on it. [golden_diff check-order] renders
+      every litmus test both ways and fails on any difference. Also set by
+      [MORDOR_USET_REVERSED]. *)
+  val reversed_iteration : bool ref
+
   (** [to_string string_of_val s] converts set to string.
 
       Uses mathematical set notation: \{1,2,3\} or ∅ for empty.
@@ -365,117 +372,335 @@ module USet : sig
       @return String representation. *)
   val to_string : ('a -> string) -> 'a t -> string
 end = struct
-  open Core
   open Lwt.Syntax
 
-  type 'a t = 'a Hash_set.Poly.t
+  (* A hash set of MoRDor's own, for two reasons.
 
-  let value_equality a b =
-    match (a, b) with
-    | x, y when phys_equal x y -> true
-    | x, y when Poly.(x = y) -> true
-    | _ -> false
+     Reading it writes nothing. Base's hash sets, which this used to be, clear
+     a [mutation_allowed] flag for the duration of every iteration and restore
+     the value they found, unsynchronised; two domains iterating one set --
+     the event structure's relations, a justification's -- could leave it
+     cleared for good. A parallel run then left [po], [read_events] and
+     [write_events] refusing every later [add], and changed the hash of any
+     record holding such a set, which reordered [ctx.executions] and changed
+     which execution an assertion reported as its witness.
 
-  let equal s1 s2 = Hash_set.equal s1 s2
-  let create () : 'a t = Hash_set.Poly.create ()
+     Elements are hashed and compared by content, sets included. A set that is
+     an element, or a field of one -- an execution's relations, a
+     justification's dependencies, a set of histories -- counts by its
+     members, not by how its table happens to be laid out. *)
 
-  let singleton x =
-    let s = Hash_set.Poly.create () in
-      Hash_set.add s x;
-      s
+  type marker = Marker
 
-  let of_list lst = Hash_set.Poly.of_list lst
-  let to_list s = Hash_set.to_list s
-  let mem s x = Hash_set.mem s x
+  (* Every set's first field is this, physically: it is how {!is_set} tells a
+     set from any other value. *)
+  let marker = ref Marker
+
+  type 'a bucket = Nil | Cons of { hash : int; elt : 'a; next : 'a bucket }
+
+  (* [tag] is read, through [Obj], by [is_set]. [sum] is the sum of the
+     members' hashes, kept as they come and go: it is the set's own hash. *)
+  type 'a t = {
+    tag : marker ref;
+    mutable size : int;
+    mutable sum : int;
+    mutable buckets : 'a bucket array;
+  }
+  [@@warning "-69"]
+
+  let is_set (v : Obj.t) =
+    Obj.is_block v
+    && Obj.tag v = 0
+    && Obj.size v = 4
+    && Obj.field v 0 == Obj.repr marker
+
+  let as_set (v : Obj.t) : Obj.t t = Obj.obj v
+
+  (* Tags whose blocks hold values this module can look into. *)
+  let opaque tag =
+    tag = Obj.closure_tag
+    || tag = Obj.infix_tag
+    || tag = Obj.object_tag
+    || tag = Obj.lazy_tag
+    || tag = Obj.cont_tag
+
+  let reversed_iteration =
+    ref (Option.is_some (Sys.getenv_opt "MORDOR_USET_REVERSED"))
+
+  let fold_buckets f s init =
+    let acc = ref init in
+    let each g a =
+      if !reversed_iteration then
+        for i = Array.length a - 1 downto 0 do
+          g a.(i)
+        done
+      else Array.iter g a
+    in
+      each
+        (fun b ->
+          let rec go = function
+            | Nil -> ()
+            | Cons { hash; elt; next } ->
+                acc := f !acc hash elt;
+                go next
+          in
+            go b
+        )
+        s.buckets;
+      !acc
+
+  (* A set's hash is the sum of its members': the same members, the same
+     hash, whatever order they went in. *)
+  let set_hash s = (s.sum + s.size) land max_int
+
+  (* A block with no block inside: a pair of labels, the common case. *)
+  let flat (v : Obj.t) =
+    let n = Obj.size v in
+    let rec go i = i = n || (Obj.is_int (Obj.field v i) && go (i + 1)) in
+      go 0
+
+  (* [hash v] follows [v] until it has seen [budget] values and blocks, as
+     the generic hash does, and hashes a set met on the way by its members. A flat block
+     goes to the generic hash directly. *)
+  let rec hash_obj budget (v : Obj.t) =
+    if Obj.is_int v then Hashtbl.hash v
+    else if is_set v then set_hash (as_set v)
+    else
+      let tag = Obj.tag v in
+        if tag >= Obj.no_scan_tag then Hashtbl.hash v
+        else if tag = Obj.forward_tag then hash_obj budget (Obj.field v 0)
+        else if opaque tag then tag
+        else if flat v then (
+          decr budget;
+          Hashtbl.hash v
+        )
+        else (
+          decr budget;
+          let n = Obj.size v in
+          let h = ref ((tag * 31) + n) in
+            for i = 0 to n - 1 do
+              if !budget > 0 then (
+                let f = Obj.field v i in
+                  if Obj.is_int f then decr budget;
+                  h := (!h * 31) + hash_obj budget f
+              )
+            done;
+            !h land max_int
+        )
+
+  let hash x = hash_obj (ref 16) (Obj.repr x)
+
+  (* Structural equality, with sets compared by their members. What the
+     structure cannot look into it compares physically. *)
+  let rec equal_obj (a : Obj.t) (b : Obj.t) =
+    a == b
+    || Obj.is_block a
+       && Obj.is_block b
+       &&
+       if is_set a || is_set b then
+         is_set a && is_set b && set_equal (as_set a) (as_set b)
+       else
+         let tag = Obj.tag a in
+           tag = Obj.tag b
+           &&
+           if tag >= Obj.no_scan_tag then compare a b = 0
+           else if flat a then flat b && compare a b = 0
+           else if tag = Obj.forward_tag then
+             equal_obj (Obj.field a 0) (Obj.field b 0)
+           else if opaque tag then false
+           else
+             let n = Obj.size a in
+               n = Obj.size b
+               &&
+               let rec go i =
+                 i = n
+                 || (equal_obj (Obj.field a i) (Obj.field b i) && go (i + 1))
+               in
+                 go 0
+
+  and mem_hashed : 'a. 'a t -> int -> 'a -> bool =
+   fun s h x ->
+    let rec go = function
+      | Nil -> false
+      | Cons { hash; elt; next } ->
+          (hash = h && equal_obj (Obj.repr elt) (Obj.repr x)) || go next
+    in
+      go s.buckets.(h mod Array.length s.buckets)
+
+  and set_equal : 'a. 'a t -> 'a t -> bool =
+   fun s1 s2 ->
+    s1.size = s2.size
+    && fold_buckets (fun ok h x -> ok && mem_hashed s2 h x) s1 true
+
+  let value_equality a b = equal_obj (Obj.repr a) (Obj.repr b)
+
+  let create_sized n =
+    { tag = marker; size = 0; sum = 0; buckets = Array.make (max 8 n) Nil }
+
+  let create () = create_sized 16
+  let mem s x = mem_hashed s (hash x) x
+  let size s = s.size
+  let is_empty s = s.size = 0
+
+  let resize s =
+    let buckets = Array.make (2 * Array.length s.buckets) Nil in
+    let n = Array.length buckets in
+      fold_buckets
+        (fun () hash elt ->
+          let i = hash mod n in
+            buckets.(i) <- Cons { hash; elt; next = buckets.(i) }
+        )
+        s ();
+      s.buckets <- buckets
+
+  let add_hashed s h x =
+    if not (mem_hashed s h x) then (
+      let i = h mod Array.length s.buckets in
+        s.buckets.(i) <- Cons { hash = h; elt = x; next = s.buckets.(i) };
+        s.size <- s.size + 1;
+        s.sum <- s.sum + h;
+        if s.size > 2 * Array.length s.buckets then resize s
+    )
 
   let add s x =
-    Hash_set.add s x;
+    add_hashed s (hash x) x;
     s
 
   let remove s x =
-    Hash_set.remove s x;
-    s
+    let h = hash x in
+    let i = h mod Array.length s.buckets in
+    let rec go = function
+      | Nil -> Nil
+      | Cons { hash; elt; next } ->
+          if hash = h && equal_obj (Obj.repr elt) (Obj.repr x) then (
+            s.size <- s.size - 1;
+            s.sum <- s.sum - h;
+            next
+          )
+          else Cons { hash; elt; next = go next }
+    in
+      s.buckets.(i) <- go s.buckets.(i);
+      s
 
-  let values s = Hash_set.to_list s
-  let size s = Hash_set.length s
-  let is_empty s = Hash_set.is_empty s
+  let fold f s init = fold_buckets (fun acc _ x -> f acc x) s init
+  let iter f s = fold_buckets (fun () _ x -> f x) s ()
+
+  (* Early exit without writing anything to the set. *)
+  exception Found
+
+  let exists f s =
+    try
+      iter (fun x -> if f x then raise_notrace Found) s;
+      false
+    with Found -> true
+
+  let for_all f s = not (exists (fun x -> not (f x)) s)
+
+  let find f s =
+    let found = ref None in
+      ( try
+          iter
+            (fun x ->
+              if f x then (
+                found := Some x;
+                raise_notrace Found
+              )
+            )
+            s
+        with Found -> ()
+      );
+      !found
+
+  let values s = List.rev (fold (fun acc x -> x :: acc) s [])
+  let to_list = values
+
+  let of_list l =
+    let s = create_sized (List.length l) in
+      List.iter (fun x -> add_hashed s (hash x) x) l;
+      s
+
+  let singleton x = of_list [ x ]
 
   let clear s =
-    Hash_set.clear s;
+    s.size <- 0;
+    s.sum <- 0;
+    s.buckets <- Array.make 16 Nil;
     s
 
-  let clone s = Hash_set.copy s
-  let union s1 s2 = Hash_set.union s1 s2
+  let clone s =
+    { tag = marker; size = s.size; sum = s.sum; buckets = Array.copy s.buckets }
 
-  let flatten ss =
-    let result = Hash_set.Poly.create () in
-      Hash_set.iter ss ~f:(fun s ->
-          Hash_set.iter s ~f:(fun x -> Hash_set.add result x)
-      );
-      result
+  let equal s1 s2 = set_equal s1 s2
 
-  (* [~into] is labelled because the unlabelled form was a trap. Written in
-     pipeline position, [x |> inplace_union y] passes [y] as the mutated set,
-     and the accumulator reads like the thing being built up while being the
-     thing consumed. That folded eco into a shared cache field in IMM's
-     coherence check and made the search order-dependent (github #88); the same
-     shape had already been found and fixed once in RC11's psc_base. With the
-     label, the pipeline form does not typecheck and the mutated set is named
-     at every call. *)
-  let inplace_union ~into s2 =
-    Hash_set.iter s2 ~f:(fun x -> Hash_set.add into x);
+  (* Keeping the hashes the members already have. *)
+  let into_hashed into s =
+    fold_buckets (fun () h x -> add_hashed into h x) s ();
     into
 
-  let intersection s1 s2 = Hash_set.inter s1 s2
-  let set_minus s1 s2 = Hash_set.diff s1 s2
+  let inplace_union ~into s2 = into_hashed into s2
+
+  let union s1 s2 =
+    into_hashed (into_hashed (create_sized (s1.size + s2.size)) s1) s2
+
+  let flatten ss =
+    let result = create () in
+      iter (fun s -> ignore (into_hashed result s)) ss;
+      result
+
+  let filter_hashed keep s =
+    let result = create_sized s.size in
+      fold_buckets (fun () h x -> if keep h x then add_hashed result h x) s ();
+      result
+
+  let intersection s1 s2 =
+    let small, large = if s1.size <= s2.size then (s1, s2) else (s2, s1) in
+      filter_hashed (fun h x -> mem_hashed large h x) small
+
+  let set_minus s1 s2 = filter_hashed (fun h x -> not (mem_hashed s2 h x)) s1
+  let filter f s = filter_hashed (fun _ x -> f x) s
 
   let inplace_set_minus s1 s2 =
-    Hash_set.iter s2 ~f:(fun x -> Hash_set.remove s1 x);
+    iter (fun x -> ignore (remove s1 x)) s2;
     s1
 
-  let difference s1 s2 =
-    let a = Hash_set.copy s1 in
-    let b = Hash_set.copy s2 in
-      Hash_set.iter s1 ~f:(fun x -> Hash_set.remove b x);
-      Hash_set.iter s2 ~f:(fun x -> Hash_set.remove a x);
-      Hash_set.iter b ~f:(fun x -> Hash_set.add a x);
-      a
+  let difference s1 s2 = union (set_minus s1 s2) (set_minus s2 s1)
 
   let map f s =
-    let result = Hash_set.Poly.create () in
-      Hash_set.iter s ~f:(fun v -> Hash_set.add result (f v));
+    let result = create_sized s.size in
+      iter (fun x -> ignore (add result (f x))) s;
       result
 
   let imap f s =
-    let pairs = Hash_set.to_list s in
-      Hash_set.clear s;
-      List.iter pairs ~f:(fun v -> Hash_set.add s (f v));
+    let vals = values s in
+      ignore (clear s);
+      List.iter (fun x -> ignore (add s (f x))) vals;
       s
 
-  let filter f s = Hash_set.filter s ~f
-
   let filter_map f s =
-    let result = Hash_set.Poly.create () in
-      Hash_set.iter s ~f:(fun v ->
-          match f v with
-          | Some v' -> Hash_set.add result v'
+    let result = create_sized s.size in
+      iter
+        (fun x ->
+          match f x with
+          | Some y -> ignore (add result y)
           | None -> ()
-      );
+        )
+        s;
       result
 
   let ifilter f s =
-    Hash_set.filter_inplace s ~f;
-    s
+    let kept = filter f s in
+      s.size <- kept.size;
+      s.sum <- kept.sum;
+      s.buckets <- kept.buckets;
+      s
 
   let async_map f s =
-    let+ results = Lwt_list.map_p f (Hash_set.to_list s) in
-      Hash_set.Poly.of_list results
+    let+ results = Lwt_list.map_p f (values s) in
+      of_list results
 
   let async_filter f s =
-    let* vals = Lwt_list.filter_p f (Hash_set.to_list s) in
-      Lwt.return (Hash_set.Poly.of_list vals)
-
-  let iter f s = Hash_set.iter s ~f
+    let* vals = Lwt_list.filter_p f (values s) in
+      Lwt.return (of_list vals)
 
   let iter_async f s =
     let rec aux = function
@@ -484,39 +709,33 @@ end = struct
           let* () = f v in
             aux rest
     in
-      aux (Hash_set.to_list s)
-
-  let fold f s init = Hash_set.fold s ~init ~f
-  let for_all f s = Hash_set.for_all s ~f
-  let exists f s = Hash_set.exists s ~f
-  let find f s = Hash_set.find s ~f
+      aux (values s)
 
   let async_for_all f s =
-    let vals = Hash_set.to_list s in
     let rec check = function
       | [] -> Lwt.return_true
       | v :: rest ->
           let* result = f v in
             if result then check rest else Lwt.return_false
     in
-      check vals
+      check (values s)
 
   let async_exists f s =
-    let vals = Hash_set.to_list s in
     let rec check = function
       | [] -> Lwt.return_false
       | v :: rest ->
           let* result = f v in
             if result then Lwt.return_true else check rest
     in
-      check vals
+      check (values s)
 
-  let subset s1 s2 = for_all (fun v -> mem s2 v) s1
+  let subset s1 s2 =
+    s1.size <= s2.size
+    && fold_buckets (fun ok h x -> ok && mem_hashed s2 h x) s1 true
 
   let to_string string_of_val s =
-    let vals = values s |> fun s -> List.map s ~f:string_of_val in
-      if List.is_empty vals then "∅"
-      else Printf.sprintf "{%s}" (String.concat ~sep:"," vals)
+    let vals = List.map string_of_val (values s) in
+      if vals = [] then "∅" else Printf.sprintf "{%s}" (String.concat "," vals)
 end
 
 (** {1 Binary Relations} *)
@@ -627,10 +846,19 @@ module URelation : sig
 
   (** {2 Properties} *)
 
+  (** [restrict s rel] is [rel ∩ (s × s)], the pairs of [rel] with both ends in
+      [s], without building [s × s].
+
+      @param s The set.
+      @param rel The relation.
+      @return The pairs of [rel] within [s]. *)
+  val restrict : 'a USet.t -> 'a t -> 'a t
+
   (** [acyclic rel] checks if relation is acyclic.
 
       A relation is acyclic if its transitive closure contains no reflexive
-      edges (no element reaches itself).
+      edges (no element reaches itself). Decided by a depth-first search, in
+      time linear in the size of the relation.
 
       @param rel The relation.
       @return [true] if acyclic. *)
@@ -693,8 +921,9 @@ module URelation : sig
   (** [to_map rel] converts relation to map.
 
       Creates hash table mapping each first element to its corresponding second
-      element. If multiple pairs share the same first element, one is chosen
-      arbitrarily.
+      element. If multiple pairs share the same first element, the least second
+      element is chosen: it used to be whichever the set's iteration met last,
+      so the answer depended on how the relation's table was laid out.
 
       @param rel The relation.
       @return Hash table from first to second elements. *)
@@ -737,7 +966,13 @@ end = struct
 
   let to_map rel =
     let map = Hashtbl.create (USet.size rel) in
-      USet.iter (fun (f, t) -> Hashtbl.replace map f t) rel;
+      USet.iter
+        (fun (f, t) ->
+          match Hashtbl.find_opt map f with
+          | Some t' when compare t' t <= 0 -> ()
+          | _ -> Hashtbl.replace map f t
+        )
+        rel;
       map
 
   let compose (rels : 'a t list) : 'a t =
@@ -792,27 +1027,38 @@ end = struct
   let identity s = USet.map (fun x -> (x, x)) s
   let inverse s = USet.map (fun (a, b) -> (b, a)) s
 
+  (* By a depth-first search from each element with a successor: [(a, b)]
+     for every [b] it reaches. This used to add [(a, d)] for every [(a, b)],
+     [(b, d)] until nothing changed, comparing every pair with every pair each
+     round: on rcu-2, a coherence model's hb of 1,500 pairs took tens of
+     milliseconds, and it is closed once per candidate order. *)
   let transitive_closure s =
-    let result = USet.clone s in
-    let changed = ref true in
-      while !changed do
-        changed := false;
-        let vals = USet.to_list result in
-          List.iter
-            (fun (a, b) ->
+    let successors = Hashtbl.create (USet.size s) in
+      USet.iter
+        (fun (a, b) ->
+          Hashtbl.replace successors a
+            (b :: (Hashtbl.find_opt successors a |> Option.value ~default:[]))
+        )
+        s;
+      let result = USet.clone s in
+        Hashtbl.iter
+          (fun a _ ->
+            let reached = Hashtbl.create 16 in
+            let rec visit x =
               List.iter
-                (fun (c, d) ->
-                  if b = c && not (USet.mem result (a, d)) then (
-                    USet.add result (a, d) |> ignore;
-                    changed := true;
-                    ()
+                (fun y ->
+                  if not (Hashtbl.mem reached y) then (
+                    Hashtbl.replace reached y ();
+                    ignore (USet.add result (a, y));
+                    visit y
                   )
                 )
-                vals
-            )
-            vals
-      done;
-      result
+                (Hashtbl.find_opt successors x |> Option.value ~default:[])
+            in
+              visit a
+          )
+          successors;
+        result
 
   let transitive_reduction rel =
     USet.filter
@@ -851,10 +1097,72 @@ end = struct
   let reflexive_closure domain s = identity domain |> USet.union s
   let symmetric_closure s = inverse s |> USet.union s
 
+  (* S5 (#17): with [MORDOR_S5_TRACE] set to a path, every relation asked
+     [acyclic] about is written there, with the function that asked:
+     [Marshal]led [(site, pairs)], one per call. The relations are over event
+     labels. *)
+  let s5_trace =
+    Option.map
+      (fun path ->
+        let oc = open_out_bin path in
+          at_exit (fun () -> close_out oc);
+          (oc, Mutex.create ())
+      )
+      (Sys.getenv_opt "MORDOR_S5_TRACE")
+
+  let s5_site () =
+    Printexc.get_callstack 16
+    |> Printexc.backtrace_slots
+    |> Option.value ~default:[||]
+    |> Array.to_list
+    |> List.find_map (fun slot ->
+        match Printexc.Slot.location slot with
+        | Some loc
+          when String.starts_with ~prefix:"src/" loc.filename
+               && not (String.ends_with ~suffix:"uset.ml" loc.filename) ->
+            Some (Option.value (Printexc.Slot.name slot) ~default:loc.filename)
+        | _ -> None
+    )
+    |> Option.value ~default:"?"
+
   let acyclic s =
-    let s_tc = transitive_closure s in
-    let result = USet.for_all (fun (a, b) -> not (a = b)) s_tc in
-      result
+    Option.iter
+      (fun (oc, lock) ->
+        let record = (s5_site (), USet.values s) in
+          Mutex.protect lock (fun () -> Marshal.to_channel oc record [])
+      )
+      s5_trace;
+    (* A three-colour depth-first search: a successor still on the search's
+       path closes a cycle. This used to close the relation transitively, by
+       fixpoint iteration, and look for a pair [(a, a)] -- the same answer at
+       a cost of O(n * m^2) against O(n + m). S5 (#17) compared the two on
+       195,201 relations from real runs: no disagreement, 3 to 30 times
+       faster. *)
+    let succ = Hashtbl.create (max 16 (USet.size s)) in
+      USet.iter
+        (fun (a, b) ->
+          Hashtbl.replace succ a
+            (b :: (Hashtbl.find_opt succ a |> Option.value ~default:[]))
+        )
+        s;
+      let colour = Hashtbl.create (max 16 (Hashtbl.length succ)) in
+      let rec visit v =
+        match Hashtbl.find_opt colour v with
+        | Some `On_path -> false
+        | Some `Done -> true
+        | None ->
+            Hashtbl.replace colour v `On_path;
+            let ok =
+              List.for_all visit
+                (Hashtbl.find_opt succ v |> Option.value ~default:[])
+            in
+              Hashtbl.replace colour v `Done;
+              ok
+      in
+        Hashtbl.fold (fun v _ acc -> acc && visit v) succ true
+
+  let restrict s rel =
+    USet.filter (fun (a, b) -> USet.mem s a && USet.mem s b) rel
 
   let is_irreflexive s = USet.for_all (fun (a, b) -> not (a = b)) s
 

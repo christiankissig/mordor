@@ -17,58 +17,60 @@ let make_ir_node stmt =
 (** Helper to run Lwt tests *)
 let run_lwt f () = Lwt_main.run (f ())
 
-(** Reset counters for consistent testing *)
-let reset_counters () =
-  event_counter := 0;
-  greek_counter := 0;
-  zh_counter := 0
-
-(** Test event ID generation *)
-let test_next_event_id () =
-  reset_counters ();
-  let id1 = next_event_id () in
-  let id2 = next_event_id () in
-  let id3 = next_event_id () in
-    Alcotest.(check int) "first event id" 1 id1;
-    Alcotest.(check int) "second event id" 2 id2;
-    Alcotest.(check int) "third event id" 3 id3
+(** Labels count from zero *)
+let test_next_label () =
+  let alloc = Allocator.create () in
+  let l1 = Allocator.next_label alloc in
+  let l2 = Allocator.next_label alloc in
+  let l3 = Allocator.next_label alloc in
+    Alcotest.(check int) "first label" 0 l1;
+    Alcotest.(check int) "second label" 1 l2;
+    Alcotest.(check int) "third label" 2 l3
 
 (** Test Greek symbol generation *)
 let test_next_greek () =
-  reset_counters ();
-  let g1 = next_greek () in
-  let g2 = next_greek () in
+  let alloc = Allocator.create () in
+  let g1 = Allocator.next_greek alloc in
+  let g2 = Allocator.next_greek alloc in
     Alcotest.(check string) "first greek symbol" "α" g1;
     Alcotest.(check string) "second greek symbol" "β" g2
 
 let test_next_greek_overflow () =
-  reset_counters ();
-  (* Generate more symbols than in the alphabet to test suffix *)
-  for _i = 1 to String.length greek_alpha do
-    let _ = next_greek () in
-      ()
-  done;
-  let overflow = next_greek () in
-    Alcotest.(check string) "greek with suffix" "α2" overflow
+  let alloc = Allocator.create () in
+    (* Generate more symbols than in the alphabet to test suffix *)
+    for _i = 1 to String.length greek_alpha do
+      let _ = Allocator.next_greek alloc in
+        ()
+    done;
+    let overflow = Allocator.next_greek alloc in
+      Alcotest.(check string) "greek with suffix" "α2" overflow
 
 (** Test Chinese symbol generation *)
 let test_next_zh () =
-  reset_counters ();
-  let z1 = next_zh () in
-  let z2 = next_zh () in
+  let alloc = Allocator.create () in
+  let z1 = Allocator.next_zh alloc in
+  let z2 = Allocator.next_zh alloc in
     Alcotest.(check bool) "first zh is string" true (String.length z1 > 0);
     Alcotest.(check bool) "second zh is string" true (String.length z2 > 0);
     Alcotest.(check bool) "zh symbols differ" true (z1 <> z2)
 
+(** Two allocators share nothing: what one hands out does not move the other,
+    which is what lets an interpretation, and later a fragment, own one. *)
+let test_allocators_are_independent () =
+  let a = Allocator.create () and b = Allocator.create () in
+    ignore (Allocator.next_label a, Allocator.next_greek a, Allocator.next_zh a);
+    Alcotest.(check int) "b's labels start at 0" 0 (Allocator.next_label b);
+    Alcotest.(check string) "b's greek starts at α" "α" (Allocator.next_greek b);
+    Alcotest.(check string) "b's zh starts at 一" "一" (Allocator.next_zh b)
+
 (** Test events collection creation *)
 let test_create_events () =
   let events = create_events [] in
-    Alcotest.(check int) "initial label is 1" 0 events.label;
-    Alcotest.(check int) "events table is empty" 0 (Hashtbl.length events.events)
+    Alcotest.(check int) "events table is empty" 0 (Hashtbl.length events.events);
+    Alcotest.(check int) "first label is 0" 0 (Allocator.next_label events.alloc)
 
 (** Test adding events *)
 let test_add_event () =
-  reset_counters ();
   let events = create_events [] in
   let evt = Event.create Read 0 () in
   let env = Hashtbl.create 16 in
@@ -77,11 +79,12 @@ let test_add_event () =
       { source_span = None; thread_ctx = None; loop_ctx = None }
   in
     Alcotest.(check int) "event label assigned" 0 added_evt.label;
-    Alcotest.(check int) "label counter incremented" 1 events.label;
+    Alcotest.(check int)
+      "label counter incremented" 1
+      (Allocator.next_label events.alloc);
     Alcotest.(check int) "event added to table" 1 (Hashtbl.length events.events)
 
 let test_add_multiple_events () =
-  reset_counters ();
   let events = create_events [] in
   let evt1 = Event.create Read 0 () in
   let evt2 = Event.create Write 0 () in
@@ -121,6 +124,32 @@ let test_dot () =
     (* Check po relations added *)
     Alcotest.(check bool) "po (1,2) exists" true (USet.mem result.po (1, 2));
     Alcotest.(check bool) "po (1,3) exists" true (USet.mem result.po (1, 3))
+
+(** [dot] leaves its operand as it found it: the path condition and de facto
+    constraints of the prefixed event go into the result's tables, not the
+    operand's, so prefixing one structure twice gives two results that know
+    nothing of each other. *)
+let test_dot_leaves_operand_alone () =
+  let s = { (SymbolicEventStructure.create ()) with e = USet.of_list [ 3 ] } in
+  let phi = [ EBoolean true ] in
+  let r1 = SymbolicEventStructure.dot (Event.create Read 1 ()) s phi phi in
+  let r2 = SymbolicEventStructure.dot (Event.create Write 2 ()) s [] [] in
+    Alcotest.(check int)
+      "operand restrict untouched" 0
+      (Hashtbl.length s.restrict);
+    Alcotest.(check int) "operand defacto untouched" 0 (Hashtbl.length s.defacto);
+    Alcotest.(check bool)
+      "first result restricts 1" true
+      (Hashtbl.find_opt r1.restrict 1 = Some phi);
+    Alcotest.(check bool)
+      "first result has defacto for 1" true
+      (Hashtbl.find_opt r1.defacto 1 = Some phi);
+    Alcotest.(check bool)
+      "first result does not see 2" false
+      (Hashtbl.mem r1.restrict 2 || Hashtbl.mem r1.defacto 2);
+    Alcotest.(check bool)
+      "second result does not see 1" false
+      (Hashtbl.mem r2.restrict 1 || Hashtbl.mem r2.defacto 1)
 
 (** Test SymbolicEventStructure.plus operation *)
 let test_plus () =
@@ -171,6 +200,71 @@ let test_cross () =
     Alcotest.(check bool) "has event 1" true (USet.mem result.e 1);
     Alcotest.(check bool) "has event 4" true (USet.mem result.e 4)
 
+(** A structure that owns its tables: one event [label], known to [events],
+    [origin] (under [symbol]), [p], [restrict] and [defacto]. *)
+let owned_structure label symbol =
+  let s =
+    { (SymbolicEventStructure.create ()) with e = USet.of_list [ label ] }
+  in
+    Hashtbl.replace s.events label (Event.create Read label ());
+    Hashtbl.replace s.origin symbol label;
+    Hashtbl.replace s.p label (Hashtbl.create 0);
+    Hashtbl.replace s.restrict label [ EBoolean true ];
+    Hashtbl.replace s.defacto label [];
+    s
+
+(** [plus] and [cross] merge their operands' tables rather than keeping the left
+    one's: operands that own their tables come out with the union, in tables
+    that are neither operand's, and the operands are left alone. *)
+let test_combinators_merge_owned_tables () =
+  List.iter
+    (fun (name, combine) ->
+      let a = owned_structure 1 "α" and b = owned_structure 2 "β" in
+      let r : SymbolicEventStructure.t = combine a b in
+      let has tbl k = Hashtbl.mem tbl k in
+        Alcotest.(check bool)
+          (name ^ ": events of both")
+          true
+          (has r.events 1 && has r.events 2);
+        Alcotest.(check bool)
+          (name ^ ": origins of both")
+          true
+          (has r.origin "α" && has r.origin "β");
+        Alcotest.(check bool)
+          (name ^ ": envs of both") true
+          (has r.p 1 && has r.p 2);
+        Alcotest.(check bool)
+          (name ^ ": restrict of both")
+          true
+          (has r.restrict 1 && has r.restrict 2);
+        Alcotest.(check bool)
+          (name ^ ": defacto of both")
+          true
+          (has r.defacto 1 && has r.defacto 2);
+        Alcotest.(check bool)
+          (name ^ ": tables are fresh")
+          true
+          (r.events != a.events && r.origin != a.origin && r.p != a.p);
+        Alcotest.(check bool)
+          (name ^ ": operands untouched")
+          false
+          (has a.events 2 || has a.origin "β" || has a.p 2 || has b.events 1)
+    )
+    [
+      ("plus", SymbolicEventStructure.plus);
+      ("cross", SymbolicEventStructure.cross);
+    ]
+
+(** The case interpretation is in today: both operands hold the same tables.
+    Merging a table with itself gives a copy of it and nothing more. *)
+let test_combinators_merge_shared_tables () =
+  let a = owned_structure 1 "α" in
+  let b = { a with e = USet.of_list [ 2 ] } in
+  let r = SymbolicEventStructure.plus a b in
+    Alcotest.(check int) "one event, once" 1 (Hashtbl.length r.events);
+    Alcotest.(check int) "one origin, once" 1 (Hashtbl.length r.origin);
+    Alcotest.(check int) "one env, once" 1 (Hashtbl.length r.p)
+
 (** Test interpret_statements with empty list *)
 let test_interpret_empty_statements =
   run_lwt (fun () ->
@@ -184,7 +278,6 @@ let test_interpret_empty_statements =
 (** Test interpret GlobalStore statement *)
 let test_interpret_global_store =
   run_lwt (fun () ->
-      reset_counters ();
       let env = Hashtbl.create 16 in
       let events = create_events [] in
       let mode = Types.SC in
@@ -204,7 +297,6 @@ let test_interpret_global_store =
 (** Test interpret GlobalLoad statement *)
 let test_interpret_global_load =
   run_lwt (fun () ->
-      reset_counters ();
       let env = Hashtbl.create 16 in
       let events = create_events [] in
       let mode = Types.SC in
@@ -221,7 +313,6 @@ let test_interpret_global_load =
 (** Test interpret Fence statement *)
 let test_interpret_fence =
   run_lwt (fun () ->
-      reset_counters ();
       let env = Hashtbl.create 16 in
       let events = create_events [] in
       let mode = Types.SC in
@@ -238,7 +329,6 @@ let test_interpret_fence =
 (** Test interpret multiple statements *)
 let test_interpret_multiple_statements =
   run_lwt (fun () ->
-      reset_counters ();
       let env = Hashtbl.create 16 in
       let events = create_events [] in
       let stmts =
@@ -265,7 +355,6 @@ let test_interpret_multiple_statements =
 (** Test main interpret function *)
 let test_interpret_main =
   run_lwt (fun () ->
-      reset_counters ();
       let ast =
         List.map make_ir_node
           [
@@ -290,7 +379,6 @@ let test_interpret_main =
 
 let test_interpret_main_with_po =
   run_lwt (fun () ->
-      reset_counters ();
       let ast =
         List.map make_ir_node
           [
@@ -368,6 +456,42 @@ let check_structure_wellformed name structure =
       (name ^ ": po and conflict are disjoint")
       0
       (USet.size (USet.intersection structure.po structure.conflict))
+
+(* A structure describes the events that are in it, and no others.
+
+   The interpreter creates a branch event before it knows whether the branch
+   survives: a guard that folds to a constant is elided, and its event, already
+   labelled and recorded, never enters the structure. While the structure was
+   handed the interpreter's program-wide tables it described those events too,
+   and [po_iter], built from [loop_indices], ordered them. This is
+   branch_condition/nested_fail, whose loop came back with two members that
+   were not events of the structure. *)
+let test_structure_describes_its_events_only () =
+  let structure =
+    interpret_symbolic
+      "x := 0; y := 1; rval := x; rtest := y; do { ri := 0; if (rval = 0) { if \
+       (rtest = 1) { ri := 1; } } } while (ri = 0)"
+  in
+  let here label = USet.mem structure.e label in
+  let keys_here name tbl =
+    Alcotest.(check bool)
+      (name ^ " binds events of the structure only")
+      true
+      (Hashtbl.fold (fun label _ acc -> acc && here label) tbl true)
+  in
+    keys_here "events" structure.events;
+    keys_here "p" structure.p;
+    keys_here "loop_indices" structure.loop_indices;
+    keys_here "thread_index" structure.thread_index;
+    Alcotest.(check bool)
+      "origin names events of the structure only" true
+      (Hashtbl.fold (fun _ label acc -> acc && here label) structure.origin true);
+    Alcotest.(check int)
+      "every event is described" (USet.size structure.e)
+      (Hashtbl.length structure.events);
+    Alcotest.(check bool)
+      "po_iter orders events of the structure only" true
+      (USet.for_all (fun (a, b) -> here a && here b) structure.po_iter)
 
 (* A while loop whose guard reads a value updated by the body branches on a
    symbolic guard: both "enter" and "exit" branches are feasible. *)
@@ -563,10 +687,61 @@ let test_referenced_global_is_distinct () =
          structure.constraints
       )
 
+(* Each thread is interpreted with labels of its own and relabelled into place.
+   Labels still count up in program order with no gap or overlap, symbols are
+   fresh across threads, and the threads of a nested block are numbered after
+   the thread they are in. *)
+let test_threads_relabelled_into_place () =
+  let structure =
+    interpret_symbolic
+      "x := 0; { r1 := x; y := 1 } ||| { { r2 := y } ||| { z := 2 } }; w := 1"
+  in
+  let find typ loc =
+    Hashtbl.fold
+      (fun _ (e : event) acc ->
+        if e.typ = typ && e.loc = Some (EVar loc) then Some e.label else acc
+      )
+      structure.events None
+    |> Option.get
+  in
+  let accesses =
+    [
+      ("x := 0", find Write "x", 0);
+      ("r1 := x", find Read "x", 1);
+      ("y := 1", find Write "y", 1);
+      ("r2 := y", find Read "y", 3);
+      ("z := 2", find Write "z", 4);
+      ("w := 1", find Write "w", 0);
+    ]
+  in
+  let labels = List.map (fun (_, l, _) -> l) accesses in
+  let read_symbol loc = (Hashtbl.find structure.events (find Read loc)).rval in
+    Alcotest.(check bool)
+      "the threads' reads are of different symbols" false
+      (read_symbol "x" = read_symbol "y");
+    Alcotest.(check (list int))
+      "labels are dense"
+      (List.init (USet.size structure.e) Fun.id)
+      (USet.values structure.e |> List.sort compare);
+    Alcotest.(check (list int))
+      "labels follow program order" (List.sort compare labels) labels;
+    List.iter
+      (fun (name, label, thread) ->
+        Alcotest.(check (option int))
+          (name ^ " is in its thread")
+          (Some thread)
+          (Hashtbl.find_opt structure.thread_index label)
+      )
+      accesses
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
     [
+      Alcotest.test_case "Structure describes its events only" `Quick
+        test_structure_describes_its_events_only;
+      Alcotest.test_case "Threads are relabelled into place" `Quick
+        test_threads_relabelled_into_place;
       Alcotest.test_case "While symbolic guard well-formed" `Quick
         test_while_symbolic_guard_wellformed;
       Alcotest.test_case "While symbolic guard yields executions" `Quick
@@ -591,7 +766,9 @@ let suite =
         test_global_malloc_stores_the_address;
       Alcotest.test_case "Referenced global is distinct" `Quick
         test_referenced_global_is_distinct;
-      Alcotest.test_case "Event ID generation" `Quick test_next_event_id;
+      Alcotest.test_case "Label generation" `Quick test_next_label;
+      Alcotest.test_case "Allocators are independent" `Quick
+        test_allocators_are_independent;
       Alcotest.test_case "Greek symbol generation" `Quick test_next_greek;
       Alcotest.test_case "Greek symbol overflow" `Quick test_next_greek_overflow;
       Alcotest.test_case "Chinese symbol generation" `Quick test_next_zh;
@@ -600,9 +777,15 @@ let suite =
       Alcotest.test_case "Add multiple events" `Quick test_add_multiple_events;
       Alcotest.test_case "Empty structure" `Quick test_empty_structure;
       Alcotest.test_case "Dot operation" `Quick test_dot;
+      Alcotest.test_case "Dot leaves its operand alone" `Quick
+        test_dot_leaves_operand_alone;
       Alcotest.test_case "Plus operation" `Quick test_plus;
       Alcotest.test_case "Plus with relations" `Quick test_plus_with_relations;
       Alcotest.test_case "Cross operation" `Quick test_cross;
+      Alcotest.test_case "Combinators merge owned tables" `Quick
+        test_combinators_merge_owned_tables;
+      Alcotest.test_case "Combinators merge shared tables" `Quick
+        test_combinators_merge_shared_tables;
       Alcotest.test_case "Interpret empty statements" `Quick
         test_interpret_empty_statements;
       Alcotest.test_case "Interpret GlobalStore" `Quick

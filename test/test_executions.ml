@@ -222,6 +222,182 @@ let test_integration () =
 
 (** Test suite *)
 
+(** {1 Scoped choice points} *)
+
+(* SB, interpreted and elaborated: its structure, its one path, and its
+   justifications by the write they justify. *)
+let store_buffering () =
+  let ctx =
+    Context.make_context
+      { Context.default_options with allow_unknown_model = true }
+      ()
+  in
+    ctx.litmus <-
+      Some
+        "x := 0; y := 0; { x := 1; r1 := y } ||| { y := 1; r2 := x } %% allow \
+         (r1 = 0 && r2 = 0) [sc]";
+    let ctx =
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Elaborations.step_generate_justifications
+        )
+    in
+    let structure = Option.get ctx.structure in
+    let justmap = Hashtbl.create 8 in
+      List.iter
+        (fun (j : justification) ->
+          Hashtbl.replace justmap j.w.label
+            (j
+            :: (Hashtbl.find_opt justmap j.w.label |> Option.value ~default:[])
+            )
+        )
+        (Option.get ctx.justifications);
+      (structure, List.hd (generate_max_conflictfree_sets structure), justmap)
+
+let access structure typ loc =
+  Hashtbl.fold
+    (fun label (e : event) acc ->
+      if e.typ = typ && e.loc = Some (EVar loc) then label else acc
+    )
+    structure.events (-1)
+
+(* A scope of one write enumerates that write's justifications alone, and
+   every one the whole path's enumeration chose for it. *)
+let test_justification_combinations_in_a_scope () =
+  let structure, path, justmap = store_buffering () in
+  let x1 = access structure Write "x" in
+  let combos scope =
+    Lwt_main.run
+      (compute_justification_combinations sequential_compute structure [ path ]
+         ~scope justmap
+      )
+    |> List.map snd
+  in
+  let whole = combos (justifiable structure) in
+  let local = combos (fun _ -> USet.singleton x1) in
+  let chosen_for_x1 combo =
+    List.filter (fun (j : justification) -> j.w.label = x1) combo
+  in
+  (* Both draw from [justmap], and a justification holds sets that [=] cannot
+     compare. *)
+  let same a b = List.length a = List.length b && List.for_all2 ( == ) a b in
+    check bool "the whole path has combinations" true (whole <> []);
+    check bool "each local combination justifies x := 1 alone" true
+      (List.for_all
+         (fun combo ->
+           List.map (fun (j : justification) -> j.w.label) combo = [ x1 ]
+         )
+         local
+      );
+    check bool "every choice for x := 1 is enumerated locally" true
+      (List.for_all
+         (fun combo -> List.exists (same (chosen_for_x1 combo)) local)
+         whole
+      )
+
+(* A scope of one read enumerates the writes that read can read from, and
+   they are the ones the whole path's enumeration gives it. *)
+let test_path_rf_in_a_scope () =
+  let structure, path, _ = store_buffering () in
+  let r1 = access structure Read "y" in
+  let rf (scope : Freeze.scope) =
+    Freeze.compute_path_rf structure path ~scope ~elided:(USet.create ())
+      ~constraints:structure.constraints [] (USet.create ()) (USet.create ())
+      (path.p @ structure.constraints)
+  in
+  let whole = Freeze.path_scope structure path ~elided:(USet.create ()) in
+  let local = { whole with reads = USet.singleton r1 } in
+  let sources combos =
+    List.concat_map
+      (List.filter_map (fun (r, w) -> if r = r1 then Some w else None))
+      combos
+    |> List.sort_uniq compare
+  in
+  let local_rf = rf local in
+    check bool "each local relation reads r1 alone" true
+      (List.for_all (fun c -> List.map fst c = [ r1 ]) local_rf);
+    check (list int) "r1 reads from the writes it could on the whole path"
+      (sources (rf whole))
+      (sources local_rf);
+    check bool "r1 has a write to read" true (sources local_rf <> [])
+
+(** {1 Validation predicates} *)
+
+let rel = USet.of_list
+
+(* A read of an elided write, a read with no write, a cycle through rf. *)
+let test_validation_predicates () =
+  check bool "reading an elided write" false
+    (Validation.rf_not_elided ~rf:(rel [ (1, 2) ]) ~delta:(rel [ (0, 1) ]));
+  check bool "reading a write nothing elides" true
+    (Validation.rf_not_elided ~rf:(rel [ (1, 2) ]) ~delta:(rel [ (0, 3) ]));
+  check bool "a read with nothing to read" false
+    (Validation.rf_total
+       ~rf:(rel [ (1, 2) ])
+       ~reads:(USet.of_list [ 2; 4 ])
+       ~delta:(rel [])
+    );
+  check bool "an elided read needs nothing to read" true
+    (Validation.rf_total
+       ~rf:(rel [ (1, 2) ])
+       ~reads:(USet.of_list [ 2; 4 ])
+       ~delta:(rel [ (3, 4) ])
+    );
+  check bool "rf against dp closes a cycle" false
+    (Validation.rhb_acyclic
+       (Validation.rhb ~dp:(rel [ (2, 3) ]) ~ppo:(rel []) ~rf:(rel [ (3, 2) ]))
+    );
+  check bool "rf_respects_ppo holds of an rf edge in ppo" true
+    (Validation.rf_respects_ppo ~rf:(rel [ (1, 2) ]) ~ppo:(rel [ (1, 2) ]))
+
+(* The rf edge (w, r) closes a cycle when r reaches w, through dp and ppo and
+   through the rf edges already chosen, given as (read, write) pairs; and not
+   through edges it is not given. *)
+let test_rf_closes_rhb_cycle () =
+  let succ = URelation.adjacency_map (rel [ (2, 3); (4, 5) ]) in
+    check bool "through dp and ppo" true
+      (Validation.rf_closes_rhb_cycle ~succ ~rf:[] (3, 2));
+    check bool "through an rf edge chosen before" true
+      (Validation.rf_closes_rhb_cycle ~succ ~rf:[ (4, 3) ] (5, 2));
+    check bool "not without it" false
+      (Validation.rf_closes_rhb_cycle ~succ ~rf:[] (5, 2));
+    check bool "rhb_acyclic agrees" false
+      (Validation.rhb_acyclic
+         (Validation.rhb
+            ~dp:(rel [ (2, 3) ])
+            ~ppo:(rel [ (4, 5) ])
+            ~rf:(rel [ (3, 4); (5, 2) ])
+         )
+      )
+
+(* The delta forms decide what the plain ones decide of the union. *)
+let test_validation_deltas () =
+  let base = rel [ (1, 2) ] and added = rel [ (2, 1) ] in
+    check bool "a merge can close a cycle"
+      (Validation.rhb_acyclic (USet.union base added))
+      (Validation.rhb_acyclic_delta base ~drhb:added);
+    check bool "a merge can elide a write already read"
+      (Validation.rf_not_elided ~rf:base ~delta:(rel [ (0, 1) ]))
+      (Validation.rf_not_elided_delta ~rf:base ~delta:(rel []) ~drf:(rel [])
+         ~ddelta:(rel [ (0, 1) ])
+      );
+    check bool "a merge can add a read with nothing to read"
+      (Validation.rf_total ~rf:base
+         ~reads:(USet.of_list [ 2; 4 ])
+         ~delta:(rel [])
+      )
+      (Validation.rf_total_delta ~rf:base ~reads:(USet.of_list [ 2 ])
+         ~delta:(rel []) ~drf:(rel []) ~dreads:(USet.of_list [ 4 ])
+         ~ddelta:(rel [])
+      );
+    check bool "rf_respects_ppo_delta"
+      (Validation.rf_respects_ppo ~rf:(USet.union base added) ~ppo:base)
+      (Validation.rf_respects_ppo_delta ~rf:base ~ppo:base ~drf:added
+         ~dppo:(rel [])
+      )
+
 let suite =
   [
     (* Parameterized origin tests *)
@@ -243,6 +419,14 @@ let suite =
     [
       ("justification properties", `Quick, test_justification_properties);
       ("integration", `Quick, test_integration);
+      ( "justification combinations in a scope",
+        `Quick,
+        test_justification_combinations_in_a_scope
+      );
+      ("read-from in a scope", `Quick, test_path_rf_in_a_scope);
+      ("validation predicates", `Quick, test_validation_predicates);
+      ("rf closes an rhb cycle", `Quick, test_rf_closes_rhb_cycle);
+      ("validation deltas", `Quick, test_validation_deltas);
     ];
   ]
   |> List.flatten

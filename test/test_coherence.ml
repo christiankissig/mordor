@@ -348,8 +348,9 @@ let test_rc11c_coherent_simple () =
     check bool "simple RC11c coherence with consume passes" true result;
     ()
 
-(** Test IMM.check_coherence with RMW atomicity *)
-let test_imm_coherent_rmw () =
+(** An RMW from 1 to 2 whose atomicity [co] breaks: the write 3 is ordered
+    between the write 1 read and the RMW's own write. *)
+let imm_rmw_violated () =
   let events =
     make_events_table
       [
@@ -392,10 +393,58 @@ let test_imm_coherent_rmw () =
   let cache = IMM.build_cache execution structure loc_restrict in
   (* co ordering that violates atomicity: 0 -> 3 -> 2 *)
   let co = uset_of_list [ (0, 3); (3, 2) ] in
+    (cache, co)
+
+(** Test IMM.check_coherence with RMW atomicity *)
+let test_imm_coherent_rmw () =
+  let cache, co = imm_rmw_violated () in
   let result = IMM.check_coherence cache co in
-    check bool "RMW atomicity violated" false result;
-    (* Should fail *)
-    ()
+    check bool "RMW atomicity violated" false result
+
+(** The axioms are separately callable, and say which one an order breaks. *)
+let test_imm_names_the_broken_axiom () =
+  let cache, co = imm_rmw_violated () in
+  let candidate = IMM.candidate cache co in
+  let broken =
+    List.filter (fun (_, holds) -> not (holds candidate)) IMM.axioms
+    |> List.map fst
+  in
+    check (list string) "atomicity, and only atomicity"
+      [ "rmw ∩ (fre;coe) = ∅" ]
+      broken
+
+(** Every registered model has axioms, each with a name of its own. *)
+let test_models_name_their_axioms () =
+  List.iter
+    (fun name ->
+      let module M = (val Option.get (ModelRegistry.lookup name)) in
+      let names = List.map fst M.axioms in
+        check bool (name ^ " has axioms") true (names <> []);
+        check int
+          (name ^ "'s axioms have distinct names")
+          (List.length names)
+          (List.length (List.sort_uniq compare names))
+    )
+    (ModelRegistry.names ())
+
+(** The default incremental adapter never prunes, and decides at the end as the
+    model does. *)
+let test_incremental_adapter () =
+  List.iter
+    (fun name ->
+      check bool
+        (name ^ " has an incremental form")
+        true
+        (ModelRegistry.lookup_incremental name <> None)
+    )
+    (ModelRegistry.names ());
+  let module M = Incremental (IMM) in
+  let cache, co = imm_rmw_violated () in
+  let partial = M.start cache in
+    check bool "extend never prunes" true (M.extend partial co <> None);
+    check bool "finalize is check_coherence"
+      (IMM.check_coherence cache co)
+      (M.finalize partial co)
 
 (** Test cache creation for different models *)
 let test_cache_types () =
@@ -525,6 +574,10 @@ let suite =
       test_case "rc11_coherent simple" `Quick test_rc11_coherent_simple;
       test_case "rc11c_coherent simple" `Quick test_rc11c_coherent_simple;
       test_case "imm_coherent RMW" `Quick test_imm_coherent_rmw;
+      test_case "imm names the broken axiom" `Quick
+        test_imm_names_the_broken_axiom;
+      test_case "models name their axioms" `Quick test_models_name_their_axioms;
+      test_case "incremental adapter" `Quick test_incremental_adapter;
       test_case "coherence_axiom rejects cyclic hb" `Quick
         test_coherence_axiom_rejects_cyclic_hb;
       test_case "coherence_axiom accepts acyclic hb" `Quick

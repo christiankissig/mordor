@@ -15,57 +15,76 @@ open Uset
 
 let ir_node_to_string = Ir.to_string ~ann_to_string:(fun _ -> "")
 
-(** {1 Event and Symbol Generation} *)
+(** {1 Event and Symbol Allocation} *)
 
-(** Event counter for generating unique event identifiers. *)
-let event_counter = ref 0
+(** Allocator of event labels and fresh symbols.
 
-(** Generate the next unique event identifier.
-    @return A fresh integer identifier. *)
-let next_event_id () =
-  incr event_counter;
-  !event_counter
+    One allocator is made for each interpretation and handed down the recursion
+    inside {!events_t}, so labels and symbols are fresh within an interpretation
+    and start over with the next one. The three counters used to be module-level
+    references that every entry point had to remember to reset, and that two
+    interpretations running at once would have shared.
 
-(** Counter for Greek letter symbols (α, β, γ, ...). *)
-let greek_counter = ref 0
+    A thread is interpreted as a fragment, with labels of its own from [0], and
+    relabelled into place; see {!interpret_thread}. *)
+module Allocator = struct
+  type t = { mutable label : int; mutable greek : int; mutable zh : int }
 
-(** Generate the next Greek letter symbol with optional numeric suffix.
-    @return
-      A string containing a Greek letter, possibly with a numeric suffix (e.g.,
-      "α", "β", "α1", "β1", ...). *)
-let next_greek () =
-  let num_greek_letters = String.length greek_alpha / 2 in
-  (* 24 letters *)
-  let idx = !greek_counter mod num_greek_letters in
-  let suffix = !greek_counter / num_greek_letters in
-    incr greek_counter;
-    let base = String.sub greek_alpha (idx * 2) 2 in
-      if suffix = 0 then base else base ^ string_of_int suffix
+  let create () = { label = 0; greek = 0; zh = 0 }
 
-(** Counter for Chinese character symbols. *)
-let zh_counter = ref 0
+  (** [next_label t] is the next unused event label, counting from [0]. *)
+  let next_label t =
+    let label = t.label in
+      t.label <- label + 1;
+      label
 
-(** Generate the next Chinese character symbol with optional numeric suffix.
-    @return
-      A string containing a Chinese character, possibly with a numeric suffix.
-*)
-let next_zh () =
-  let num_zh_chars = String.length zh_alpha / 3 in
-  let idx = !zh_counter mod num_zh_chars in
-  let suffix = !zh_counter / num_zh_chars in
-    incr zh_counter;
-    let base = String.sub zh_alpha (idx * 3) 3 in
-      if suffix = 0 then base else base ^ string_of_int suffix
+  (* The [n]th symbol over an alphabet of [width]-byte characters: the
+     alphabet's letters in turn, then again with a numeric suffix. *)
+  let nth_symbol alphabet width n =
+    let letters = String.length alphabet / width in
+    let base = String.sub alphabet (n mod letters * width) width in
+      if n < letters then base else base ^ string_of_int (n / letters)
+
+  (** [next_greek t] is the next Greek letter symbol, with a numeric suffix once
+      the alphabet is exhausted (e.g., "α", "β", ..., "α1", "β1", ...). *)
+  let next_greek t =
+    let n = t.greek in
+      t.greek <- n + 1;
+      nth_symbol greek_alpha 2 n
+
+  (** [next_zh t] is the next Chinese character symbol, with a numeric suffix
+      once the alphabet is exhausted. *)
+  let next_zh t =
+    let n = t.zh in
+      t.zh <- n + 1;
+      nth_symbol zh_alpha 3 n
+
+  (* The labels handed out so far. *)
+  let labels t = t.label
+
+  (* [fragment t] is an allocator for a fragment interpreted where [t] is: its
+     labels are its own, from [0]; its symbols carry on from [t]'s. *)
+  let fragment t = { t with label = 0 }
+
+  (* [resume t ~after] carries [t] on past everything [after], an allocator
+     made by [fragment t], has handed out. *)
+  let resume t ~after =
+    t.label <- t.label + after.label;
+    t.greek <- after.greek;
+    t.zh <- after.zh
+end
 
 (** {1 Event Structure Tracking} *)
 
-(** Structure tracking events globally during interpretation.
+(** The interpreter's working record of an interpretation: every event it has
+    created, in the order it created them.
 
-    This improves efficiency as events and symbols (and thus origins) are
-    enumerated from the start of the program, but event structures are
-    constructed from the end as continuations. Thus creating the event and
-    origin tables at the end requires repeated merging. The last labels are
-    anyways defined inductively from the start. *)
+    Events and symbols are enumerated from the start of the program, while event
+    structures are constructed from the end, as continuations, so an event is
+    labelled and recorded here before the structure it will be prefixed to
+    exists. {!prefix} reads what was recorded for an event when the time comes
+    to put it in a structure; the structure's own tables are built there and
+    describe the events that made it in, which these tables do not promise. *)
 type events_t = {
   defacto : expr list;  (** Optional de facto constraints from litmus tests. *)
   events : (int, event) Hashtbl.t;  (** Events indexed by label. *)
@@ -74,13 +93,14 @@ type events_t = {
   env_by_evt : (int, (string, expr) Hashtbl.t) Hashtbl.t;
       (** Register environment at each event label. *)
   thread_index : (int, int) Hashtbl.t;
-      (** Mapping from event labels to thread indices. *)
-  mutable current_thread : int;
-      (** The thread the events being added belong to: [0] outside every
-          parallel block, and a fresh index for each thread of each block
-          interpreted, nested ones included. *)
+      (** Mapping from event labels to thread indices. An event is added to
+          thread [0], the thread being interpreted: the program's own outside
+          every parallel block, or the fragment's inside one, which relabelling
+          moves to the thread's index. *)
   mutable threads_allocated : int;
-      (** The last thread index handed out; see {!current_thread}. *)
+      (** The last thread index handed out, counting from [1] for the first
+          thread of the first parallel block interpreted, nested ones included.
+      *)
   loop_indices : (int, int list) Hashtbl.t;
       (** Mapping from event labels to loop indices. *)
   loop_conditions : (int, expr list) Hashtbl.t;
@@ -98,11 +118,11 @@ type events_t = {
   ubopt : bool;
       (** Whether the model exploits undefined behaviour. Gates the rewrite in
           {!apply_ub_constraints}. *)
-  mutable label : int;  (** Counter for generating unique event labels. *)
+  alloc : Allocator.t;  (** Source of event labels and fresh symbols. *)
 }
 
 (** Create a new empty events structure.
-    @return A fresh events_t with empty tables and zero label counter. *)
+    @return A fresh events_t with empty tables and an allocator of its own. *)
 let create_events ?(ubopt = false) defacto =
   {
     defacto;
@@ -112,12 +132,11 @@ let create_events ?(ubopt = false) defacto =
     env_by_evt = Hashtbl.create 256;
     source_spans = Hashtbl.create 256;
     thread_index = Hashtbl.create 256;
-    current_thread = 0;
     threads_allocated = 0;
     loop_indices = Hashtbl.create 256;
     loop_conditions = Hashtbl.create 256;
     globals = USet.create ();
-    label = 0;
+    alloc = Allocator.create ();
   }
 
 (** [apply_ub_constraints events e] folds [lhs / !r] to [lhs] when the model
@@ -203,31 +222,47 @@ let ub_assume events env e =
       Source annotations including span, thread, and loop context.
     @return The event with its newly assigned label. *)
 let add_event (events : events_t) event env (annotation : ir_node_ann) =
-  let lbl = events.label in
-    events.label <- events.label + 1;
-    let event' : event = { event with label = lbl } in
-      Hashtbl.replace events.events lbl event';
-      Hashtbl.replace events.env_by_evt lbl (Hashtbl.copy env);
-      ( match annotation.source_span with
-      | Some span -> Hashtbl.replace events.source_spans lbl span
-      | None -> ()
-      );
-      (* The index is the interpreter's, not the annotation's [tid]. The parser
+  let lbl = Allocator.next_label events.alloc in
+  let event' : event = { event with label = lbl } in
+    Hashtbl.replace events.events lbl event';
+    Hashtbl.replace events.env_by_evt lbl (Hashtbl.copy env);
+    ( match annotation.source_span with
+    | Some span -> Hashtbl.replace events.source_spans lbl span
+    | None -> ()
+    );
+    (* The index is the interpreter's, not the annotation's [tid]. The parser
          annotates a thread body before the enclosing [threads] rule has
          advanced [tid] -- Menhir reduces bottom-up -- so every body carried
          [tid = 0] and every event of every thread shared one index. Memory
          models that ask whether two events are in the same thread had nothing
          to ask. The annotation still says whether the event belongs to the
          program at all: terminal events carry none and stay unindexed. *)
-      ( match annotation.thread_ctx with
-      | Some _ -> Hashtbl.replace events.thread_index lbl events.current_thread
-      | None -> ()
-      );
-      ( match annotation.loop_ctx with
-      | Some loop_ctx -> Hashtbl.replace events.loop_indices lbl loop_ctx.loops
-      | None -> ()
-      );
-      event'
+    ( match annotation.thread_ctx with
+    | Some _ -> Hashtbl.replace events.thread_index lbl 0
+    | None -> ()
+    );
+    ( match annotation.loop_ctx with
+    | Some loop_ctx -> Hashtbl.replace events.loop_indices lbl loop_ctx.loops
+    | None -> ()
+    );
+    event'
+
+(** [prefix events event structure phi defacto] is [structure] prefixed with
+    [event], which {!add_event} has added to [events]: the {!EventStructure}
+    of the event alone -- with the register environment, loops and thread that
+    were recorded for its label -- followed by [structure].
+
+    This is how the structure's own tables get built. The ones in [events] are
+    the interpreter's working record of every event it has created; the
+    structure's describe the events that are in it. *)
+let prefix (events : events_t) (event : event) structure phi defacto =
+  let find tbl = Hashtbl.find_opt tbl event.label in
+    EventStructure.seq
+      (EventStructure.singleton ?env:(find events.env_by_evt)
+         ?loops:(find events.loop_indices) ?thread:(find events.thread_index)
+         event phi defacto
+      )
+      structure
 
 (** Record a loop's continuation guard for one occurrence of the loop.
 
@@ -269,14 +304,73 @@ let update_env (env : (string, expr) Hashtbl.t) (register : string) (expr : expr
 
 (** Add a read-modify-write edge to a symbolic event structure.
 
-    @param structure The event structure to modify.
+    [structure] is left as it was: [dot] hands its operand's [rmw] set on to its
+    result, so adding to that set in place would also add the edge to every
+    structure the operand was ever prefixed into.
+
+    @param structure The event structure to extend.
     @param er The label of the read event.
     @param ew The label of the write event.
     @return A new event structure with the RMW edge added. *)
 let add_rmw_edge (structure : symbolic_event_structure) (er : int) (cond : expr)
     (ew : int) =
-  USet.add structure.rmw (er, cond, ew) |> ignore;
-  structure
+  {
+    structure with
+    rmw = USet.union structure.rmw (USet.singleton (er, cond, ew));
+  }
+
+(** {1 Threads as Fragments} *)
+
+(** [interpret_thread events interpret env phi] is the structure [interpret]
+    builds for one thread of a parallel block, entered in [env] under [phi].
+
+    The thread is interpreted as a fragment: in an [events_t] of its own, whose
+    allocator hands out labels from [0] and adds events to thread [0]. The
+    fragment is then relabelled into place -- its labels shifted by the number
+    [events] has handed out, its thread indices by the number of threads -- and
+    its working tables added to [events]. The offset counts what was handed out,
+    not what made it into a structure: an elided branch has taken a label too.
+    Laid out in program order like this, the relabelled fragment is the
+    structure interpreting the thread in place would have built (S1, #14).
+
+    Symbols are not the fragment's own: its allocator carries on from where the
+    enclosing one is, and the enclosing one then carries on from where the
+    fragment's stopped. A symbol's name is not only a name. [Expr.evaluate]
+    orders operands by it, so naming the fragment's symbols from α and renaming
+    them afterwards gives [(一 != β)] where interpreting in place gives
+    [(β != 一)] (programs/cas-increment-race.lit). Labels appear in no expression
+    and can be shifted freely. *)
+let interpret_thread (events : events_t) interpret env phi =
+  let fragment =
+    {
+      (create_events ~ubopt:events.ubopt events.defacto) with
+      globals = events.globals;
+      alloc = Allocator.fragment events.alloc;
+    }
+  in
+  let structure = interpret env phi fragment in
+  let off = Allocator.labels events.alloc
+  and thread_off = events.threads_allocated + 1 in
+  let label l = l + off in
+  let into tbl k v =
+    Hashtbl.iter (fun x y -> Hashtbl.replace tbl (k x) (v y))
+  in
+    into events.events label
+      (fun (ev : event) -> { ev with label = label ev.label })
+      fragment.events;
+    into events.origin Fun.id label fragment.origin;
+    into events.env_by_evt label Fun.id fragment.env_by_evt;
+    into events.thread_index label (( + ) thread_off) fragment.thread_index;
+    into events.loop_indices label Fun.id fragment.loop_indices;
+    into events.source_spans label Fun.id fragment.source_spans;
+    Hashtbl.iter
+      (fun lid guards ->
+        List.iter (fun g -> record_loop_condition events (Some lid) g) guards
+      )
+      fragment.loop_conditions;
+    Allocator.resume events.alloc ~after:fragment.alloc;
+    events.threads_allocated <- thread_off + fragment.threads_allocated;
+    EventStructure.relabel ~off ~thread_off structure
 
 (** {1 Statement Interpretation} *)
 
@@ -308,24 +402,14 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
       let structure =
         match stmt with
         | Threads { threads } ->
-            let interpret_threads ts =
-              let parent = events.current_thread in
+            let threads_structure =
               List.fold_left
                 (fun acc t ->
-                  events.threads_allocated <- events.threads_allocated + 1;
-                  events.current_thread <- events.threads_allocated;
-                  let t_structure =
-                    Fun.protect
-                      ~finally:(fun () -> events.current_thread <- parent)
-                      (fun () -> recurse t env phi events)
-                  in
-                  let acc_structure = acc in
-                    SymbolicEventStructure.cross acc_structure t_structure
+                  EventStructure.par acc
+                    (interpret_thread events (recurse t) env phi)
                 )
-                (SymbolicEventStructure.create ())
-                ts
+                (EventStructure.empty ()) threads
             in
-            let threads_structure = interpret_threads threads in
               (* The continuation is the join.  Every other branch here composes
                  with [recurse rest ...]; this one used to return the cross
                  product and stop, so a statement after a parallel block
@@ -344,7 +428,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               if rest = [] then threads_structure
               else
                 let cont = recurse rest env phi events in
-                  SymbolicEventStructure.seq threads_structure cont
+                  EventStructure.seq ~join:true threads_structure cont
         | RegisterStore { register; expr } ->
             let expr_value, env = ub_assume events env expr in
             let env' = update_env env register expr_value in
@@ -382,7 +466,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   @ ub_facts env
               in
               let cont = recurse rest env phi events in
-                SymbolicEventStructure.dot event' cont phi defacto
+                prefix events event' cont phi defacto
         | DerefStore { address; expr; assign } ->
             let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
             let wval, env = ub_assume events env expr in
@@ -403,9 +487,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 @ ub_facts env
             in
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | DerefLoad { register; address; load } ->
-            let symbol = next_greek () in
+            let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
             let evt =
               {
@@ -427,9 +511,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
               let env' = Hashtbl.copy env in
                 Hashtbl.replace env' register (Expr.of_value rval);
                 let cont = recurse rest env' phi events in
-                  SymbolicEventStructure.dot event' cont phi defacto
+                  prefix events event' cont phi defacto
         | GlobalLoad { register; global; load } ->
-            let symbol = next_greek () in
+            let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
             let evt =
               {
@@ -454,11 +538,11 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 let env' = Hashtbl.copy env in
                   Hashtbl.replace env' register (Expr.of_value rval);
                   let cont = recurse rest env' phi events in
-                    SymbolicEventStructure.dot event' cont phi defacto
+                    prefix events event' cont phi defacto
         | Fadd { register; address; operand; rmw_mode; load_mode; assign_mode }
           ->
             let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-            let symbol = next_greek () in
+            let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
             let base_evt_load : event = Event.create Read 0 () in
             let evt_load =
@@ -509,15 +593,15 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Hashtbl.replace env' register result_expr;
                 let cont = recurse rest env' phi events in
                   add_rmw_edge
-                    (SymbolicEventStructure.dot event_load'
-                       (SymbolicEventStructure.dot event_store' cont phi defacto)
+                    (prefix events event_load'
+                       (prefix events event_store' cont phi defacto)
                        phi defacto
                     )
                     event_load'.label (EBoolean true) event_store'.label
         | Cas { register; address; expected; desired; load_mode; assign_mode }
           ->
             let loc = Expr.evaluate ~env:(Hashtbl.find_opt env) address in
-            let symbol = next_greek () in
+            let symbol = Allocator.next_greek events.alloc in
             let rval = VSymbol symbol in
             let evt_load =
               {
@@ -576,11 +660,11 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Hashtbl.replace env_fail register (ENum Z.zero);
                 let cont_succ = recurse rest env_succ phi_succ events in
                 let cont_fail = recurse rest env_fail phi_fail events in
-                  SymbolicEventStructure.dot event_load'
-                    (SymbolicEventStructure.dot branch_event'
-                       (SymbolicEventStructure.plus
+                  prefix events event_load'
+                    (prefix events branch_event'
+                       (EventStructure.choice
                           (add_rmw_edge
-                             (SymbolicEventStructure.dot event_store' cont_succ
+                             (prefix events event_store' cont_succ
                                 phi_succ defacto
                              )
                              event_load'.label cond_expr event_store'.label
@@ -645,8 +729,8 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 | _ ->
                     let then_structure = then_structure events in
                     let else_structure = else_structure events in
-                      SymbolicEventStructure.dot branch_event'
-                        (SymbolicEventStructure.plus then_structure
+                      prefix events branch_event'
+                        (EventStructure.choice then_structure
                            else_structure
                         )
                         phi defacto
@@ -658,8 +742,8 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 | _ ->
                     let then_structure = then_structure events in
                     let rest_structure = recurse rest env new_else_phi events in
-                      SymbolicEventStructure.dot branch_event'
-                        (SymbolicEventStructure.plus then_structure
+                      prefix events branch_event'
+                        (EventStructure.choice then_structure
                            rest_structure
                         )
                         phi defacto
@@ -677,7 +761,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             in
 
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | Lock { global } ->
             let base_evt : event = Event.create Lock 0 () in
             let evt =
@@ -696,7 +780,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             in
 
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | Unlock { global } ->
             let base_evt : event = Event.create Unlock 0 () in
             let evt =
@@ -715,9 +799,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             in
 
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | RegMalloc { register; size } ->
-            let symbol = next_zh () in
+            let symbol = Allocator.next_zh events.alloc in
             let rval = VSymbol symbol in
             let loc = ESymbol symbol in
             let base_evt : event = Event.create Malloc 0 () in
@@ -742,13 +826,13 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Hashtbl.replace env' register (Expr.of_value rval);
                 let cont = recurse rest env' phi events in
 
-                SymbolicEventStructure.dot event' cont phi defacto
+                prefix events event' cont phi defacto
         | GlobalMalloc { global; size } ->
             (* The allocation, then a store of its address to the global: two
                events, as [r := malloc n; x := r] would be. The store used to be
                missing, so the global never held the address and a load from it
                read whatever it held before. *)
-            let symbol = next_zh () in
+            let symbol = Allocator.next_zh events.alloc in
             let rval = VSymbol symbol in
             let loc = ESymbol symbol in
             let base_evt : event = Event.create Malloc 0 () in
@@ -779,8 +863,8 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
 
               let cont = recurse rest env phi events in
 
-              SymbolicEventStructure.dot event'
-                (SymbolicEventStructure.dot store' cont phi defacto)
+              prefix events event'
+                (prefix events store' cont phi defacto)
                 phi defacto
         | Free { register } ->
             let base_evt : event = Event.create Free 0 () in
@@ -795,7 +879,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             in
 
             let cont = recurse rest env phi events in
-              SymbolicEventStructure.dot event' cont phi defacto
+              prefix events event' cont phi defacto
         | Skip ->
             let cont = recurse rest env phi events in
               cont
@@ -804,7 +888,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             Logs_safe.err (fun m ->
                 m "Statement not handled: %s" (ir_node_to_string node)
             );
-            SymbolicEventStructure.create ()
+            EventStructure.empty ()
       in
         structure
 
@@ -812,24 +896,37 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
 
 (** Create a generic terminal structure with a terminal event.
 
-    Adds a single terminal event and establishes distinctness constraints for
-    all global variables.
-
     @param add_event Function to add events to the global table.
     @param env The current register environment.
     @param phi The current path condition.
     @param events The global events structure.
     @return A symbolic event structure with a terminal event. *)
 let make_generic_terminal_structure ~add_event env phi events =
-  let structure = SymbolicEventStructure.create () in
   let terminal_evt = Event.create Terminal 0 () in
   let terminal_evt : event =
     add_event events terminal_evt env
       { source_span = None; thread_ctx = None; loop_ctx = None }
   in
+  let defacto =
+    List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
+    @ ub_facts env
+  in
+    prefix events terminal_evt (EventStructure.empty ()) phi defacto
+
+(** [distinctness globals structure] is what the program says about its
+    locations: [globals] are pairwise distinct, and the allocations of
+    [structure] are pairwise distinct and distinct from every global.
+
+    It is a property of the whole program and is computed once, from the
+    finished structure. It used to be attached to each terminal structure,
+    computed from what interpretation had seen by then -- a thread's terminal
+    knew nothing of an allocation in the next thread -- and the structure's list
+    was the concatenation of them all. The last terminal had seen everything, so
+    the union is this list, with duplicates. *)
+let distinctness globals (structure : symbolic_event_structure) =
   let global_constraints =
-    URelation.cross events.globals events.globals
-    |> (fun rel -> USet.set_minus rel (URelation.identity events.globals))
+    URelation.cross globals globals
+    |> (fun rel -> USet.set_minus rel (URelation.identity globals))
     |> USet.values
     |> List.map (fun (g1, g2) -> if g1 < g2 then (g1, g2) else (g2, g1))
     |> List.sort_uniq (fun (a1, b1) (a2, b2) ->
@@ -850,7 +947,7 @@ let make_generic_terminal_structure ~add_event env phi events =
           | Malloc, Some loc -> loc :: acc
           | _ -> acc
         )
-        events.events []
+        structure.events []
       |> List.sort_uniq Expr.compare
     in
     let rec distinct_pairs = function
@@ -865,31 +962,13 @@ let make_generic_terminal_structure ~add_event env phi events =
          *p and x be told apart, and so lets the two accesses be reordered. *)
       List.concat_map
         (fun loc ->
-          USet.values events.globals
+          USet.values globals
           |> List.map (fun g -> Expr.binop loc "!=" (EVar g))
         )
         locations
       @ distinct_pairs locations
   in
-  let constraints = global_constraints @ allocation_constraints in
-  let cont =
-    {
-      structure with
-      events = events.events;
-      origin = events.origin;
-      loop_indices = events.loop_indices;
-      loop_conditions = events.loop_conditions;
-      thread_index = events.thread_index;
-      p = events.env_by_evt;
-      constraints;
-    }
-  in
-  let defacto =
-    List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
-    @ ub_facts env
-  in
-
-  SymbolicEventStructure.dot terminal_evt cont phi defacto
+    global_constraints @ allocation_constraints
 
 (** {1 Basic Interpretation} *)
 
@@ -943,18 +1022,17 @@ let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
     List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
     @ ub_facts env
   in
-  let structure = SymbolicEventStructure.dot init_event' structure [] defacto in
+  let structure = prefix events init_event' structure [] defacto in
 
-  (* Add data from the events context *)
+  (* The per-event tables are the structure's own by now; [dot] built them.
+     The loop guards are still handed over whole: they are keyed by loop, not
+     by event, and accumulate one per interpreted occurrence. The constraints
+     are about the program as a whole. *)
   let structure =
     {
       structure with
-      events = events.events;
-      origin = events.origin;
-      loop_indices = events.loop_indices;
       loop_conditions = events.loop_conditions;
-      thread_index = events.thread_index;
-      p = events.env_by_evt;
+      constraints = distinctness events.globals structure;
     }
   in
 
@@ -1026,16 +1104,6 @@ module StepCounterSemantics : sig
       @param ctx The Mordor context.
       @return Updated context with interpretation results. *)
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
-
-  (** Interpret a program with a specific step counter.
-
-      @param step_counter The maximum number of loop iterations to unroll.
-      @param ctx The Mordor context.
-      @return A tuple of (symbolic event structure, source spans table). *)
-  val interpret :
-    step_counter:int ->
-    mordor_ctx ->
-    symbolic_event_structure * (int, source_span) Hashtbl.t
 end = struct
   (** Create an IR node with no annotations.
 
@@ -1138,7 +1206,7 @@ end = struct
   let rec interpret_statements_step_counter step_counter per_loop nodes env phi
       events =
     assert (step_counter >= 0);
-    if step_counter = 0 then SymbolicEventStructure.create ()
+    if step_counter = 0 then EventStructure.empty ()
     else
       match nodes with
       | node :: rest -> (
@@ -1185,28 +1253,19 @@ end = struct
       generic_step_interpret
         ~stmt_semantics:(interpret_statements_step_counter step_counter per_loop)
         lwt_ctx
-
-  let interpret ~step_counter lwt_ctx =
-    let ctx = lwt_ctx in
-      greek_counter := 0;
-      zh_counter := 0;
-      let stmt_semantics =
-        interpret_statements_step_counter step_counter true
-      in
-
-      match ctx.program_stmts with
-      | Some stmts ->
-          let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
-          let constraints = ctx.litmus_constraints in
-          let structure, source_spans =
-            interpret_generic ~ubopt:ctx.options.ubopt ~stmt_semantics ~defacto
-            ~constraints stmts
-          in
-            (structure, source_spans)
-      | _ -> failwith "No program statements or constraints for interpretation."
 end
 
 (** {1 Symbolic Loop Semantics} *)
+
+(** S8 (#20): with [compositional_po_iter] set, each interpreted occurrence of a
+    loop adds to its own structure's [po_iter] the pairs of its body's events,
+    and interpretation keeps that rather than rebuilding [po_iter] from
+    [loop_indices] at the end. Off by default; enabled via
+    [MORDOR_S8_COMPOSITIONAL_PO_ITER]. *)
+module S8 = struct
+  let compositional_po_iter =
+    ref (Option.is_some (Sys.getenv_opt "MORDOR_S8_COMPOSITIONAL_PO_ITER"))
+end
 
 (** Symbolic loop semantics for unbounded loops.
 
@@ -1219,13 +1278,6 @@ module SymbolicLoopSemantics : sig
       @param ctx The Mordor context.
       @return Updated context with interpretation results. *)
   val step_interpret : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
-
-  (** Interpret a program with symbolic loop semantics.
-
-      @param ctx The Mordor context.
-      @return A tuple of (symbolic event structure, source spans table). *)
-  val interpret :
-    mordor_ctx -> symbolic_event_structure * (int, source_span) Hashtbl.t
 end = struct
   (** Generate program order relations for a symbolic event structure.
 
@@ -1442,6 +1494,31 @@ end = struct
     let loop_index =
       annotations.loop_ctx |> Option.map (fun (ctx : loop_ctx) -> ctx.lid)
     in
+    (* S8: this occurrence's iterations, from its own body alone -- the events
+       of the entering branch that are in the loop -- rather than from every
+       event of the program the loop's index was ever stamped on. *)
+    let iterations (s : symbolic_event_structure) =
+      match (!S8.compositional_po_iter, loop_index) with
+      | true, Some lid ->
+          let body =
+            USet.filter
+              (fun e ->
+                Hashtbl.find_opt s.loop_indices e
+                |> Option.fold ~none:false ~some:(List.mem lid)
+              )
+              s.e
+          in
+            {
+              s with
+              po_iter =
+                USet.union s.po_iter
+                  (USet.set_minus
+                     (URelation.cross body body)
+                     (URelation.identity body)
+                  );
+            }
+      | _ -> s
+    in
     let defacto =
       List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
       @ ub_facts env
@@ -1486,17 +1563,17 @@ end = struct
         exit_phi events
     in
       match cond_val with
-      | EBoolean true -> enter_structure events
+      | EBoolean true -> iterations (enter_structure events)
       | EBoolean false -> exit_structure events
       | _ ->
           let branch_event =
             { (Event.create Branch 0 ()) with cond = Some cond_val }
           in
           let branch_event' = add_event events branch_event env annotations in
-          let enter_structure = enter_structure events in
+          let enter_structure = iterations (enter_structure events) in
           let exit_structure = exit_structure events in
-            SymbolicEventStructure.dot branch_event'
-              (SymbolicEventStructure.plus enter_structure exit_structure)
+            prefix events branch_event'
+              (EventStructure.choice enter_structure exit_structure)
               phi defacto
 
   let step_interpret lwt_ctx =
@@ -1507,35 +1584,14 @@ end = struct
     in
     let lwt_ctx = generic_step_interpret ~stmt_semantics lwt_ctx in
       let* ctx = lwt_ctx in
-        ctx.structure <-
-          Some
-            {
-              (Option.get ctx.structure) with
-              po_iter = generate_po_iter (Option.get ctx.structure);
-            };
+        if not !S8.compositional_po_iter then
+          ctx.structure <-
+            Some
+              {
+                (Option.get ctx.structure) with
+                po_iter = generate_po_iter (Option.get ctx.structure);
+              };
         Lwt.return ctx
-
-  let interpret ctx =
-    greek_counter := 0;
-    zh_counter := 0;
-    let stmt_semantics =
-      interpret_statements_symbolic_loop
-        ~final_structure:make_generic_terminal_structure ~add_event
-    in
-
-    match ctx.program_stmts with
-    | Some stmts ->
-        let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
-        let constraints = ctx.litmus_constraints in
-        let structure, source_spans =
-          interpret_generic ~ubopt:ctx.options.ubopt ~stmt_semantics ~defacto
-            ~constraints stmts
-        in
-        let structure =
-          { structure with po_iter = generate_po_iter structure }
-        in
-          (structure, source_spans)
-    | _ -> failwith "No program statements or constraints for interpretation."
 end
 
 (** {1 Main Pipeline Step} *)
@@ -1549,6 +1605,7 @@ end
     @return Updated context with interpretation results. *)
 let step_interpret lwt_ctx =
   let* ctx = lwt_ctx in
+  Progress.stage ~unit:"" "interpret" @@ fun () ->
     Logs_safe.debug (fun m ->
         m "Interpreting program with %s loop semantics."
           ( match ctx.options.loop_semantics with
@@ -1558,8 +1615,6 @@ let step_interpret lwt_ctx =
           | Generic -> "generic"
           )
     );
-    greek_counter := 0;
-    zh_counter := 0;
     match ctx.options.loop_semantics with
     | FiniteStepCounter | StepCounterPerLoop ->
         StepCounterSemantics.step_interpret lwt_ctx

@@ -11,7 +11,9 @@
 
     Usage: golden_diff check [DIR ...] compare against committed goldens
     (default) golden_diff update [DIR ...] (re)generate goldens golden_diff
-    verify [DIR ...] run each test twice, assert determinism
+    verify [DIR ...] run each test twice, assert determinism golden_diff
+    check-order [DIR ...] render each test with sets iterated both ways, assert
+    the pipeline does not depend on the order
 
     DIR defaults to the litmus corpora in [default_dirs]. Goldens live under
     [test/goldens/<litmus-path>.golden]. `check` exits non-zero on any mismatch
@@ -200,6 +202,40 @@ let run_verify files =
     List.iter (fun f -> Printf.printf "  flaky %s\n" f) (List.rev !flaky);
     if !flaky <> [] then exit 1
 
+(* Order gate: render each test with sets iterated in their usual order and
+   in its reverse, and require byte-identical output. What the pipeline
+   computes must be a function of the program, not of the order a hash set
+   happens to hold its members in. *)
+let run_check_order files =
+  let ok = ref 0 and differ = ref [] and errs = ref [] in
+    List.iter
+      (fun lit ->
+        match
+          let program = read_file lit in
+          let forward = render program in
+            Uset.USet.reversed_iteration := true;
+            let reversed =
+              Fun.protect
+                ~finally:(fun () -> Uset.USet.reversed_iteration := false)
+                (fun () -> render program)
+            in
+              String.equal forward reversed
+        with
+        | true -> incr ok
+        | false -> differ := lit :: !differ
+        | exception e -> errs := (lit, Printexc.to_string e) :: !errs
+      )
+      files;
+    Printf.printf "\n===== iteration-order check =====\n";
+    Printf.printf "order-independent : %d\n" !ok;
+    Printf.printf "ORDER-DEPENDENT   : %d\n" (List.length !differ);
+    Printf.printf "errors            : %d\n" (List.length !errs);
+    List.iter (fun f -> Printf.printf "  differs %s\n" f) (List.rev !differ);
+    List.iter
+      (fun (f, m) -> Printf.printf "  error %s: %s\n" f m)
+      (List.rev !errs);
+    if !differ <> [] || !errs <> [] then exit 1
+
 let () =
   let argv = Array.to_list Sys.argv in
   let mode, dirs =
@@ -213,6 +249,8 @@ let () =
     | "check" -> run_check files
     | "update" -> run_update files
     | "verify" -> run_verify files
+    | "check-order" -> run_check_order files
     | m ->
-        Printf.eprintf "unknown mode %S (use check|update|verify)\n" m;
+        Printf.eprintf "unknown mode %S (use check|update|verify|check-order)\n"
+          m;
         exit 2

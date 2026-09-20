@@ -546,13 +546,6 @@ module LiftElab : sig
       @return Promise of list of lifted justifications. *)
   val elab : context -> justification -> justification -> justification list
 
-  (** [relabel expr pairs] applies symbol relabeling to an expression.
-
-      @param expr The expression to relabel.
-      @param pairs Set of [(from, to)] symbol substitution pairs.
-      @return The relabeled expression. *)
-  val relabel : expr -> (string * string) USet.t -> expr
-
   (** [find_distinguishing_predicate p1 p2] finds distinguishing predicate.
 
       Finds a predicate that is positive in [p1] and negative in [p2], or vice
@@ -588,9 +581,6 @@ module LiftElab : sig
     ForwardingContext.t ->
     (string, string) Hashtbl.t uset
 end = struct
-  let relabel expr pairs =
-    USet.fold (fun acc (f, t) -> Expr.subst acc f (ESymbol t)) pairs expr
-
   (** [is_expr_relab_equiv elab_ctx relab p1 expr1 p2 expr2] checks expression
       equivalence.
 
@@ -1277,6 +1267,7 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
       (fun just -> OpTrace.add elab_ctx.op_trace just PreJustification |> ignore)
       pre_justs;
 
+    let round = ref 0 in
     let rec fixed_point (justs : justification list)
         (new_justs : justification list) just_cache =
       Logs_safe.debug (fun m ->
@@ -1285,6 +1276,10 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
       );
 
       let old_justs = justs @ new_justs in
+        incr round;
+        Progress.set_done (List.length old_justs);
+        Progress.set_detail
+          (Printf.sprintf "round %d, %d new" !round (List.length new_justs));
 
       (* Process candidates in ascending order of predicate count so the more
          general justifications are considered first; any later candidate that
@@ -1556,7 +1551,11 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
     in
 
     let just_cache = JustificationCache.create 1024 in
-      let* final_justs = fixed_point [] pre_justs just_cache in
+      let* final_justs =
+        Progress.stage ~unit:"justifications" "elaborate" (fun () ->
+            fixed_point [] pre_justs just_cache
+        )
+      in
         (* The derivation of each justification, kept rather than dropped with
            the elaboration context: it is the part that explains a surprising
            result, and it reached exactly one debug line (github #80). *)
@@ -1629,6 +1628,7 @@ let generate_justifications ?(num_threads = 1) ?(collapse_forwarding = false)
 let step_generate_justifications ?(collapse_forwarding = false)
     (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
+  Progress.stage ~unit:"" "justifications" @@ fun () ->
     match ctx.structure with
     | Some structure ->
         let* fwd_es_ctx =

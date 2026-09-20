@@ -218,6 +218,9 @@ module Display = struct
       @return Unit wrapped in Lwt *)
   let print_results (lwt_ctx : mordor_ctx Lwt.t) =
     let* ctx = lwt_ctx in
+    (* The progress line shares the terminal; results go under it, and a
+       directory run counts the program done. *)
+    Progress.interrupt ();
       Printf.printf "=== Verification Results ===\n";
       ( match ctx.structure with
       | None -> ()
@@ -266,6 +269,7 @@ module Display = struct
       );
       Printf.printf "===========================\n";
       flush stdout;
+      Progress.tick ();
       Lwt.return_unit
 
   (** Print the dependency relations of every execution.
@@ -339,6 +343,7 @@ module Display = struct
       @param name The program name
       @param program The program source code *)
   let print_program_header name program =
+    Progress.interrupt ();
     Printf.printf "Running program %s.\n" name;
     Printf.printf "===================\n";
     Printf.printf "\n=== Running: %s ===\n" name;
@@ -687,10 +692,17 @@ module Pipeline = struct
       @return Unit wrapped in Lwt
       @raise Failure if a single-file command is given multiple files *)
   let execute config tests =
+    (* A directory's programs, as one stage, each counted as it is reported. *)
+    let programs f =
+      if List.length tests > 1 then
+        Progress.stage ~total:(List.length tests) ~unit:"programs" "litmus tests"
+          f
+      else f ()
+    in
     match config.Config.command with
-    | Config.Run -> run_tests tests config
-    | Config.Parse -> parse_tests tests config
-    | Config.Interpret -> interpret_tests tests config
+    | Config.Run -> programs (fun () -> run_tests tests config)
+    | Config.Parse -> programs (fun () -> parse_tests tests config)
+    | Config.Interpret -> programs (fun () -> interpret_tests tests config)
     | Config.Episodicity ->
         if List.length tests <> 1 then
           failwith
@@ -719,7 +731,7 @@ module Pipeline = struct
           failwith
             "Dependencies command with --output-mode json requires exactly one \
              input program (use --single)";
-        dependencies_tests tests config
+        programs (fun () -> dependencies_tests tests config)
     | Config.Justifications ->
         if List.length tests <> 1 then
           failwith
@@ -868,6 +880,14 @@ module CLI = struct
         " Output file path (default: stdout)"
       );
       (* Logging levels *)
+      ( "--progress",
+        Arg.Unit (fun () -> Progress.enabled := true),
+        " Show progress on stderr (default when stderr is a terminal)"
+      );
+      ( "--no-progress",
+        Arg.Unit (fun () -> Progress.enabled := false),
+        " Do not show progress"
+      );
       ( "--debug",
         Arg.Unit (fun () -> state.log_level <- Some Logs.Debug),
         " Set log level to Debug (most verbose)"
@@ -1029,6 +1049,8 @@ end
 
     @return Unit wrapped in Lwt *)
 let main () =
+  (* On a terminal, unless --no-progress says otherwise. *)
+  Progress.enabled := Unix.isatty Unix.stderr;
   (* Parse command-line arguments *)
   let config, log_level = CLI.parse_args () in
 

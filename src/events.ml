@@ -87,6 +87,7 @@ module Event : sig
   val is_ordering : event -> bool
   val get_symbols : event -> string USet.t
   val relabel : relab:(string -> string option) -> event -> event
+  val rename : relab:(string -> string option) -> event -> event
 end = struct
   type t = event
 
@@ -227,13 +228,22 @@ end = struct
       );
       symbols
 
-  let relabel ~relab e =
+  let map_exprs expr ~relab e =
     {
       e with
-      loc = Option.map (Expr.relabel ~relab) e.loc;
+      loc = Option.map (expr ~relab) e.loc;
       rval = Option.map (Value.relabel ~relab) e.rval;
-      wval = Option.map (Expr.relabel ~relab) e.wval;
+      wval = Option.map (expr ~relab) e.wval;
+      (* A branch event's guard. It was left alone, which no caller could see:
+         the one there was relabels a justification's write. S1 (#14) could. *)
+      cond = Option.map (expr ~relab) e.cond;
     }
+
+  (* Renames symbols and evaluates what it renamed; see [Expr.relabel]. *)
+  let relabel ~relab e = map_exprs (fun ~relab -> Expr.relabel ~relab) ~relab e
+
+  (* Renames symbols and changes nothing else. *)
+  let rename ~relab e = map_exprs Expr.rename ~relab e
 end
 
 let get_loc structure event_id =
