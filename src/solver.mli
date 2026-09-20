@@ -47,8 +47,8 @@ type solver = {
 
     The [Z3.context] is this domain's, shared by every query it runs: building
     one per query cost megabytes of native memory that OCaml's GC has no reason
-    to reclaim. The Z3 solver and the variable table are fresh, so no
-    constraint and no variable carries over from an earlier query.
+    to reclaim. The Z3 solver and the variable table are fresh, so no constraint
+    and no variable carries over from an earlier query.
 
     A context must not be used from more than one domain.
 

@@ -541,8 +541,10 @@ forbid (r1 = 1 && r2 = 1) []|}
         test_unknown_model_allowed_leaves_coherent;
       test_case "known_model_mapped_to_default_is_not_unknown" `Quick
         test_known_model_mapped_to_default_is_not_unknown;
-      test_case "known_model_sets_coherent" `Quick test_known_model_sets_coherent;
-      test_case "underscore_model_is_known" `Quick test_underscore_model_is_known;
+      test_case "known_model_sets_coherent" `Quick
+        test_known_model_sets_coherent;
+      test_case "underscore_model_is_known" `Quick
+        test_underscore_model_is_known;
       test_case "select_default_is_stated_model" `Quick
         test_select_default_is_stated_model;
       test_case "select_primary_overrides_stated" `Quick

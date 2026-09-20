@@ -778,7 +778,6 @@ let test_membership_present_events_allow () =
 (*  Suite assembly                                                     *)
 (* ================================================================== *)
 
-
 (* ------------------------------------------------------------------ *)
 (*  Refinement chains (github #85)                                     *)
 (* ------------------------------------------------------------------ *)
@@ -816,19 +815,31 @@ let check_refinement_verdict name source expected () =
 
 (* A program refines itself. *)
 let refinement_identity =
-  "x := 0;\n   { x := 42 }|||{ r1 := x }\n   %% ~~> [_=allow] %%\n   x := 0;\n   { x := 42 }|||{ r1 := x }\n"
+  "x := 0;\n\
+  \   { x := 42 }|||{ r1 := x }\n\
+  \   %% ~~> [_=allow] %%\n\
+  \   x := 0;\n\
+  \   { x := 42 }|||{ r1 := x }\n"
 
 (* The target invents a write the source never performs, so r1 = 3 is a
    behaviour the source has not: the refinement does not hold. *)
 let refinement_invented_write outcome =
   Printf.sprintf
-    "x := 0;\n     { x := 42 }|||{ r1 := x }\n     %%%% ~~> [_=%s] %%%%\n     x := 0;\n     { x := 42; x := 3 }|||{ r1 := x }\n"
+    "x := 0;\n\
+    \     { x := 42 }|||{ r1 := x }\n\
+    \     %%%% ~~> [_=%s] %%%%\n\
+    \     x := 0;\n\
+    \     { x := 42; x := 3 }|||{ r1 := x }\n"
     outcome
 
 (* Two programs with nothing in common. Comparing on the intersection of their
    observable registers would make this vacuously a refinement. *)
 let refinement_unrelated =
-  "x := 0;\n   { x := 1 }|||{ r1 := x }\n   %% ~~> [_=allow] %%\n   y := 0;\n   { y := 99 }|||{ r9 := y }\n"
+  "x := 0;\n\
+  \   { x := 1 }|||{ r1 := x }\n\
+  \   %% ~~> [_=allow] %%\n\
+  \   y := 0;\n\
+  \   { y := 99 }|||{ r9 := y }\n"
 
 (* A register that ends up holding an allocation's address. Comparing the
    address's integer value is meaningless -- the allocator picks it, and nothing
@@ -851,8 +862,8 @@ let refinement_pointer_valued outcome =
 let refinement_tests =
   [
     Alcotest.test_case "refinement: a program refines itself" `Quick
-      (check_refinement_verdict "identity refinement holds"
-         refinement_identity true
+      (check_refinement_verdict "identity refinement holds" refinement_identity
+         true
       );
     Alcotest.test_case "refinement: an invented write is not a refinement"
       `Quick
@@ -877,7 +888,6 @@ let refinement_tests =
          true
       );
   ]
-
 
 (* ------------------------------------------------------------------ *)
 (*  Globals, references and pointers                                   *)

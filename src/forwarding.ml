@@ -128,10 +128,10 @@ end = struct
         (** Context-indexed cache for subset lookups.
 
             Groups cache entries by context, allowing lookup of entries whose
-            predicates are subsets of a query. Each entry carries its
-            predicates twice, as the list that keys it and as the set the
-            subset test needs: building that set per entry per lookup was the
-            bulk of what {!get_subset} did, and it never changes. *)
+            predicates are subsets of a query. Each entry carries its predicates
+            twice, as the list that keys it and as the set the subset test
+            needs: building that set per entry per lookup was the bulk of what
+            {!get_subset} did, and it never changes. *)
     mutex : Mutex.t;
         (** Mutex protecting concurrent access to [exact] and [by_context]. *)
   }
@@ -159,16 +159,16 @@ end = struct
           | None -> { ppo = None; ppo_loc = None }
       )
 
-  (** [get_subset cache con predicates] is the cached entry under [con] with
-      the largest ppo among those whose predicates [predicates] subsumes, or
-      [None] if there is no such entry.
+  (** [get_subset cache con predicates] is the cached entry under [con] with the
+      largest ppo among those whose predicates [predicates] subsumes, or [None]
+      if there is no such entry.
 
       Only the bucket lookup is taken under the lock. Picking among a context's
-      entries is a subset test against each and a comparison of their sizes,
-      and doing that while holding the cache made every other domain wait
-      through it. Reading the bucket out is safe because its cells are
-      immutable and {!set_field} replaces the whole list: a reader sees the
-      bucket either before an update or after it, never partway through. *)
+      entries is a subset test against each and a comparison of their sizes, and
+      doing that while holding the cache made every other domain wait through
+      it. Reading the bucket out is safe because its cells are immutable and
+      {!set_field} replaces the whole list: a reader sees the bucket either
+      before an update or after it, never partway through. *)
   let get_subset cache con predicates =
     let entries =
       with_lock cache (fun () ->

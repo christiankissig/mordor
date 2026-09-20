@@ -111,7 +111,9 @@ let render (program : string) : string =
       String.concat ""
         (List.map
            (fun (assertion, holds) ->
-             Printf.sprintf "  %s %s\n" (if holds then "holds" else "fails") assertion
+             Printf.sprintf "  %s %s\n"
+               (if holds then "holds" else "fails")
+               assertion
            )
            ctx.assertion_verdicts
         )

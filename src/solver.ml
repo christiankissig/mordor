@@ -371,12 +371,12 @@ let quick_check exprs =
 
 (** Cache for conjunction satisfiability results, in two generations.
 
-    Unbounded, it grew about 20MB a second on rcu-2: a read-from enumeration there
-    asks hundreds of thousands of conjunctions, most of them once, and an entry
-    holds its conjunction, several KB. New entries go to the young generation;
-    when that is full it becomes the old one and the old one is dropped, and an
-    entry hit in the old one moves back to the young. So what is asked again
-    stays, and at most twice {!generation_size} entries are held. *)
+    Unbounded, it grew about 20MB a second on rcu-2: a read-from enumeration
+    there asks hundreds of thousands of conjunctions, most of them once, and an
+    entry holds its conjunction, several KB. New entries go to the young
+    generation; when that is full it becomes the old one and the old one is
+    dropped, and an entry hit in the old one moves back to the young. So what is
+    asked again stays, and at most twice {!generation_size} entries are held. *)
 module GenerationalCache = struct
   type t = {
     mutable young : bool option ConjunctionCache.t;
@@ -405,7 +405,6 @@ module GenerationalCache = struct
 end
 
 let quick_check_cache = GenerationalCache.create ()
-
 let cache_mutex = Mutex.create ()
 
 (** S7 (#19): with [MORDOR_S7_TRACE] set to a path, every query to

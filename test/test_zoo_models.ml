@@ -13,7 +13,9 @@ open Uset
 
 let contains haystack needle =
   let n = String.length needle and h = String.length haystack in
-  let rec go i = i + n <= h && (String.sub haystack i n = needle || go (i + 1)) in
+  let rec go i =
+    i + n <= h && (String.sub haystack i n = needle || go (i + 1))
+  in
     go 0
 
 (** Every implemented name selects the coherence model of that name. *)
@@ -28,7 +30,7 @@ let test_names_resolve () =
       match Coherence.ModelRegistry.lookup name with
       | Some model ->
           let module M = (val model : Coherence.MEMORY_MODEL) in
-            check string (name ^ " is registered under its name") name M.name
+          check string (name ^ " is registered under its name") name M.name
       | None -> fail (name ^ " has no coherence model")
     )
     implemented_zoo_models
@@ -106,8 +108,8 @@ let run ?(primary = "smrd") ~others source =
       )
 
 (** MRD is sMRD only where sMRD's extensions have nothing to act on; allocated
-    memory is outside that, and the run says so rather than answering as sMRD.
-    A pointer to a named global is not: it resolves to the global. *)
+    memory is outside that, and the run says so rather than answering as sMRD. A
+    pointer to a named global is not: it resolves to the global. *)
 let test_mrd_refuses_pointers () =
   match
     run ~primary:"mrd" ~others:[]
@@ -167,14 +169,35 @@ allow (r0 = 0) [_]|};
     edges hold of outcomes, not of executions. *)
 let edges =
   [
-    ("sc", "vbd"); ("vbd", "sc"); ("sc", "tso"); ("tso", "x86-tso");
-    ("x86-tso", "tso"); ("tso", "clighttso"); ("clighttso", "tso");
-    ("tso", "coherence"); ("sc", "sra"); ("sra", "ra"); ("ra", "wra");
-    ("sc", "pc"); ("pc", "pram"); ("pc", "coherence"); ("sc", "causal");
-    ("causal", "pram"); ("causal", "cc"); ("causal", "wfr"); ("pram", "slow");
-    ("coherence", "slow"); ("slow", "local"); ("pram", "ryw"); ("pram", "mr");
-    ("pram", "mw"); ("rc11", "rc17"); ("sc", "od-lso"); ("sc", "pocausal");
-    ("rc11", "rc11z"); ("rc11z", "rc11");
+    ("sc", "vbd");
+    ("vbd", "sc");
+    ("sc", "tso");
+    ("tso", "x86-tso");
+    ("x86-tso", "tso");
+    ("tso", "clighttso");
+    ("clighttso", "tso");
+    ("tso", "coherence");
+    ("sc", "sra");
+    ("sra", "ra");
+    ("ra", "wra");
+    ("sc", "pc");
+    ("pc", "pram");
+    ("pc", "coherence");
+    ("sc", "causal");
+    ("causal", "pram");
+    ("causal", "cc");
+    ("causal", "wfr");
+    ("pram", "slow");
+    ("coherence", "slow");
+    ("slow", "local");
+    ("pram", "ryw");
+    ("pram", "mr");
+    ("pram", "mw");
+    ("rc11", "rc17");
+    ("sc", "od-lso");
+    ("sc", "pocausal");
+    ("rc11", "rc11z");
+    ("rc11z", "rc11");
   ]
 
 let test_edges_hold () =
@@ -212,8 +235,8 @@ let oscillating verdicts =
 %s|}
     verdicts
 
-(** Each line of a conjunction may name several models, and each model makes
-    an assertion of its own, checked under that model. *)
+(** Each line of a conjunction may name several models, and each model makes an
+    assertion of its own, checked under that model. *)
 let test_conjunction_parses () =
   let ctx =
     parse
@@ -252,17 +275,23 @@ let test_conjunction_checks_each_model () =
         )
     in
       check bool "one failing assertion fails the test" false valid;
-      check (list bool) "and only that one" [ true; false ] (List.map snd verdicts)
+      check (list bool) "and only that one" [ true; false ]
+        (List.map snd verdicts)
 
-(** A model that folds undefined behaviour needs its own interpretation, which
-    a conjunction does not get. *)
+(** A model that folds undefined behaviour needs its own interpretation, which a
+    conjunction does not get. *)
 let test_conjunction_refuses_mixed_ub_fold () =
   match
     parse
-      "x := 0;\n{ x := 1 } ||| { r0 := x }\n%%\nallow (r0 = 1) [RC11]\nforbid (r0 = 1) [UB11]"
+      "x := 0;\n\
+       { x := 1 } ||| { r0 := x }\n\
+       %%\n\
+       allow (r0 = 1) [RC11]\n\
+       forbid (r0 = 1) [UB11]"
   with
   | _ -> fail "RC11 and UB11 shared an enumeration"
-  | exception Failure msg -> check bool "says why" true (contains msg "undefined behaviour")
+  | exception Failure msg ->
+      check bool "says why" true (contains msg "undefined behaviour")
 
 let suite =
   ( "Zoo models",

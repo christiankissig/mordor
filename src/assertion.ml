@@ -827,8 +827,8 @@ module Refinement = struct
   (** [run_program options litmus] runs one program of the chain through the
       pipeline and returns its structure and coherent executions.
 
-      This is what was missing. [do_check_refinement] used to compare a hardcoded
-      empty result against itself, so no program in the chain was ever
+      This is what was missing. [do_check_refinement] used to compare a
+      hardcoded empty result against itself, so no program in the chain was ever
       interpreted (github #85). *)
   let run_program (options : Context.options) (litmus : Context.ir_litmus) =
     let ctx =
@@ -914,14 +914,12 @@ module Refinement = struct
       {!observation_cap} -- the caller must not read that as "no observations".
 
       Enumeration rather than a containment query, because a source execution's
-      internal symbols would have to be existentially quantified to ask
-      "is every observation of [t] an observation of some [s]" directly, and the
+      internal symbols would have to be existentially quantified to ask "is
+      every observation of [t] an observation of some [s]" directly, and the
       solver interface here has no quantifiers. The programs are small enough
       that enumerating is exact. *)
   let observations structure (exec : symbolic_execution) regs =
-    let rf_conditions =
-      ExecutionAnalysis.build_rf_conditions structure exec
-    in
+    let rf_conditions = ExecutionAnalysis.build_rf_conditions structure exec in
     let value_of reg =
       Expr.evaluate ~env:(Hashtbl.find_opt exec.final_env) (EVar reg)
     in
@@ -971,9 +969,7 @@ module Refinement = struct
         | Some model ->
             let point =
               List.map
-                (fun reg ->
-                  (reg, Solver.concrete_value model ("$obs$" ^ reg))
-                )
+                (fun reg -> (reg, Solver.concrete_value model ("$obs$" ^ reg)))
                 regs
             in
               if List.exists (fun (_, v) -> Option.is_none v) point then (
@@ -987,7 +983,9 @@ module Refinement = struct
                       exec.id
                       (String.concat "; "
                          (List.filter_map
-                            (fun (r, v) -> if Option.is_none v then Some r else None)
+                            (fun (r, v) ->
+                              if Option.is_none v then Some r else None
+                            )
                             point
                          )
                       )
@@ -999,8 +997,7 @@ module Refinement = struct
                   EOr
                     (List.map
                        (fun (reg, v) ->
-                         EBinOp
-                           (obs_var reg, "!=", Expr.of_value (Option.get v))
+                         EBinOp (obs_var reg, "!=", Expr.of_value (Option.get v))
                        )
                        point
                     )
@@ -1044,12 +1041,14 @@ module Refinement = struct
     let source_regs = observable_registers source in
     let target_regs = observable_registers target in
     let regs =
-      USet.union source_regs target_regs |> USet.values
+      USet.union source_regs target_regs
+      |> USet.values
       |> List.sort String.compare
     in
     let only_in name a b =
       USet.filter (fun r -> not (USet.mem b r)) a
-      |> USet.values |> List.sort String.compare
+      |> USet.values
+      |> List.sort String.compare
       |> function
       | [] -> None
       | rs -> Some (name ^ ": " ^ String.concat ", " rs)
@@ -1072,55 +1071,55 @@ module Refinement = struct
       | _ :: _ as diffs ->
           Logs_safe.info (fun m ->
               m
-                "Refinement: the programs do not end in the same registers                  (%s), so the target has a behaviour the source has not"
+                "Refinement: the programs do not end in the same \
+                 registers                  (%s), so the target has a \
+                 behaviour the source has not"
                 (String.concat "; " diffs)
           );
           Some false
       | [] -> (
-      match
-        (run_observations source regs, run_observations target regs)
-      with
-      | Some source_points, Some target_points ->
-          let source_set =
-            List.map
-              (fun p ->
-                String.concat ","
-                  (List.map (fun (r, v) -> r ^ "=" ^ v) p)
-              )
-              source_points
-            |> List.sort_uniq String.compare
-          in
-          let missing =
-            List.filter
-              (fun p ->
-                let key =
-                  String.concat ","
-                    (List.map (fun (r, v) -> r ^ "=" ^ v) p)
-                in
-                  not (List.mem key source_set)
-              )
-              target_points
-          in
-            List.iter
-              (fun p ->
-                Logs_safe.info (fun m ->
-                    m "Refinement: target behaviour not in source: %s"
-                      (String.concat ", "
-                         (List.map (fun (r, v) -> r ^ " = " ^ v) p)
-                      )
-                )
-              )
-              missing;
-            Some (missing = [])
-      | _ ->
-          Logs_safe.err (fun m ->
-              m
-                "Refinement: could not enumerate the observable behaviours \
-                 (cap %d); the chain is not decided"
-                observation_cap
-          );
-          None
-      )
+          match
+            (run_observations source regs, run_observations target regs)
+          with
+          | Some source_points, Some target_points ->
+              let source_set =
+                List.map
+                  (fun p ->
+                    String.concat "," (List.map (fun (r, v) -> r ^ "=" ^ v) p)
+                  )
+                  source_points
+                |> List.sort_uniq String.compare
+              in
+              let missing =
+                List.filter
+                  (fun p ->
+                    let key =
+                      String.concat "," (List.map (fun (r, v) -> r ^ "=" ^ v) p)
+                    in
+                      not (List.mem key source_set)
+                  )
+                  target_points
+              in
+                List.iter
+                  (fun p ->
+                    Logs_safe.info (fun m ->
+                        m "Refinement: target behaviour not in source: %s"
+                          (String.concat ", "
+                             (List.map (fun (r, v) -> r ^ " = " ^ v) p)
+                          )
+                    )
+                  )
+                  missing;
+                Some (missing = [])
+          | _ ->
+              Logs_safe.err (fun m ->
+                  m
+                    "Refinement: could not enumerate the observable behaviours \
+                     (cap %d); the chain is not decided"
+                    observation_cap
+              );
+              None
+        )
 
   (** [collect_chain acc ast] collects programs in chained assertion.
 
@@ -1171,12 +1170,18 @@ module Refinement = struct
     let%lwt runs = Lwt_list.map_s (run_program options) tests in
       match
         List.fold_left
-          (fun acc r -> match (acc, r) with Some xs, Some x -> Some (x :: xs) | _ -> None)
+          (fun acc r ->
+            match (acc, r) with
+            | Some xs, Some x -> Some (x :: xs)
+            | _ -> None
+          )
           (Some []) runs
       with
       | None ->
           Logs_safe.err (fun m ->
-              m "Refinement: chain not decided, a program produced no executions"
+              m
+                "Refinement: chain not decided, a program produced no \
+                 executions"
           );
           Lwt.return
             {
@@ -1199,10 +1204,14 @@ module Refinement = struct
                 in
                   Logs_safe.info (fun m ->
                       m "Refinement link: holds=%s asserted=%s -> %b"
-                        (match holds with
-                         | None -> "undecided"
-                         | Some h -> string_of_bool h)
-                        (match outcome with Allow -> "allow" | Forbid -> "forbid")
+                        ( match holds with
+                        | None -> "undecided"
+                        | Some h -> string_of_bool h
+                        )
+                        ( match outcome with
+                        | Allow -> "allow"
+                        | Forbid -> "forbid"
+                        )
                         link_pass
                   );
                   walk rest os' (all_pass && link_pass)
@@ -1367,16 +1376,16 @@ module AssertionChecker = struct
   let run_ub_validation_all executions structure =
     let all_ub_reasons = ref [] in
     let execution_results = ref [] in
-    List.iter
-      (fun execution ->
-        let ub_reasons = run_ub_validation_on_execution structure execution in
-          all_ub_reasons := ub_reasons @ !all_ub_reasons;
-          execution_results :=
-            { exec_id = execution.id; satisfied = false; ub_reasons }
-            :: !execution_results
-      )
-      executions;
-    Lwt.return (!all_ub_reasons, !execution_results)
+      List.iter
+        (fun execution ->
+          let ub_reasons = run_ub_validation_on_execution structure execution in
+            all_ub_reasons := ub_reasons @ !all_ub_reasons;
+            execution_results :=
+              { exec_id = execution.id; satisfied = false; ub_reasons }
+              :: !execution_results
+        )
+        executions;
+      Lwt.return (!all_ub_reasons, !execution_results)
 
   (** [check_model_assertion model executions structure] checks model assertion.
 
@@ -1449,13 +1458,12 @@ module AssertionChecker = struct
             :: !execution_results;
 
           (* Track assertion instance only for executions that witness/contradict *)
-          ( match detail_opt with
+          match detail_opt with
           | Some detail ->
               if outcome = Allow && exec_satisfied then
                 (* Allow assertion witnessed by this execution *)
                 let instance =
-                  AssertionInstanceTracking.create_witnessed execution.id
-                    detail
+                  AssertionInstanceTracking.create_witnessed execution.id detail
                 in
                   assertion_instances := instance :: !assertion_instances
               else if outcome = Forbid && exec_satisfied then
@@ -1484,11 +1492,10 @@ module AssertionChecker = struct
                   else
                     (* forbid (ub) contradicted by this UB execution *)
                     let instance =
-                      AssertionInstanceTracking.create_contradicted
-                        execution.id detail
+                      AssertionInstanceTracking.create_contradicted execution.id
+                        detail
                     in
                       assertion_instances := instance :: !assertion_instances
-          )
       )
       executions;
 
@@ -1605,11 +1612,7 @@ module AssertionChecker = struct
        nothing to compare against. *)
     let%lwt result =
       Refinement.do_check_refinement options
-        {
-          config;
-          program;
-          assertions = [ Chained { model; outcome; rest } ];
-        }
+        { config; program; assertions = [ Chained { model; outcome; rest } ] }
     in
       Lwt.return
         {
@@ -1643,7 +1646,8 @@ module AssertionChecker = struct
         | None ->
             Logs_safe.err (fun m ->
                 m
-                  "Refinement assertion reached the checker without a                    context; the chain cannot be decided"
+                  "Refinement assertion reached the checker without \
+                   a                    context; the chain cannot be decided"
             );
             Lwt.return
               {
@@ -1662,8 +1666,7 @@ module AssertionChecker = struct
                   model = None;
                   values = [];
                   defacto = Option.value ctx.litmus_defacto ~default:[];
-                  constraints =
-                    Option.value ctx.litmus_constraints ~default:[];
+                  constraints = Option.value ctx.litmus_constraints ~default:[];
                 }
               model outcome rest executions structure
       )
@@ -1688,12 +1691,15 @@ let check_assertion = AssertionChecker.check
 (** [ub_reasons_to_yojson ubs] converts UB reason list to Yojson. *)
 let ub_reasons_to_yojson = JSONSerialization.ub_reasons_to_yojson
 
-(** [describe_assertion assertion] is an outcome assertion as a test writes
-    it, [forbid (r0 = 1) [ra]], naming one model. *)
+(** [describe_assertion assertion] is an outcome assertion as a test writes it,
+    [forbid (r0 = 1) [ra]], naming one model. *)
 let describe_assertion : Context.ir_assertion -> string = function
   | Ir.Outcome { outcome; condition; model } ->
       Printf.sprintf "%s (%s) [%s]"
-        (match outcome with Ir.Allow -> "allow" | Ir.Forbid -> "forbid")
+        ( match outcome with
+        | Ir.Allow -> "allow"
+        | Ir.Forbid -> "forbid"
+        )
         ( match condition with
         | Ir.CondUB -> "ub"
         | Ir.CondExpr e -> Expr.to_string e

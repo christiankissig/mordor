@@ -501,15 +501,6 @@ type model_options = {
   ubopt : bool;  (** Whether this model uses undefined behavior optimizations *)
 }
 
-(** Predefined configurations for known memory models.
-
-    This table maps model names to their appropriate settings:
-    - {b Power}: IBM POWER architecture with IMM coherence
-    - {b RC11}: Repaired C11 memory model
-    - {b IMM}: Intermediate Memory Model
-    - etc.
-
-    Models with "UB" suffix enable undefined behavior optimizations. *)
 (** The zoo's models MoRDor defines from the relations it already computes,
     beyond [imm], [rc11] and [smrd]. *)
 let implemented_zoo_models =
@@ -540,6 +531,15 @@ let implemented_zoo_models =
     "wfr";
   ]
 
+(** Predefined configurations for known memory models.
+
+    This table maps model names to their appropriate settings:
+    - {b Power}: IBM POWER architecture with IMM coherence
+    - {b RC11}: Repaired C11 memory model
+    - {b IMM}: Intermediate Memory Model
+    - etc.
+
+    Models with "UB" suffix enable undefined behavior optimizations. *)
 let model_options_table : (string, model_options) Hashtbl.t =
   let tbl = Hashtbl.create 20 in
     Hashtbl.add tbl "power" { coherent = Some "imm"; ubopt = false };
@@ -646,7 +646,8 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
       (* The table has carried [ubopt] since it was written and nothing ever
          read it, so [UB11] and no annotation at all behaved identically.
          [Interpret] now gates the [e / !r -> e] rewrite on it. *)
-      Logs_safe.debug (fun m -> m "setting ubopt %b" options.ubopt);
+      Logs_safe.debug (fun m -> m "setting ubopt %b" options.ubopt
+      );
       ctx.options.ubopt <- options.ubopt
 
 (** [assertion_coherence_model ctx model] is the coherence model an assertion
@@ -658,17 +659,17 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
 
     @raise Failure
       if [model] is unknown, unless [allow_unknown_model] is set, or if it
-      disagrees with the model in effect about the undefined-behaviour fold.
-      The fold happens at interpretation, before any model is consulted, and
-      the assertions of one test share one interpretation. *)
+      disagrees with the model in effect about the undefined-behaviour fold. The
+      fold happens at interpretation, before any model is consulted, and the
+      assertions of one test share one interpretation. *)
 let assertion_coherence_model (ctx : mordor_ctx) model =
   match get_model_options model with
   | Some { coherent; ubopt } ->
       if ubopt <> ctx.options.ubopt then
         failwith
           (Printf.sprintf
-             "The assertions of one test are checked against one enumeration of \
-              its executions, and %S and %S differ in whether they fold \
+             "The assertions of one test are checked against one enumeration \
+              of its executions, and %S and %S differ in whether they fold \
               undefined behaviour, which happens before any model is \
               consulted. Put the assertions under %S in a test of their own."
              model ctx.options.model model
@@ -677,7 +678,9 @@ let assertion_coherence_model (ctx : mordor_ctx) model =
   | None ->
       (* Unknown: fail as [apply_model_options] does, or measure under the
          model in effect when asked to. *)
-      let probe = { ctx with options = { ctx.options with model = ctx.options.model } } in
+      let probe =
+        { ctx with options = { ctx.options with model = ctx.options.model } }
+      in
         apply_model_options probe model;
         ctx.options.coherent
 
@@ -695,8 +698,12 @@ let set_assertions (ctx : mordor_ctx) (assertions : ir_assertion list) =
   in
     ( match assertions with
     | _ :: _ :: _
-      when List.exists (function Ir.Chained _ -> true | _ -> false) assertions
-      ->
+      when List.exists
+             (function
+               | Ir.Chained _ -> true
+               | _ -> false
+               )
+             assertions ->
         failwith "A refinement chain has to be a litmus test's only assertion."
     | first :: _ ->
         Option.iter

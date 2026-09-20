@@ -42,8 +42,8 @@ module OpTraceTable = Hashtbl.Make (JustificationCacheKey)
 (** Thread-safe wrapper around [OpTraceTable].
 
     Every write happens on the main domain, once a round's elaborations have
-    come back: the workers return their results and this records them. The
-    mutex is kept so that the table stays safe if a write ever moves into an
+    come back: the workers return their results and this records them. The mutex
+    is kept so that the table stays safe if a write ever moves into an
     elaborator, since a [Hashtbl] raced from two domains corrupts silently. *)
 module OpTrace = struct
   type 'a t = { tbl : 'a OpTraceTable.t; mutex : Mutex.t }
@@ -164,8 +164,7 @@ let pre_justifications structure =
                      match event.rval with
                      | Some v ->
                          USet.difference syms
-                           (USet.of_list
-                              (Expr.get_symbols (Expr.of_value v)))
+                           (USet.of_list (Expr.get_symbols (Expr.of_value v)))
                      | None -> syms
                    else syms
                 );
@@ -260,7 +259,7 @@ module ValueAssignElab = struct
                    program writing the constant 1 forbids
                    (own/VA-unrelated-guard-smrd.lit). *)
                 let p = just.p in
-                    (* Recompute the dependency set from the write's own
+                (* Recompute the dependency set from the write's own
                        expressions, as pre_justifications does and as
                        Definition 4.10 does, D' = syms(x') u syms(eps'). The
                        predicate's symbols stay out of [d]: freeze_dp takes dp
@@ -269,13 +268,15 @@ module ValueAssignElab = struct
                        conditional carry different dependency sets, which
                        LiftElab reads as a mismatch and refuses to lift
                        (esop_problem/cse.lit). *)
-                    let d =
-                      [ just.w.loc; Option.map Expr.of_value just.w.rval; Some wval ]
-                      |> List.filter_map Fun.id
-                      |> List.concat_map Expr.get_symbols
-                      |> USet.of_list
-                    in
-                    (* The one place a justification's write event stops
+                let d =
+                  [
+                    just.w.loc; Option.map Expr.of_value just.w.rval; Some wval;
+                  ]
+                  |> List.filter_map Fun.id
+                  |> List.concat_map Expr.get_symbols
+                  |> USet.of_list
+                in
+                (* The one place a justification's write event stops
                        agreeing with the event structure's. wval is concretised
                        here and nowhere else -- Justification.relabel would
                        rewrite loc and rval too, but nothing calls it -- and
@@ -292,8 +293,8 @@ module ValueAssignElab = struct
 
                        Locations and read values are untouched, so code reading
                        those is unaffected either way. *)
-                    let w = { just.w with wval = Some wval } in
-                      [ { just with w; d; p } ]
+                let w = { just.w with wval = Some wval } in
+                  [ { just with w; d; p } ]
       | None -> []
 end
 
@@ -346,7 +347,9 @@ module ForwardElab = struct
        volatile read may not be satisfied from a preceding write and a volatile
        write may not be dropped.  The mode sets do not carry this: a volatile
        access is relaxed as far as [rlx_read_events] is concerned. *)
-    let elidable = USet.filter (fun e -> not (Events.is_volatile elab_ctx.structure e)) in
+    let elidable =
+      USet.filter (fun e -> not (Events.is_volatile elab_ctx.structure e))
+    in
     let w_cross_r = URelation.cross write_events (elidable rlx_read_events) in
     let r_cross_r = URelation.cross read_events (elidable read_events) in
     let w_cross_w = URelation.cross write_events (elidable rlx_write_events) in
@@ -372,7 +375,9 @@ module ForwardElab = struct
        in the elided position, so that is the side volatile has to be kept out
        of. *)
     let elidable =
-      USet.filter (fun e -> not (Events.is_volatile elab_ctx.structure e)) write_events
+      USet.filter
+        (fun e -> not (Events.is_volatile elab_ctx.structure e))
+        write_events
     in
     let w_cross_w = URelation.cross elidable write_events in
       USet.filter
@@ -1119,8 +1124,8 @@ end = struct
                                     match Hashtbl.find_opt relab s with
                                     | Some s' ->
                                         let o2 =
-                                          Hashtbl.find
-                                            elab_ctx.structure.origin s'
+                                          Hashtbl.find elab_ctx.structure.origin
+                                            s'
                                         in
                                         (* Structure lookup, for the
                                            same reason as in
@@ -1128,16 +1133,16 @@ end = struct
                                            justification for an
                                            arbitrary origin event. *)
                                         let e1 =
-                                          Hashtbl.find
-                                            elab_ctx.structure.events o1
+                                          Hashtbl.find elab_ctx.structure.events
+                                            o1
                                         in
                                         let e2 =
-                                          Hashtbl.find
-                                            elab_ctx.structure.events o2
+                                          Hashtbl.find elab_ctx.structure.events
+                                            o2
                                         in
-                                          is_closed_relab_equiv elab_ctx
-                                            statex relab pred_1 pred_2
-                                            just_1.p e1 just_2.p e2
+                                          is_closed_relab_equiv elab_ctx statex
+                                            relab pred_1 pred_2 just_1.p e1
+                                            just_2.p e2
                                     | None -> true
                                 )
                                 just_1.d
@@ -1146,8 +1151,7 @@ end = struct
                                 if is_trace then
                                   Logs_safe.debug (fun m ->
                                       m
-                                        "Relabeling failed origins \
-                                         equivalence.\n\
+                                        "Relabeling failed origins equivalence.\n\
                                          \tW1: %d\n\
                                          \tW2: %d"
                                         just_1.w.label just_2.w.label
@@ -1281,19 +1285,19 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
         Progress.set_detail
           (Printf.sprintf "round %d, %d new" !round (List.length new_justs));
 
-      (* Process candidates in ascending order of predicate count so the more
+        (* Process candidates in ascending order of predicate count so the more
          general justifications are considered first; any later candidate that
          is cover-equivalent to one already kept is then discarded. This avoids
          the double-drop that the reflexive [Justification.covers] would
          otherwise produce when two same-length cover-equivalents are both in
          the input list. *)
-      (* Candidates this round's elaborators produced that filter_justs threw
+        (* Candidates this round's elaborators produced that filter_justs threw
          away, either as already seen or as covered by a justification already
          kept. Reported at the end of the round: without it the only counts in
          the log are post-filter, and the filter looks like it is doing nothing. *)
-      let covered_this_round = ref 0 in
+        let covered_this_round = ref 0 in
 
-      (* Keep one justification per (p, d, w) triple.
+        (* Keep one justification per (p, d, w) triple.
 
          ForwardElab emits, for a justification with forwarding set F and every
          candidate edge e not in F, one with F union {e}. Over a fixed point that
@@ -1316,238 +1320,241 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
          Off by default. The executions pipeline reads just.fwd and just.we --
          they are carried onto symbolic_execution and drawn in the Web UI -- so
          only the episodicity path, which does not, may ask for this. *)
-      let seen_pdw = Hashtbl.create 64 in
-      let pdw_key (j : justification) =
-        ( List.map Expr.to_string j.p |> List.sort compare,
-          USet.values j.d |> List.sort compare,
-          j.w.label
-        )
-      in
-
-      let filter_justs new_justs justs =
-        let sorted_justs =
-          List.stable_sort
-            (fun j1 j2 -> compare (List.length j1.p) (List.length j2.p))
-            justs
+        let seen_pdw = Hashtbl.create 64 in
+        let pdw_key (j : justification) =
+          ( List.map Expr.to_string j.p |> List.sort compare,
+            USet.values j.d |> List.sort compare,
+            j.w.label
+          )
         in
-        let kept = ref [] in
-          List.iter
-            (fun just ->
-              if
-                (not (JustificationCache.mem just_cache just))
-                && ((not collapse_forwarding)
-                   || not (Hashtbl.mem seen_pdw (pdw_key just))
-                   )
-                && (not
-                      (List.exists
-                         (fun just' -> Justification.covers just' just)
-                         (old_justs @ new_justs)
-                      )
-                   )
-                && not
-                     (List.exists
-                        (fun just' -> Justification.covers just' just)
-                        !kept
-                     )
-              then (
-                JustificationCache.add just_cache just ();
-                if collapse_forwarding then
-                  Hashtbl.replace seen_pdw (pdw_key just) ();
-                kept := just :: !kept
-              )
-              else incr covered_this_round
-            )
-            sorted_justs;
-          List.rev !kept
-      in
 
-      let add_elab_results_to_optrace optrace_fn =
-        List.iter (fun (just, elaborated) ->
+        let filter_justs new_justs justs =
+          let sorted_justs =
+            List.stable_sort
+              (fun j1 j2 -> compare (List.length j1.p) (List.length j2.p))
+              justs
+          in
+          let kept = ref [] in
             List.iter
-              (fun just' ->
-                OpTrace.add elab_ctx.op_trace just' (optrace_fn just) |> ignore
+              (fun just ->
+                if
+                  (not (JustificationCache.mem just_cache just))
+                  && ((not collapse_forwarding)
+                     || not (Hashtbl.mem seen_pdw (pdw_key just))
+                     )
+                  && (not
+                        (List.exists
+                           (fun just' -> Justification.covers just' just)
+                           (old_justs @ new_justs)
+                        )
+                     )
+                  && not
+                       (List.exists
+                          (fun just' -> Justification.covers just' just)
+                          !kept
+                       )
+                then (
+                  JustificationCache.add just_cache just ();
+                  if collapse_forwarding then
+                    Hashtbl.replace seen_pdw (pdw_key just) ();
+                  kept := just :: !kept
+                )
+                else incr covered_this_round
               )
-              elaborated
-        )
-      in
+              sorted_justs;
+            List.rev !kept
+        in
 
-      (* Per-input fan-out log: emits the input justification and each
+        let add_elab_results_to_optrace optrace_fn =
+          List.iter (fun (just, elaborated) ->
+              List.iter
+                (fun just' ->
+                  OpTrace.add elab_ctx.op_trace just' (optrace_fn just)
+                  |> ignore
+                )
+                elaborated
+          )
+        in
+
+        (* Per-input fan-out log: emits the input justification and each
          elaborated output. Only emits for inputs that produced at least one
          output, so passes with empty fan-out are not noisy. The
          [just_to_string] argument lets pair-valued inputs (e.g. lifting)
          render both components without the caller having to flatten. *)
-      let log_elab_fanout :
-          'a.
-          just_to_string:('a -> string) ->
-          name:string ->
-          ('a * justification list) list ->
-          unit =
-       fun ~just_to_string ~name results ->
-        List.iter
-          (fun (input, elaborated) ->
-            if List.length elaborated > 0 then (
-              Logs_safe.debug (fun m ->
-                  m "%s on %s produced %d:" name (just_to_string input)
-                    (List.length elaborated)
-              );
-              List.iter
-                (fun out ->
-                  Logs_safe.debug (fun m ->
-                      m "  -> %s" (Justification.to_string out)
+        let log_elab_fanout :
+            'a.
+            just_to_string:('a -> string) ->
+            name:string ->
+            ('a * justification list) list ->
+            unit =
+         fun ~just_to_string ~name results ->
+          List.iter
+            (fun (input, elaborated) ->
+              if List.length elaborated > 0 then (
+                Logs_safe.debug (fun m ->
+                    m "%s on %s produced %d:" name (just_to_string input)
+                      (List.length elaborated)
+                );
+                List.iter
+                  (fun out ->
+                    Logs_safe.debug (fun m ->
+                        m "  -> %s" (Justification.to_string out)
+                    )
                   )
-                )
-                elaborated
+                  elaborated
+              )
             )
-          )
-          results
-      in
+            results
+        in
 
-      (* Fuse map-then-flatten into a single tail-recursive pass; [List.flatten]
+        (* Fuse map-then-flatten into a single tail-recursive pass; [List.flatten]
          in OCaml stdlib is not tail recursive and overflows on the large
          lifting-result lists produced when the elaboration fixed point has not
          yet converged. *)
-      let filter_elab_results new_justs results =
-        List.fold_left
-          (fun acc (_, elaborated) -> List.rev_append elaborated acc)
-          [] results
-        |> filter_justs new_justs
-      in
-
-      let run_elab ~just_to_string ~name elab_fn optrace_fn new_justs justs =
-        let results =
-          List.map (fun just -> (just, elab_fn elab_ctx just)) justs
+        let filter_elab_results new_justs results =
+          List.fold_left
+            (fun acc (_, elaborated) -> List.rev_append elaborated acc)
+            [] results
+          |> filter_justs new_justs
         in
-          add_elab_results_to_optrace optrace_fn results;
-          log_elab_fanout ~just_to_string ~name results;
-          filter_elab_results new_justs results |> Lwt.return
-      in
 
-      let run_elab_parallel ~just_to_string ~name p elab_fn optrace_fn new_justs
-          justs =
-        let elaborate just =
-          match elab_fn elab_ctx just with
-          | result -> (just, result)
-          | exception exn ->
-              let bt = Printexc.get_raw_backtrace () in
-                Printf.eprintf "Exception in domain for just: %s\n%s%!"
-                  (Printexc.to_string exn)
-                  (Printexc.raw_backtrace_to_string bt);
-                Printexc.raise_with_backtrace exn bt
-        in
-          let* results = Parallel.map p elaborate justs in
+        let run_elab ~just_to_string ~name elab_fn optrace_fn new_justs justs =
+          let results =
+            List.map (fun just -> (just, elab_fn elab_ctx just)) justs
+          in
             add_elab_results_to_optrace optrace_fn results;
             log_elab_fanout ~just_to_string ~name results;
             filter_elab_results new_justs results |> Lwt.return
-      in
+        in
 
-      (* Dispatch: use parallel when a pool is available, sequential otherwise. *)
-      let run ~just_to_string ~name elab_fn optrace_fn new_justs justs =
-        match pool with
-        | Some p ->
-            run_elab_parallel ~just_to_string ~name p elab_fn optrace_fn
-              new_justs justs
-        | None ->
-            run_elab ~just_to_string ~name elab_fn optrace_fn new_justs justs
-      in
+        let run_elab_parallel ~just_to_string ~name p elab_fn optrace_fn
+            new_justs justs =
+          let elaborate just =
+            match elab_fn elab_ctx just with
+            | result -> (just, result)
+            | exception exn ->
+                let bt = Printexc.get_raw_backtrace () in
+                  Printf.eprintf "Exception in domain for just: %s\n%s%!"
+                    (Printexc.to_string exn)
+                    (Printexc.raw_backtrace_to_string bt);
+                  Printexc.raise_with_backtrace exn bt
+          in
+            let* results = Parallel.map p elaborate justs in
+              add_elab_results_to_optrace optrace_fn results;
+              log_elab_fanout ~just_to_string ~name results;
+              filter_elab_results new_justs results |> Lwt.return
+        in
 
-      (* A deallocation carries no value to justify, so its pre-justification is
+        (* Dispatch: use parallel when a pool is available, sequential otherwise. *)
+        let run ~just_to_string ~name elab_fn optrace_fn new_justs justs =
+          match pool with
+          | Some p ->
+              run_elab_parallel ~just_to_string ~name p elab_fn optrace_fn
+                new_justs justs
+          | None ->
+              run_elab ~just_to_string ~name elab_fn optrace_fn new_justs justs
+        in
+
+        (* A deallocation carries no value to justify, so its pre-justification is
          its only justification: none of the elaborations below apply to it.
          Excluding frees here keeps the choice of justification for a free
          UNIQUE when executions are frozen, rather than branching over the
          forwarding variants elaboration would otherwise produce. *)
-      let elaborable =
-        List.filter (fun just ->
-            not (USet.mem elab_ctx.structure.free_events just.w.label)
-        )
-      in
-      let new_justs_e = elaborable new_justs in
-      let justs_e = elaborable justs in
-
-      let acc_justs = [] in
-        let* new_va_justs =
-          run ~just_to_string:Justification.to_string ~name:"ValueAssignElab"
-            ValueAssignElab.elab
-            (fun just -> ValueAssignElab just)
-            acc_justs new_justs_e
+        let elaborable =
+          List.filter (fun just ->
+              not (USet.mem elab_ctx.structure.free_events just.w.label)
+          )
         in
-        let acc_justs = acc_justs @ new_va_justs in
-          Logs_safe.debug (fun m ->
-              m "Value assignment produced %d new justifications."
-                (List.length new_va_justs)
-          );
+        let new_justs_e = elaborable new_justs in
+        let justs_e = elaborable justs in
 
-          let* new_fwd_justs =
-            run ~just_to_string:Justification.to_string ~name:"ForwardElab"
-              ForwardElab.elab
-              (fun just -> Forwarding just)
+        let acc_justs = [] in
+          let* new_va_justs =
+            run ~just_to_string:Justification.to_string ~name:"ValueAssignElab"
+              ValueAssignElab.elab
+              (fun just -> ValueAssignElab just)
               acc_justs new_justs_e
           in
-          let acc_justs = acc_justs @ new_fwd_justs in
+          let acc_justs = acc_justs @ new_va_justs in
             Logs_safe.debug (fun m ->
-                m "Forwarding produced %d new justifications."
-                  (List.length new_fwd_justs)
+                m "Value assignment produced %d new justifications."
+                  (List.length new_va_justs)
             );
 
-            let justs_to_lift =
-              List.concat_map
-                (fun just -> List.map (fun just' -> (just, just')) new_justs_e)
-                new_justs_e
-              @ List.concat_map
-                  (fun just -> List.map (fun just' -> (just, just')) justs_e)
-                  new_justs_e
-              @ List.concat_map
-                  (fun just -> List.map (fun just' -> (just, just')) new_justs_e)
-                  justs_e
+            let* new_fwd_justs =
+              run ~just_to_string:Justification.to_string ~name:"ForwardElab"
+                ForwardElab.elab
+                (fun just -> Forwarding just)
+                acc_justs new_justs_e
             in
-
-            let lift_pair_to_string (j1, j2) =
-              Printf.sprintf "(%s, %s)"
-                (Justification.to_string j1)
-                (Justification.to_string j2)
-            in
-
-            let* new_lift_justs =
-              run ~just_to_string:lift_pair_to_string ~name:"LiftElab"
-                (fun elab_ctx (j1, j2) -> LiftElab.elab elab_ctx j1 j2)
-                (fun (j1, j2) -> LiftElab (j1, j2))
-                acc_justs justs_to_lift
-            in
-            let acc_justs = acc_justs @ new_lift_justs in
+            let acc_justs = acc_justs @ new_fwd_justs in
               Logs_safe.debug (fun m ->
-                  m "Lifting produced %d new justifications."
-                    (List.length new_lift_justs)
+                  m "Forwarding produced %d new justifications."
+                    (List.length new_fwd_justs)
               );
 
-              let* new_weaken_justs =
-                run ~just_to_string:Justification.to_string ~name:"WeakElab"
-                  WeakElab.elab
-                  (fun just -> WeakElab just)
-                  acc_justs new_justs_e
+              let justs_to_lift =
+                List.concat_map
+                  (fun just -> List.map (fun just' -> (just, just')) new_justs_e)
+                  new_justs_e
+                @ List.concat_map
+                    (fun just -> List.map (fun just' -> (just, just')) justs_e)
+                    new_justs_e
+                @ List.concat_map
+                    (fun just ->
+                      List.map (fun just' -> (just, just')) new_justs_e
+                    )
+                    justs_e
               in
-              let acc_justs = acc_justs @ new_weaken_justs in
+
+              let lift_pair_to_string (j1, j2) =
+                Printf.sprintf "(%s, %s)"
+                  (Justification.to_string j1)
+                  (Justification.to_string j2)
+              in
+
+              let* new_lift_justs =
+                run ~just_to_string:lift_pair_to_string ~name:"LiftElab"
+                  (fun elab_ctx (j1, j2) -> LiftElab.elab elab_ctx j1 j2)
+                  (fun (j1, j2) -> LiftElab (j1, j2))
+                  acc_justs justs_to_lift
+              in
+              let acc_justs = acc_justs @ new_lift_justs in
                 Logs_safe.debug (fun m ->
-                    m "Weakening produced %d new justifications."
-                      (List.length new_weaken_justs)
+                    m "Lifting produced %d new justifications."
+                      (List.length new_lift_justs)
                 );
 
-                let new_justs = acc_justs in
+                let* new_weaken_justs =
+                  run ~just_to_string:Justification.to_string ~name:"WeakElab"
+                    WeakElab.elab
+                    (fun just -> WeakElab just)
+                    acc_justs new_justs_e
+                in
+                let acc_justs = acc_justs @ new_weaken_justs in
                   Logs_safe.debug (fun m ->
-                      m
-                        "Total new justifications this iteration: %d (%d \
-                         discarded as seen or covered)"
-                        (List.length new_justs) !covered_this_round
+                      m "Weakening produced %d new justifications."
+                        (List.length new_weaken_justs)
                   );
 
-                  if List.length new_justs = 0 then (
+                  let new_justs = acc_justs in
                     Logs_safe.debug (fun m ->
                         m
-                          "Batch elaborations reached fixed point with %d \
-                           justifications."
-                          (List.length old_justs)
+                          "Total new justifications this iteration: %d (%d \
+                           discarded as seen or covered)"
+                          (List.length new_justs) !covered_this_round
                     );
-                    Lwt.return old_justs
-                  )
-                  else fixed_point old_justs new_justs just_cache
+
+                    if List.length new_justs = 0 then (
+                      Logs_safe.debug (fun m ->
+                          m
+                            "Batch elaborations reached fixed point with %d \
+                             justifications."
+                            (List.length old_justs)
+                      );
+                      Lwt.return old_justs
+                    )
+                    else fixed_point old_justs new_justs just_cache
     in
 
     let just_cache = JustificationCache.create 1024 in
@@ -1556,20 +1563,21 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
             fixed_point [] pre_justs just_cache
         )
       in
-        (* The derivation of each justification, kept rather than dropped with
+      (* The derivation of each justification, kept rather than dropped with
            the elaboration context: it is the part that explains a surprising
            result, and it reached exactly one debug line (github #80). *)
-        let derivations =
-          List.map
-            (fun just ->
-              ( Justification.to_string just,
-                OpTrace.find_opt elab_ctx.op_trace just
-                |> Option.map op_to_string
-                |> Option.value ~default:"PreJustification" )
+      let derivations =
+        List.map
+          (fun just ->
+            ( Justification.to_string just,
+              OpTrace.find_opt elab_ctx.op_trace just
+              |> Option.map op_to_string
+              |> Option.value ~default:"PreJustification"
             )
-            final_justs
-          |> List.sort_uniq compare
-        in
+          )
+          final_justs
+        |> List.sort_uniq compare
+      in
         let* just_str =
           Lwt_list.map_s
             (fun (rendered, derivation) ->
@@ -1628,7 +1636,7 @@ let generate_justifications ?(num_threads = 1) ?(collapse_forwarding = false)
 let step_generate_justifications ?(collapse_forwarding = false)
     (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
-  Progress.stage ~unit:"" "justifications" @@ fun () ->
+    Progress.stage ~unit:"" "justifications" @@ fun () ->
     match ctx.structure with
     | Some structure ->
         let* fwd_es_ctx =

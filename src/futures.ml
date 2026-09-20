@@ -186,7 +186,7 @@ let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
 
 let step_futures (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
-  Progress.stage ~unit:"" "futures" @@ fun () ->
+    Progress.stage ~unit:"" "futures" @@ fun () ->
     match ctx.executions with
     | Some execs ->
         Logs_safe.debug (fun m -> m "Calculating futures...");

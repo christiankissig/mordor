@@ -292,7 +292,6 @@ type symbolic_execution = {
   pointer_map : (int, value_type) Hashtbl.t option; [@opaque]
   final_env : (string, expr) Hashtbl.t; [@printer pp_env]
 }
-
 (* Declared after symbolic_execution on purpose.  Both records carry fwd and we,
    and OCaml resolves a bare field to the last type that defines it, so this
    order is what keeps the existing just.fwd / just.we readers pointing at a
