@@ -773,6 +773,8 @@ module CLI = struct
     mutable num_threads : int;  (** Number of threads for parallel execution *)
     mutable allow_unknown_model : bool;
         (** Accept a memory model name the registry does not know *)
+    mutable all_executions : bool;
+        (** [futures]: from every execution, not one witness per future *)
   }
 
   (** Create initial parse state with defaults. *)
@@ -789,6 +791,7 @@ module CLI = struct
       log_level = None;
       num_threads = 1;
       allow_unknown_model = false;
+      all_executions = false;
     }
 
   (** Convert parse state to immutable configuration.
@@ -816,6 +819,8 @@ module CLI = struct
             loop_semantics = state.loop_semantics;
             step_counter = Option.value state.step_counter ~default:2;
             allow_unknown_model = state.allow_unknown_model;
+            futures_by_witness =
+              command = Config.Futures && not state.all_executions;
           }
         in
           {
@@ -956,6 +961,12 @@ module CLI = struct
             state.step_counter <- Some n
           ),
         " Per-loop iteration bound (default: 2)"
+      );
+      ( "--all-executions",
+        Arg.Unit (fun () -> state.all_executions <- true),
+        " futures: compute them from every execution, as the other commands \
+         enumerate them, instead of from one witness per future (the default; \
+         the same futures, and far fewer executions)"
       );
       ( "--allow-unknown-model",
         Arg.Unit (fun () -> state.allow_unknown_model <- true),

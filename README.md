@@ -167,7 +167,13 @@ MoRDor supports several commands for analyzing litmus tests and generating outpu
 - **`interpret`**: Parse and interpret to generate the event structure
 - **`episodicity`**: Check loop episodicity (requires `--single`)
 - **`visual-es`**: Visualize event structures (requires `--single`)
-- **`futures`**: Compute future states (requires `--single`)
+- **`futures`**: Compute future states (requires `--single`). By default from
+  one witness execution per future rather than from every execution: the
+  same futures, found per justification combination by a solver query (sMRD)
+  or a search (other models). A combination neither settles within the budgets
+  (`MORDOR_WITNESS_ROUNDS`, 50 solver rounds; `MORDOR_WITNESS_SECS`, 60 s of
+  search) is reported as a warning that the futures may be incomplete.
+  `--all-executions` computes them from every execution instead.
 - **`executions`**: Export all executions with events and `po`/`dp`/`ppo`/`rf`/`rmw` relations as JSON (requires `--single`)
 - **`dependencies`**: Compute dependency relations (not yet implemented)
 

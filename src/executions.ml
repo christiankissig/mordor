@@ -1201,8 +1201,8 @@ module Freeze = struct
       @param f
         Called as [f acc indices rf], with [rf] as a list of [(read, write)]
         pairs. *)
-  let rf_search ?shuffle ?inspect ?prune structure (path : path_info) ~scope
-      ~elided ~constraints statex ppo dp p_combined =
+  let rf_search ?shuffle ?inspect ?prune ?(order = `Label) structure
+      (path : path_info) ~scope ~elided ~constraints statex ppo dp p_combined =
     let { reads = read_events; writes = write_events } = scope in
     let w_cross_r = URelation.cross write_events read_events in
 
@@ -1369,10 +1369,26 @@ module Freeze = struct
                    | None -> false
                    )
       in
-        ( all_rf_inv_map,
-          USet.values read_events |> List.sort compare,
-          check_partial
-        )
+      let reads = USet.values read_events |> List.sort compare in
+      let reads =
+        match order with
+        | `Label -> reads
+        | `Constrained ->
+            (* S15: the read with the fewest candidate writes first, and each
+                 read's latest write first. A search for one relation finds it
+                 sooner; the relations are the same. *)
+            Hashtbl.filter_map_inplace
+              (fun _ ws -> Some (List.sort (fun a b -> compare b a) ws))
+              all_rf_inv_map;
+            let choices r =
+              List.length
+                (try Hashtbl.find all_rf_inv_map r with Not_found -> [])
+            in
+              List.stable_sort
+                (fun a b -> compare (choices a) (choices b))
+                reads
+      in
+        (all_rf_inv_map, reads, check_partial)
 
   let fold_path_rf ?shuffle ?inspect ?prune structure path ~scope ~elided
       ~constraints statex ppo dp p_combined f init =
@@ -2348,6 +2364,327 @@ module Freeze = struct
 
           filtered_results
 
+  (** {2 Witnesses}
+
+      What the futures need of a combination is not its executions but one of
+      them, or the knowledge that it has none: every execution of a combination
+      has the same future (S14, #91). *)
+
+  type witness =
+    | Witness of FreezeResult.t
+        (** A result {!enumerate} would return, which the model admits. *)
+    | No_witness  (** The combination has no such result. *)
+    | Undecided  (** Neither was established within the budgets. *)
+
+  let env_int name default =
+    Option.bind (Sys.getenv_opt name) int_of_string_opt |> Option.value ~default
+
+  (** How many read-from relations the solver may propose for one combination
+      before it is left to the search: [MORDOR_WITNESS_ROUNDS], 50 by default.
+  *)
+  let witness_rounds = ref (env_int "MORDOR_WITNESS_ROUNDS" 50)
+
+  (** Seconds the search may spend on one combination: [MORDOR_WITNESS_SECS], 60
+      by default. *)
+  let witness_seconds =
+    ref
+      (Option.bind (Sys.getenv_opt "MORDOR_WITNESS_SECS") float_of_string_opt
+      |> Option.value ~default:60.
+      )
+
+  let instantiator structure prep =
+    instantiate_execution structure prep.prep_path prep.prep_dp prep.prep_ppo
+      prep.prep_justs prep.prep_path.p prep.prep_p_combined prep.prep_elided
+
+  (** [frame_of structure prep] is the combination's events, [dp] and [ppo]:
+      what its future, and minimality, compare it by. *)
+  let frame_of structure prep =
+    let e, dp, ppo, _, _ =
+      frame structure prep.prep_path prep.prep_dp prep.prep_ppo
+        prep.prep_p_combined prep.prep_elided
+    in
+      (e, dp, ppo)
+
+  (* The search {!enumerate} runs, as candidate writes per read, the order it
+     decides reads in, and its check of a partial relation. *)
+  let search_space ?order ~coherence_models structure prep =
+    let path = prep.prep_path and elided = prep.prep_elided in
+      rf_search ?order
+        ~prune:(fun () ->
+          coherence_prune structure path prep.prep_dp prep.prep_ppo
+            prep.prep_p_combined elided coherence_models
+        )
+        structure path
+        ~scope:(path_scope structure path ~elided)
+        ~elided ~constraints:prep.prep_constraints prep.prep_statex
+        prep.prep_ppo prep.prep_dp prep.prep_p_combined
+
+  (** [valid_rf ~coherence_models structure prep] is a test of whether a
+      read-from relation, as [(write, read)] pairs, is one {!enumerate} with
+      [coherence_models] returns a result for: the search reaches it, every
+      prefix passing its checks in its order, and it instantiates. The search is
+      set up once, by the call. *)
+  let valid_rf ~coherence_models structure prep =
+    let alternatives, reads, check_partial =
+      search_space ~coherence_models structure prep
+    in
+    let instantiate = instantiator structure prep in
+      fun rf ->
+        let write = Hashtbl.create 16 in
+          USet.iter (fun (w, r) -> Hashtbl.replace write r w) rf;
+          let rec reached combo = function
+            | [] -> true
+            | r :: rest -> (
+                match Hashtbl.find_opt write r with
+                | None -> false
+                | Some w ->
+                    let alternatives =
+                      try Hashtbl.find alternatives r with Not_found -> []
+                    in
+                      List.mem w alternatives
+                      && check_partial combo ~alternatives (r, w)
+                      && reached ((r, w) :: combo) rest
+              )
+          in
+            Hashtbl.length write = List.length reads
+            && reached [] reads
+            && Option.is_some (instantiate rf)
+
+  exception Found of FreezeResult.t
+  exception Out_of_time
+
+  (** [search_witness ~coherence_models ~check structure prep] searches the
+      combination's read-from relations, most constrained read first, for a
+      result [check] accepts, within {!witness_seconds}. *)
+  let search_witness ~coherence_models ~check structure prep =
+    let alternatives, reads, check_partial =
+      search_space ~order:`Constrained ~coherence_models structure prep
+    in
+    let instantiate = instantiator structure prep in
+    let deadline = Unix.gettimeofday () +. !witness_seconds in
+    let steps = ref 0 in
+    let check_partial combo ?alternatives pair =
+      incr steps;
+      if !steps land 1023 = 0 && Unix.gettimeofday () > deadline then
+        raise Out_of_time;
+      check_partial combo ?alternatives pair
+    in
+      try
+        ListMapCombinationBuilder.fold_combinations alternatives reads
+          ~check_partial
+          (fun () _ fr ->
+            match
+              instantiate (List.map (fun (r, w) -> (w, r)) fr |> USet.of_list)
+            with
+            | Some result when check result -> raise (Found result)
+            | _ -> ()
+          )
+          ();
+        No_witness
+      with
+      | Found result -> Witness result
+      | Out_of_time -> Undecided
+
+  (** [solver_witness ~check structure prep] asks the solver for a read-from
+      relation of the combination that smrd could admit, and checks each it
+      proposes exactly — [instantiate_execution], then [check] — blocking those
+      that fail, up to {!witness_rounds} times.
+
+      The constraints are a necessary condition for a result smrd admits (S19,
+      #96), so unsatisfiable means there is none. A selector per read ranges
+      over its candidate writes (Init only where it is the only one); the chosen
+      edge implies the read's value and location equal the write's; the
+      combination's predicates hold; [rhb] is acyclic, by ranks; and smrd's
+      coherence and atomicity axioms hold over each write's position in [co],
+      with a read at its write's position. [hb] is taken as [(dp ∪ ppo)⁺], a
+      subset of smrd's, which leaves out release/acquire edges, so the condition
+      stays necessary. *)
+  let solver_witness ~check structure prep =
+    let alternatives, reads, _ =
+      search_space ~coherence_models:[] structure prep
+    in
+    let instantiate = instantiator structure prep in
+    let e, dp, ppo = frame_of structure prep in
+    let _, _, _, _, rmw =
+      frame structure prep.prep_path prep.prep_dp prep.prep_ppo
+        prep.prep_p_combined prep.prep_elided
+    in
+    let var fmt = Printf.ksprintf (fun s -> ESymbol s) fmt in
+    let sel r = var "witness_sel%d" r
+    and rank x = var "witness_rank%d" x
+    and pos x = var "witness_pos%d" x in
+    let num n = ENum (Z.of_int n) in
+    let eq a b = EBinOp (a, "=", b)
+    and lt a b = EBinOp (a, "<", b)
+    and imp a b = EBinOp (a, "=>", b)
+    and neg a = EUnOp ("!", a) in
+    let conj = function
+      | [] -> EBoolean true
+      | x :: xs -> List.fold_left (fun a b -> EBinOp (a, "&&", b)) x xs
+    in
+    let disj = function
+      | [] -> EBoolean false
+      | [ x ] -> x
+      | l -> EOr l
+    in
+    let alts r =
+      let ws = try Hashtbl.find alternatives r with Not_found -> [] in
+        if List.length ws > 1 then List.filter (fun w -> w <> 0) ws else ws
+    in
+    let chosen r w = eq (sel r) (num w) in
+    let writes =
+      USet.values e
+      |> List.filter (fun x ->
+          x <> 0
+          &&
+          match Hashtbl.find_opt structure.events x with
+          | Some (ev : event) -> ev.typ = Write && Option.is_some ev.loc
+          | None -> false
+      )
+    in
+    let sameloc a b =
+      match (get_loc structure a, get_loc structure b) with
+      | Some la, Some lb -> Some (eq la lb)
+      | _ -> None
+    in
+    let edge f w r = USet.values (f structure (USet.singleton (w, r))) in
+    let for_edges f =
+      List.concat_map
+        (fun r ->
+          List.filter_map (fun w -> if w = 0 then None else f r w) (alts r)
+        )
+        reads
+    in
+    let static = USet.union dp ppo |> URelation.restrict e in
+    let accesses = USet.of_list (reads @ writes) in
+    let hb0 =
+      URelation.transitive_closure static
+      |> USet.filter (fun (a, b) ->
+          a <> b && USet.mem accesses a && USet.mem accesses b
+      )
+    in
+    let constraints =
+      prep.prep_p_combined
+      (* choice *)
+      @ List.map (fun r -> disj (List.map (chosen r) (alts r))) reads
+      (* values and locations *)
+      @ for_edges (fun r w ->
+          Some
+            (imp (chosen r w)
+               (conj
+                  (edge ReadFromValidation.env_rf w r
+                  @ edge ReadFromValidation.check_rf w r
+                  )
+               )
+            )
+      )
+      (* rhb acyclic *)
+      @ List.map (fun (a, b) -> lt (rank a) (rank b)) (USet.values static)
+      @ for_edges (fun r w -> Some (imp (chosen r w) (lt (rank w) (rank r))))
+      (* positions in co *)
+      @ List.map (fun x -> lt (num 0) (pos x)) writes
+      @ List.concat_map
+          (fun x ->
+            List.filter_map
+              (fun y ->
+                if x >= y then None
+                else
+                  Option.map
+                    (fun same -> imp same (neg (eq (pos x) (pos y))))
+                    (sameloc x y)
+              )
+              writes
+          )
+          writes
+      @ List.concat_map
+          (fun r ->
+            List.map
+              (fun w ->
+                imp (chosen r w) (eq (pos r) (if w = 0 then num 0 else pos w))
+              )
+              (alts r)
+          )
+          reads
+      (* coherence: hb;eco irreflexive *)
+      @ List.filter_map
+          (fun (a, b) ->
+            Option.map
+              (fun same ->
+                let back =
+                  lt (pos b) (pos a)
+                  ::
+                  ( if List.mem b writes && List.mem a reads then [ chosen a b ]
+                    else []
+                  )
+                in
+                  imp same (neg (disj back))
+              )
+              (sameloc a b)
+          )
+          (USet.values hb0)
+      (* atomicity: rmw ∩ (rb;co) = ∅ *)
+      @ List.concat_map
+          (fun (r, w) ->
+            List.filter_map
+              (fun x ->
+                if x = w then None
+                else
+                  Option.map
+                    (fun same ->
+                      neg (conj [ same; lt (pos r) (pos x); lt (pos x) (pos w) ])
+                    )
+                    (sameloc x r)
+              )
+              writes
+          )
+          (USet.values rmw)
+    in
+    let decode model =
+      List.map
+        (fun r ->
+          match Hashtbl.find_opt model (Printf.sprintf "witness_sel%d" r) with
+          | Some (VNumber n) -> (r, Z.to_int n)
+          | _ -> (r, List.hd (alts r @ [ 0 ]))
+        )
+        reads
+    in
+    let rec ask blocks n =
+      if n > !witness_rounds then Undecided
+      else
+        match Solver.quick_solve (constraints @ blocks) with
+        | None -> No_witness
+        | Some model -> (
+            let rf = decode model in
+            let result =
+              instantiate (List.map (fun (r, w) -> (w, r)) rf |> USet.of_list)
+            in
+              match result with
+              | Some result when check result -> Witness result
+              | _ ->
+                  ask
+                    (neg (conj (List.map (fun (r, w) -> chosen r w) rf))
+                    :: blocks
+                    )
+                    (n + 1)
+          )
+    in
+      if List.exists (fun r -> alts r = []) reads then No_witness else ask [] 1
+
+  (** [witness ~model ~coherence_models ~admits ~reject structure prep] is a
+      witness for the combination: a result {!enumerate} would return, that
+      [admits] (the model's coherence check) holds of and [reject] does not. For
+      smrd the solver is asked first ({!solver_witness}); for any other model,
+      and where the solver is undecided, the search is ({!search_witness}),
+      pruning by [coherence_models]. *)
+  let witness ~model ~coherence_models ~admits ~reject structure prep =
+    let check result = admits result && not (reject result) in
+    let from_solver =
+      if model = "smrd" then solver_witness ~check structure prep else Undecided
+    in
+      match from_solver with
+      | Undecided -> search_witness ~coherence_models ~check structure prep
+      | decided -> decided
+
   (** [freeze structure path j_list statex ~elided ~constraints ~include_rf]
       creates executions from justifications.
 
@@ -2465,6 +2802,102 @@ let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
         Lwt.return s
     )
 
+(** [execution_of_freeze_result structure ~include_rf ~id fr] is the execution a
+    freeze result becomes: its relations, the read values resolved through its
+    read-from, and the final register environment. *)
+let execution_of_freeze_result (structure : symbolic_event_structure)
+    ~include_rf ~id (freeze_res : FreezeResult.t) : symbolic_execution =
+  (* Fixed point computation for RF mapping *)
+  let fix_rf_map = Hashtbl.create 16 in
+
+  (* Build initial mapping from RF *)
+  if include_rf then
+    USet.iter
+      (fun (w, r) ->
+        (* TODO look up logic is contrived *)
+        let w_val = vale structure w r in
+          match get_val structure r with
+          | None -> failwith ("Read event " ^ string_of_int r ^ " has no value!")
+          | Some r_val ->
+              (* Store mapping *)
+              Hashtbl.replace fix_rf_map (Expr.to_string r_val) w_val
+      )
+      freeze_res.rf;
+
+  (* Compute fixed point *)
+  let rec compute_fixed_point map =
+    let changed = ref false in
+    let new_map = Hashtbl.create (Hashtbl.length map) in
+
+    Hashtbl.iter
+      (fun key value ->
+        (* Evaluate value with current map *)
+        let new_value =
+          match value with
+          | EVar v -> (
+              try
+                let replacement = Hashtbl.find map v in
+                  changed := true;
+                  replacement
+              with Not_found -> value
+            )
+          | _ -> value
+        in
+          Hashtbl.replace new_map key new_value
+      )
+      map;
+
+    if !changed then compute_fixed_point new_map else new_map
+  in
+
+  let final_map = compute_fixed_point fix_rf_map in
+
+  (* produce final register environment by merging register environment at
+       all terminal events. There are multiple terminal events across
+       multiple threads. *)
+  let final_env = Hashtbl.create 16 in
+    USet.iter
+      (fun lbl ->
+        let evt = Hashtbl.find_opt structure.events lbl |> Option.get in
+          if evt.typ = Terminal then
+            let reg_env =
+              Hashtbl.find_opt structure.p lbl
+              |> Option.value ~default:(Hashtbl.create 0)
+            in
+              Hashtbl.iter
+                (fun reg expr ->
+                  (* The register environment also carries the path's UB
+                       assumptions, keyed by a prefix no register can have
+                       (see [Interpret.ub_fact_prefix]). They are facts for
+                       elaboration, not part of the observable state. *)
+                  if not (String.starts_with ~prefix:"%ub:" reg) then
+                    Hashtbl.add final_env reg expr
+                )
+                reg_env
+      )
+      freeze_res.e;
+
+    (* Create execution *)
+    let exec =
+      {
+        id;
+        e = freeze_res.e;
+        rf = freeze_res.rf;
+        dp = freeze_res.dp;
+        ppo = freeze_res.ppo;
+        rmw = freeze_res.rmw;
+        fwd = freeze_res.fwd;
+        we = freeze_res.we;
+        ex_p = freeze_res.pp;
+        justifications = freeze_res.justs;
+        co = None;
+        fix_rf_map = final_map;
+        pointer_map = None;
+        final_env;
+      }
+    in
+      exec
+
 (** [generate_executions ?include_rf structure justs statex ~restrictions]
     generates all valid executions.
 
@@ -2492,7 +2925,7 @@ let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
       each a copy carrying the coherence order that model admitted it under.
     @return Promise of list of valid coherent executions. *)
 let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
-    ?(compare_models = []) ?admissions ?model_executions
+    ?(witnesses = false) ?(compare_models = []) ?admissions ?model_executions
     (structure : symbolic_event_structure)
     (fwd_es_ctx : Forwarding.event_structure_context)
     (justs : justification list) statex ~restrictions =
@@ -2561,6 +2994,174 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
         List.sort_uniq String.compare
           ((restrictions : Coherence.restrictions).coherent :: compare_models)
       in
+      (* R13 (#99): instead of every result of every combination, one
+         witness per future. Each combination has one future (S14, #91), so
+         the futures need, per future, one combination with a result the
+         model admits -- and one minimality would not remove: a result is
+         removed when a combination with the same events and smaller [dp] and
+         [ppo] has one with the same read-from, so a witness must not have a
+         read-from valid for a combination that dominates its own. That rule
+         gives the enumerated futures exactly (S14). *)
+      let witness_stage prepared =
+        let digest x =
+          Digest.string (Marshal.to_string x [ Marshal.No_sharing ])
+        in
+        let sorted s = USet.values s |> List.sort compare in
+        let kinds =
+          let seen = Hashtbl.create 64 in
+            List.filter_map
+              (fun (_, _, _, prepared) ->
+                match prepared with
+                | Some (key, p) when not (Hashtbl.mem seen key) ->
+                    Hashtbl.replace seen key ();
+                    Some (key, p)
+                | _ -> None
+              )
+              prepared
+            |> Array.of_list
+        in
+        let frames =
+          Array.map (fun (_, p) -> Freeze.frame_of structure p) kinds
+        in
+        let by_events = Hashtbl.create 64 in
+          Array.iteri
+            (fun i (e, _, _) ->
+              let k = digest (sorted e) in
+                Hashtbl.replace by_events k
+                  (i
+                  :: (Hashtbl.find_opt by_events k |> Option.value ~default:[])
+                  )
+            )
+            frames;
+          let dominators i =
+            let e, dp, ppo = frames.(i) in
+              List.filter
+                (fun j ->
+                  let _, dp', ppo' = frames.(j) in
+                    j <> i
+                    && USet.subset dp' dp
+                    && USet.subset ppo' ppo
+                    && not (USet.equal dp' dp && USet.equal ppo' ppo)
+                )
+                (Hashtbl.find by_events (digest (sorted e)))
+          in
+          (* Kinds with the same future, in order: the first with a witness
+             stands for all of them. *)
+          let groups =
+            let order = ref [] and members = Hashtbl.create 64 in
+              Array.iteri
+                (fun i (e, dp, ppo) ->
+                  let k =
+                    digest
+                      ( sorted e,
+                        sorted (URelation.restrict e (USet.union dp ppo))
+                      )
+                  in
+                    match Hashtbl.find_opt members k with
+                    | Some l -> Hashtbl.replace members k (i :: l)
+                    | None ->
+                        order := k :: !order;
+                        Hashtbl.replace members k [ i ]
+                )
+                frames;
+              List.rev_map (fun k -> List.rev (Hashtbl.find members k)) !order
+          in
+          let model = (restrictions : Coherence.restrictions).coherent in
+          let admits fr =
+            Option.is_some
+              (check_for_coherence structure
+                 (execution_of_freeze_result structure ~include_rf ~id:0 fr)
+                 restrictions
+              )
+          in
+          let decide group =
+            let rec go tried undecided = function
+              | [] -> (None, tried, undecided)
+              | i :: rest -> (
+                  let key, p = kinds.(i) in
+                  (* A dominating combination's results are what {!enumerate}
+                     gives it, so its read-froms are tested as it would find
+                     them, with the models it prunes by. *)
+                  let valid_in =
+                    List.map
+                      (fun j ->
+                        Freeze.valid_rf ~coherence_models structure
+                          (snd kinds.(j))
+                      )
+                      (dominators i)
+                  in
+                  let reject (fr : FreezeResult.t) =
+                    List.exists (fun valid -> valid fr.rf) valid_in
+                  in
+                    match
+                      Freeze.witness ~model ~coherence_models:[ model ] ~admits
+                        ~reject structure p
+                    with
+                    | Freeze.Witness fr -> (Some (key, fr), tried + 1, undecided)
+                    | Freeze.No_witness -> go (tried + 1) undecided rest
+                    | Freeze.Undecided -> go (tried + 1) (undecided + 1) rest
+                )
+            in
+              go 0 0 group
+          in
+            let* decided =
+              compute.run ~stage:("witnesses", "futures") decide groups
+            in
+            let witnessed = Hashtbl.create 64 in
+              List.iter
+                (fun (found, _, _) ->
+                  Option.iter
+                    (fun (key, fr) -> Hashtbl.replace witnessed key fr)
+                    found
+                )
+                decided;
+              let tried = List.fold_left (fun n (_, t, _) -> n + t) 0 decided in
+              let open_futures =
+                List.length
+                  (List.filter
+                     (fun (found, _, u) -> found = None && u > 0)
+                     decided
+                  )
+              in
+                Logs_safe.info (fun m ->
+                    m
+                      "Futures from witnesses: %d combinations, %d kinds, %d \
+                       futures to decide; %d witnessed; %d kinds searched, %d \
+                       skipped for a future already witnessed"
+                      (List.length prepared) (Array.length kinds)
+                      (List.length groups) (Hashtbl.length witnessed) tried
+                      (Array.length kinds - tried)
+                );
+                if open_futures > 0 then
+                  Logs_safe.warn (fun m ->
+                      m
+                        "Futures may be incomplete: for %d of %d possible \
+                         futures no witness was found and some combination was \
+                         undecided within the budgets (MORDOR_WITNESS_ROUNDS, \
+                         MORDOR_WITNESS_SECS)"
+                        open_futures (List.length groups)
+                  );
+                List.concat_map
+                  (fun (fwd, we, just_combo, prepared) ->
+                    match prepared with
+                    | Some (key, _) -> (
+                        match Hashtbl.find_opt witnessed key with
+                        | Some (fr : FreezeResult.t) ->
+                            [
+                              {
+                                fr with
+                                fwd = USet.clone fwd;
+                                we = USet.clone we;
+                                justs = just_combo;
+                              };
+                            ]
+                        | None -> []
+                      )
+                    | None -> []
+                  )
+                  prepared
+                |> Lwt.return
+      in
       let prepare_combo (path, just_combo) =
         let fwd =
           List.fold_left
@@ -2595,197 +3196,113 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             ~stage:("prepare", "combinations")
             prepare_combo input_stream
         in
-
-        (* Combinations that differ only in their forwarding and elision edges
+          if witnesses && include_rf then witness_stage prepared
+          else
+            (* Combinations that differ only in their forwarding and elision edges
          freeze to the same results, and deduplication merged those results
          afterwards. Each is frozen once, the first of its kind, and its
          results are given to every combination of the kind. On the litmus
          corpus that is more than half of all combinations (S11). *)
-        (* S11 measures duplicates, so it sees every combination. *)
-        let merge = !Freeze.merge_duplicates && not S11.enabled in
-        let distinct =
-          let seen = Hashtbl.create 64 in
-            List.filter_map
-              (fun (_, _, _, prepared) ->
-                match prepared with
-                | Some (key, p) when merge && not (Hashtbl.mem seen key) ->
-                    Hashtbl.replace seen key ();
-                    Some (key, p)
-                | Some (key, p) when not merge -> Some (key, p)
-                | _ -> None
-              )
-              prepared
-        in
-          if !s4_counters then
-            Logs_safe.info (fun m ->
-                m "[S4] combinations frozen: %d of %d" (List.length distinct)
-                  (List.length prepared)
-            );
-          let* frozen =
-            compute.run
-              ~stage:("freeze", "kinds of combination")
-              (fun (key, p) ->
-                (key, Freeze.enumerate ~coherence_models structure p ~include_rf)
-              )
-              distinct
-          in
-          let by_key = Hashtbl.create 64 in
-            List.iter
-              (fun (key, results) -> Hashtbl.replace by_key key results)
-              frozen;
-            (* Without merging, keys still repeat; each combination then takes its
-           own results, in order. *)
-            let own = ref frozen in
-            let results_of key =
-              if merge then Hashtbl.find by_key key
-              else
-                match !own with
-                | (_, results) :: rest ->
-                    own := rest;
-                    results
-                | [] -> assert false
+            (* S11 measures duplicates, so it sees every combination. *)
+            let merge = !Freeze.merge_duplicates && not S11.enabled in
+            let distinct =
+              let seen = Hashtbl.create 64 in
+                List.filter_map
+                  (fun (_, _, _, prepared) ->
+                    match prepared with
+                    | Some (key, p) when merge && not (Hashtbl.mem seen key) ->
+                        Hashtbl.replace seen key ();
+                        Some (key, p)
+                    | Some (key, p) when not merge -> Some (key, p)
+                    | _ -> None
+                  )
+                  prepared
             in
-            let results =
-              List.map
-                (fun (fwd, we, just_combo, prepared) ->
-                  match prepared with
-                  | None -> []
-                  | Some (key, _) ->
-                      let freeze_results = results_of key in
-                        Logs_safe.debug (fun m ->
-                            m
-                              "Computed %d freeze results with %d \
-                               justifications"
-                              (List.length freeze_results)
-                              (List.length just_combo)
-                        );
-                        (* The forwarding context is the combination's, not the
+              if !s4_counters then
+                Logs_safe.info (fun m ->
+                    m "[S4] combinations frozen: %d of %d"
+                      (List.length distinct) (List.length prepared)
+                );
+              let* frozen =
+                compute.run
+                  ~stage:("freeze", "kinds of combination")
+                  (fun (key, p) ->
+                    ( key,
+                      Freeze.enumerate ~coherence_models structure p ~include_rf
+                    )
+                  )
+                  distinct
+              in
+              let by_key = Hashtbl.create 64 in
+                List.iter
+                  (fun (key, results) -> Hashtbl.replace by_key key results)
+                  frozen;
+                (* Without merging, keys still repeat; each combination then takes its
+           own results, in order. *)
+                let own = ref frozen in
+                let results_of key =
+                  if merge then Hashtbl.find by_key key
+                  else
+                    match !own with
+                    | (_, results) :: rest ->
+                        own := rest;
+                        results
+                    | [] -> assert false
+                in
+                let results =
+                  List.map
+                    (fun (fwd, we, just_combo, prepared) ->
+                      match prepared with
+                      | None -> []
+                      | Some (key, _) ->
+                          let freeze_results = results_of key in
+                            Logs_safe.debug (fun m ->
+                                m
+                                  "Computed %d freeze results with %d \
+                                   justifications"
+                                  (List.length freeze_results)
+                                  (List.length just_combo)
+                            );
+                            (* The forwarding context is the combination's, not the
                        freeze's, so it is attached here.  Each result gets its
                        own copy: deduplication unions into whichever it keeps,
                        and sharing would make that union visible to results it
                        never applied to. *)
-                        List.map
-                          (fun (fr : FreezeResult.t) ->
-                            {
-                              fr with
-                              fwd = USet.clone fwd;
-                              we = USet.clone we;
-                              justs = just_combo;
-                            }
-                          )
-                          freeze_results
-                )
-                prepared
-            in
-              if S11.enabled then S11.report ();
-              List.flatten results |> Lwt.return
+                            List.map
+                              (fun (fr : FreezeResult.t) ->
+                                {
+                                  fr with
+                                  fwd = USet.clone fwd;
+                                  we = USet.clone we;
+                                  justs = just_combo;
+                                }
+                              )
+                              freeze_results
+                    )
+                    prepared
+                in
+                  if S11.enabled then S11.report ();
+                  List.flatten results |> Lwt.return
     in
 
     let stream_freeze_to_execution input_stream =
       let* input_stream = input_stream in
       let id = ref 0 in
       let freeze_to_execution (freeze_res : FreezeResult.t) =
-        (* Fixed point computation for RF mapping *)
-        let fix_rf_map = Hashtbl.create 16 in
-
-        (* Build initial mapping from RF *)
-        if include_rf then
-          USet.iter
-            (fun (w, r) ->
-              (* TODO look up logic is contrived *)
-              let w_val = vale structure w r in
-                match get_val structure r with
-                | None ->
-                    failwith ("Read event " ^ string_of_int r ^ " has no value!")
-                | Some r_val ->
-                    (* Store mapping *)
-                    Hashtbl.replace fix_rf_map (Expr.to_string r_val) w_val
-            )
-            freeze_res.rf;
-
-        (* Compute fixed point *)
-        let rec compute_fixed_point map =
-          let changed = ref false in
-          let new_map = Hashtbl.create (Hashtbl.length map) in
-
-          Hashtbl.iter
-            (fun key value ->
-              (* Evaluate value with current map *)
-              let new_value =
-                match value with
-                | EVar v -> (
-                    try
-                      let replacement = Hashtbl.find map v in
-                        changed := true;
-                        replacement
-                    with Not_found -> value
-                  )
-                | _ -> value
-              in
-                Hashtbl.replace new_map key new_value
-            )
-            map;
-
-          if !changed then compute_fixed_point new_map else new_map
+        let exec =
+          execution_of_freeze_result structure ~include_rf ~id:!id freeze_res
         in
 
-        let final_map = compute_fixed_point fix_rf_map in
+        (* Increment executiion counter *)
+        id := !id + 1;
 
-        (* produce final register environment by merging register environment at
-           all terminal events. There are multiple terminal events across
-           multiple threads. *)
-        let final_env = Hashtbl.create 16 in
-          USet.iter
-            (fun lbl ->
-              let evt = Hashtbl.find_opt structure.events lbl |> Option.get in
-                if evt.typ = Terminal then
-                  let reg_env =
-                    Hashtbl.find_opt structure.p lbl
-                    |> Option.value ~default:(Hashtbl.create 0)
-                  in
-                    Hashtbl.iter
-                      (fun reg expr ->
-                        (* The register environment also carries the path's UB
-                           assumptions, keyed by a prefix no register can have
-                           (see [Interpret.ub_fact_prefix]). They are facts for
-                           elaboration, not part of the observable state. *)
-                        if not (String.starts_with ~prefix:"%ub:" reg) then
-                          Hashtbl.add final_env reg expr
-                      )
-                      reg_env
-            )
-            freeze_res.e;
+        Logs_safe.debug (fun m ->
+            m "Generated execution with %d events, %d RF edges:\n%s"
+              (USet.size exec.e) (USet.size exec.rf)
+              (show_symbolic_execution exec)
+        );
 
-          (* Create execution *)
-          let exec =
-            {
-              id = !id;
-              e = freeze_res.e;
-              rf = freeze_res.rf;
-              dp = freeze_res.dp;
-              ppo = freeze_res.ppo;
-              rmw = freeze_res.rmw;
-              fwd = freeze_res.fwd;
-              we = freeze_res.we;
-              ex_p = freeze_res.pp;
-              justifications = freeze_res.justs;
-              co = None;
-              fix_rf_map = final_map;
-              pointer_map = None;
-              final_env;
-            }
-          in
-
-          (* Increment executiion counter *)
-          id := !id + 1;
-
-          Logs_safe.debug (fun m ->
-              m "Generated execution with %d events, %d RF edges:\n%s"
-                (USet.size exec.e) (USet.size exec.rf)
-                (show_symbolic_execution exec)
-          );
-
-          exec
+        exec
       in
 
       let compute input_stream =
@@ -3099,7 +3616,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
       Whether to exhaustively explore all combinations (default: false).
     @param restrictions Coherence restrictions to check.
     @return Promise of list of valid coherent executions. *)
-let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
+let calculate_dependencies ?(include_rf = true) ?(num_threads = 1) ?witnesses
     ?compare_models ?admissions ?model_executions
     (structure : symbolic_event_structure) (final_justs : justification list)
     (fwd_es_ctx : Forwarding.event_structure_context) ~(exhaustive : bool)
@@ -3161,8 +3678,9 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1)
 
   (* Build executions if not just structure *)
   let* executions =
-    generate_executions ~include_rf ~compute ?compare_models ?admissions
-      ?model_executions structure fwd_es_ctx final_justs statex ~restrictions
+    generate_executions ~include_rf ~compute ?witnesses ?compare_models
+      ?admissions ?model_executions structure fwd_es_ctx final_justs statex
+      ~restrictions
   in
 
   Logs_safe.debug (fun m ->
@@ -3226,6 +3744,7 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
             in
               let* executions =
                 calculate_dependencies ~num_threads
+                  ~witnesses:ctx.options.futures_by_witness
                   ~compare_models:checked_models ?admissions ?model_executions
                   structure final_justs fwd_es_ctx
                   ~exhaustive:(ctx.options.exhaustive || false)

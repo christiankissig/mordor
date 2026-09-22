@@ -398,6 +398,82 @@ let test_validation_deltas () =
          ~dppo:(rel [])
       )
 
+(** {1 Futures from witnesses (R13)} *)
+
+(* The executions the pipeline returns for [litmus], and their futures, each as
+   a sorted list of pairs, with futures computed from witnesses or not. *)
+let executions_and_futures ~witnesses litmus =
+  let ctx =
+    Context.make_context
+      {
+        Context.default_options with
+        allow_unknown_model = true;
+        futures_by_witness = witnesses;
+      }
+      ()
+  in
+    ctx.litmus <- Some litmus;
+    let ctx =
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Elaborations.step_generate_justifications
+        |> step_calculate_dependencies
+        )
+    in
+    let executions = Option.get ctx.executions in
+    let futures =
+      Futures.calculate_future_set executions
+      |> USet.values
+      |> List.map (fun f -> USet.values f |> List.sort compare)
+      |> List.sort_uniq compare
+    in
+      (USet.size executions, futures)
+
+(* SB; MP over release/acquire; and avoidoota/listing20, where minimality
+   removes half the futures a witness per combination would give, so the
+   witnesses must obey S14's rule to match. *)
+let witness_programs =
+  [
+    ( "SB",
+      "x := 0; y := 0; { x := 1; r1 := y } ||| { y := 1; r2 := x } %% allow \
+       (r1 = 0 && r2 = 0) []"
+    );
+    ( "MP+rel+acq",
+      "x := 0; y := 0; { x := 1; y.store(1, rel) } ||| { r1 := y.load(acq); r2 \
+       := x } %% forbid (r1 = 1 && r2 = 0) []"
+    );
+    ( "listing20",
+      "x := 0; y := 0; z := 0; { r1 := x; r2 := r1; if (r2 > 17) { r2 := 17 }; \
+       y := r2; r3 := y; r4 := r3; if (r4 < 17) { r4 := 17 }; z := r4 } ||| { \
+       r5 := z; x := r5 } %% allow (r1 = 17 && r3 = 17 && r5 = 17) []"
+    );
+  ]
+
+let test_futures_from_witnesses () =
+  List.iter
+    (fun (name, litmus) ->
+      let all_executions, all_futures =
+        executions_and_futures ~witnesses:false litmus
+      in
+      let witnesses, witness_futures =
+        executions_and_futures ~witnesses:true litmus
+      in
+        check bool
+          (name ^ ": the same futures")
+          true
+          (all_futures = witness_futures);
+        check bool
+          (name ^ ": at most one execution per future")
+          true
+          (witnesses <= List.length witness_futures);
+        if name = "listing20" then
+          check bool "listing20: fewer executions than every one" true
+            (witnesses < all_executions)
+    )
+    witness_programs
+
 let suite =
   [
     (* Parameterized origin tests *)
@@ -427,6 +503,7 @@ let suite =
       ("validation predicates", `Quick, test_validation_predicates);
       ("rf closes an rhb cycle", `Quick, test_rf_closes_rhb_cycle);
       ("validation deltas", `Quick, test_validation_deltas);
+      ("futures from witnesses", `Quick, test_futures_from_witnesses);
     ];
   ]
   |> List.flatten

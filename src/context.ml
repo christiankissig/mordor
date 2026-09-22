@@ -124,6 +124,11 @@ type options = {
           falling back to the coherence model already in effect instead of
           failing. Off by default: the fallback answers a different question
           from the one the litmus test asks. *)
+  mutable futures_by_witness : bool;
+      (** Compute the futures from one witness execution per future rather than
+          from every execution (R13): exact, and what the [futures] command does
+          unless told [--all-executions]. The executions the pipeline then
+          returns are the witnesses, not all of them. *)
 }
 [@@deriving show]
 
@@ -147,6 +152,7 @@ let default_options =
     step_counter = 2;
     ubopt = false;
     allow_unknown_model = false;
+    futures_by_witness = false;
   }
 
 (** {1 Types for Checked Executions} *)

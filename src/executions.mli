@@ -224,6 +224,57 @@ module Freeze : sig
       {!duplicate_key}. On by default; [MORDOR_FREEZE_NO_MERGE] turns it off. *)
   val merge_duplicates : bool ref
 
+  (** {2 Witnesses (R13)} *)
+
+  (** What {!witness} found for a combination. *)
+  type witness =
+    | Witness of FreezeResult.t
+        (** A result {!enumerate} would return, which the model admits. *)
+    | No_witness  (** The combination has no such result. *)
+    | Undecided  (** Neither was established within the budgets. *)
+
+  (** How many read-from relations the solver may propose for one combination
+      before the search takes over: [MORDOR_WITNESS_ROUNDS], 50 by default. *)
+  val witness_rounds : int ref
+
+  (** Seconds the search may spend on one combination: [MORDOR_WITNESS_SECS], 60
+      by default. *)
+  val witness_seconds : float ref
+
+  (** [frame_of structure prepared] is the combination's events, [dp] and [ppo]:
+      what its future, and minimality, compare it by. *)
+  val frame_of :
+    symbolic_event_structure ->
+    prepared ->
+    int uset * (int * int) uset * (int * int) uset
+
+  (** [valid_rf ~coherence_models structure prepared] tests whether a read-from
+      relation, as [(write, read)] pairs, is one {!enumerate} with
+      [coherence_models] returns a result for. The search is set up once, by the
+      partial application. *)
+  val valid_rf :
+    coherence_models:string list ->
+    symbolic_event_structure ->
+    prepared ->
+    (int * int) uset ->
+    bool
+
+  (** [witness ~model ~coherence_models ~admits ~reject structure prepared] is a
+      result {!enumerate} would return for the combination that [admits] holds
+      of and [reject] does not, or that there is none. For smrd a solver query
+      decides it (S19, #96), checking each read-from it proposes exactly; for
+      any other model, and where the solver is undecided after
+      {!witness_rounds}, a search does, most constrained read first, pruned by
+      [coherence_models], within {!witness_seconds}. *)
+  val witness :
+    model:string ->
+    coherence_models:string list ->
+    admits:(FreezeResult.t -> bool) ->
+    reject:(FreezeResult.t -> bool) ->
+    symbolic_event_structure ->
+    prepared ->
+    witness
+
   (** [freeze ...] is {!enumerate} of {!prepare}: the combination's valid
       executions, or none where its predicates are unsatisfiable.
 
@@ -396,6 +447,7 @@ end
 val generate_executions :
   ?include_rf:bool ->
   ?compute:compute_fn ->
+  ?witnesses:bool ->
   ?compare_models:string list ->
   ?admissions:(int, string list) Hashtbl.t ->
   ?model_executions:(string, symbolic_execution list) Hashtbl.t ->
@@ -435,6 +487,7 @@ val generate_executions :
 val calculate_dependencies :
   ?include_rf:bool ->
   ?num_threads:int ->
+  ?witnesses:bool ->
   ?compare_models:string list ->
   ?admissions:(int, string list) Hashtbl.t ->
   ?model_executions:(string, symbolic_execution list) Hashtbl.t ->
