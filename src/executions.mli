@@ -261,9 +261,10 @@ module Freeze : sig
 
   (** [witness ~model ~coherence_models ~admits ~reject structure prepared] is a
       result {!enumerate} would return for the combination that [admits] holds
-      of and [reject] does not, or that there is none. For smrd a solver query
-      decides it (S19, #96), checking each read-from it proposes exactly; for
-      any other model, and where the solver is undecided after
+      of and [reject] does not, or that there is none. Where the model has a
+      symbolic form ({!Coherence.ModelRegistry.lookup_symbolic}, smrd today) a
+      solver query decides it, checking each read-from it proposes exactly (S19,
+      #96); where it has none, and where the solver is undecided after
       {!witness_rounds}, a search does, most constrained read first, pruned by
       [coherence_models], within {!witness_seconds}. *)
   val witness :

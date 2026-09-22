@@ -559,9 +559,26 @@ let test_coherence_axiom_accepts_acyclic_hb () =
     ()
 
 (** Test suite *)
+(* R16: smrd is the one model with a symbolic form; the rest are asked about
+   one execution at a time. *)
+let test_symbolic_registry () =
+  check bool "smrd has one" true
+    (Option.is_some (ModelRegistry.lookup_symbolic "smrd"));
+  List.iter
+    (fun name ->
+      check bool (name ^ " has none") false
+        (Option.is_some (ModelRegistry.lookup_symbolic name))
+    )
+    [ "rc11"; "imm"; "sc"; "od-lso" ];
+  let symbolic = Option.get (ModelRegistry.lookup_symbolic "smrd") in
+  let module M = (val symbolic : SYMBOLIC_MODEL) in
+    check string "its name" "smrd" M.name;
+    check bool "cheapest first, then fuller" true (List.length M.levels = 2)
+
 let suite =
   ( "Coherence",
     [
+      test_case "symbolic model registry" `Quick test_symbolic_registry;
       test_case "em write events" `Quick test_em_write_events;
       test_case "em with mode" `Quick test_em_with_mode;
       test_case "em relaxed threshold asks own mode" `Quick

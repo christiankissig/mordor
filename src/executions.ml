@@ -2485,190 +2485,186 @@ module Freeze = struct
       | Found result -> Witness result
       | Out_of_time -> Undecided
 
-  (** [solver_witness ~check structure prep] asks the solver for a read-from
-      relation of the combination that smrd could admit, and checks each it
-      proposes exactly — [instantiate_execution], then [check] — blocking those
-      that fail, up to {!witness_rounds} times.
+  (** [solver_witness ~model ~check structure prep] asks the solver for a
+      read-from relation of the combination that [model] could admit, and checks
+      each it proposes exactly -- [instantiate_execution], then [check] --
+      blocking those that fail, up to {!witness_rounds} times.
 
-      The constraints are a necessary condition for a result smrd admits (S19,
-      #96), so unsatisfiable means there is none. A selector per read ranges
-      over its candidate writes (Init only where it is the only one); the chosen
-      edge implies the read's value and location equal the write's; the
-      combination's predicates hold; [rhb] is acyclic, by ranks; and smrd's
-      coherence and atomicity axioms hold over each write's position in [co],
-      with a read at its write's position. [hb] is taken as [(dp ∪ ppo)⁺], a
-      subset of smrd's, which leaves out release/acquire edges, so the condition
-      stays necessary. *)
-  let solver_witness ~check structure prep =
-    let alternatives, reads, _ =
-      search_space ~coherence_models:[] structure prep
-    in
-    let instantiate = instantiator structure prep in
-    let e, dp, ppo = frame_of structure prep in
-    let _, _, _, _, rmw =
-      frame structure prep.prep_path prep.prep_dp prep.prep_ppo
-        prep.prep_p_combined prep.prep_elided
-    in
-    let var fmt = Printf.ksprintf (fun s -> ESymbol s) fmt in
-    let sel r = var "witness_sel%d" r
-    and rank x = var "witness_rank%d" x
-    and pos x = var "witness_pos%d" x in
-    let num n = ENum (Z.of_int n) in
-    let eq a b = EBinOp (a, "=", b)
-    and lt a b = EBinOp (a, "<", b)
-    and imp a b = EBinOp (a, "=>", b)
-    and neg a = EUnOp ("!", a) in
-    let conj = function
-      | [] -> EBoolean true
-      | x :: xs -> List.fold_left (fun a b -> EBinOp (a, "&&", b)) x xs
-    in
-    let disj = function
-      | [] -> EBoolean false
-      | [ x ] -> x
-      | l -> EOr l
-    in
-    let alts r =
-      let ws = try Hashtbl.find alternatives r with Not_found -> [] in
-        if List.length ws > 1 then List.filter (fun w -> w <> 0) ws else ws
-    in
-    let chosen r w = eq (sel r) (num w) in
-    let writes =
-      USet.values e
-      |> List.filter (fun x ->
-          x <> 0
-          &&
-          match Hashtbl.find_opt structure.events x with
-          | Some (ev : event) -> ev.typ = Write && Option.is_some ev.loc
-          | None -> false
-      )
-    in
-    let sameloc a b =
-      match (get_loc structure a, get_loc structure b) with
-      | Some la, Some lb -> Some (eq la lb)
-      | _ -> None
-    in
-    let edge f w r = USet.values (f structure (USet.singleton (w, r))) in
-    let for_edges f =
-      List.concat_map
-        (fun r ->
-          List.filter_map (fun w -> if w = 0 then None else f r w) (alts r)
-        )
-        reads
-    in
-    let static = USet.union dp ppo |> URelation.restrict e in
-    let accesses = USet.of_list (reads @ writes) in
-    let hb0 =
-      URelation.transitive_closure static
-      |> USet.filter (fun (a, b) ->
-          a <> b && USet.mem accesses a && USet.mem accesses b
-      )
-    in
-    let constraints =
-      prep.prep_p_combined
-      (* choice *)
-      @ List.map (fun r -> disj (List.map (chosen r) (alts r))) reads
-      (* values and locations *)
-      @ for_edges (fun r w ->
-          Some
-            (imp (chosen r w)
-               (conj
-                  (edge ReadFromValidation.env_rf w r
-                  @ edge ReadFromValidation.check_rf w r
-                  )
-               )
+      The constraints are a necessary condition for such a result (S19, #96): a
+      selector per read ranges over its candidate writes (Init only where it is
+      the only one); the chosen edge implies the read's value and location equal
+      the write's; the combination's predicates hold; [rhb] is acyclic, by
+      ranks; each write has a place in the coherence order at its location,
+      distinct from the others there, and a read has its write's. The model adds
+      its own, in levels, from the cheapest statement to the fullest
+      ({!Coherence.SYMBOLIC_MODEL}); the first that decides the combination is
+      the answer, and what one level ruled out the next keeps.
+
+      Unsatisfiable therefore means the combination has no result the model
+      admits. A model with no symbolic form leaves it {!Undecided}, for the
+      search. *)
+  let solver_witness ~model ~check structure prep =
+    match Coherence.ModelRegistry.lookup_symbolic model with
+    | None -> Undecided
+    | Some symbolic ->
+        let module M = (val symbolic : Coherence.SYMBOLIC_MODEL) in
+        let alternatives, reads, _ =
+          search_space ~coherence_models:[] structure prep
+        in
+        let instantiate = instantiator structure prep in
+        let e, dp, ppo = frame_of structure prep in
+        let _, _, _, _, rmw =
+          frame structure prep.prep_path prep.prep_dp prep.prep_ppo
+            prep.prep_p_combined prep.prep_elided
+        in
+        let var fmt = Printf.ksprintf (fun s -> ESymbol s) fmt in
+        let sel r = var "witness_sel%d" r
+        and rank x = var "witness_rank%d" x
+        and pos x = var "witness_pos%d" x in
+        let num n = ENum (Z.of_int n) in
+        let eq a b = EBinOp (a, "=", b)
+        and lt a b = EBinOp (a, "<", b)
+        and imp a b = EBinOp (a, "=>", b)
+        and neg a = EUnOp ("!", a) in
+        let conj = function
+          | [] -> EBoolean true
+          | x :: xs -> List.fold_left (fun a b -> EBinOp (a, "&&", b)) x xs
+        in
+        let disj = function
+          | [] -> EBoolean false
+          | [ x ] -> x
+          | l -> EOr l
+        in
+        let alts r =
+          let ws = try Hashtbl.find alternatives r with Not_found -> [] in
+            if List.length ws > 1 then List.filter (fun w -> w <> 0) ws else ws
+        in
+        let chosen r w = eq (sel r) (num w) in
+        let writes =
+          USet.values e
+          |> List.filter (fun x ->
+              x <> 0
+              &&
+              match Hashtbl.find_opt structure.events x with
+              | Some (ev : event) -> ev.typ = Write && Option.is_some ev.loc
+              | None -> false
+          )
+        in
+        let sameloc a b =
+          match (get_loc structure a, get_loc structure b) with
+          | Some la, Some lb -> Some (eq la lb)
+          | _ -> None
+        in
+        let edge f w r = USet.values (f structure (USet.singleton (w, r))) in
+        let for_edges f =
+          List.concat_map
+            (fun r ->
+              List.filter_map (fun w -> if w = 0 then None else f r w) (alts r)
             )
-      )
-      (* rhb acyclic *)
-      @ List.map (fun (a, b) -> lt (rank a) (rank b)) (USet.values static)
-      @ for_edges (fun r w -> Some (imp (chosen r w) (lt (rank w) (rank r))))
-      (* positions in co *)
-      @ List.map (fun x -> lt (num 0) (pos x)) writes
-      @ List.concat_map
-          (fun x ->
-            List.filter_map
-              (fun y ->
-                if x >= y then None
-                else
-                  Option.map
-                    (fun same -> imp same (neg (eq (pos x) (pos y))))
-                    (sameloc x y)
-              )
-              writes
+            reads
+        in
+        let static = USet.union dp ppo |> URelation.restrict e in
+        let closure = URelation.transitive_closure static in
+        let encoding =
+          {
+            Coherence.enc_events = USet.values e;
+            enc_reads = reads;
+            enc_writes = writes;
+            enc_candidates = alts;
+            enc_rmw = rmw;
+            enc_reaches = (fun a b -> a = b || USet.mem closure (a, b));
+            enc_chosen = chosen;
+            enc_position = pos;
+            enc_sameloc = sameloc;
+            enc_fresh = (fun name -> var "witness_%s" name);
+            enc_structure = structure;
+          }
+        in
+        (* What every execution of the combination satisfies, whatever the
+           model: the choices, what they mean for values and locations, the
+           combination's predicates, an acyclic [rhb], and a coherence order
+           per location. *)
+        let common =
+          prep.prep_p_combined
+          @ List.map (fun r -> disj (List.map (chosen r) (alts r))) reads
+          @ for_edges (fun r w ->
+              Some
+                (imp (chosen r w)
+                   (conj
+                      (edge ReadFromValidation.env_rf w r
+                      @ edge ReadFromValidation.check_rf w r
+                      )
+                   )
+                )
           )
-          writes
-      @ List.concat_map
-          (fun r ->
-            List.map
-              (fun w ->
-                imp (chosen r w) (eq (pos r) (if w = 0 then num 0 else pos w))
-              )
-              (alts r)
-          )
-          reads
-      (* coherence: hb;eco irreflexive *)
-      @ List.filter_map
-          (fun (a, b) ->
-            Option.map
-              (fun same ->
-                let back =
-                  lt (pos b) (pos a)
-                  ::
-                  ( if List.mem b writes && List.mem a reads then [ chosen a b ]
-                    else []
-                  )
-                in
-                  imp same (neg (disj back))
-              )
-              (sameloc a b)
-          )
-          (USet.values hb0)
-      (* atomicity: rmw ∩ (rb;co) = ∅ *)
-      @ List.concat_map
-          (fun (r, w) ->
-            List.filter_map
+          @ List.map (fun (a, b) -> lt (rank a) (rank b)) (USet.values static)
+          @ for_edges (fun r w -> Some (imp (chosen r w) (lt (rank w) (rank r))))
+          @ List.map (fun x -> lt (num 0) (pos x)) writes
+          @ List.concat_map
               (fun x ->
-                if x = w then None
-                else
-                  Option.map
-                    (fun same ->
-                      neg (conj [ same; lt (pos r) (pos x); lt (pos x) (pos w) ])
-                    )
-                    (sameloc x r)
+                List.filter_map
+                  (fun y ->
+                    if x >= y then None
+                    else
+                      Option.map
+                        (fun same -> imp same (neg (eq (pos x) (pos y))))
+                        (sameloc x y)
+                  )
+                  writes
               )
               writes
-          )
-          (USet.values rmw)
-    in
-    let decode model =
-      List.map
-        (fun r ->
-          match Hashtbl.find_opt model (Printf.sprintf "witness_sel%d" r) with
-          | Some (VNumber n) -> (r, Z.to_int n)
-          | _ -> (r, List.hd (alts r @ [ 0 ]))
-        )
-        reads
-    in
-    let rec ask blocks n =
-      if n > !witness_rounds then Undecided
-      else
-        match Solver.quick_solve (constraints @ blocks) with
-        | None -> No_witness
-        | Some model -> (
-            let rf = decode model in
-            let result =
-              instantiate (List.map (fun (r, w) -> (w, r)) rf |> USet.of_list)
-            in
-              match result with
-              | Some result when check result -> Witness result
-              | _ ->
-                  ask
-                    (neg (conj (List.map (fun (r, w) -> chosen r w) rf))
-                    :: blocks
-                    )
-                    (n + 1)
-          )
-    in
-      if List.exists (fun r -> alts r = []) reads then No_witness else ask [] 1
+          @ List.concat_map
+              (fun r ->
+                List.map
+                  (fun w ->
+                    imp (chosen r w)
+                      (eq (pos r) (if w = 0 then num 0 else pos w))
+                  )
+                  (alts r)
+              )
+              reads
+        in
+        let decode model =
+          List.map
+            (fun r ->
+              match
+                Hashtbl.find_opt model (Printf.sprintf "witness_sel%d" r)
+              with
+              | Some (VNumber n) -> (r, Z.to_int n)
+              | _ -> (r, List.hd (alts r @ [ 0 ]))
+            )
+            reads
+        in
+        let rec ask constraints blocks n =
+          if n > !witness_rounds then (Undecided, blocks)
+          else
+            match Solver.quick_solve (constraints @ blocks) with
+            | None -> (No_witness, blocks)
+            | Some model -> (
+                let rf = decode model in
+                let blocked =
+                  neg (conj (List.map (fun (r, w) -> chosen r w) rf)) :: blocks
+                in
+                let result =
+                  instantiate
+                    (List.map (fun (r, w) -> (w, r)) rf |> USet.of_list)
+                in
+                  match result with
+                  | Some result when check result -> (Witness result, blocked)
+                  | _ -> ask constraints blocked (n + 1)
+              )
+        in
+        let rec by_level levels blocks =
+          match levels with
+          | [] -> Undecided
+          | level :: rest -> (
+              match ask (common @ level encoding) blocks 1 with
+              | Undecided, blocks -> by_level rest blocks
+              | decided, _ -> decided
+            )
+        in
+          if List.exists (fun r -> alts r = []) reads then No_witness
+          else by_level M.levels []
 
   (** [witness ~model ~coherence_models ~admits ~reject structure prep] is a
       witness for the combination: a result {!enumerate} would return, that
@@ -2678,9 +2674,7 @@ module Freeze = struct
       pruning by [coherence_models]. *)
   let witness ~model ~coherence_models ~admits ~reject structure prep =
     let check result = admits result && not (reject result) in
-    let from_solver =
-      if model = "smrd" then solver_witness ~check structure prep else Undecided
-    in
+    let from_solver = solver_witness ~model ~check structure prep in
       match from_solver with
       | Undecided -> search_witness ~coherence_models ~check structure prep
       | decided -> decided
