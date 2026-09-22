@@ -212,9 +212,11 @@ module Freeze : sig
   val duplicate_key : prepared -> Digest.t
 
   (** [enumerate structure prepared ~include_rf] is the combination's valid
-      executions. *)
+      executions. With [witness] (S15), only the first valid one it holds of, or
+      none. *)
   val enumerate :
     ?coherence_models:string list ->
+    ?witness:(FreezeResult.t -> bool) ->
     symbolic_event_structure ->
     prepared ->
     include_rf:bool ->

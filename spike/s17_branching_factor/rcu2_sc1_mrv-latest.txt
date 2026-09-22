@@ -1,0 +1,64 @@
+combinations: 256
+log10 choice product, median: 16.77
+probes reaching a valid leaf: 179 of 256 combinations; log10 valid leaves, median where reached: 4.17
+depth of the peak estimate, median: 15.0
+secs per combination, median: 14.9
+depth  reached  median log10 survivors  (with dead as -inf: share alive)  branching
+    0      256                    0.00       1.00  
+    1      256                    0.60       1.00     3.98
+    2      256                    1.15       1.00     3.55
+    3      256                    1.59       1.00     2.75
+    4      256                    2.02       1.00     2.72
+    5      256                    2.40       1.00     2.34
+    6      256                    2.76       1.00     2.32
+    7      256                    3.12       1.00     2.26
+    8      256                    3.43       1.00     2.07
+    9      256                    3.68       1.00     1.78
+   10      256                    3.74       1.00     1.15
+   11      247                    3.71       0.96     0.93
+   12      227                    3.75       0.89     1.10
+   13      212                    3.88       0.83     1.33
+   14      207                    4.02       0.81     1.40
+   15      201                    4.19       0.79     1.48
+   16      186                    4.18       0.75     0.98
+   17      149                    4.15       0.72     0.93
+   18       81                    3.86       0.63     0.51
+   19       25                    4.02       0.52     1.45
+   20        4                    4.20       0.50     1.50
+
+rejections:
+  rejections total=773662
+  reason n=457082 unsat
+  reason n=166208 rhb cycle
+  reason n=31264 coherence: hb;eco ∪ hb is irreflexive@一/5
+  reason n=19941 coherence: hb;eco ∪ hb is irreflexive@(一 + 1)/5
+  reason n=16264 coherence: hb;eco ∪ hb is irreflexive@一/1
+  reason n=8573 coherence: hb;eco ∪ hb is irreflexive@(三 + 1)/1
+  reason n=7312 coherence: hb;eco ∪ hb is irreflexive@(一 + 1)/1
+  reason n=5797 coherence: hb;eco ∪ hb is irreflexive@(一 + 1)/7
+  reason n=5558 coherence: rmw ∩ (rb;co) = ∅@(一 + 1)/28
+  reason n=5388 coherence: hb;eco ∪ hb is irreflexive@(一 + 1)/21
+  reason n=4975 coherence: hb;eco ∪ hb is irreflexive@二/6
+  reason n=4781 coherence: hb;eco ∪ hb is irreflexive@(一 + 1)/28
+  reason n=3940 coherence: rmw ∩ (rb;co) = ∅@(一 + 1)/7
+  reason n=3759 coherence: hb;eco ∪ hb is irreflexive@二/10
+  reason n=3733 coherence: hb;eco ∪ hb is irreflexive@四/1
+  reason n=3711 coherence: hb;eco ∪ hb is irreflexive@二/3
+  reason n=3601 coherence: rmw ∩ (rb;co) = ∅@(一 + 1)/21
+  reason n=3509 coherence: hb;eco ∪ hb is irreflexive@(一 + 1)/6
+  reason n=2575 coherence: hb;eco ∪ hb is irreflexive@二/4
+  reason n=2397 init: another write exists
+  reason n=2356 coherence: rmw ∩ (rb;co) = ∅@(一 + 1)/6
+  reason n=2352 coherence: hb;eco ∪ hb is irreflexive@三/1
+  reason n=1790 coherence: rmw ∩ (rb;co) = ∅@二/6
+  reason n=1754 coherence: rmw ∩ (rb;co) = ∅@二/3
+  reason n=1606 coherence: hb;eco ∪ hb is irreflexive@七/1
+  reason n=773 coherence: hb;eco ∪ hb is irreflexive@(五 + 1)/2
+  reason n=712 coherence: hb;eco ∪ hb is irreflexive@四/2
+  reason n=588 coherence: hb;eco ∪ hb is irreflexive@(六 + 1)/2
+  reason n=547 coherence: rmw ∩ (rb;co) = ∅@二/10
+  reason n=204 coherence: hb;eco ∪ hb is irreflexive@三/2
+  reason n=183 coherence: rmw ∩ (rb;co) = ∅@二/4
+  reason n=172 coherence: hb;eco ∪ hb is irreflexive@五/2
+  reason n=131 coherence: rmw ∩ (rb;co) = ∅@二/2
+  reason n=126 coherence: hb;eco ∪ hb is irreflexive@六/2

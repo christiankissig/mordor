@@ -1,0 +1,17 @@
+combinations: 27
+log10 choice product, median: 2.86
+probes reaching a valid leaf: 27 of 27 combinations; log10 valid leaves, median where reached: 2.16
+depth of the peak estimate, median: 6
+secs per combination, median: 0.1
+depth  reached  median log10 survivors  (with dead as -inf: share alive)  branching
+    0       27                    0.00       1.00  
+    1       27                    0.30       1.00     2.00
+    2       27                    0.60       1.00     2.00
+    3       27                    1.08       1.00     3.02
+    4       27                    1.56       1.00     3.02
+    5       27                    1.86       1.00     2.00
+    6       27                    2.16       1.00     2.00
+
+rejections:
+  rejections total=5400
+  reason n=5400 init: another write exists

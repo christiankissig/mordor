@@ -1,0 +1,5 @@
+label rc=0 S15 summary order=label combos=256 witness=124 exhausted=0 budget=132 witness_secs_median=7.522 p90=45.054 max=60.186 exhausted_secs_max=0.000 wall=12:21.71 maxrss_kb=2282512
+mrv rc=0 S15 summary order=mrv combos=256 witness=198 exhausted=7 budget=51 witness_secs_median=4.338 p90=37.923 max=60.823 exhausted_secs_max=60.132 wall=8:05.78 maxrss_kb=2235816
+latest rc=0 S15 summary order=latest combos=256 witness=71 exhausted=0 budget=185 witness_secs_median=6.009 p90=38.937 max=58.593 exhausted_secs_max=0.000 wall=14:46.57 maxrss_kb=2341948
+mrv-latest rc=0 S15 summary order=mrv-latest combos=256 witness=216 exhausted=8 budget=32 witness_secs_median=2.906 p90=24.136 max=45.733 exhausted_secs_max=56.934 wall=5:56.82 maxrss_kb=2265780
+loc rc=0 S15 summary order=loc combos=256 witness=55 exhausted=0 budget=201 witness_secs_median=13.965 p90=52.202 max=59.998 exhausted_secs_max=0.000 wall=15:55.21 maxrss_kb=2610548

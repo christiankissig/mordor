@@ -1,0 +1,375 @@
+litmus-tests/atomics/mp-atomic2.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:4
+litmus-tests/atomics/mp-atomic.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:4
+litmus-tests/3.2W.lit	S19 summary combos=27 disagree=0 smt_secs_median=0.011 p90=0.014 max=0.017 enum_secs_median=0.005 max=0.150 verdicts=sat/exists:27
+litmus-tests/avoidoota/additional_twosource.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/avoidoota/additional_inventintload.lit	S19 summary combos=45 disagree=0 smt_secs_median=0.002 p90=0.005 max=0.008 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:8,unsat/none:37
+litmus-tests/avoidoota/listing10.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.002 p90=0.002 max=0.002 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2
+litmus-tests/avoidoota/listing11.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1
+litmus-tests/avoidoota/additional_nonlb.lit	S19 summary combos=432 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.012 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:409,unsat/none:23
+litmus-tests/avoidoota/listing12.lit	S19 summary combos=312 disagree=0 smt_secs_median=0.007 p90=0.010 max=0.016 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:304,unsat/none:8
+litmus-tests/avoidoota/listing13.lit	S19 summary combos=468 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.014 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:205,unsat/none:263
+litmus-tests/avoidoota/listing14.lit	S19 summary combos=312 disagree=0 smt_secs_median=0.006 p90=0.009 max=0.013 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:295,unsat/none:17
+litmus-tests/avoidoota/listing16.lit	S19 summary combos=228 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:226,unsat/none:2
+litmus-tests/avoidoota/listing17.lit	S19 summary combos=156 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.010 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:150,unsat/none:6
+litmus-tests/avoidoota/listing18.lit	S19 summary combos=216 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:215,unsat/none:1
+litmus-tests/avoidoota/listing19.lit	S19 summary combos=120 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.010 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:31,unsat/none:89
+litmus-tests/avoidoota/listing1.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:35,unsat/none:1
+litmus-tests/avoidoota/listing21.lit	S19 summary combos=120 disagree=0 smt_secs_median=0.004 p90=0.008 max=0.010 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:38,unsat/none:82
+litmus-tests/avoidoota/listing22.lit	S19 summary combos=60 disagree=0 smt_secs_median=0.005 p90=0.008 max=0.009 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:44,unsat/none:16
+litmus-tests/avoidoota/listing23.lit	S19 summary combos=84 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.010 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:55,unsat/none:29
+litmus-tests/avoidoota/listing24.lit	S19 summary combos=120 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.012 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:74,unsat/none:46
+litmus-tests/avoidoota/listing2_5.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/avoidoota/listing25.lit	S19 summary combos=21 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:17,unsat/none:4
+litmus-tests/avoidoota/listing2_5pwg.lit	S19 summary combos=32 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:30,unsat/none:2
+litmus-tests/avoidoota/listing26.lit	S19 summary combos=28 disagree=0 smt_secs_median=0.007 p90=0.009 max=0.010 enum_secs_median=0.001 max=0.005 verdicts=sat/exists:23,unsat/none:5
+litmus-tests/avoidoota/listing27_allow.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/avoidoota/listing27_forbid.lit	S19 summary combos=30 disagree=0 smt_secs_median=0.005 p90=0.011 max=0.012 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:21,unsat/none:9
+litmus-tests/avoidoota/listing3.lit	S19 summary combos=25 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:8,unsat/none:17
+litmus-tests/avoidoota/listing7.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2
+litmus-tests/avoidoota/listing8.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2
+litmus-tests/avoidoota/listing9.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.016 p90=0.016 max=0.016 enum_secs_median=0.012 max=0.012 verdicts=sat/exists:1
+litmus-tests/avoidoota/listing20.lit	S19 summary combos=384 disagree=0 smt_secs_median=0.004 p90=0.007 max=0.009 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:144,unsat/none:240
+litmus-tests/basic/coproduct-exns.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.009 p90=0.009 max=0.009 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1
+litmus-tests/basic.lit.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.003 p90=0.003 max=0.003 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1,unsat/none:1
+litmus-tests/basic/lb.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/basic/par-comp.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1
+litmus-tests/basic/rw.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:6
+litmus-tests/c20/rs-example.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.007 p90=0.008 max=0.011 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:12
+litmus-tests/esop_problem/lb+ctrldat+ctrl-single.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.002 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:1,unsat/none:8
+litmus-tests/esop_problem/cse.lit	S19 summary combos=72 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:29,unsat/none:43
+litmus-tests/esop_problem/lb+ctrldata+ctrl-double.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:13,unsat/none:11
+litmus-tests/esop_problem/lb+ctrldata+po.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:10,unsat/none:2
+litmus-tests/esop_problem/lb+datas.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.011 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:35,unsat/none:1
+litmus-tests/esop_problem/lb.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:16
+litmus-tests/esop_problem/mp.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/esop_problem/sb.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4
+litmus-tests/fowm2024/load intro - no aliasing.lit	S19 summary combos=7 disagree=0 smt_secs_median=0.000 p90=0.016 max=0.016 enum_secs_median=0.002 max=0.005 verdicts=sat/exists:1,unsat/none:6
+litmus-tests/fowm2024/load intro - potential aliasing.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.012 p90=0.012 max=0.012 enum_secs_median=0.003 max=0.003 verdicts=sat/exists:1
+litmus-tests/fowm2024/nullptr - use.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:1,unsat/none:1
+litmus-tests/fowm2024/nullptr - no use.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1,unsat/none:1
+litmus-tests/fwd/ra/lift_relrel.lit	S19 summary combos=18 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:8,unsat/none:10
+litmus-tests/fwd/ra/lift_rel.lit	S19 summary combos=18 disagree=0 smt_secs_median=0.004 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:8,unsat/none:10
+litmus-tests/fwd/rlx/lift_F1w.lit	S19 summary combos=75 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.009 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:20,unsat/none:55
+litmus-tests/fwd/rlx/lift_F1r.lit	S19 summary combos=90 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:28,unsat/none:62
+litmus-tests/fwd/rlx/lift_F2w.lit	S19 summary combos=33 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:13,unsat/none:20
+litmus-tests/fwd/rlx/lift_F1wr.lit	S19 summary combos=57 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:17,unsat/none:40
+litmus-tests/imm/FADD RMW Atomicity.lit	S19 summary combos=5 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:5
+litmus-tests/fwd/rlx/lift.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:13,unsat/none:11
+litmus-tests/ISO/1-MP.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:6,unsat/none:2
+litmus-tests/imm/LB+falsedep+Fsc.lit	S19 summary combos=18 disagree=0 smt_secs_median=0.004 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:12,unsat/none:6
+litmus-tests/ISO/2-MP+rel+acq.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:6,unsat/none:2
+litmus-tests/ISO/3-LB.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:16
+litmus-tests/ISO/4-LB+deps.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:35,unsat/none:1
+litmus-tests/ISO/5-LB+false-dep.lit	S19 summary combos=48 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:29,unsat/none:19
+litmus-tests/MP/MP+rel+acq.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:4
+litmus-tests/MP/MP.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/on_thin_air_reads19/ex3.5.lit	S19 summary combos=18 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:10,unsat/none:8
+litmus-tests/on_thin_air_reads19/P1.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:35,unsat/none:1
+litmus-tests/on_thin_air_reads19/P2.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.009 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:16
+litmus-tests/on_thin_air_reads19/P4.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:11,unsat/none:1
+litmus-tests/on_thin_air_reads19/P3.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/on_thin_air_reads19/P6.lit	S19 summary combos=44 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:11,unsat/none:33
+litmus-tests/on_thin_air_reads19/s5.3.2.lit	S19 summary combos=48 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.010 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:34,unsat/none:14
+litmus-tests/on_thin_air_reads19/TC9a.lit	S19 summary combos=30 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:23,unsat/none:7
+litmus-tests/opts/store-forward.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:35,unsat/none:1
+litmus-tests/own/atloc-alias.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:3
+litmus-tests/own/atloc-final-value.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2
+litmus-tests/own/atloc-noalias.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:3
+litmus-tests/on_thin_air_reads19/TC7.lit	S19 summary combos=128 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:116,unsat/none:12
+litmus-tests/own/atloc-unwritten.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2
+litmus-tests/own/co-witness-exported.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4
+litmus-tests/own/coproductReorder.lit	S19 summary combos=15 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:3,unsat/none:12
+litmus-tests/own/co-witness-respects-po.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4
+litmus-tests/own/ctrl_subsumed_by_data.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:3
+litmus-tests/own/DOMAIN.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:1
+litmus-tests/own/expressionPreservingSubstitution.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests/own/FreeRace2.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:3,unsat/none:1
+litmus-tests/own/FreeRace.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:3,unsat/none:1
+litmus-tests/own/JCTC12.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.018 p90=0.018 max=0.018 enum_secs_median=0.012 max=0.012 verdicts=sat/exists:1
+litmus-tests/own/elideanddontobserve.lit	S19 summary combos=66 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:27,unsat/none:39
+litmus-tests/own/join-continuation.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:12
+litmus-tests/own/LB+deps+const-smrd.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:1,unsat/none:8
+litmus-tests/own/LB+deps-smrd.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.002 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:1,unsat/none:8
+litmus-tests/own/nonatomic-store-no-sync.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.007 p90=0.009 max=0.009 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/own/LF.lit	S19 summary combos=20 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:20
+litmus-tests/own/nonatomic-store-no-sync-relaxed.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4
+litmus-tests/own/OOTA7.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.007 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:6,unsat/none:6
+litmus-tests/own/oota-direct-reuse.lit	S19 summary combos=156 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.009 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:150,unsat/none:6
+litmus-tests/own/oota-forwarded-reread.lit	S19 summary combos=228 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.010 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:226,unsat/none:2
+litmus-tests/own/ORI.lit	S19 summary combos=144 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.029 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:36,unsat/none:108
+litmus-tests/own/paper108.lit	S19 summary combos=5 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:5
+litmus-tests/own/paper109.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests/own/paper112F.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2
+litmus-tests/own/ORI2.lit	S19 summary combos=264 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.033 enum_secs_median=0.001 max=0.008 verdicts=sat/exists:36,unsat/none:228
+litmus-tests/own/paper113.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2,unsat/none:1
+litmus-tests/own/paper115.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.003 p90=0.003 max=0.003 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4
+litmus-tests/own/ptr-overwrite-coherence.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:1
+litmus-tests/own/SB+sc.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:3,unsat/none:1
+litmus-tests/own/relaxed-store-elided.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:10,unsat/none:2
+litmus-tests/own/sync/fence0lift.lit	S19 summary combos=27 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:12,unsat/none:15
+litmus-tests/own/speculative_optimisation.lit	S19 summary combos=72 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:29,unsat/none:43
+litmus-tests/own/sync/fence1lift.lit	S19 summary combos=15 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:6,unsat/none:9
+litmus-tests/own/sync/fence2lift.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4,unsat/none:5
+litmus-tests/own/sync/rel1lift.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.002 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:3,unsat/none:9
+litmus-tests/own/sync/rel2lift.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:3,unsat/none:9
+litmus-tests/own/sync/writeElisionRel.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:7,unsat/none:17
+litmus-tests/own/sync/writeElision.lit	S19 summary combos=66 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:29,unsat/none:37
+litmus-tests/own/VA-unrelated-guard+const-smrd.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.002 p90=0.004 max=0.005 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:1,unsat/none:11
+litmus-tests/own/volatile-store-not-elided.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1
+litmus-tests/own/VA-unrelated-guard-smrd.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:1,unsat/none:11
+litmus-tests/pldi_repairing/IRIW+acq+sc.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.009 p90=0.009 max=0.009 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:3,unsat/none:1
+litmus-tests/own/VRA-JCTC1.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:26,unsat/none:10
+litmus-tests/pldi_repairing/LB+deps.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.002 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1,unsat/none:8
+litmus-tests/pldi_repairing/RWC+syncs.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.008 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/pldi_repairing/LB.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:16
+litmus-tests/pldi_repairing/W+WRC.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.010 p90=0.011 max=0.011 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:8
+litmus-tests/popl_bridging/FADD Example.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:8,unsat/none:4
+litmus-tests/popl_bridging/IRIW+Fsc+Fsc.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:3,unsat/none:1
+litmus-tests/popl_bridging/LB.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/popl_bridging/Load buffering with acquire reads.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:3,unsat/none:1
+litmus-tests/popl_bridging/Load buffering with release writes.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:12,unsat/none:4
+litmus-tests/popl_bridging/ARM FADD.lit	S19 summary combos=132 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.009 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:80,unsat/none:52
+litmus-tests/popl_bridging/MP+rel+acq.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.007 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:4
+litmus-tests/popl_bridging/PSC.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:4,unsat/none:2
+litmus-tests/popl_bridging/RMW Atomicity.lit	S19 summary combos=5 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:5
+litmus-tests/popl_bubbly/LB+deps.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.002 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:1,unsat/none:8
+litmus-tests/popl_bubbly/LB+false-deps.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.002 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:13,unsat/none:11
+litmus-tests/popl_bridging/rfi is not always preserved.lit	S19 summary combos=120 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:68,unsat/none:52
+litmus-tests/popl_bubbly/LB.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:35,unsat/none:1
+litmus-tests/popl_grounding/Coh.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:3
+litmus-tests/popl_grounding/Coh-CYC (Soham).lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.009 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:13,unsat/none:23
+litmus-tests/popl_grounding/Cwrites.lit	S19 summary combos=28 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:7,unsat/none:21
+litmus-tests/popl_grounding/LBfd.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:13,unsat/none:11
+litmus-tests/popl_grounding/LB.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:10,unsat/none:2
+litmus-tests/popl_grounding/RNGb.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:2,unsat/none:1
+litmus-tests/popl_promising/2+2W.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:1
+litmus-tests/popl_promising/ARM-weak.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:1
+litmus-tests/popl_promising/COH.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:3
+litmus-tests/popl_grounding/RNG.lit	S19 summary combos=60 disagree=0 smt_secs_median=0.004 p90=0.007 max=0.009 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:21,unsat/none:39
+litmus-tests/popl_promising/CYC.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.002 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:1,unsat/none:8
+litmus-tests/popl_promising/LBaa/LBa'0.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1
+litmus-tests/popl_promising/LBaa/LBa'1.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests/popl_promising/LBa.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.010 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:10,unsat/none:2
+litmus-tests/popl_promising/LBa'.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/popl_promising/LBd.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:35,unsat/none:1
+litmus-tests/popl_promising/LBfd.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/popl_promising/LB.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/popl_promising/LBr.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:20,unsat/none:4
+litmus-tests/popl_promising/MP+fences.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4
+litmus-tests/popl_promising/Page 7 Column 1.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.007 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:8
+litmus-tests/popl_promising/Par-Inc.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.004 p90=0.009 max=0.009 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:8
+litmus-tests/popl_promising/SB+fences.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/popl_promising/SB.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:4
+litmus-tests-promising/2+2W.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:1
+litmus-tests-promising/ARM-weak.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1
+litmus-tests-promising/COH.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:3
+litmus-tests-promising/CYC.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.002 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1,unsat/none:8
+litmus-tests-promising/Coh-CYC (Promising).lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:13,unsat/none:23
+litmus-tests-promising/LBaa/LBa'0.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1
+litmus-tests-promising/LBaa/LBa'1.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests-promising/LBa.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:10,unsat/none:2
+litmus-tests-promising/LBa'.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests-promising/LBd.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:35,unsat/none:1
+litmus-tests-promising/LBfd.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests-promising/LB.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests-promising/LBr.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:20,unsat/none:4
+litmus-tests-promising/MP+fences.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4
+litmus-tests-promising/Page 7 Column 1.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.009 p90=0.011 max=0.011 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:8
+litmus-tests-promising/Page 7 Column 1b.lit	S19 summary combos=20 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.010 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:20
+litmus-tests-promising/Par-Inc.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:8
+litmus-tests-promising/SB+fences.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests-promising/SB.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:4
+litmus-tests/requests/0nONvMSw7 (MP).lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/requests/1MR_opBNP (2+2W with obs thread).lit	S19 summary combos=9 disagree=0 smt_secs_median=0.008 p90=0.009 max=0.009 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:9
+litmus-tests/requests/2zm8LRQsJ (LB).lit	S19 summary combos=16 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:16
+litmus-tests/requests/Aj1vSoVpE (MP).lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4
+litmus-tests/requests/E8OKvIVLN (2+2W with obs thread).lit	S19 summary combos=9 disagree=0 smt_secs_median=0.009 p90=0.013 max=0.013 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:9
+litmus-tests/avoidoota/listing15.lit	S19 summary combos=2200 disagree=0 smt_secs_median=0.005 p90=0.010 max=0.031 enum_secs_median=0.000 max=0.006 verdicts=sat/exists:1329,unsat/none:871
+litmus-tests/requests/leb0OUCUM (LB).lit	S19 summary combos=16 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:16
+litmus-tests/requests/oEk0xQtQy (CoWR).lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:3
+litmus-tests/requests/ptmsQeW4i (CoWR).lit	S19 summary combos=3 disagree=0 smt_secs_median=0.007 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:3
+litmus-tests/requests/ZcUmGBDR9 (MP).lit	S19 summary combos=4 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4
+litmus-tests/requests/XXLpA6s8E (LB).lit	S19 summary combos=16 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:16
+litmus-tests-review/on_thin_air_reads19/P5.lit	S19 summary combos=5 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:5
+litmus-tests-review/esop_problem/RRE.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:10,unsat/none:14
+litmus-tests-review/own/FWD-STRENGTHEN-LIFT.lit	S19 summary combos=84 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.009 enum_secs_median=0.000 max=0.005 verdicts=sat/exists:24,unsat/none:60
+litmus-tests-promising/Upd-Stuck.lit	S19 summary combos=348 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.011 enum_secs_median=0.000 max=0.005 verdicts=sat/exists:286,unsat/none:62
+litmus-tests-review/popl_promising/Page 7 Column 1b.lit	S19 summary combos=20 disagree=0 smt_secs_median=0.007 p90=0.010 max=0.010 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:20
+litmus-tests-review/popl_bridging/Preserving detour.lit	S19 summary combos=234 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.010 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:71,unsat/none:163
+litmus-tests-review/rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.009 p90=0.009 max=0.009 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests-review/sevcik_thesis/Skip/LB+locks.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests-review/popl_grounding/FADD.lit	S19 summary combos=288 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.010 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:227,unsat/none:61
+litmus-tests/rmm-zoo/models/ra-sra-wra/2+2W+rel+acq.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:3,unsat/none:1
+litmus-tests/rmm-zoo/models/ra-sra-wra/CAS-both+rel+acq.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:2,unsat/none:2
+litmus-tests-review/symmrd/LB+UB+data+z.lit	S19 summary combos=120 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.009 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:109,unsat/none:11
+litmus-tests/rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests/rmm-zoo/models/ra-sra-wra/Oscillating.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.004 verdicts=sat/exists:3
+litmus-tests/rmm-zoo/models/ra-sra-wra/SF.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:3
+litmus-tests/rmm-zoo/models/ra-sra-wra/WW.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:3
+litmus-tests/rmm-zoo/models/rc11-rc17/LB.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:16
+litmus-tests/rmm-zoo/models/rc11-rc17/uaf-bug.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.002 max=0.002 verdicts=sat/exists:2
+litmus-tests/rmm-zoo/models/sc-tso/IRIW.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/models/rc11-rc17/RS17.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.009 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:22,unsat/none:14
+litmus-tests/rmm-zoo/models/sc-tso/SB+cas.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.003 p90=0.009 max=0.012 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:4,unsat/none:12
+litmus-tests/rmm-zoo/models/sc-tso/SB+failed-cas.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.003 p90=0.008 max=0.009 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:4,unsat/none:12
+litmus-tests/rmm-zoo/models/sc-tso/SB+fence.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/models/sc-tso/SB+fences.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/models/sc-tso/SB.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/models/sessions/Monotonic-read.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests/rmm-zoo/models/steinke-nutt/Cross-own.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:3
+litmus-tests/rmm-zoo/models/steinke-nutt/MP.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/models/steinke-nutt/Oscillating.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:3
+litmus-tests/rmm-zoo/models/steinke-nutt/Readers-disagree.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:3
+litmus-tests/rmm-zoo/models/steinke-nutt/Revised-order.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:3
+litmus-tests/rmm-zoo/models/steinke-nutt/WRC.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:8
+litmus-tests/rmm-zoo/models/steinke-nutt/Writer-reversed.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4
+litmus-tests-review/popl_promising/Upd-Stuck.lit	S19 summary combos=348 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.011 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:286,unsat/none:62
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.004 p90=0.007 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:9,unsat/none:7
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rel+acq.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:3,unsat/none:1
+litmus-tests/rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:11,unsat/none:1
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.007 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:3,unsat/none:1
+litmus-tests/rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.004 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rlx.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:8
+litmus-tests/rmm-zoo/properties/elimination/load-store/opt.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:2,unsat/none:1
+litmus-tests/rmm-zoo/properties/elimination/store-store/opt.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4,unsat/none:2
+litmus-tests/rmm-zoo/properties/elimination/load-store/src.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.005 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:8,unsat/none:4
+litmus-tests/rmm-zoo/properties/elimination/store-store/src.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.009 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:8,unsat/none:4
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/opt.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:8
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/opt.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.003 p90=0.003 max=0.003 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/src.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2,unsat/none:2
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/opt.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:8
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/src.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:8
+litmus-tests/rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rel+acq-drf.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests/rmm-zoo/properties/reordering/load-load/opt.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:1,unsat/none:1
+litmus-tests/rmm-zoo/properties/reordering/load-load/src.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:1,unsat/none:1
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/src.lit	S19 summary combos=40 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.009 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:32,unsat/none:8
+litmus-tests/rmm-zoo/properties/reordering/load-store/opt.lit	S19 summary combos=18 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:11,unsat/none:7
+litmus-tests/rmm-zoo/properties/reordering/store-load/opt.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:5,unsat/none:3
+litmus-tests/rmm-zoo/properties/reordering/load-store/src.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.002 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:5,unsat/none:7
+litmus-tests/rmm-zoo/properties/reordering/store-load/src.lit	S19 summary combos=14 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:11,unsat/none:3
+litmus-tests/rmw/cas_acqrel_failure_reorder.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/rmm-zoo/properties/reordering/store-store/opt.lit	S19 summary combos=25 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:16,unsat/none:9
+litmus-tests/rmm-zoo/properties/reordering/store-store/src.lit	S19 summary combos=25 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:16,unsat/none:9
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREA.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:1
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREB.lit	S19 summary combos=1 disagree=0 smt_secs_median=0.003 p90=0.003 max=0.003 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIA.lit	S19 summary combos=7 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:7
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIB.lit	S19 summary combos=7 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:7
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIC.lit	S19 summary combos=7 disagree=0 smt_secs_median=0.003 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:7
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (b).lit	S19 summary combos=60 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:26,unsat/none:34
+litmus-tests/sevcik_thesis/LB.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction.lit	S19 summary combos=84 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.009 enum_secs_median=0.000 max=0.004 verdicts=sat/exists:26,unsat/none:58
+litmus-tests/sevcik_thesis/MP.lit	S19 summary combos=32 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.009 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:20,unsat/none:12
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERA.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2,unsat/none:1
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERB.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4
+litmus-tests/sevcik_thesis/Redundant Read after Read Elimination.lit	S19 summary combos=72 disagree=0 smt_secs_median=0.002 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:29,unsat/none:43
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:6
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:6,unsat/none:3
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RA.lit	S19 summary combos=25 disagree=0 smt_secs_median=0.004 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:16,unsat/none:9
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RB.lit	S19 summary combos=25 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.009 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:16,unsat/none:9
+litmus-tests/sevcik_thesis/Skip/Redundant Write after Read Elimination.lit	S19 summary combos=10 disagree=0 smt_secs_median=0.009 p90=0.011 max=0.011 enum_secs_median=0.002 max=0.004 verdicts=sat/exists:10
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit	S19 summary combos=14 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:14
+litmus-tests/sevcik_thesis/Skip/Reordering with external actions.lit	S19 summary combos=18 disagree=0 smt_secs_median=0.004 p90=0.008 max=0.009 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:6,unsat/none:12
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPB.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4
+litmus-tests/single-thread-lift-tests/basic-lift.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests/single-thread-lift-tests/basic-not-lift.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2
+litmus-tests/single-thread-lift-tests/lift-above-read-2.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:6
+litmus-tests/single-thread-lift-tests/lift-above-read.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:6
+litmus-tests/single-thread-lift-tests/lift-with-read-freezing.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.007 p90=0.009 max=0.009 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:8
+litmus-tests/single-thread-lift-tests/lift-with-write-freezing.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.002 p90=0.003 max=0.003 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:2,unsat/none:4
+litmus-tests/single-thread-lift-tests/lock-test.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:8
+litmus-tests/single-thread-lift-tests/one-sided-lift.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.003 p90=0.003 max=0.003 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:3
+litmus-tests/single-thread-lift-tests/read-freezing.lit	S19 summary combos=7 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:7
+litmus-tests/single-thread-lift-tests/write-after-read-elim.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.002 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:6,unsat/none:2
+litmus-tests/single-thread-lift-tests/write-chain.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.003 p90=0.003 max=0.003 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2
+litmus-tests/single-thread-lift-tests/write-before-lift.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.003 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4,unsat/none:8
+litmus-tests/single-thread-lift-tests/write-freezing.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4,unsat/none:2
+litmus-tests/symmrd/LB+alias+data.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.004 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4
+litmus-tests/symmrd/LB+UB+data+arr.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.009 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/sevcik_thesis/Roach Motel Semantics.lit	S19 summary combos=180 disagree=0 smt_secs_median=0.007 p90=0.010 max=0.017 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:171,unsat/none:9
+litmus-tests/symmrd/LB+UB+data-forbid.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/symmrd/LB+UB+data.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/symmrd/alignment.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.144 p90=0.639 max=0.639 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:4
+litmus-tests/symmrd/no-alignment.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.224 p90=0.224 max=0.224 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:2
+litmus-tests/symmrd/refinement/LB+UB+data.lit	S19 summary combos=30 disagree=0 smt_secs_median=0.007 p90=0.012 max=0.016 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:21,unsat/none:9
+litmus-tests/test6/2+2W.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:9
+litmus-tests/symmrd/refinement/LB+UBoff+data.lit	S19 summary combos=30 disagree=0 smt_secs_median=0.008 p90=0.012 max=0.012 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:21,unsat/none:9
+litmus-tests/symmrd/refinement/LB+UB+data+z.lit	S19 summary combos=108 disagree=0 smt_secs_median=0.005 p90=0.010 max=0.014 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:85,unsat/none:23
+litmus-tests/test6/2+2W with obs thread.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.007 p90=0.009 max=0.009 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:9
+litmus-tests/test6/3.SB.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:8
+litmus-tests/test6/3.2W.lit	S19 summary combos=27 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.009 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:27
+litmus-tests/test6/CoRR1.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.002 max=0.002 verdicts=sat/exists:2
+litmus-tests/test6/CoRW.lit	S19 summary combos=5 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:5
+litmus-tests/test6/CoWR.lit	S19 summary combos=3 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:3
+litmus-tests/test6/CoWW.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:8
+litmus-tests/test6/IRIW.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/test6/3.LB.lit	S19 summary combos=64 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:64
+litmus-tests/test6/ISA2+Fsc+Fsc.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.007 p90=0.008 max=0.008 enum_secs_median=0.002 max=0.002 verdicts=sat/exists:4
+litmus-tests/test6/IRRWIW.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.008 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:12
+litmus-tests/test6/ISA2.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.007 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:22,unsat/none:2
+litmus-tests/test6/LB.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:16
+litmus-tests/test6/IRWIW.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:36
+litmus-tests/test6/MP.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:4
+litmus-tests/test6/R.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:6
+litmus-tests/test6/RWC.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/test6/RW.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.003 p90=0.003 max=0.003 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:1,unsat/none:1
+litmus-tests/test6/SB.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests/test6/PPO000-019.lit	S19 summary combos=48 disagree=0 smt_secs_median=0.004 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:26,unsat/none:22
+litmus-tests/test6/S.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.004 p90=0.004 max=0.005 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:12
+litmus-tests/test6/W+RWC.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:8
+litmus-tests/test6/WRC.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:8
+litmus-tests/test6/S with obs thread.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.006 p90=0.009 max=0.009 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:12
+litmus-tests/test6/WRR+2W.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.005 p90=0.008 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:6
+litmus-tests/test6/WRW+2W.lit	S19 summary combos=18 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:18
+litmus-tests/test6/WRW+WR.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:12
+litmus-tests/test6/WWC.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:24
+litmus-tests/test6/Z6.0.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:24
+litmus-tests/test6/Z6.1.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:36
+litmus-tests/test6/Z6.3.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:12
+litmus-tests/test6/Z6.2.lit	S19 summary combos=48 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.009 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:48
+litmus-tests/test6/Z6.5.lit	S19 summary combos=18 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:18
+litmus-tests/test6/Z6.4.lit	S19 summary combos=30 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:30
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est-atomic.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:22,unsat/none:14
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.007 max=0.009 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:22,unsat/none:14
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-eadd.lit	S19 summary combos=60 disagree=0 smt_secs_median=0.004 p90=0.008 max=0.009 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:42,unsat/none:18
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-eadd.lit	S19 summary combos=20 disagree=0 smt_secs_median=0.005 p90=0.008 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:14,unsat/none:6
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.008 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:22,unsat/none:2
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-est.lit	S19 summary combos=12 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:12
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:14,unsat/none:2
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-st.lit	S19 summary combos=56 disagree=0 smt_secs_median=0.006 p90=0.008 max=0.009 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:44,unsat/none:12
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd-atomics.lit	S19 summary combos=40 disagree=0 smt_secs_median=0.007 p90=0.009 max=0.011 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:38,unsat/none:2
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd.lit	S19 summary combos=40 disagree=0 smt_secs_median=0.006 p90=0.009 max=0.009 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:40
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est-atomics.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:24
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.009 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:24
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-strel.lit	S19 summary combos=16 disagree=0 smt_secs_median=0.005 p90=0.006 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:14,unsat/none:2
+litmus-tests-cpp/models/cpp-release-sequences/RS+cpp20.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:8
+litmus-tests-cpp/properties/atomicity-mca/IRIW+scfences.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.008 p90=0.010 max=0.010 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:4
+litmus-tests-cpp/properties/global-transformations/thread-inlining/opt.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.006 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests-cpp/properties/global-transformations/thread-inlining/src.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.005 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:4
+litmus-tests-cpp/properties/reasoning-guarantees/external-drf/MP+rlx-race.lit	S19 summary combos=4 disagree=0 smt_secs_median=0.007 p90=0.007 max=0.007 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:4
+litmus-tests-jmm/jctc/JCTC10.lit	S19 summary combos=48 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.009 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:15,unsat/none:33
+litmus-tests-jmm/jctc/JCTC13.lit	S19 summary combos=9 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.006 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:1,unsat/none:8
+litmus-tests-jmm/jctc/JCTC14.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.003 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2,unsat/none:6
+litmus-tests-jmm/jctc/JCTC15.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.005 p90=0.010 max=0.010 enum_secs_median=0.001 max=0.003 verdicts=sat/exists:8,unsat/none:16
+litmus-tests-jmm/jctc/JCTC16.lit	S19 summary combos=8 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:8
+litmus-tests-jmm/jctc/JCTC17-left.lit	S19 summary combos=6 disagree=0 smt_secs_median=0.003 p90=0.003 max=0.003 enum_secs_median=0.000 max=0.000 verdicts=sat/exists:6
+litmus-tests-jmm/jctc/JCTC17.lit	S19 summary combos=84 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.004 verdicts=sat/exists:36,unsat/none:48
+litmus-tests-jmm/jctc/JCTC17-smaller.lit	S19 summary combos=2 disagree=0 smt_secs_median=0.006 p90=0.006 max=0.006 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:2
+litmus-tests-jmm/jctc/JCTC12.lit	S19 summary combos=210 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.009 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:80,unsat/none:130
+litmus-tests-jmm/jctc/JCTC19.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.002 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:12,unsat/none:24
+litmus-tests-jmm/jctc/JCTC18.lit	S19 summary combos=60 disagree=0 smt_secs_median=0.004 p90=0.007 max=0.009 enum_secs_median=0.000 max=0.004 verdicts=sat/exists:32,unsat/none:28
+litmus-tests-jmm/jctc/JCTC1.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.006 max=0.008 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:26,unsat/none:10
+litmus-tests-jmm/jctc/JCTC20.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.003 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:12,unsat/none:24
+litmus-tests-jmm/jctc/JCTC2.lit	S19 summary combos=18 disagree=0 smt_secs_median=0.005 p90=0.008 max=0.009 enum_secs_median=0.001 max=0.001 verdicts=sat/exists:10,unsat/none:8
+litmus-tests-jmm/jctc/JCTC3.lit	S19 summary combos=30 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.008 enum_secs_median=0.001 max=0.002 verdicts=sat/exists:25,unsat/none:5
+litmus-tests-jmm/jctc/JCTC4.lit	S19 summary combos=36 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.007 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:35,unsat/none:1
+litmus-tests-jmm/jctc/JCTC6.lit	S19 summary combos=15 disagree=0 smt_secs_median=0.002 p90=0.005 max=0.005 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:3,unsat/none:12
+litmus-tests-jmm/jctc/JCTC7.lit	S19 summary combos=144 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.008 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:130,unsat/none:14
+litmus-tests-jmm/jctc/JCTC8b.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.005 max=0.006 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:22,unsat/none:2
+litmus-tests-jmm/jctc/JCTC8.lit	S19 summary combos=24 disagree=0 smt_secs_median=0.004 p90=0.010 max=0.013 enum_secs_median=0.000 max=0.001 verdicts=sat/exists:21,unsat/none:3
+litmus-tests-jmm/jctc/JCTC9b.lit	S19 summary combos=40 disagree=0 smt_secs_median=0.005 p90=0.010 max=0.015 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:35,unsat/none:5
+litmus-tests-jmm/jctc/JCTC9.lit	S19 summary combos=40 disagree=0 smt_secs_median=0.006 p90=0.012 max=0.018 enum_secs_median=0.000 max=0.002 verdicts=sat/exists:35,unsat/none:5
+litmus-tests-jmm/jctc/JCTC5.lit	S19 summary combos=384 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.011 enum_secs_median=0.000 max=0.003 verdicts=sat/exists:338,unsat/none:46
+litmus-tests-jmm/jctc/JCTC11.lit	S19 summary combos=864 disagree=0 smt_secs_median=0.005 p90=0.007 max=0.012 enum_secs_median=0.001 max=0.004 verdicts=sat/exists:778,unsat/none:86

@@ -184,12 +184,165 @@ let print_futures (lwt_ctx : mordor_ctx Lwt.t) =
       Logs_safe.err (fun m -> m "Unsupported output mode for futures.");
       Lwt.return ctx
 
+(** S16 (how far executions collapse under a quotient, #93): with [MORDOR_S16]
+    set, {!step_futures} reports how many classes the executions fall into under
+    successively finer keys: the future; the final registers; the final memory
+    (each location's co-last write); the value every read observes; the
+    undefined behaviour. *)
+module S16 = struct
+  let enabled = Option.is_some (Sys.getenv_opt "MORDOR_S16")
+
+  let report (structure : symbolic_event_structure)
+      (execs : symbolic_execution list) =
+    let sorted l = List.sort compare l in
+    let resolve (ex : symbolic_execution) e =
+      Expr.Expr.to_string
+        (Expr.Expr.evaluate ~env:(Hashtbl.find_opt ex.fix_rf_map) e)
+    in
+    let future (ex : symbolic_execution) =
+      let inside (a, b) = USet.mem ex.e a && USet.mem ex.e b in
+        ( sorted (USet.values ex.e),
+          sorted (List.filter inside (USet.values (USet.union ex.dp ex.ppo)))
+        )
+    in
+    let registers ex =
+      Hashtbl.fold (fun r e acc -> (r, resolve ex e) :: acc) ex.final_env []
+      |> sorted
+    in
+    let memory (ex : symbolic_execution) =
+      let co = Option.value ex.co ~default:(USet.create ()) in
+      let writes =
+        USet.values ex.e
+        |> List.filter_map (fun l ->
+            match Hashtbl.find_opt structure.events l with
+            | Some ({ typ = Write; loc = Some loc; wval = Some v; _ } : event)
+              -> Some (l, resolve ex loc, resolve ex v)
+            | _ -> None
+        )
+      in
+        List.filter
+          (fun (w, loc, _) ->
+            not
+              (List.exists
+                 (fun (w', loc', _) ->
+                   w' <> w && loc' = loc && USet.mem co (w, w')
+                 )
+                 writes
+              )
+          )
+          writes
+        |> List.map (fun (_, loc, v) -> (loc, v))
+        |> sorted
+    in
+    let reads ex =
+      USet.values ex.rf
+      |> List.filter_map (fun (_, r) ->
+          Option.map (fun v -> (r, resolve ex v)) (Events.get_val structure r)
+      )
+      |> sorted
+    in
+    let ub ex =
+      List.map
+        (fun reason ->
+          let pairs s =
+            USet.values s
+            |> sorted
+            |> List.map (fun (a, b) -> Printf.sprintf "%d-%d" a b)
+            |> String.concat " "
+          in
+            match reason with
+            | UAF s -> "UAF " ^ pairs s
+            | UPD s -> "UPD " ^ pairs s
+        )
+        (Assertion.ub_reasons structure ex)
+      |> sorted
+    in
+    let rows =
+      List.map
+        (fun ex ->
+          let f = future ex and g = registers ex and m = memory ex in
+          let r = reads ex and u = ub ex in
+            (f, g, m, r, u)
+        )
+        execs
+    in
+    let classes key =
+      let t = Hashtbl.create 64 in
+        List.iter (fun row -> Hashtbl.replace t (key row) ()) rows;
+        Hashtbl.length t
+    in
+    let digest x = Digest.string (Marshal.to_string x []) in
+    let per_future = Hashtbl.create 64 in
+      List.iter
+        (fun ((f, _, _, _, _) as row) ->
+          let k = digest f in
+            Hashtbl.replace per_future k
+              (row
+              :: (Hashtbl.find_opt per_future k |> Option.value ~default:[])
+              )
+        )
+        rows;
+      let within key =
+        Hashtbl.fold
+          (fun _ members acc ->
+            let t = Hashtbl.create 8 in
+              List.iter (fun row -> Hashtbl.replace t (key row) ()) members;
+              max acc (Hashtbl.length t)
+          )
+          per_future 0
+      in
+      let largest =
+        Hashtbl.fold (fun _ m acc -> max acc (List.length m)) per_future 0
+      in
+        Printf.eprintf
+          "S16 executions=%d futures=%d outcomes=%d ub_kinds=%d \
+           future+registers=%d +memory=%d +reads=%d +ub=%d largest_future=%d \
+           within_future_max: registers+memory=%d +reads=%d +ub=%d\n\
+           %!"
+          (List.length rows)
+          (classes (fun (f, _, _, _, _) -> digest f))
+          (classes (fun (_, g, m, _, _) -> digest (g, m)))
+          (classes (fun (_, _, _, _, u) -> digest u))
+          (classes (fun (f, g, _, _, _) -> digest (f, g)))
+          (classes (fun (f, g, m, _, _) -> digest (f, g, m)))
+          (classes (fun (f, g, m, r, _) -> digest (f, g, m, r)))
+          (classes (fun (f, g, m, r, u) -> digest (f, g, m, r, u)))
+          largest
+          (within (fun (_, g, m, _, _) -> digest (g, m)))
+          (within (fun (_, g, m, r, _) -> digest (g, m, r)))
+          (within (fun (_, g, m, r, u) -> digest (g, m, r, u)));
+        (* The outcomes themselves, for reading. *)
+        if Option.is_some (Sys.getenv_opt "MORDOR_S16_SHOW") then (
+          let t = Hashtbl.create 16 in
+            List.iter
+              (fun (_, g, m, _, u) ->
+                let k = (g, m, u) in
+                  Hashtbl.replace t k
+                    (1 + (Hashtbl.find_opt t k |> Option.value ~default:0))
+              )
+              rows;
+            Hashtbl.iter
+              (fun (g, m, u) n ->
+                Printf.eprintf
+                  "S16 outcome n=%d registers=%s memory=%s ub=%s\n%!" n
+                  (String.concat "," (List.map (fun (r, v) -> r ^ "=" ^ v) g))
+                  (String.concat "," (List.map (fun (l, v) -> l ^ "=" ^ v) m))
+                  (String.concat ";" u)
+              )
+              t
+        )
+end
+
 let step_futures (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let* ctx = lwt_ctx in
     Progress.stage ~unit:"" "futures" @@ fun () ->
     match ctx.executions with
     | Some execs ->
         Logs_safe.debug (fun m -> m "Calculating futures...");
+        if S16.enabled then
+          Option.iter
+            (fun structure -> S16.report structure (USet.values execs))
+            ctx.structure;
         let future_set = calculate_future_set execs in
           ctx.futures <- Some future_set;
           Logs_safe.debug (fun m -> m "Futures calculated.");

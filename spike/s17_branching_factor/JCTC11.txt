@@ -1,0 +1,16 @@
+combinations: 864
+log10 choice product, median: 0.30
+probes reaching a valid leaf: 778 of 864 combinations; log10 valid leaves, median where reached: 0.12
+depth of the peak estimate, median: 2.0
+secs per combination, median: 0.0
+depth  reached  median log10 survivors  (with dead as -inf: share alive)  branching
+    0      864                    0.00       1.00  
+    1      774                    0.00       0.96     1.00
+    2      528                    0.30       0.89     2.00
+    3      227                    0.30       0.84     1.00
+    4       41                    0.30       0.76     1.00
+
+rejections:
+  rejections total=41312
+  reason n=31800 init: another write exists
+  reason n=9512 unsat

@@ -214,6 +214,15 @@ val rejected_by_one_location :
   restrictions ->
   bool
 
+(** S17: why {!rejected_by_one_location} holds, as ["thin-air"] or
+    ["axiom@location/orders"]; [None] if it does not. *)
+val explain_rejection :
+  ?eqlocs:(int * int) uset ->
+  symbolic_event_structure ->
+  symbolic_execution ->
+  restrictions ->
+  string option
+
 (** [location_equality structure execution] is the pairs of [execution]'s events
     whose locations its predicates entail equal. More predicates only add pairs,
     so the relation of a partial execution's predicates can stand in for a

@@ -2308,6 +2308,88 @@ let rejected_by_one_location ?eqlocs structure execution restrictions =
               )
               (po_orders_per_location structure execution eqlocs writes)
 
+(** S17: why {!rejected_by_one_location} holds of [execution], if it does:
+    ["thin-air"], or the axiom that fails in the most po-respecting orders of
+    the first location none of whose orders passes, with that location and its
+    number of orders, as ["axiom@location/orders"]. [None] if it does not hold.
+*)
+let explain_rejection ?eqlocs structure execution restrictions =
+  match ModelRegistry.lookup restrictions.coherent with
+  | None -> None
+  | Some model ->
+      let module M = (val model : MEMORY_MODEL) in
+      let eqlocs =
+        match eqlocs with
+        | Some eqlocs -> eqlocs
+        | None -> location_equality structure execution
+      in
+      let cache =
+        M.build_cache execution structure
+          (build_location_restriction structure execution eqlocs)
+      in
+        if not (M.check_thin_air cache execution) then Some "thin-air"
+        else
+          let failing co =
+            let c = M.candidate cache co in
+              List.filter_map
+                (fun (name, axiom) -> if axiom c then None else Some name)
+                M.axioms
+          in
+          let writes =
+            coherence_writes ~orders_allocations:M.orders_allocations structure
+              execution
+          in
+            if (not M.uses_co) || USet.size writes < 2 then
+              match failing (USet.create ()) with
+              | [] -> None
+              | axiom :: _ -> Some (axiom ^ "@-/0")
+            else
+              let location = function
+                | ((w, _) :: _) :: _ -> (
+                    match Events.get_loc structure w with
+                    | Some loc -> Expr.to_string loc
+                    | None -> "?"
+                  )
+                | _ -> "?"
+              in
+                List.find_map
+                  (fun orders ->
+                    let fails =
+                      List.map
+                        (fun order ->
+                          failing
+                            (URelation.transitive_closure (USet.of_list order))
+                        )
+                        orders
+                    in
+                      if List.exists (fun f -> f = []) fails then None
+                      else
+                        let counts = Hashtbl.create 4 in
+                          List.iter
+                            (List.iter (fun a ->
+                                 Hashtbl.replace counts a
+                                   (1
+                                   + (Hashtbl.find_opt counts a
+                                     |> Option.value ~default:0
+                                     )
+                                   )
+                             )
+                            )
+                            fails;
+                          let axiom, _ =
+                            Hashtbl.fold
+                              (fun a n (b, m) ->
+                                if n > m then (a, n) else (b, m)
+                              )
+                              counts ("?", 0)
+                          in
+                            Some
+                              (Printf.sprintf "%s@%s/%d" axiom (location orders)
+                                 (List.length orders)
+                              )
+                  )
+                  (po_orders_per_location structure execution eqlocs writes)
+
 (** [rejects_partial_executions name]: {!rejected_by_one_location} holding of a
     partial execution means model [name] rejects every completion of it. It does
     for a model whose violations only grow with co, rf and hb; S6 found that of

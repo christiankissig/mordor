@@ -68,6 +68,11 @@ val check_assertion :
   exhaustive:bool ->
   assertion_result Lwt.t
 
+(** S16: the undefined behaviour of an execution, as the assertion stage finds
+    it. *)
+val ub_reasons :
+  Types.symbolic_event_structure -> Types.symbolic_execution -> ub_reason list
+
 (** [ub_reasons_to_yojson ubs] converts a UB reason list to Yojson. *)
 val ub_reasons_to_yojson : ub_reason list -> Yojson.Safe.t
 

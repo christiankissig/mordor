@@ -1674,6 +1674,23 @@ end
 
 (** {1 Public API} *)
 
+(** S16: the undefined behaviour [execution] has, as the assertion stage finds
+    it: use-after-free and unsequenced races. *)
+let ub_reasons structure execution =
+  let rhb = ExecutionAnalysis.build_happens_before structure execution in
+  let pointers = ExecutionAnalysis.extract_pointers structure execution in
+  let pointer_map =
+    ExecutionAnalysis.build_pointer_map pointers execution.fix_rf_map
+  in
+  let all_alloc_read_writes =
+    ExecutionAnalysis.get_alloc_read_write_events structure execution
+      pointer_map
+  in
+  let ub_reasons = ref [] in
+    UBValidation.check_all structure execution ub_reasons pointer_map rhb
+      all_alloc_read_writes;
+    !ub_reasons
+
 (** [check_assertion assertion executions structure ~exhaustive] checks
     assertion.
 
