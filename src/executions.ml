@@ -1138,6 +1138,31 @@ module S13 = struct
       go [] reads 1. 1.
 end
 
+(** S14 (one future per justification combination, #91): with [MORDOR_S14] set,
+    {!generate_executions} also runs every freeze result straight through
+    coherence, with no deduplication or minimality, and compares that future set
+    with the one the pipeline reports. A future is a function of the combination
+    alone (see {!Futures.calculate_future_set}), so the unminimised set is what
+    one witness per combination would give. *)
+module S14 = struct
+  let enabled = Option.is_some (Sys.getenv_opt "MORDOR_S14")
+
+  (* Each freeze result, in stream order, with the index of its combination. *)
+  let tagged : (int * FreezeResult.t) list ref = ref []
+
+  (* What [Futures.calculate_future_set] keeps of an execution: its events, and
+     [dp] and [ppo] restricted to them. *)
+  let future_key e dp ppo =
+    let es = USet.values e |> List.sort compare in
+    let inside (a, b) = USet.mem e a && USet.mem e b in
+    let edges =
+      USet.values (USet.union dp ppo)
+      |> List.filter inside
+      |> List.sort_uniq compare
+    in
+      Digest.string (Marshal.to_string (es, edges) [])
+end
+
 (** {1 Freezing} *)
 
 module Freeze = struct
@@ -2678,6 +2703,13 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                 prepared
             in
               if S11.enabled then S11.report ();
+              if S14.enabled then
+                S14.tagged :=
+                  List.concat
+                    (List.mapi
+                       (fun i rs -> List.map (fun fr -> (i, fr)) rs)
+                       results
+                    );
               List.flatten results |> Lwt.return
     in
 
@@ -3073,11 +3105,223 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
       |> stream_filter_coherent_executions
       |> count_stage "executions after coherence"
     in
-      Logs_safe.debug (fun m ->
-          m "Minimized to %d executions" (List.length executions)
-      );
+      let* () =
+        if not S14.enabled then Lwt.return_unit
+        else
+          let tagged = Array.of_list !S14.tagged in
+            (* Every result, unminimised, through coherence. Execution ids are
+           positions in [tagged], so each coherent one names its combination. *)
+            let* execs =
+              stream_freeze_to_execution
+                (Lwt.return (Array.to_list (Array.map snd tagged)))
+            in
+              let* coherent =
+                stream_filter_coherent_executions (Lwt.return execs)
+              in
+              let key (ex : symbolic_execution) =
+                S14.future_key ex.e ex.dp ex.ppo
+              in
+              let set keys =
+                let t = Hashtbl.create 64 in
+                  List.iter (fun k -> Hashtbl.replace t k ()) keys;
+                  t
+              in
+              let combos =
+                Array.fold_left (fun n (i, _) -> max n (i + 1)) 0 tagged
+              in
+              (* Distinct futures among each combination's results. *)
+              let per_combo = Array.make combos [] in
+                Array.iter
+                  (fun (i, (fr : FreezeResult.t)) ->
+                    let k = S14.future_key fr.e fr.dp fr.ppo in
+                      if not (List.mem k per_combo.(i)) then
+                        per_combo.(i) <- k :: per_combo.(i)
+                  )
+                  tagged;
+                let coherent_combo = Array.make combos false in
+                  List.iter
+                    (fun (ex : symbolic_execution) ->
+                      coherent_combo.(fst tagged.(ex.id)) <- true
+                    )
+                    coherent;
+                  let valid =
+                    set
+                      (Array.to_list
+                         (Array.concat
+                            (Array.to_list (Array.map Array.of_list per_combo))
+                         )
+                      )
+                  in
+                  let nomin = set (List.map key coherent) in
+                  let truth = set (List.map key executions) in
+                  let only a b =
+                    Hashtbl.fold
+                      (fun k () n -> if Hashtbl.mem b k then n else n + 1)
+                      a 0
+                  in
+                    S10.print
+                      "S14 combos_valid=%d combos_coherent=%d \
+                       max_futures_per_combo=%d results=%d coherent=%d \
+                       futures_valid=%d futures_nomin=%d futures_true=%d \
+                       only_nomin=%d only_true=%d"
+                      (Array.fold_left
+                         (fun n l -> if l = [] then n else n + 1)
+                         0 per_combo
+                      )
+                      (Array.fold_left
+                         (fun n b -> if b then n + 1 else n)
+                         0 coherent_combo
+                      )
+                      (Array.fold_left
+                         (fun n l -> max n (List.length l))
+                         0 per_combo
+                      )
+                      (Array.length tagged) (List.length coherent)
+                      (Hashtbl.length valid) (Hashtbl.length nomin)
+                      (Hashtbl.length truth) (only nomin truth)
+                      (only truth nomin);
+                    (* The rule a witness per combination would need: A's future
+                 survives iff some coherent result of A has a read-from no
+                 combination dominating A (same events, [dp] and [ppo]
+                 contained, not both equal: what minimality removes by) also
+                 has. *)
+                    let rf_key (fr : FreezeResult.t) =
+                      USet.values fr.rf |> List.sort compare
+                    in
+                    let frame = Array.make combos None in
+                    let rfs = Array.init combos (fun _ -> Hashtbl.create 8) in
+                    let coh = Array.init combos (fun _ -> Hashtbl.create 8) in
+                      Array.iter
+                        (fun (i, (fr : FreezeResult.t)) ->
+                          if frame.(i) = None then frame.(i) <- Some fr;
+                          Hashtbl.replace rfs.(i) (rf_key fr) ()
+                        )
+                        tagged;
+                      List.iter
+                        (fun (ex : symbolic_execution) ->
+                          let i, fr = tagged.(ex.id) in
+                            Hashtbl.replace coh.(i) (rf_key fr) ()
+                        )
+                        coherent;
+                      let by_e = Hashtbl.create 64 in
+                        Array.iteri
+                          (fun i f ->
+                            Option.iter
+                              (fun (fr : FreezeResult.t) ->
+                                let k = USet.values fr.e |> List.sort compare in
+                                  Hashtbl.replace by_e k
+                                    (i
+                                    :: (Hashtbl.find_opt by_e k
+                                       |> Option.value ~default:[]
+                                       )
+                                    )
+                              )
+                              f
+                          )
+                          frame;
+                        let dominates b a =
+                          match (frame.(b), frame.(a)) with
+                          | ( Some (fb : FreezeResult.t),
+                              Some (fa : FreezeResult.t) ) ->
+                              USet.subset fb.dp fa.dp
+                              && USet.subset fb.ppo fa.ppo
+                              && not
+                                   (USet.equal fb.dp fa.dp
+                                   && USet.equal fb.ppo fa.ppo
+                                   )
+                          | _ -> false
+                        in
+                        let dominated = ref 0 in
+                        let rule = Hashtbl.create 64 in
+                          Array.iteri
+                            (fun a f ->
+                              match f with
+                              | None -> ()
+                              | Some (fa : FreezeResult.t) ->
+                                  let k =
+                                    USet.values fa.e |> List.sort compare
+                                  in
+                                  let doms =
+                                    List.filter
+                                      (fun b -> b <> a && dominates b a)
+                                      (Hashtbl.find by_e k)
+                                  in
+                                    if doms <> [] then incr dominated;
+                                    let survives =
+                                      Hashtbl.fold
+                                        (fun r () found ->
+                                          found
+                                          || not
+                                               (List.exists
+                                                  (fun b ->
+                                                    Hashtbl.mem rfs.(b) r
+                                                  )
+                                                  doms
+                                               )
+                                        )
+                                        coh.(a) false
+                                    in
+                                      if survives then
+                                        Hashtbl.replace rule
+                                          (S14.future_key fa.e fa.dp fa.ppo)
+                                          ()
+                            )
+                            frame;
+                          S10.print
+                            "S14 rule dominated_combos=%d futures_rule=%d \
+                             rule_only=%d true_only=%d"
+                            !dominated (Hashtbl.length rule) (only rule truth)
+                            (only truth rule);
+                          (* The same results through each stage in turn: which one removes
+                 futures. *)
+                          let frs = Array.to_list (Array.map snd tagged) in
+                          let fr_futures l =
+                            Hashtbl.length
+                              (set
+                                 (List.map
+                                    (fun (fr : FreezeResult.t) ->
+                                      S14.future_key fr.e fr.dp fr.ppo
+                                    )
+                                    l
+                                 )
+                              )
+                          in
+                          let ex_futures l =
+                            Hashtbl.length (set (List.map key l))
+                          in
+                            let* a = dedup_freeze_results (Lwt.return frs) in
+                              let* b =
+                                keep_minimal_freeze_results (Lwt.return a)
+                              in
+                                let* c =
+                                  stream_freeze_to_execution (Lwt.return b)
+                                  |> dedup_executions
+                                in
+                                  let* d =
+                                    keep_minimal_executions (Lwt.return c)
+                                  in
+                                    let* e =
+                                      stream_filter_coherent_executions
+                                        (Lwt.return d)
+                                    in
+                                      S10.print
+                                        "S14 stages all=%d dedup_fr=%d \
+                                         min_fr=%d dedup_ex=%d min_ex=%d \
+                                         coherent=%d (futures; results %d %d \
+                                         %d %d %d %d)"
+                                        (fr_futures frs) (fr_futures a)
+                                        (fr_futures b) (ex_futures c)
+                                        (ex_futures d) (ex_futures e)
+                                        (List.length frs) (List.length a)
+                                        (List.length b) (List.length c)
+                                        (List.length d) (List.length e);
+                                      Lwt.return_unit
+      in
+        Logs_safe.debug (fun m ->
+            m "Minimized to %d executions" (List.length executions)
+        );
 
-      Lwt.return executions
+        Lwt.return executions
 
 (** Calculate dependencies and justifications *)
 

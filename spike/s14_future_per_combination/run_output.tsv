@@ -1,0 +1,1125 @@
+litmus-tests/atomics/mp-atomic.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=7 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/atomics/mp-atomic.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/atomics/mp-atomic.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 7)
+litmus-tests/atomics/mp-atomic2.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=7 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/atomics/mp-atomic2.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/atomics/mp-atomic2.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 7)
+litmus-tests/avoidoota/listing11.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing11.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing11.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/avoidoota/listing10.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing10.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing10.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/avoidoota/additional_twosource.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/avoidoota/additional_twosource.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/avoidoota/additional_twosource.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/avoidoota/additional_inventintload.lit	S14 combos_valid=15 combos_coherent=15 max_futures_per_combo=1 results=39 coherent=27 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/avoidoota/additional_inventintload.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/avoidoota/additional_inventintload.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 39 24 24 24 24 16)
+litmus-tests/avoidoota/listing16.lit	S14 combos_valid=719 combos_coherent=719 max_futures_per_combo=1 results=884 coherent=884 futures_valid=190 futures_nomin=190 futures_true=190 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing16.lit	S14 rule dominated_combos=0 futures_rule=190 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing16.lit	S14 stages all=190 dedup_fr=190 min_fr=190 dedup_ex=190 min_ex=190 coherent=190 (futures; results 884 295 295 246 246 246)
+litmus-tests/avoidoota/additional_nonlb.lit	S14 combos_valid=481 combos_coherent=481 max_futures_per_combo=1 results=797 coherent=797 futures_valid=409 futures_nomin=409 futures_true=409 only_nomin=0 only_true=0
+litmus-tests/avoidoota/additional_nonlb.lit	S14 rule dominated_combos=0 futures_rule=409 rule_only=0 true_only=0
+litmus-tests/avoidoota/additional_nonlb.lit	S14 stages all=409 dedup_fr=409 min_fr=409 dedup_ex=409 min_ex=409 coherent=409 (futures; results 797 701 701 701 701 701)
+litmus-tests/avoidoota/listing12.lit	S14 combos_valid=777 combos_coherent=777 max_futures_per_combo=1 results=1038 coherent=1038 futures_valid=304 futures_nomin=304 futures_true=212 only_nomin=92 only_true=0
+litmus-tests/avoidoota/listing12.lit	S14 rule dominated_combos=230 futures_rule=212 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing12.lit	S14 stages all=304 dedup_fr=304 min_fr=212 dedup_ex=212 min_ex=212 coherent=212 (futures; results 1038 456 323 323 323 323)
+litmus-tests/avoidoota/listing17.lit	S14 combos_valid=450 combos_coherent=450 max_futures_per_combo=1 results=554 coherent=554 futures_valid=150 futures_nomin=150 futures_true=106 only_nomin=44 only_true=0
+litmus-tests/avoidoota/listing17.lit	S14 rule dominated_combos=130 futures_rule=106 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing17.lit	S14 stages all=150 dedup_fr=150 min_fr=106 dedup_ex=106 min_ex=106 coherent=106 (futures; results 554 194 139 139 139 139)
+litmus-tests/avoidoota/listing13.lit	S14 combos_valid=524 combos_coherent=524 max_futures_per_combo=1 results=623 coherent=623 futures_valid=179 futures_nomin=179 futures_true=108 only_nomin=71 only_true=0
+litmus-tests/avoidoota/listing13.lit	S14 rule dominated_combos=202 futures_rule=108 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing13.lit	S14 stages all=179 dedup_fr=179 min_fr=108 dedup_ex=108 min_ex=108 coherent=108 (futures; results 623 233 147 147 147 147)
+litmus-tests/avoidoota/listing14.lit	S14 combos_valid=893 combos_coherent=893 max_futures_per_combo=1 results=1150 coherent=1150 futures_valid=295 futures_nomin=295 futures_true=207 only_nomin=88 only_true=0
+litmus-tests/avoidoota/listing14.lit	S14 rule dominated_combos=260 futures_rule=207 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing14.lit	S14 stages all=295 dedup_fr=295 min_fr=207 dedup_ex=207 min_ex=207 coherent=207 (futures; results 1150 426 303 303 303 303)
+litmus-tests/avoidoota/listing1.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=62 coherent=62 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing1.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing1.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 62 45 45 45 45 45)
+litmus-tests/avoidoota/listing19.lit	S14 combos_valid=45 combos_coherent=45 max_futures_per_combo=1 results=79 coherent=79 futures_valid=31 futures_nomin=31 futures_true=31 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing19.lit	S14 rule dominated_combos=0 futures_rule=31 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing19.lit	S14 stages all=31 dedup_fr=31 min_fr=31 dedup_ex=31 min_ex=31 coherent=31 (futures; results 79 60 60 60 60 60)
+litmus-tests/avoidoota/listing18.lit	S14 combos_valid=342 combos_coherent=342 max_futures_per_combo=1 results=528 coherent=528 futures_valid=215 futures_nomin=215 futures_true=215 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing18.lit	S14 rule dominated_combos=0 futures_rule=215 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing18.lit	S14 stages all=215 dedup_fr=215 min_fr=215 dedup_ex=215 min_ex=215 coherent=215 (futures; results 528 335 335 335 335 335)
+litmus-tests/avoidoota/listing22.lit	S14 combos_valid=51 combos_coherent=51 max_futures_per_combo=1 results=71 coherent=71 futures_valid=44 futures_nomin=44 futures_true=44 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing22.lit	S14 rule dominated_combos=0 futures_rule=44 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing22.lit	S14 stages all=44 dedup_fr=44 min_fr=44 dedup_ex=44 min_ex=44 coherent=44 (futures; results 71 62 62 62 62 62)
+litmus-tests/avoidoota/listing21.lit	S14 combos_valid=52 combos_coherent=52 max_futures_per_combo=1 results=68 coherent=68 futures_valid=38 futures_nomin=38 futures_true=38 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing21.lit	S14 rule dominated_combos=0 futures_rule=38 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing21.lit	S14 stages all=38 dedup_fr=38 min_fr=38 dedup_ex=38 min_ex=38 coherent=38 (futures; results 68 50 50 50 50 50)
+litmus-tests/avoidoota/listing2_5.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing2_5.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing2_5.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/avoidoota/listing23.lit	S14 combos_valid=63 combos_coherent=63 max_futures_per_combo=1 results=109 coherent=90 futures_valid=55 futures_nomin=55 futures_true=55 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing23.lit	S14 rule dominated_combos=0 futures_rule=55 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing23.lit	S14 stages all=55 dedup_fr=55 min_fr=55 dedup_ex=55 min_ex=55 coherent=55 (futures; results 109 98 98 98 98 80)
+litmus-tests/avoidoota/listing25.lit	S14 combos_valid=25 combos_coherent=25 max_futures_per_combo=1 results=30 coherent=30 futures_valid=17 futures_nomin=17 futures_true=17 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing25.lit	S14 rule dominated_combos=0 futures_rule=17 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing25.lit	S14 stages all=17 dedup_fr=17 min_fr=17 dedup_ex=17 min_ex=17 coherent=17 (futures; results 30 21 21 21 21 21)
+litmus-tests/avoidoota/listing2_5pwg.lit	S14 combos_valid=32 combos_coherent=32 max_futures_per_combo=1 results=48 coherent=48 futures_valid=30 futures_nomin=30 futures_true=22 only_nomin=8 only_true=0
+litmus-tests/avoidoota/listing2_5pwg.lit	S14 rule dominated_combos=8 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing2_5pwg.lit	S14 stages all=30 dedup_fr=30 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 48 46 31 31 31 31)
+litmus-tests/avoidoota/listing27_allow.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing27_allow.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing27_allow.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/avoidoota/listing27_forbid.lit	S14 combos_valid=23 combos_coherent=23 max_futures_per_combo=1 results=29 coherent=29 futures_valid=21 futures_nomin=21 futures_true=21 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing27_forbid.lit	S14 rule dominated_combos=0 futures_rule=21 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing27_forbid.lit	S14 stages all=21 dedup_fr=21 min_fr=21 dedup_ex=21 min_ex=21 coherent=21 (futures; results 29 27 27 27 27 27)
+litmus-tests/avoidoota/listing3.lit	S14 combos_valid=15 combos_coherent=15 max_futures_per_combo=1 results=21 coherent=21 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing3.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing3.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 21 12 12 12 12 12)
+litmus-tests/avoidoota/listing26.lit	S14 combos_valid=32 combos_coherent=32 max_futures_per_combo=1 results=78 coherent=62 futures_valid=23 futures_nomin=23 futures_true=23 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing26.lit	S14 rule dominated_combos=0 futures_rule=23 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing26.lit	S14 stages all=23 dedup_fr=23 min_fr=23 dedup_ex=23 min_ex=23 coherent=23 (futures; results 78 57 57 57 57 45)
+litmus-tests/avoidoota/listing24.lit	S14 combos_valid=84 combos_coherent=84 max_futures_per_combo=1 results=159 coherent=131 futures_valid=74 futures_nomin=74 futures_true=74 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing24.lit	S14 rule dominated_combos=0 futures_rule=74 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing24.lit	S14 stages all=74 dedup_fr=74 min_fr=74 dedup_ex=74 min_ex=74 coherent=74 (futures; results 159 142 142 142 142 118)
+litmus-tests/avoidoota/listing7.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=3 coherent=3 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing7.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing7.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 3 3 3 3 3 3)
+litmus-tests/avoidoota/listing8.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=3 coherent=3 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing8.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing8.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 3 3 3 3 3 3)
+litmus-tests/avoidoota/listing9.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=22 coherent=19 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/avoidoota/listing9.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing9.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 22 22 22 22 22 19)
+litmus-tests/basic/coproduct-exns.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/basic/coproduct-exns.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/basic/coproduct-exns.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/basic/lb.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/basic/lb.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/basic/lb.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/basic.lit.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/basic.lit.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/basic.lit.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/basic/par-comp.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/basic/par-comp.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/basic/par-comp.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/basic/rw.lit	S14 combos_valid=7 combos_coherent=7 max_futures_per_combo=1 results=7 coherent=7 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/basic/rw.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/basic/rw.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 7 6 6 6 6 6)
+litmus-tests/c20/rs-example.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=90 coherent=78 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests/c20/rs-example.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/c20/rs-example.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 90 51 51 51 51 44)
+litmus-tests/esop_problem/lb+ctrldat+ctrl-single.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/esop_problem/lb+ctrldat+ctrl-single.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/esop_problem/lb+ctrldat+ctrl-single.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/esop_problem/lb+ctrldata+ctrl-double.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=24 coherent=24 futures_valid=13 futures_nomin=13 futures_true=12 only_nomin=1 only_true=0
+litmus-tests/esop_problem/lb+ctrldata+ctrl-double.lit	S14 rule dominated_combos=2 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/esop_problem/lb+ctrldata+ctrl-double.lit	S14 stages all=13 dedup_fr=13 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 24 13 12 12 12 12)
+litmus-tests/esop_problem/lb+ctrldata+po.lit	S14 combos_valid=18 combos_coherent=18 max_futures_per_combo=1 results=22 coherent=22 futures_valid=10 futures_nomin=10 futures_true=10 only_nomin=0 only_true=0
+litmus-tests/esop_problem/lb+ctrldata+po.lit	S14 rule dominated_combos=0 futures_rule=10 rule_only=0 true_only=0
+litmus-tests/esop_problem/lb+ctrldata+po.lit	S14 stages all=10 dedup_fr=10 min_fr=10 dedup_ex=10 min_ex=10 coherent=10 (futures; results 22 12 12 12 12 12)
+litmus-tests/esop_problem/lb+datas.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=62 coherent=62 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests/esop_problem/lb+datas.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests/esop_problem/lb+datas.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 62 45 45 45 45 45)
+litmus-tests/esop_problem/cse.lit	S14 combos_valid=31 combos_coherent=31 max_futures_per_combo=1 results=38 coherent=38 futures_valid=29 futures_nomin=29 futures_true=25 only_nomin=4 only_true=0
+litmus-tests/esop_problem/cse.lit	S14 rule dominated_combos=4 futures_rule=25 rule_only=0 true_only=0
+litmus-tests/esop_problem/cse.lit	S14 stages all=29 dedup_fr=29 min_fr=25 dedup_ex=25 min_ex=25 coherent=25 (futures; results 38 36 31 31 31 31)
+litmus-tests/esop_problem/lb.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=25 coherent=25 futures_valid=16 futures_nomin=16 futures_true=16 only_nomin=0 only_true=0
+litmus-tests/esop_problem/lb.lit	S14 rule dominated_combos=0 futures_rule=16 rule_only=0 true_only=0
+litmus-tests/esop_problem/lb.lit	S14 stages all=16 dedup_fr=16 min_fr=16 dedup_ex=16 min_ex=16 coherent=16 (futures; results 25 25 25 25 25 25)
+litmus-tests/esop_problem/mp.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/esop_problem/mp.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/esop_problem/mp.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/esop_problem/sb.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/esop_problem/sb.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/esop_problem/sb.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/fowm2024/load intro - no aliasing.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=4 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/fowm2024/load intro - no aliasing.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/fowm2024/load intro - no aliasing.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 4 4 4 4 4 1)
+litmus-tests/fowm2024/load intro - potential aliasing.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=4 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/fowm2024/load intro - potential aliasing.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/fowm2024/load intro - potential aliasing.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 4 4 4 4 4 1)
+litmus-tests/fowm2024/nullptr - no use.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/fowm2024/nullptr - no use.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/fowm2024/nullptr - no use.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/fowm2024/nullptr - use.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/fowm2024/nullptr - use.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/fowm2024/nullptr - use.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/fwd/ra/lift_rel.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=8 coherent=8 futures_valid=8 futures_nomin=8 futures_true=7 only_nomin=1 only_true=0
+litmus-tests/fwd/ra/lift_rel.lit	S14 rule dominated_combos=1 futures_rule=7 rule_only=0 true_only=0
+litmus-tests/fwd/ra/lift_rel.lit	S14 stages all=8 dedup_fr=8 min_fr=7 dedup_ex=7 min_ex=7 coherent=7 (futures; results 8 8 7 7 7 7)
+litmus-tests/fwd/ra/lift_relrel.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=8 coherent=8 futures_valid=8 futures_nomin=8 futures_true=7 only_nomin=1 only_true=0
+litmus-tests/fwd/ra/lift_relrel.lit	S14 rule dominated_combos=1 futures_rule=7 rule_only=0 true_only=0
+litmus-tests/fwd/ra/lift_relrel.lit	S14 stages all=8 dedup_fr=8 min_fr=7 dedup_ex=7 min_ex=7 coherent=7 (futures; results 8 8 7 7 7 7)
+litmus-tests/fwd/rlx/lift_F2w.lit	S14 combos_valid=17 combos_coherent=17 max_futures_per_combo=1 results=17 coherent=17 futures_valid=13 futures_nomin=13 futures_true=12 only_nomin=1 only_true=0
+litmus-tests/fwd/rlx/lift_F2w.lit	S14 rule dominated_combos=1 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/fwd/rlx/lift_F2w.lit	S14 stages all=13 dedup_fr=13 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 17 13 12 12 12 12)
+litmus-tests/fwd/rlx/lift.lit	S14 combos_valid=13 combos_coherent=13 max_futures_per_combo=1 results=13 coherent=13 futures_valid=13 futures_nomin=13 futures_true=12 only_nomin=1 only_true=0
+litmus-tests/fwd/rlx/lift.lit	S14 rule dominated_combos=1 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/fwd/rlx/lift.lit	S14 stages all=13 dedup_fr=13 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 13 13 12 12 12 12)
+litmus-tests/fwd/rlx/lift_F1wr.lit	S14 combos_valid=17 combos_coherent=17 max_futures_per_combo=1 results=17 coherent=17 futures_valid=17 futures_nomin=17 futures_true=16 only_nomin=1 only_true=0
+litmus-tests/fwd/rlx/lift_F1wr.lit	S14 rule dominated_combos=1 futures_rule=16 rule_only=0 true_only=0
+litmus-tests/fwd/rlx/lift_F1wr.lit	S14 stages all=17 dedup_fr=17 min_fr=16 dedup_ex=16 min_ex=16 coherent=16 (futures; results 17 17 16 16 16 16)
+litmus-tests/imm/FADD RMW Atomicity.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=14 coherent=13 futures_valid=5 futures_nomin=5 futures_true=5 only_nomin=0 only_true=0
+litmus-tests/imm/FADD RMW Atomicity.lit	S14 rule dominated_combos=0 futures_rule=5 rule_only=0 true_only=0
+litmus-tests/imm/FADD RMW Atomicity.lit	S14 stages all=5 dedup_fr=5 min_fr=5 dedup_ex=5 min_ex=5 coherent=5 (futures; results 14 12 12 12 12 11)
+litmus-tests/imm/LB+falsedep+Fsc.lit	S14 combos_valid=14 combos_coherent=14 max_futures_per_combo=1 results=18 coherent=18 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests/imm/LB+falsedep+Fsc.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/imm/LB+falsedep+Fsc.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 18 16 16 16 16 16)
+litmus-tests/fwd/rlx/lift_F1r.lit	S14 combos_valid=28 combos_coherent=28 max_futures_per_combo=1 results=28 coherent=28 futures_valid=28 futures_nomin=28 futures_true=24 only_nomin=4 only_true=0
+litmus-tests/fwd/rlx/lift_F1r.lit	S14 rule dominated_combos=4 futures_rule=24 rule_only=0 true_only=0
+litmus-tests/fwd/rlx/lift_F1r.lit	S14 stages all=28 dedup_fr=28 min_fr=24 dedup_ex=24 min_ex=24 coherent=24 (futures; results 28 28 24 24 24 24)
+litmus-tests/fwd/rlx/lift_F1w.lit	S14 combos_valid=20 combos_coherent=20 max_futures_per_combo=1 results=20 coherent=20 futures_valid=20 futures_nomin=20 futures_true=14 only_nomin=6 only_true=0
+litmus-tests/fwd/rlx/lift_F1w.lit	S14 rule dominated_combos=6 futures_rule=14 rule_only=0 true_only=0
+litmus-tests/fwd/rlx/lift_F1w.lit	S14 stages all=20 dedup_fr=20 min_fr=14 dedup_ex=14 min_ex=14 coherent=14 (futures; results 20 20 14 14 14 14)
+litmus-tests/ISO/1-MP.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=8 coherent=8 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/ISO/1-MP.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/ISO/1-MP.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 8 8 8 8 8 8)
+litmus-tests/ISO/2-MP+rel+acq.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=8 coherent=6 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/ISO/2-MP+rel+acq.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/ISO/2-MP+rel+acq.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 8 8 8 8 8 6)
+litmus-tests/ISO/3-LB.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=25 coherent=25 futures_valid=16 futures_nomin=16 futures_true=16 only_nomin=0 only_true=0
+litmus-tests/ISO/3-LB.lit	S14 rule dominated_combos=0 futures_rule=16 rule_only=0 true_only=0
+litmus-tests/ISO/3-LB.lit	S14 stages all=16 dedup_fr=16 min_fr=16 dedup_ex=16 min_ex=16 coherent=16 (futures; results 25 25 25 25 25 25)
+litmus-tests/ISO/4-LB+deps.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=62 coherent=62 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests/ISO/4-LB+deps.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests/ISO/4-LB+deps.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 62 45 45 45 45 45)
+litmus-tests/ISO/5-LB+false-dep.lit	S14 combos_valid=31 combos_coherent=31 max_futures_per_combo=1 results=38 coherent=38 futures_valid=29 futures_nomin=29 futures_true=25 only_nomin=4 only_true=0
+litmus-tests/ISO/5-LB+false-dep.lit	S14 rule dominated_combos=4 futures_rule=25 rule_only=0 true_only=0
+litmus-tests/ISO/5-LB+false-dep.lit	S14 stages all=29 dedup_fr=29 min_fr=25 dedup_ex=25 min_ex=25 coherent=25 (futures; results 38 36 31 31 31 31)
+litmus-tests/MP/MP+rel+acq.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=7 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/MP/MP+rel+acq.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/MP/MP+rel+acq.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 7)
+litmus-tests/MP/MP.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/MP/MP.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/MP/MP.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/on_thin_air_reads19/ex3.5.lit	S14 combos_valid=11 combos_coherent=11 max_futures_per_combo=1 results=15 coherent=15 futures_valid=10 futures_nomin=10 futures_true=10 only_nomin=0 only_true=0
+litmus-tests/on_thin_air_reads19/ex3.5.lit	S14 rule dominated_combos=0 futures_rule=10 rule_only=0 true_only=0
+litmus-tests/on_thin_air_reads19/ex3.5.lit	S14 stages all=10 dedup_fr=10 min_fr=10 dedup_ex=10 min_ex=10 coherent=10 (futures; results 15 14 14 14 14 14)
+litmus-tests/on_thin_air_reads19/P1.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=62 coherent=62 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests/on_thin_air_reads19/P1.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests/on_thin_air_reads19/P1.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 62 45 45 45 45 45)
+litmus-tests/on_thin_air_reads19/P2.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=25 coherent=25 futures_valid=16 futures_nomin=16 futures_true=16 only_nomin=0 only_true=0
+litmus-tests/on_thin_air_reads19/P2.lit	S14 rule dominated_combos=0 futures_rule=16 rule_only=0 true_only=0
+litmus-tests/on_thin_air_reads19/P2.lit	S14 stages all=16 dedup_fr=16 min_fr=16 dedup_ex=16 min_ex=16 coherent=16 (futures; results 25 25 25 25 25 25)
+litmus-tests/on_thin_air_reads19/P3.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/on_thin_air_reads19/P3.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/on_thin_air_reads19/P3.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/on_thin_air_reads19/P4.lit	S14 combos_valid=12 combos_coherent=12 max_futures_per_combo=1 results=19 coherent=19 futures_valid=11 futures_nomin=11 futures_true=11 only_nomin=0 only_true=0
+litmus-tests/on_thin_air_reads19/P4.lit	S14 rule dominated_combos=0 futures_rule=11 rule_only=0 true_only=0
+litmus-tests/on_thin_air_reads19/P4.lit	S14 stages all=11 dedup_fr=11 min_fr=11 dedup_ex=11 min_ex=11 coherent=11 (futures; results 19 18 18 18 18 18)
+litmus-tests/on_thin_air_reads19/P6.lit	S14 combos_valid=12 combos_coherent=12 max_futures_per_combo=1 results=14 coherent=14 futures_valid=11 futures_nomin=11 futures_true=11 only_nomin=0 only_true=0
+litmus-tests/on_thin_air_reads19/P6.lit	S14 rule dominated_combos=0 futures_rule=11 rule_only=0 true_only=0
+litmus-tests/on_thin_air_reads19/P6.lit	S14 stages all=11 dedup_fr=11 min_fr=11 dedup_ex=11 min_ex=11 coherent=11 (futures; results 14 13 13 13 13 13)
+litmus-tests/on_thin_air_reads19/TC9a.lit	S14 combos_valid=31 combos_coherent=31 max_futures_per_combo=1 results=35 coherent=35 futures_valid=23 futures_nomin=23 futures_true=23 only_nomin=0 only_true=0
+litmus-tests/on_thin_air_reads19/TC9a.lit	S14 rule dominated_combos=0 futures_rule=23 rule_only=0 true_only=0
+litmus-tests/on_thin_air_reads19/TC9a.lit	S14 stages all=23 dedup_fr=23 min_fr=23 dedup_ex=23 min_ex=23 coherent=23 (futures; results 35 27 27 27 27 27)
+litmus-tests/opts/store-forward.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=62 coherent=62 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests/opts/store-forward.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests/opts/store-forward.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 62 45 45 45 45 45)
+litmus-tests/own/atloc-alias.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=5 coherent=5 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/atloc-alias.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/atloc-alias.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 5 4 4 4 4 4)
+litmus-tests/on_thin_air_reads19/s5.3.2.lit	S14 combos_valid=47 combos_coherent=47 max_futures_per_combo=1 results=79 coherent=72 futures_valid=34 futures_nomin=34 futures_true=34 only_nomin=0 only_true=0
+litmus-tests/on_thin_air_reads19/s5.3.2.lit	S14 rule dominated_combos=0 futures_rule=34 rule_only=0 true_only=0
+litmus-tests/on_thin_air_reads19/s5.3.2.lit	S14 stages all=34 dedup_fr=34 min_fr=34 dedup_ex=34 min_ex=34 coherent=34 (futures; results 79 58 58 58 58 53)
+litmus-tests/own/atloc-final-value.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/own/atloc-final-value.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/own/atloc-final-value.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/own/atloc-noalias.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=5 coherent=5 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/atloc-noalias.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/atloc-noalias.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 5 4 4 4 4 4)
+litmus-tests/own/atloc-unwritten.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/own/atloc-unwritten.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/own/atloc-unwritten.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/own/coproductReorder.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=3 coherent=3 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/coproductReorder.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/coproductReorder.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 3 3 3 3 3 3)
+litmus-tests/own/co-witness-exported.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=10 coherent=10 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/own/co-witness-exported.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/own/co-witness-exported.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 10 8 8 8 8 8)
+litmus-tests/own/co-witness-respects-po.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=10 coherent=10 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/own/co-witness-respects-po.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/own/co-witness-respects-po.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 10 8 8 8 8 8)
+litmus-tests/own/ctrl_subsumed_by_data.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=3 coherent=3 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/ctrl_subsumed_by_data.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/ctrl_subsumed_by_data.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 3 3 3 3 3 3)
+litmus-tests/own/DOMAIN.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/own/DOMAIN.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/own/DOMAIN.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/on_thin_air_reads19/TC7.lit	S14 combos_valid=384 combos_coherent=384 max_futures_per_combo=1 results=448 coherent=448 futures_valid=116 futures_nomin=116 futures_true=116 only_nomin=0 only_true=0
+litmus-tests/on_thin_air_reads19/TC7.lit	S14 rule dominated_combos=0 futures_rule=116 rule_only=0 true_only=0
+litmus-tests/on_thin_air_reads19/TC7.lit	S14 stages all=116 dedup_fr=116 min_fr=116 dedup_ex=116 min_ex=116 coherent=116 (futures; results 448 136 136 136 136 136)
+litmus-tests/own/expressionPreservingSubstitution.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/own/expressionPreservingSubstitution.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/own/expressionPreservingSubstitution.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/own/FreeRace2.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=3 coherent=3 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/FreeRace2.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/FreeRace2.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 3 3 3 3 3 3)
+litmus-tests/own/FreeRace.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=3 coherent=3 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/FreeRace.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/FreeRace.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 3 3 3 3 3 3)
+litmus-tests/own/JCTC12.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=12 coherent=8 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/own/JCTC12.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/own/JCTC12.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 12 12 12 12 12 8)
+litmus-tests/own/elideanddontobserve.lit	S14 combos_valid=58 combos_coherent=58 max_futures_per_combo=1 results=101 coherent=101 futures_valid=24 futures_nomin=24 futures_true=18 only_nomin=6 only_true=0
+litmus-tests/own/elideanddontobserve.lit	S14 rule dominated_combos=14 futures_rule=18 rule_only=0 true_only=0
+litmus-tests/own/elideanddontobserve.lit	S14 stages all=24 dedup_fr=24 min_fr=18 dedup_ex=18 min_ex=18 coherent=18 (futures; results 101 61 47 47 47 47)
+litmus-tests/own/join-continuation.lit	S14 combos_valid=14 combos_coherent=14 max_futures_per_combo=1 results=14 coherent=14 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests/own/join-continuation.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/own/join-continuation.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 14 12 12 12 12 12)
+litmus-tests/own/LB+deps+const-smrd.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/own/LB+deps+const-smrd.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/own/LB+deps+const-smrd.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/own/LB+deps-smrd.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/own/LB+deps-smrd.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/own/LB+deps-smrd.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/own/LF.lit	S14 combos_valid=20 combos_coherent=20 max_futures_per_combo=1 results=20 coherent=20 futures_valid=7 futures_nomin=7 futures_true=7 only_nomin=0 only_true=0
+litmus-tests/own/LF.lit	S14 rule dominated_combos=0 futures_rule=7 rule_only=0 true_only=0
+litmus-tests/own/LF.lit	S14 stages all=7 dedup_fr=7 min_fr=7 dedup_ex=7 min_ex=7 coherent=7 (futures; results 20 20 20 7 7 7)
+litmus-tests/own/nonatomic-store-no-sync.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/own/nonatomic-store-no-sync.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/own/nonatomic-store-no-sync.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/own/nonatomic-store-no-sync-relaxed.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=7 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/own/nonatomic-store-no-sync-relaxed.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/own/nonatomic-store-no-sync-relaxed.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 7)
+litmus-tests/own/OOTA7.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=10 coherent=7 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/own/OOTA7.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/own/OOTA7.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 10 10 10 10 10 7)
+litmus-tests/own/paper108.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=6 coherent=6 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/paper108.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/paper108.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 6 3 3 3 3 3)
+litmus-tests/avoidoota/listing20.lit	S14 combos_valid=227 combos_coherent=227 max_futures_per_combo=1 results=303 coherent=303 futures_valid=134 futures_nomin=134 futures_true=68 only_nomin=66 only_true=0
+litmus-tests/avoidoota/listing20.lit	S14 rule dominated_combos=98 futures_rule=68 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing20.lit	S14 stages all=134 dedup_fr=134 min_fr=68 dedup_ex=68 min_ex=68 coherent=68 (futures; results 303 196 106 92 92 92)
+litmus-tests/own/paper109.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/own/paper109.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/own/paper109.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/own/paper112F.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/own/paper112F.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/own/paper112F.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/own/paper113.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/own/paper113.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/own/paper113.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/own/paper115.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=4 coherent=4 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/own/paper115.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/own/paper115.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 4 4 4 4 4 4)
+litmus-tests/own/oota-direct-reuse.lit	S14 combos_valid=450 combos_coherent=450 max_futures_per_combo=1 results=554 coherent=554 futures_valid=150 futures_nomin=150 futures_true=106 only_nomin=44 only_true=0
+litmus-tests/own/oota-direct-reuse.lit	S14 rule dominated_combos=130 futures_rule=106 rule_only=0 true_only=0
+litmus-tests/own/oota-direct-reuse.lit	S14 stages all=150 dedup_fr=150 min_fr=106 dedup_ex=106 min_ex=106 coherent=106 (futures; results 554 194 139 139 139 139)
+litmus-tests/own/ptr-overwrite-coherence.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=2 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/own/ptr-overwrite-coherence.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/own/ptr-overwrite-coherence.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 2 2 2 2 2 1)
+litmus-tests/own/relaxed-store-elided.lit	S14 combos_valid=43 combos_coherent=43 max_futures_per_combo=1 results=43 coherent=43 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/own/relaxed-store-elided.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/own/relaxed-store-elided.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 43 8 8 8 8 8)
+litmus-tests/own/ORI.lit	S14 combos_valid=42 combos_coherent=42 max_futures_per_combo=1 results=78 coherent=54 futures_valid=36 futures_nomin=36 futures_true=36 only_nomin=0 only_true=0
+litmus-tests/own/ORI.lit	S14 rule dominated_combos=0 futures_rule=36 rule_only=0 true_only=0
+litmus-tests/own/ORI.lit	S14 stages all=36 dedup_fr=36 min_fr=36 dedup_ex=36 min_ex=36 coherent=36 (futures; results 78 68 68 68 68 48)
+litmus-tests/own/SB+sc.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=8 coherent=7 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/SB+sc.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/SB+sc.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 8 8 8 8 8 7)
+litmus-tests/own/sync/fence0lift.lit	S14 combos_valid=12 combos_coherent=12 max_futures_per_combo=1 results=14 coherent=14 futures_valid=12 futures_nomin=12 futures_true=10 only_nomin=2 only_true=0
+litmus-tests/own/sync/fence0lift.lit	S14 rule dominated_combos=2 futures_rule=10 rule_only=0 true_only=0
+litmus-tests/own/sync/fence0lift.lit	S14 stages all=12 dedup_fr=12 min_fr=10 dedup_ex=10 min_ex=10 coherent=10 (futures; results 14 14 12 12 12 12)
+litmus-tests/own/oota-forwarded-reread.lit	S14 combos_valid=719 combos_coherent=719 max_futures_per_combo=1 results=884 coherent=884 futures_valid=190 futures_nomin=190 futures_true=190 only_nomin=0 only_true=0
+litmus-tests/own/oota-forwarded-reread.lit	S14 rule dominated_combos=0 futures_rule=190 rule_only=0 true_only=0
+litmus-tests/own/oota-forwarded-reread.lit	S14 stages all=190 dedup_fr=190 min_fr=190 dedup_ex=190 min_ex=190 coherent=190 (futures; results 884 295 295 246 246 246)
+litmus-tests/own/sync/fence1lift.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=6 coherent=6 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/own/sync/fence1lift.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/own/sync/fence1lift.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 6 6 6 6 6 6)
+litmus-tests/own/sync/fence2lift.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=4 coherent=4 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/own/sync/fence2lift.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/own/sync/fence2lift.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 4 4 4 4 4 4)
+litmus-tests/own/sync/rel1lift.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=3 coherent=3 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/sync/rel1lift.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/sync/rel1lift.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 3 3 3 3 3 3)
+litmus-tests/own/sync/rel2lift.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=3 coherent=3 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/own/sync/rel2lift.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/own/sync/rel2lift.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 3 3 3 3 3 3)
+litmus-tests/own/sync/writeElisionRel.lit	S14 combos_valid=9 combos_coherent=9 max_futures_per_combo=1 results=10 coherent=10 futures_valid=7 futures_nomin=7 futures_true=7 only_nomin=0 only_true=0
+litmus-tests/own/sync/writeElisionRel.lit	S14 rule dominated_combos=0 futures_rule=7 rule_only=0 true_only=0
+litmus-tests/own/sync/writeElisionRel.lit	S14 stages all=7 dedup_fr=7 min_fr=7 dedup_ex=7 min_ex=7 coherent=7 (futures; results 10 8 8 8 8 8)
+litmus-tests/own/speculative_optimisation.lit	S14 combos_valid=31 combos_coherent=31 max_futures_per_combo=1 results=38 coherent=38 futures_valid=29 futures_nomin=29 futures_true=25 only_nomin=4 only_true=0
+litmus-tests/own/speculative_optimisation.lit	S14 rule dominated_combos=4 futures_rule=25 rule_only=0 true_only=0
+litmus-tests/own/speculative_optimisation.lit	S14 stages all=29 dedup_fr=29 min_fr=25 dedup_ex=25 min_ex=25 coherent=25 (futures; results 38 36 31 31 31 31)
+litmus-tests/own/VA-unrelated-guard+const-smrd.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/own/VA-unrelated-guard+const-smrd.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/own/VA-unrelated-guard+const-smrd.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/own/ORI2.lit	S14 combos_valid=42 combos_coherent=42 max_futures_per_combo=1 results=78 coherent=54 futures_valid=36 futures_nomin=36 futures_true=36 only_nomin=0 only_true=0
+litmus-tests/own/ORI2.lit	S14 rule dominated_combos=0 futures_rule=36 rule_only=0 true_only=0
+litmus-tests/own/ORI2.lit	S14 stages all=36 dedup_fr=36 min_fr=36 dedup_ex=36 min_ex=36 coherent=36 (futures; results 78 68 68 68 68 48)
+litmus-tests/own/VA-unrelated-guard-smrd.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/own/VA-unrelated-guard-smrd.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/own/VA-unrelated-guard-smrd.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/own/sync/writeElision.lit	S14 combos_valid=60 combos_coherent=60 max_futures_per_combo=1 results=62 coherent=62 futures_valid=28 futures_nomin=28 futures_true=20 only_nomin=8 only_true=0
+litmus-tests/own/sync/writeElision.lit	S14 rule dominated_combos=16 futures_rule=20 rule_only=0 true_only=0
+litmus-tests/own/sync/writeElision.lit	S14 stages all=28 dedup_fr=28 min_fr=20 dedup_ex=20 min_ex=20 coherent=20 (futures; results 62 30 22 22 22 22)
+litmus-tests/own/volatile-store-not-elided.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/own/volatile-store-not-elided.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/own/volatile-store-not-elided.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/own/VRA-JCTC1.lit	S14 combos_valid=28 combos_coherent=28 max_futures_per_combo=1 results=38 coherent=38 futures_valid=26 futures_nomin=26 futures_true=22 only_nomin=4 only_true=0
+litmus-tests/own/VRA-JCTC1.lit	S14 rule dominated_combos=4 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/own/VRA-JCTC1.lit	S14 stages all=26 dedup_fr=26 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 38 36 31 31 31 31)
+litmus-tests/pldi_repairing/IRIW+acq+sc.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=24 coherent=23 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/pldi_repairing/IRIW+acq+sc.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/pldi_repairing/IRIW+acq+sc.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 24 24 24 24 24 23)
+litmus-tests/pldi_repairing/LB+deps.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/pldi_repairing/LB+deps.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/pldi_repairing/LB+deps.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/pldi_repairing/LB.lit	S14 combos_valid=16 combos_coherent=15 max_futures_per_combo=1 results=25 coherent=21 futures_valid=16 futures_nomin=15 futures_true=15 only_nomin=0 only_true=0
+litmus-tests/pldi_repairing/LB.lit	S14 rule dominated_combos=0 futures_rule=15 rule_only=0 true_only=0
+litmus-tests/pldi_repairing/LB.lit	S14 stages all=16 dedup_fr=16 min_fr=16 dedup_ex=16 min_ex=16 coherent=15 (futures; results 25 25 25 25 25 21)
+litmus-tests/pldi_repairing/RWC+syncs.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=15 coherent=14 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/pldi_repairing/RWC+syncs.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/pldi_repairing/RWC+syncs.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 15 15 15 15 15 14)
+litmus-tests/pldi_repairing/W+WRC.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=27 coherent=25 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/pldi_repairing/W+WRC.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/pldi_repairing/W+WRC.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 27 27 27 27 27 25)
+litmus-tests/popl_bridging/IRIW+Fsc+Fsc.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=24 coherent=23 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/popl_bridging/IRIW+Fsc+Fsc.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/popl_bridging/IRIW+Fsc+Fsc.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 24 24 24 24 24 23)
+litmus-tests/popl_bridging/FADD Example.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=57 coherent=57 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/popl_bridging/FADD Example.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/popl_bridging/FADD Example.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 57 57 57 57 57 57)
+litmus-tests/popl_bridging/Load buffering with acquire reads.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=5 coherent=5 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/popl_bridging/Load buffering with acquire reads.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/popl_bridging/Load buffering with acquire reads.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 5 5 5 5 5 5)
+litmus-tests/popl_bridging/LB.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/popl_bridging/LB.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/popl_bridging/LB.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/popl_bridging/Load buffering with release writes.lit	S14 combos_valid=12 combos_coherent=12 max_futures_per_combo=1 results=16 coherent=16 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests/popl_bridging/Load buffering with release writes.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/popl_bridging/Load buffering with release writes.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 16 16 16 16 16 16)
+litmus-tests/popl_bridging/MP+rel+acq.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=7 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/popl_bridging/MP+rel+acq.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/popl_bridging/MP+rel+acq.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 7)
+litmus-tests/popl_bridging/PSC.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/popl_bridging/PSC.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/popl_bridging/PSC.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/popl_bridging/RMW Atomicity.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=14 coherent=13 futures_valid=5 futures_nomin=5 futures_true=5 only_nomin=0 only_true=0
+litmus-tests/popl_bridging/RMW Atomicity.lit	S14 rule dominated_combos=0 futures_rule=5 rule_only=0 true_only=0
+litmus-tests/popl_bridging/RMW Atomicity.lit	S14 stages all=5 dedup_fr=5 min_fr=5 dedup_ex=5 min_ex=5 coherent=5 (futures; results 14 12 12 12 12 11)
+litmus-tests/popl_bubbly/LB+deps.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/popl_bubbly/LB+deps.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/popl_bubbly/LB+deps.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/popl_bridging/ARM FADD.lit	S14 combos_valid=166 combos_coherent=166 max_futures_per_combo=1 results=209 coherent=209 futures_valid=80 futures_nomin=80 futures_true=56 only_nomin=24 only_true=0
+litmus-tests/popl_bridging/ARM FADD.lit	S14 rule dominated_combos=56 futures_rule=56 rule_only=0 true_only=0
+litmus-tests/popl_bridging/ARM FADD.lit	S14 stages all=80 dedup_fr=80 min_fr=56 dedup_ex=56 min_ex=56 coherent=56 (futures; results 209 111 79 79 79 79)
+litmus-tests/popl_bubbly/LB+false-deps.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=24 coherent=24 futures_valid=13 futures_nomin=13 futures_true=12 only_nomin=1 only_true=0
+litmus-tests/popl_bubbly/LB+false-deps.lit	S14 rule dominated_combos=2 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/popl_bubbly/LB+false-deps.lit	S14 stages all=13 dedup_fr=13 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 24 13 12 12 12 12)
+litmus-tests/popl_bubbly/LB.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=62 coherent=62 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests/popl_bubbly/LB.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests/popl_bubbly/LB.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 62 45 45 45 45 45)
+litmus-tests/popl_grounding/Coh.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=16 coherent=12 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/popl_grounding/Coh.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/popl_grounding/Coh.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 16 12 12 12 12 9)
+litmus-tests/popl_grounding/Cwrites.lit	S14 combos_valid=7 combos_coherent=7 max_futures_per_combo=1 results=7 coherent=7 futures_valid=7 futures_nomin=7 futures_true=7 only_nomin=0 only_true=0
+litmus-tests/popl_grounding/Cwrites.lit	S14 rule dominated_combos=0 futures_rule=7 rule_only=0 true_only=0
+litmus-tests/popl_grounding/Cwrites.lit	S14 stages all=7 dedup_fr=7 min_fr=7 dedup_ex=7 min_ex=7 coherent=7 (futures; results 7 7 7 7 7 7)
+litmus-tests/popl_grounding/LBfd.lit	S14 combos_valid=13 combos_coherent=13 max_futures_per_combo=1 results=13 coherent=13 futures_valid=13 futures_nomin=13 futures_true=12 only_nomin=1 only_true=0
+litmus-tests/popl_grounding/LBfd.lit	S14 rule dominated_combos=1 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/popl_grounding/LBfd.lit	S14 stages all=13 dedup_fr=13 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 13 13 12 12 12 12)
+litmus-tests/popl_grounding/LB.lit	S14 combos_valid=10 combos_coherent=10 max_futures_per_combo=1 results=12 coherent=12 futures_valid=10 futures_nomin=10 futures_true=10 only_nomin=0 only_true=0
+litmus-tests/popl_grounding/LB.lit	S14 rule dominated_combos=0 futures_rule=10 rule_only=0 true_only=0
+litmus-tests/popl_grounding/LB.lit	S14 stages all=10 dedup_fr=10 min_fr=10 dedup_ex=10 min_ex=10 coherent=10 (futures; results 12 12 12 12 12 12)
+litmus-tests/popl_grounding/Coh-CYC (Soham).lit	S14 combos_valid=24 combos_coherent=19 max_futures_per_combo=1 results=40 coherent=21 futures_valid=18 futures_nomin=13 futures_true=13 only_nomin=0 only_true=0
+litmus-tests/popl_grounding/Coh-CYC (Soham).lit	S14 rule dominated_combos=0 futures_rule=13 rule_only=0 true_only=0
+litmus-tests/popl_grounding/Coh-CYC (Soham).lit	S14 stages all=18 dedup_fr=18 min_fr=18 dedup_ex=18 min_ex=18 coherent=13 (futures; results 40 30 30 30 30 15)
+litmus-tests/popl_bridging/rfi is not always preserved.lit	S14 combos_valid=152 combos_coherent=152 max_futures_per_combo=1 results=190 coherent=190 futures_valid=68 futures_nomin=68 futures_true=68 only_nomin=0 only_true=0
+litmus-tests/popl_bridging/rfi is not always preserved.lit	S14 rule dominated_combos=0 futures_rule=68 rule_only=0 true_only=0
+litmus-tests/popl_bridging/rfi is not always preserved.lit	S14 stages all=68 dedup_fr=68 min_fr=68 dedup_ex=68 min_ex=68 coherent=68 (futures; results 190 94 94 94 94 94)
+litmus-tests/popl_grounding/RNGb.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/popl_grounding/RNGb.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/popl_grounding/RNGb.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/popl_grounding/RNG.lit	S14 combos_valid=23 combos_coherent=23 max_futures_per_combo=1 results=42 coherent=42 futures_valid=21 futures_nomin=21 futures_true=21 only_nomin=0 only_true=0
+litmus-tests/popl_grounding/RNG.lit	S14 rule dominated_combos=0 futures_rule=21 rule_only=0 true_only=0
+litmus-tests/popl_grounding/RNG.lit	S14 stages all=21 dedup_fr=21 min_fr=21 dedup_ex=21 min_ex=21 coherent=21 (futures; results 42 40 40 40 40 40)
+litmus-tests/popl_promising/2+2W.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=4 coherent=4 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/popl_promising/2+2W.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/popl_promising/2+2W.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 4 4 4 4 4 4)
+litmus-tests/popl_promising/ARM-weak.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/popl_promising/ARM-weak.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/popl_promising/ARM-weak.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/popl_promising/CYC.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/popl_promising/CYC.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/popl_promising/CYC.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/popl_promising/COH.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=16 coherent=12 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/popl_promising/COH.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/popl_promising/COH.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 16 12 12 12 12 9)
+litmus-tests/popl_promising/LBaa/LBa'0.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=2 coherent=2 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/popl_promising/LBaa/LBa'0.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/popl_promising/LBaa/LBa'0.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 2 2 2 2 2 2)
+litmus-tests/popl_promising/LBaa/LBa'1.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=3 coherent=3 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/popl_promising/LBaa/LBa'1.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/popl_promising/LBaa/LBa'1.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 3 3 3 3 3 3)
+litmus-tests/popl_promising/LBa.lit	S14 combos_valid=11 combos_coherent=11 max_futures_per_combo=1 results=15 coherent=15 futures_valid=10 futures_nomin=10 futures_true=10 only_nomin=0 only_true=0
+litmus-tests/popl_promising/LBa.lit	S14 rule dominated_combos=0 futures_rule=10 rule_only=0 true_only=0
+litmus-tests/popl_promising/LBa.lit	S14 stages all=10 dedup_fr=10 min_fr=10 dedup_ex=10 min_ex=10 coherent=10 (futures; results 15 14 14 14 14 14)
+litmus-tests/popl_promising/LBa'.lit	S14 combos_valid=34 combos_coherent=34 max_futures_per_combo=1 results=58 coherent=58 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/popl_promising/LBa'.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/popl_promising/LBa'.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 58 42 42 42 42 42)
+litmus-tests/popl_promising/LBfd.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/popl_promising/LBfd.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/popl_promising/LBfd.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/popl_promising/LBd.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=62 coherent=62 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests/popl_promising/LBd.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests/popl_promising/LBd.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 62 45 45 45 45 45)
+litmus-tests/popl_promising/LB.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/popl_promising/LB.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/popl_promising/LB.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/popl_promising/LBr.lit	S14 combos_valid=22 combos_coherent=22 max_futures_per_combo=1 results=27 coherent=27 futures_valid=20 futures_nomin=20 futures_true=20 only_nomin=0 only_true=0
+litmus-tests/popl_promising/LBr.lit	S14 rule dominated_combos=0 futures_rule=20 rule_only=0 true_only=0
+litmus-tests/popl_promising/LBr.lit	S14 stages all=20 dedup_fr=20 min_fr=20 dedup_ex=20 min_ex=20 coherent=20 (futures; results 27 25 25 25 25 25)
+litmus-tests/popl_promising/MP+fences.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=7 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/popl_promising/MP+fences.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/popl_promising/MP+fences.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 7)
+litmus-tests/popl_promising/Par-Inc.lit	S14 combos_valid=9 combos_coherent=9 max_futures_per_combo=1 results=13 coherent=12 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/popl_promising/Par-Inc.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/popl_promising/Par-Inc.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 13 12 12 12 12 11)
+litmus-tests/popl_promising/SB+fences.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=8 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/popl_promising/SB+fences.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/popl_promising/SB+fences.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 8)
+litmus-tests/popl_promising/Page 7 Column 1.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=45 coherent=33 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/popl_promising/Page 7 Column 1.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/popl_promising/Page 7 Column 1.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 45 45 45 45 45 33)
+litmus-tests/popl_promising/SB.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/popl_promising/SB.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/popl_promising/SB.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests-promising/2+2W.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=4 coherent=4 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests-promising/2+2W.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests-promising/2+2W.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 4 4 4 4 4 4)
+litmus-tests-promising/ARM-weak.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests-promising/ARM-weak.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests-promising/ARM-weak.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests-promising/COH.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=16 coherent=9 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests-promising/COH.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests-promising/COH.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 16 12 12 12 12 7)
+litmus-tests-promising/Coh-CYC (Promising).lit	S14 combos_valid=24 combos_coherent=19 max_futures_per_combo=1 results=40 coherent=21 futures_valid=18 futures_nomin=13 futures_true=13 only_nomin=0 only_true=0
+litmus-tests-promising/Coh-CYC (Promising).lit	S14 rule dominated_combos=0 futures_rule=13 rule_only=0 true_only=0
+litmus-tests-promising/Coh-CYC (Promising).lit	S14 stages all=18 dedup_fr=18 min_fr=18 dedup_ex=18 min_ex=18 coherent=13 (futures; results 40 30 30 30 30 15)
+litmus-tests-promising/CYC.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests-promising/CYC.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests-promising/CYC.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests-promising/LBaa/LBa'0.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=2 coherent=2 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests-promising/LBaa/LBa'0.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests-promising/LBaa/LBa'0.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 2 2 2 2 2 2)
+litmus-tests-promising/LBaa/LBa'1.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=3 coherent=3 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests-promising/LBaa/LBa'1.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests-promising/LBaa/LBa'1.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 3 3 3 3 3 3)
+litmus-tests-promising/LBa.lit	S14 combos_valid=11 combos_coherent=11 max_futures_per_combo=1 results=15 coherent=15 futures_valid=10 futures_nomin=10 futures_true=10 only_nomin=0 only_true=0
+litmus-tests-promising/LBa.lit	S14 rule dominated_combos=0 futures_rule=10 rule_only=0 true_only=0
+litmus-tests-promising/LBa.lit	S14 stages all=10 dedup_fr=10 min_fr=10 dedup_ex=10 min_ex=10 coherent=10 (futures; results 15 14 14 14 14 14)
+litmus-tests-promising/LBd.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=62 coherent=62 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests-promising/LBd.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests-promising/LBd.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 62 45 45 45 45 45)
+litmus-tests-promising/LBfd.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests-promising/LBfd.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-promising/LBfd.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests-promising/LBa'.lit	S14 combos_valid=34 combos_coherent=34 max_futures_per_combo=1 results=58 coherent=58 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests-promising/LBa'.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-promising/LBa'.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 58 42 42 42 42 42)
+litmus-tests-promising/LB.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests-promising/LB.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-promising/LB.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests-promising/MP+fences.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests-promising/MP+fences.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests-promising/MP+fences.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests-promising/LBr.lit	S14 combos_valid=22 combos_coherent=22 max_futures_per_combo=1 results=27 coherent=27 futures_valid=20 futures_nomin=20 futures_true=20 only_nomin=0 only_true=0
+litmus-tests-promising/LBr.lit	S14 rule dominated_combos=0 futures_rule=20 rule_only=0 true_only=0
+litmus-tests-promising/LBr.lit	S14 stages all=20 dedup_fr=20 min_fr=20 dedup_ex=20 min_ex=20 coherent=20 (futures; results 27 25 25 25 25 25)
+litmus-tests-promising/Par-Inc.lit	S14 combos_valid=9 combos_coherent=9 max_futures_per_combo=1 results=13 coherent=12 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests-promising/Par-Inc.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests-promising/Par-Inc.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 13 12 12 12 12 11)
+litmus-tests-promising/Page 7 Column 1.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=45 coherent=33 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests-promising/Page 7 Column 1.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests-promising/Page 7 Column 1.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 45 45 45 45 45 33)
+litmus-tests-promising/SB+fences.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests-promising/SB+fences.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests-promising/SB+fences.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests-promising/SB.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests-promising/SB.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests-promising/SB.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/requests/0nONvMSw7 (MP).lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/requests/0nONvMSw7 (MP).lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/requests/0nONvMSw7 (MP).lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests-promising/Page 7 Column 1b.lit	S14 combos_valid=36 combos_coherent=36 max_futures_per_combo=1 results=180 coherent=145 futures_valid=20 futures_nomin=20 futures_true=20 only_nomin=0 only_true=0
+litmus-tests-promising/Page 7 Column 1b.lit	S14 rule dominated_combos=0 futures_rule=20 rule_only=0 true_only=0
+litmus-tests-promising/Page 7 Column 1b.lit	S14 stages all=20 dedup_fr=20 min_fr=20 dedup_ex=20 min_ex=20 coherent=20 (futures; results 180 129 129 129 129 111)
+litmus-tests/requests/2zm8LRQsJ (LB).lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=25 coherent=25 futures_valid=16 futures_nomin=16 futures_true=16 only_nomin=0 only_true=0
+litmus-tests/requests/2zm8LRQsJ (LB).lit	S14 rule dominated_combos=0 futures_rule=16 rule_only=0 true_only=0
+litmus-tests/requests/2zm8LRQsJ (LB).lit	S14 stages all=16 dedup_fr=16 min_fr=16 dedup_ex=16 min_ex=16 coherent=16 (futures; results 25 25 25 25 25 25)
+litmus-tests/requests/Aj1vSoVpE (MP).lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/requests/Aj1vSoVpE (MP).lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/requests/Aj1vSoVpE (MP).lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/requests/leb0OUCUM (LB).lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=25 coherent=25 futures_valid=16 futures_nomin=16 futures_true=16 only_nomin=0 only_true=0
+litmus-tests/requests/leb0OUCUM (LB).lit	S14 rule dominated_combos=0 futures_rule=16 rule_only=0 true_only=0
+litmus-tests/requests/leb0OUCUM (LB).lit	S14 stages all=16 dedup_fr=16 min_fr=16 dedup_ex=16 min_ex=16 coherent=16 (futures; results 25 25 25 25 25 25)
+litmus-tests/requests/oEk0xQtQy (CoWR).lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=42 coherent=34 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/requests/oEk0xQtQy (CoWR).lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/requests/oEk0xQtQy (CoWR).lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 42 34 34 34 34 27)
+litmus-tests/requests/ptmsQeW4i (CoWR).lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=42 coherent=34 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/requests/ptmsQeW4i (CoWR).lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/requests/ptmsQeW4i (CoWR).lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 42 34 34 34 34 27)
+litmus-tests/requests/XXLpA6s8E (LB).lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=25 coherent=25 futures_valid=16 futures_nomin=16 futures_true=16 only_nomin=0 only_true=0
+litmus-tests/requests/XXLpA6s8E (LB).lit	S14 rule dominated_combos=0 futures_rule=16 rule_only=0 true_only=0
+litmus-tests/requests/XXLpA6s8E (LB).lit	S14 stages all=16 dedup_fr=16 min_fr=16 dedup_ex=16 min_ex=16 coherent=16 (futures; results 25 25 25 25 25 25)
+litmus-tests/requests/ZcUmGBDR9 (MP).lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/requests/ZcUmGBDR9 (MP).lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/requests/ZcUmGBDR9 (MP).lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests-review/esop_problem/RRE.lit	S14 combos_valid=11 combos_coherent=11 max_futures_per_combo=1 results=21 coherent=18 futures_valid=10 futures_nomin=10 futures_true=10 only_nomin=0 only_true=0
+litmus-tests-review/esop_problem/RRE.lit	S14 rule dominated_combos=0 futures_rule=10 rule_only=0 true_only=0
+litmus-tests-review/esop_problem/RRE.lit	S14 stages all=10 dedup_fr=10 min_fr=10 dedup_ex=10 min_ex=10 coherent=10 (futures; results 21 20 20 20 20 17)
+litmus-tests-review/on_thin_air_reads19/P5.lit	S14 combos_valid=7 combos_coherent=7 max_futures_per_combo=1 results=11 coherent=11 futures_valid=5 futures_nomin=5 futures_true=5 only_nomin=0 only_true=0
+litmus-tests-review/on_thin_air_reads19/P5.lit	S14 rule dominated_combos=0 futures_rule=5 rule_only=0 true_only=0
+litmus-tests-review/on_thin_air_reads19/P5.lit	S14 stages all=5 dedup_fr=5 min_fr=5 dedup_ex=5 min_ex=5 coherent=5 (futures; results 11 9 9 9 9 9)
+litmus-tests/requests/1MR_opBNP (2+2W with obs thread).lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=441 coherent=361 futures_valid=9 futures_nomin=9 futures_true=9 only_nomin=0 only_true=0
+litmus-tests/requests/1MR_opBNP (2+2W with obs thread).lit	S14 rule dominated_combos=0 futures_rule=9 rule_only=0 true_only=0
+litmus-tests/requests/1MR_opBNP (2+2W with obs thread).lit	S14 stages all=9 dedup_fr=9 min_fr=9 dedup_ex=9 min_ex=9 coherent=9 (futures; results 441 289 289 289 289 225)
+litmus-tests/requests/E8OKvIVLN (2+2W with obs thread).lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=441 coherent=361 futures_valid=9 futures_nomin=9 futures_true=9 only_nomin=0 only_true=0
+litmus-tests/requests/E8OKvIVLN (2+2W with obs thread).lit	S14 rule dominated_combos=0 futures_rule=9 rule_only=0 true_only=0
+litmus-tests/requests/E8OKvIVLN (2+2W with obs thread).lit	S14 stages all=9 dedup_fr=9 min_fr=9 dedup_ex=9 min_ex=9 coherent=9 (futures; results 441 289 289 289 289 225)
+litmus-tests-review/popl_promising/Page 7 Column 1b.lit	S14 combos_valid=36 combos_coherent=36 max_futures_per_combo=1 results=180 coherent=158 futures_valid=20 futures_nomin=20 futures_true=20 only_nomin=0 only_true=0
+litmus-tests-review/popl_promising/Page 7 Column 1b.lit	S14 rule dominated_combos=0 futures_rule=20 rule_only=0 true_only=0
+litmus-tests-review/popl_promising/Page 7 Column 1b.lit	S14 stages all=20 dedup_fr=20 min_fr=20 dedup_ex=20 min_ex=20 coherent=20 (futures; results 180 129 129 129 129 109)
+litmus-tests-review/own/FWD-STRENGTHEN-LIFT.lit	S14 combos_valid=28 combos_coherent=28 max_futures_per_combo=1 results=32 coherent=32 futures_valid=24 futures_nomin=24 futures_true=24 only_nomin=0 only_true=0
+litmus-tests-review/own/FWD-STRENGTHEN-LIFT.lit	S14 rule dominated_combos=0 futures_rule=24 rule_only=0 true_only=0
+litmus-tests-review/own/FWD-STRENGTHEN-LIFT.lit	S14 stages all=24 dedup_fr=24 min_fr=24 dedup_ex=24 min_ex=24 coherent=24 (futures; results 32 28 28 28 28 28)
+litmus-tests-review/rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=6 coherent=6 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests-review/rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests-review/rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 6 6 6 6 6 6)
+litmus-tests-review/sevcik_thesis/Skip/LB+locks.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests-review/sevcik_thesis/Skip/LB+locks.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-review/sevcik_thesis/Skip/LB+locks.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests-promising/Upd-Stuck.lit	S14 combos_valid=648 combos_coherent=648 max_futures_per_combo=1 results=1024 coherent=991 futures_valid=286 futures_nomin=286 futures_true=176 only_nomin=110 only_true=0
+litmus-tests-promising/Upd-Stuck.lit	S14 rule dominated_combos=288 futures_rule=176 rule_only=0 true_only=0
+litmus-tests-promising/Upd-Stuck.lit	S14 stages all=286 dedup_fr=286 min_fr=176 dedup_ex=176 min_ex=176 coherent=176 (futures; results 1024 558 372 372 372 341)
+litmus-tests-review/popl_grounding/FADD.lit	S14 combos_valid=374 combos_coherent=374 max_futures_per_combo=1 results=451 coherent=451 futures_valid=227 futures_nomin=227 futures_true=84 only_nomin=143 only_true=0
+litmus-tests-review/popl_grounding/FADD.lit	S14 rule dominated_combos=246 futures_rule=84 rule_only=0 true_only=0
+litmus-tests-review/popl_grounding/FADD.lit	S14 stages all=227 dedup_fr=227 min_fr=84 dedup_ex=84 min_ex=84 coherent=84 (futures; results 451 280 108 108 108 108)
+litmus-tests/rmm-zoo/models/ra-sra-wra/CAS-both+rel+acq.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=3 coherent=3 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/CAS-both+rel+acq.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/CAS-both+rel+acq.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 3 3 3 3 3 3)
+litmus-tests/rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=6 coherent=6 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 6 6 6 6 6 6)
+litmus-tests-review/popl_bridging/Preserving detour.lit	S14 combos_valid=212 combos_coherent=212 max_futures_per_combo=1 results=480 coherent=480 futures_valid=71 futures_nomin=71 futures_true=71 only_nomin=0 only_true=0
+litmus-tests-review/popl_bridging/Preserving detour.lit	S14 rule dominated_combos=0 futures_rule=71 rule_only=0 true_only=0
+litmus-tests-review/popl_bridging/Preserving detour.lit	S14 stages all=71 dedup_fr=71 min_fr=71 dedup_ex=71 min_ex=71 coherent=71 (futures; results 480 170 170 170 170 170)
+litmus-tests/rmm-zoo/models/ra-sra-wra/2+2W+rel+acq.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=12 coherent=12 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/2+2W+rel+acq.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/2+2W+rel+acq.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 12 12 12 12 12 12)
+litmus-tests-review/symmrd/LB+UB+data+z.lit	S14 combos_valid=232 combos_coherent=232 max_futures_per_combo=1 results=280 coherent=280 futures_valid=109 futures_nomin=109 futures_true=65 only_nomin=44 only_true=0
+litmus-tests-review/symmrd/LB+UB+data+z.lit	S14 rule dominated_combos=68 futures_rule=65 rule_only=0 true_only=0
+litmus-tests-review/symmrd/LB+UB+data+z.lit	S14 stages all=109 dedup_fr=109 min_fr=65 dedup_ex=65 min_ex=65 coherent=65 (futures; results 280 151 89 89 89 89)
+litmus-tests/rmm-zoo/models/ra-sra-wra/SF.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=16 coherent=16 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/SF.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/SF.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 16 12 12 12 12 12)
+litmus-tests/rmm-zoo/models/ra-sra-wra/WW.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=16 coherent=16 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/WW.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/WW.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 16 12 12 12 12 12)
+litmus-tests/rmm-zoo/models/rc11-rc17/uaf-bug.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=3 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/rc11-rc17/uaf-bug.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/rc11-rc17/uaf-bug.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 3 3 3 3 3 2)
+litmus-tests/rmm-zoo/models/rc11-rc17/LB.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=25 coherent=25 futures_valid=16 futures_nomin=16 futures_true=16 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/rc11-rc17/LB.lit	S14 rule dominated_combos=0 futures_rule=16 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/rc11-rc17/LB.lit	S14 stages all=16 dedup_fr=16 min_fr=16 dedup_ex=16 min_ex=16 coherent=16 (futures; results 25 25 25 25 25 25)
+litmus-tests/rmm-zoo/models/ra-sra-wra/Oscillating.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=51 coherent=39 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/Oscillating.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/ra-sra-wra/Oscillating.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 51 43 43 43 43 31)
+litmus-tests/rmm-zoo/models/sc-tso/SB+failed-cas.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/sc-tso/SB+failed-cas.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/sc-tso/SB+failed-cas.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/rmm-zoo/models/sc-tso/SB+fence.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/sc-tso/SB+fence.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/sc-tso/SB+fence.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/rmm-zoo/models/sc-tso/IRIW.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=25 coherent=25 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/sc-tso/IRIW.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/sc-tso/IRIW.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 25 25 25 25 25 25)
+litmus-tests/rmm-zoo/models/sc-tso/SB+cas.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/sc-tso/SB+cas.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/sc-tso/SB+cas.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/rmm-zoo/models/sc-tso/SB+fences.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/sc-tso/SB+fences.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/sc-tso/SB+fences.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/rmm-zoo/models/sc-tso/SB.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/sc-tso/SB.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/sc-tso/SB.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/rmm-zoo/models/sessions/Monotonic-read.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=5 coherent=5 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/sessions/Monotonic-read.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/sessions/Monotonic-read.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 5 5 5 5 5 5)
+litmus-tests/rmm-zoo/models/steinke-nutt/Cross-own.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=16 coherent=16 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Cross-own.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Cross-own.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 16 12 12 12 12 12)
+litmus-tests/rmm-zoo/models/steinke-nutt/MP.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/steinke-nutt/MP.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/steinke-nutt/MP.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/rmm-zoo/models/rc11-rc17/RS17.lit	S14 combos_valid=40 combos_coherent=40 max_futures_per_combo=1 results=116 coherent=116 futures_valid=24 futures_nomin=24 futures_true=24 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/rc11-rc17/RS17.lit	S14 rule dominated_combos=0 futures_rule=24 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/rc11-rc17/RS17.lit	S14 stages all=24 dedup_fr=24 min_fr=24 dedup_ex=24 min_ex=24 coherent=24 (futures; results 116 77 77 77 77 77)
+litmus-tests/rmm-zoo/models/steinke-nutt/Revised-order.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=16 coherent=16 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Revised-order.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Revised-order.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 16 12 12 12 12 12)
+litmus-tests-review/popl_promising/Upd-Stuck.lit	S14 combos_valid=648 combos_coherent=648 max_futures_per_combo=1 results=1024 coherent=991 futures_valid=286 futures_nomin=286 futures_true=176 only_nomin=110 only_true=0
+litmus-tests-review/popl_promising/Upd-Stuck.lit	S14 rule dominated_combos=288 futures_rule=176 rule_only=0 true_only=0
+litmus-tests-review/popl_promising/Upd-Stuck.lit	S14 stages all=286 dedup_fr=286 min_fr=176 dedup_ex=176 min_ex=176 coherent=176 (futures; results 1024 558 372 372 372 341)
+litmus-tests/rmm-zoo/models/steinke-nutt/Oscillating.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=51 coherent=39 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Oscillating.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Oscillating.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 51 43 43 43 43 31)
+litmus-tests/rmm-zoo/models/steinke-nutt/Writer-reversed.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=20 coherent=17 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Writer-reversed.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Writer-reversed.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 20 18 18 18 18 15)
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=25 coherent=25 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 25 25 25 25 25 25)
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit	S14 combos_valid=9 combos_coherent=9 max_futures_per_combo=1 results=25 coherent=25 futures_valid=9 futures_nomin=9 futures_true=9 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit	S14 rule dominated_combos=0 futures_rule=9 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit	S14 stages all=9 dedup_fr=9 min_fr=9 dedup_ex=9 min_ex=9 coherent=9 (futures; results 25 25 25 25 25 25)
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=25 coherent=25 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 25 25 25 25 25 25)
+litmus-tests/rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=57 coherent=57 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 57 54 54 54 54 54)
+litmus-tests/rmm-zoo/models/steinke-nutt/WRC.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=24 coherent=24 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/steinke-nutt/WRC.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/steinke-nutt/WRC.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 24 24 24 24 24 24)
+litmus-tests/rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=15 coherent=15 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 15 15 15 15 15 15)
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit	S14 combos_valid=12 combos_coherent=12 max_futures_per_combo=1 results=31 coherent=31 futures_valid=11 futures_nomin=11 futures_true=11 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit	S14 rule dominated_combos=0 futures_rule=11 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit	S14 stages all=11 dedup_fr=11 min_fr=11 dedup_ex=11 min_ex=11 coherent=11 (futures; results 31 29 29 29 29 29)
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=12 coherent=11 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 12 12 12 12 12 11)
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rlx.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=24 coherent=24 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rlx.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rlx.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 24 24 24 24 24 24)
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rel+acq.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=24 coherent=24 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rel+acq.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rel+acq.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 24 24 24 24 24 24)
+litmus-tests/rmm-zoo/properties/elimination/load-store/opt.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/elimination/load-store/opt.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/elimination/load-store/opt.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/rmm-zoo/properties/elimination/load-store/src.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=8 coherent=8 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/elimination/load-store/src.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/elimination/load-store/src.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 8 8 8 8 8 8)
+litmus-tests/rmm-zoo/properties/elimination/store-store/opt.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=4 coherent=4 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/elimination/store-store/opt.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/elimination/store-store/opt.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 4 4 4 4 4 4)
+litmus-tests/rmm-zoo/properties/elimination/store-store/src.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=16 coherent=16 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/elimination/store-store/src.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/elimination/store-store/src.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 16 8 8 8 8 8)
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/opt.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=16 coherent=16 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/opt.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/opt.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 16 8 8 8 8 8)
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/opt.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=4 coherent=4 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/opt.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/opt.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 4 4 4 4 4 4)
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/src.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/src.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/src.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/opt.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=10 coherent=10 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/opt.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/opt.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 10 10 10 10 10 10)
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/src.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=10 coherent=10 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/src.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/src.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 10 10 10 10 10 10)
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/src.lit	S14 combos_valid=56 combos_coherent=56 max_futures_per_combo=1 results=56 coherent=56 futures_valid=32 futures_nomin=32 futures_true=24 only_nomin=8 only_true=0
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/src.lit	S14 rule dominated_combos=16 futures_rule=24 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/src.lit	S14 stages all=32 dedup_fr=32 min_fr=24 dedup_ex=24 min_ex=24 coherent=24 (futures; results 56 32 24 24 24 24)
+litmus-tests/rmm-zoo/models/steinke-nutt/Readers-disagree.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=129 coherent=97 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Readers-disagree.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/models/steinke-nutt/Readers-disagree.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 129 113 113 113 113 81)
+litmus-tests/rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rel+acq-drf.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=6 coherent=5 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rel+acq-drf.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rel+acq-drf.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 6 6 6 6 6 5)
+litmus-tests/rmm-zoo/properties/reordering/load-load/opt.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/reordering/load-load/opt.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/reordering/load-load/opt.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/rmm-zoo/properties/reordering/load-load/src.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/rmm-zoo/properties/reordering/load-load/src.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/reordering/load-load/src.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/rmm-zoo/properties/reordering/load-store/opt.lit	S14 combos_valid=11 combos_coherent=11 max_futures_per_combo=1 results=11 coherent=11 futures_valid=11 futures_nomin=11 futures_true=8 only_nomin=3 only_true=0
+litmus-tests/rmm-zoo/properties/reordering/load-store/opt.lit	S14 rule dominated_combos=3 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/reordering/load-store/opt.lit	S14 stages all=11 dedup_fr=11 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 11 11 8 8 8 8)
+litmus-tests/rmm-zoo/properties/reordering/load-store/src.lit	S14 combos_valid=5 combos_coherent=5 max_futures_per_combo=1 results=5 coherent=5 futures_valid=5 futures_nomin=5 futures_true=4 only_nomin=1 only_true=0
+litmus-tests/rmm-zoo/properties/reordering/load-store/src.lit	S14 rule dominated_combos=1 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/reordering/load-store/src.lit	S14 stages all=5 dedup_fr=5 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 5 5 4 4 4 4)
+litmus-tests/rmm-zoo/properties/reordering/store-load/opt.lit	S14 combos_valid=5 combos_coherent=5 max_futures_per_combo=1 results=5 coherent=5 futures_valid=5 futures_nomin=5 futures_true=4 only_nomin=1 only_true=0
+litmus-tests/rmm-zoo/properties/reordering/store-load/opt.lit	S14 rule dominated_combos=1 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/reordering/store-load/opt.lit	S14 stages all=5 dedup_fr=5 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 5 5 4 4 4 4)
+litmus-tests/rmm-zoo/properties/reordering/store-load/src.lit	S14 combos_valid=11 combos_coherent=11 max_futures_per_combo=1 results=11 coherent=11 futures_valid=11 futures_nomin=11 futures_true=8 only_nomin=3 only_true=0
+litmus-tests/rmm-zoo/properties/reordering/store-load/src.lit	S14 rule dominated_combos=3 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/reordering/store-load/src.lit	S14 stages all=11 dedup_fr=11 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 11 11 8 8 8 8)
+litmus-tests/rmm-zoo/properties/reordering/store-store/opt.lit	S14 combos_valid=27 combos_coherent=27 max_futures_per_combo=1 results=27 coherent=27 futures_valid=16 futures_nomin=16 futures_true=8 only_nomin=8 only_true=0
+litmus-tests/rmm-zoo/properties/reordering/store-store/opt.lit	S14 rule dominated_combos=11 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/reordering/store-store/opt.lit	S14 stages all=16 dedup_fr=16 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 27 16 8 8 8 8)
+litmus-tests/rmw/cas_acqrel_failure_reorder.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=6 coherent=6 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/rmw/cas_acqrel_failure_reorder.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/rmw/cas_acqrel_failure_reorder.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 6 6 6 6 6 6)
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREA.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREA.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREA.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREB.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREB.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREB.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/rmm-zoo/properties/reordering/store-store/src.lit	S14 combos_valid=27 combos_coherent=27 max_futures_per_combo=1 results=27 coherent=27 futures_valid=16 futures_nomin=16 futures_true=8 only_nomin=8 only_true=0
+litmus-tests/rmm-zoo/properties/reordering/store-store/src.lit	S14 rule dominated_combos=11 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/rmm-zoo/properties/reordering/store-store/src.lit	S14 stages all=16 dedup_fr=16 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 27 16 8 8 8 8)
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIA.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=8 coherent=8 futures_valid=7 futures_nomin=7 futures_true=7 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIA.lit	S14 rule dominated_combos=0 futures_rule=7 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIA.lit	S14 stages all=7 dedup_fr=7 min_fr=7 dedup_ex=7 min_ex=7 coherent=7 (futures; results 8 7 7 7 7 7)
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIB.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=8 coherent=8 futures_valid=7 futures_nomin=7 futures_true=7 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIB.lit	S14 rule dominated_combos=0 futures_rule=7 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIB.lit	S14 stages all=7 dedup_fr=7 min_fr=7 dedup_ex=7 min_ex=7 coherent=7 (futures; results 8 7 7 7 7 7)
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIC.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=8 coherent=8 futures_valid=7 futures_nomin=7 futures_true=7 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIC.lit	S14 rule dominated_combos=0 futures_rule=7 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIC.lit	S14 stages all=7 dedup_fr=7 min_fr=7 dedup_ex=7 min_ex=7 coherent=7 (futures; results 8 7 7 7 7 7)
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (b).lit	S14 combos_valid=29 combos_coherent=29 max_futures_per_combo=1 results=39 coherent=39 futures_valid=26 futures_nomin=26 futures_true=26 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (b).lit	S14 rule dominated_combos=0 futures_rule=26 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (b).lit	S14 stages all=26 dedup_fr=26 min_fr=26 dedup_ex=26 min_ex=26 coherent=26 (futures; results 39 36 36 36 36 36)
+litmus-tests/sevcik_thesis/LB.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/LB.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/LB.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/sevcik_thesis/MP.lit	S14 combos_valid=26 combos_coherent=26 max_futures_per_combo=1 results=42 coherent=38 futures_valid=20 futures_nomin=20 futures_true=20 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/MP.lit	S14 rule dominated_combos=0 futures_rule=20 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/MP.lit	S14 stages all=20 dedup_fr=20 min_fr=20 dedup_ex=20 min_ex=20 coherent=20 (futures; results 42 32 32 32 32 28)
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERA.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERA.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERA.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction.lit	S14 combos_valid=29 combos_coherent=29 max_futures_per_combo=1 results=39 coherent=39 futures_valid=26 futures_nomin=26 futures_true=26 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction.lit	S14 rule dominated_combos=0 futures_rule=26 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction.lit	S14 stages all=26 dedup_fr=26 min_fr=26 dedup_ex=26 min_ex=26 coherent=26 (futures; results 39 36 36 36 36 36)
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERB.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=4 coherent=4 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERB.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERB.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 4 4 4 4 4 4)
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit	S14 combos_valid=10 combos_coherent=10 max_futures_per_combo=1 results=10 coherent=10 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 10 6 6 6 6 6)
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit	S14 combos_valid=10 combos_coherent=10 max_futures_per_combo=1 results=10 coherent=10 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 10 6 6 6 6 6)
+litmus-tests/sevcik_thesis/Redundant Read after Read Elimination.lit	S14 combos_valid=31 combos_coherent=31 max_futures_per_combo=1 results=38 coherent=38 futures_valid=29 futures_nomin=29 futures_true=25 only_nomin=4 only_true=0
+litmus-tests/sevcik_thesis/Redundant Read after Read Elimination.lit	S14 rule dominated_combos=4 futures_rule=25 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Redundant Read after Read Elimination.lit	S14 stages all=29 dedup_fr=29 min_fr=25 dedup_ex=25 min_ex=25 coherent=25 (futures; results 38 36 31 31 31 31)
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RA.lit	S14 combos_valid=27 combos_coherent=27 max_futures_per_combo=1 results=27 coherent=27 futures_valid=16 futures_nomin=16 futures_true=8 only_nomin=8 only_true=0
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RA.lit	S14 rule dominated_combos=11 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RA.lit	S14 stages all=16 dedup_fr=16 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 27 16 8 8 8 8)
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RB.lit	S14 combos_valid=27 combos_coherent=27 max_futures_per_combo=1 results=27 coherent=27 futures_valid=16 futures_nomin=16 futures_true=8 only_nomin=8 only_true=0
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RB.lit	S14 rule dominated_combos=11 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RB.lit	S14 stages all=16 dedup_fr=16 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 27 16 8 8 8 8)
+litmus-tests/sevcik_thesis/Skip/Redundant Write after Read Elimination.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=60 coherent=43 futures_valid=10 futures_nomin=10 futures_true=10 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Skip/Redundant Write after Read Elimination.lit	S14 rule dominated_combos=0 futures_rule=10 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Skip/Redundant Write after Read Elimination.lit	S14 stages all=10 dedup_fr=10 min_fr=10 dedup_ex=10 min_ex=10 coherent=10 (futures; results 60 40 40 40 40 30)
+litmus-tests/sevcik_thesis/Skip/Reordering with external actions.lit	S14 combos_valid=7 combos_coherent=7 max_futures_per_combo=1 results=9 coherent=9 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Skip/Reordering with external actions.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Skip/Reordering with external actions.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 9 8 8 8 8 8)
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit	S14 combos_valid=18 combos_coherent=18 max_futures_per_combo=1 results=18 coherent=18 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 18 8 8 8 8 8)
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPB.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=4 coherent=4 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPB.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPB.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 4 4 4 4 4 4)
+litmus-tests/single-thread-lift-tests/basic-lift.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/single-thread-lift-tests/basic-lift.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/basic-lift.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/single-thread-lift-tests/basic-not-lift.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/single-thread-lift-tests/basic-not-lift.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/basic-not-lift.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/single-thread-lift-tests/lift-above-read-2.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=6 coherent=6 futures_valid=6 futures_nomin=6 futures_true=4 only_nomin=2 only_true=0
+litmus-tests/single-thread-lift-tests/lift-above-read-2.lit	S14 rule dominated_combos=2 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/lift-above-read-2.lit	S14 stages all=6 dedup_fr=6 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 6 6 4 4 4 4)
+litmus-tests/single-thread-lift-tests/lift-above-read.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=6 coherent=6 futures_valid=6 futures_nomin=6 futures_true=4 only_nomin=2 only_true=0
+litmus-tests/single-thread-lift-tests/lift-above-read.lit	S14 rule dominated_combos=2 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/lift-above-read.lit	S14 stages all=6 dedup_fr=6 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 6 6 4 4 4 4)
+litmus-tests/single-thread-lift-tests/lift-with-read-freezing.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=8 coherent=8 futures_valid=8 futures_nomin=8 futures_true=6 only_nomin=2 only_true=0
+litmus-tests/single-thread-lift-tests/lift-with-read-freezing.lit	S14 rule dominated_combos=2 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/lift-with-read-freezing.lit	S14 stages all=8 dedup_fr=8 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 8 8 6 6 6 6)
+litmus-tests/single-thread-lift-tests/lift-with-write-freezing.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/single-thread-lift-tests/lift-with-write-freezing.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/lift-with-write-freezing.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/single-thread-lift-tests/lock-test.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=8 coherent=8 futures_valid=8 futures_nomin=8 futures_true=6 only_nomin=2 only_true=0
+litmus-tests/single-thread-lift-tests/lock-test.lit	S14 rule dominated_combos=2 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/lock-test.lit	S14 stages all=8 dedup_fr=8 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 8 8 6 6 6 6)
+litmus-tests/single-thread-lift-tests/one-sided-lift.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=3 coherent=3 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/single-thread-lift-tests/one-sided-lift.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/one-sided-lift.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 3 3 3 3 3 3)
+litmus-tests/single-thread-lift-tests/read-freezing.lit	S14 combos_valid=7 combos_coherent=7 max_futures_per_combo=1 results=7 coherent=7 futures_valid=7 futures_nomin=7 futures_true=7 only_nomin=0 only_true=0
+litmus-tests/single-thread-lift-tests/read-freezing.lit	S14 rule dominated_combos=0 futures_rule=7 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/read-freezing.lit	S14 stages all=7 dedup_fr=7 min_fr=7 dedup_ex=7 min_ex=7 coherent=7 (futures; results 7 7 7 7 7 7)
+litmus-tests/single-thread-lift-tests/write-after-read-elim.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=6 coherent=6 futures_valid=6 futures_nomin=6 futures_true=5 only_nomin=1 only_true=0
+litmus-tests/single-thread-lift-tests/write-after-read-elim.lit	S14 rule dominated_combos=1 futures_rule=5 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/write-after-read-elim.lit	S14 stages all=6 dedup_fr=6 min_fr=5 dedup_ex=5 min_ex=5 coherent=5 (futures; results 6 6 5 5 5 5)
+litmus-tests/single-thread-lift-tests/write-before-lift.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=4 coherent=4 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/single-thread-lift-tests/write-before-lift.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/write-before-lift.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 4 4 4 4 4 4)
+litmus-tests/single-thread-lift-tests/write-chain.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/single-thread-lift-tests/write-chain.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/write-chain.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/single-thread-lift-tests/write-freezing.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=4 coherent=4 futures_valid=4 futures_nomin=4 futures_true=3 only_nomin=1 only_true=0
+litmus-tests/single-thread-lift-tests/write-freezing.lit	S14 rule dominated_combos=1 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/single-thread-lift-tests/write-freezing.lit	S14 stages all=4 dedup_fr=4 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 4 4 3 3 3 3)
+litmus-tests/symmrd/LB+alias+data.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=5 coherent=5 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/symmrd/LB+alias+data.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/symmrd/LB+alias+data.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 5 5 5 5 5 5)
+litmus-tests/symmrd/LB+UB+data+arr.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=39 coherent=39 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/symmrd/LB+UB+data+arr.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/symmrd/LB+UB+data+arr.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 39 37 37 37 37 37)
+litmus-tests/symmrd/LB+UB+data-forbid.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/symmrd/LB+UB+data-forbid.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/symmrd/LB+UB+data-forbid.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/symmrd/LB+UB+data.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/symmrd/LB+UB+data.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/symmrd/LB+UB+data.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests/symmrd/alignment.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=4 coherent=4 futures_valid=4 futures_nomin=4 futures_true=3 only_nomin=1 only_true=0
+litmus-tests/symmrd/alignment.lit	S14 rule dominated_combos=1 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/symmrd/alignment.lit	S14 stages all=4 dedup_fr=4 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 4 4 3 3 3 3)
+litmus-tests/sevcik_thesis/Roach Motel Semantics.lit	S14 combos_valid=288 combos_coherent=288 max_futures_per_combo=1 results=442 coherent=442 futures_valid=171 futures_nomin=171 futures_true=171 only_nomin=0 only_true=0
+litmus-tests/sevcik_thesis/Roach Motel Semantics.lit	S14 rule dominated_combos=0 futures_rule=171 rule_only=0 true_only=0
+litmus-tests/sevcik_thesis/Roach Motel Semantics.lit	S14 stages all=171 dedup_fr=171 min_fr=171 dedup_ex=171 min_ex=171 coherent=171 (futures; results 442 273 273 273 273 273)
+litmus-tests/symmrd/refinement/LB+UBoff+data.lit	S14 combos_valid=23 combos_coherent=23 max_futures_per_combo=1 results=29 coherent=29 futures_valid=21 futures_nomin=21 futures_true=21 only_nomin=0 only_true=0
+litmus-tests/symmrd/refinement/LB+UBoff+data.lit	S14 rule dominated_combos=0 futures_rule=21 rule_only=0 true_only=0
+litmus-tests/symmrd/refinement/LB+UBoff+data.lit	S14 stages all=21 dedup_fr=21 min_fr=21 dedup_ex=21 min_ex=21 coherent=21 (futures; results 29 27 27 27 27 27)
+litmus-tests/test6/2+2W.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=16 coherent=16 futures_valid=9 futures_nomin=9 futures_true=9 only_nomin=0 only_true=0
+litmus-tests/test6/2+2W.lit	S14 rule dominated_combos=0 futures_rule=9 rule_only=0 true_only=0
+litmus-tests/test6/2+2W.lit	S14 stages all=9 dedup_fr=9 min_fr=9 dedup_ex=9 min_ex=9 coherent=9 (futures; results 16 9 9 9 9 9)
+litmus-tests/symmrd/refinement/LB+UB+data+z.lit	S14 combos_valid=168 combos_coherent=168 max_futures_per_combo=1 results=198 coherent=198 futures_valid=85 futures_nomin=85 futures_true=63 only_nomin=22 only_true=0
+litmus-tests/symmrd/refinement/LB+UB+data+z.lit	S14 rule dominated_combos=44 futures_rule=63 rule_only=0 true_only=0
+litmus-tests/symmrd/refinement/LB+UB+data+z.lit	S14 stages all=85 dedup_fr=85 min_fr=63 dedup_ex=63 min_ex=63 coherent=63 (futures; results 198 107 81 81 81 81)
+litmus-tests/symmrd/refinement/LB+UB+data.lit	S14 combos_valid=23 combos_coherent=23 max_futures_per_combo=1 results=29 coherent=29 futures_valid=21 futures_nomin=21 futures_true=21 only_nomin=0 only_true=0
+litmus-tests/symmrd/refinement/LB+UB+data.lit	S14 rule dominated_combos=0 futures_rule=21 rule_only=0 true_only=0
+litmus-tests/symmrd/refinement/LB+UB+data.lit	S14 stages all=21 dedup_fr=21 min_fr=21 dedup_ex=21 min_ex=21 coherent=21 (futures; results 29 27 27 27 27 27)
+litmus-tests/symmrd/no-alignment.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/symmrd/no-alignment.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/symmrd/no-alignment.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests/test6/3.2W.lit	S14 combos_valid=64 combos_coherent=64 max_futures_per_combo=1 results=64 coherent=64 futures_valid=27 futures_nomin=27 futures_true=27 only_nomin=0 only_true=0
+litmus-tests/test6/3.2W.lit	S14 rule dominated_combos=0 futures_rule=27 rule_only=0 true_only=0
+litmus-tests/test6/3.2W.lit	S14 stages all=27 dedup_fr=27 min_fr=27 dedup_ex=27 min_ex=27 coherent=27 (futures; results 64 27 27 27 27 27)
+litmus-tests/test6/3.SB.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=27 coherent=27 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/test6/3.SB.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/test6/3.SB.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 27 27 27 27 27 27)
+litmus-tests/test6/CoRR1.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=5 coherent=4 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests/test6/CoRR1.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests/test6/CoRR1.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 5 5 5 5 5 4)
+litmus-tests/test6/CoRW.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=43 coherent=35 futures_valid=5 futures_nomin=5 futures_true=5 only_nomin=0 only_true=0
+litmus-tests/test6/CoRW.lit	S14 rule dominated_combos=0 futures_rule=5 rule_only=0 true_only=0
+litmus-tests/test6/CoRW.lit	S14 stages all=5 dedup_fr=5 min_fr=5 dedup_ex=5 min_ex=5 coherent=5 (futures; results 43 39 39 39 39 31)
+litmus-tests/test6/3.LB.lit	S14 combos_valid=64 combos_coherent=64 max_futures_per_combo=1 results=125 coherent=125 futures_valid=64 futures_nomin=64 futures_true=64 only_nomin=0 only_true=0
+litmus-tests/test6/3.LB.lit	S14 rule dominated_combos=0 futures_rule=64 rule_only=0 true_only=0
+litmus-tests/test6/3.LB.lit	S14 stages all=64 dedup_fr=64 min_fr=64 dedup_ex=64 min_ex=64 coherent=64 (futures; results 125 125 125 125 125 125)
+litmus-tests/test6/CoWR.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=42 coherent=34 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests/test6/CoWR.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests/test6/CoWR.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 42 34 34 34 34 27)
+litmus-tests/test6/CoWW.lit	S14 combos_valid=45 combos_coherent=45 max_futures_per_combo=1 results=145 coherent=109 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/test6/CoWW.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/test6/CoWW.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 145 56 56 56 56 38)
+litmus-tests/test6/IRIW.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=25 coherent=25 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/test6/IRIW.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/test6/IRIW.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 25 25 25 25 25 25)
+litmus-tests/test6/ISA2+Fsc+Fsc.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=18 coherent=17 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/test6/ISA2+Fsc+Fsc.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/test6/ISA2+Fsc+Fsc.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 18 18 18 18 18 17)
+litmus-tests/test6/IRRWIW.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=72 coherent=72 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests/test6/IRRWIW.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/test6/IRRWIW.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 72 56 56 56 56 56)
+litmus-tests/test6/2+2W with obs thread.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=441 coherent=361 futures_valid=9 futures_nomin=9 futures_true=9 only_nomin=0 only_true=0
+litmus-tests/test6/2+2W with obs thread.lit	S14 rule dominated_combos=0 futures_rule=9 rule_only=0 true_only=0
+litmus-tests/test6/2+2W with obs thread.lit	S14 stages all=9 dedup_fr=9 min_fr=9 dedup_ex=9 min_ex=9 coherent=9 (futures; results 441 289 289 289 289 225)
+litmus-tests/test6/ISA2.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=57 coherent=57 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests/test6/ISA2.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests/test6/ISA2.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 57 54 54 54 54 54)
+litmus-tests/test6/LB.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=25 coherent=25 futures_valid=16 futures_nomin=16 futures_true=16 only_nomin=0 only_true=0
+litmus-tests/test6/LB.lit	S14 rule dominated_combos=0 futures_rule=16 rule_only=0 true_only=0
+litmus-tests/test6/LB.lit	S14 stages all=16 dedup_fr=16 min_fr=16 dedup_ex=16 min_ex=16 coherent=16 (futures; results 25 25 25 25 25 25)
+litmus-tests/test6/IRWIW.lit	S14 combos_valid=64 combos_coherent=64 max_futures_per_combo=1 results=169 coherent=169 futures_valid=36 futures_nomin=36 futures_true=36 only_nomin=0 only_true=0
+litmus-tests/test6/IRWIW.lit	S14 rule dominated_combos=0 futures_rule=36 rule_only=0 true_only=0
+litmus-tests/test6/IRWIW.lit	S14 stages all=36 dedup_fr=36 min_fr=36 dedup_ex=36 min_ex=36 coherent=36 (futures; results 169 100 100 100 100 100)
+litmus-tests/test6/MP.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=7 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/test6/MP.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/test6/MP.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 7)
+litmus-tests/test6/PPO000-019.lit	S14 combos_valid=28 combos_coherent=28 max_futures_per_combo=1 results=32 coherent=32 futures_valid=26 futures_nomin=26 futures_true=26 only_nomin=0 only_true=0
+litmus-tests/test6/PPO000-019.lit	S14 rule dominated_combos=0 futures_rule=26 rule_only=0 true_only=0
+litmus-tests/test6/PPO000-019.lit	S14 stages all=26 dedup_fr=26 min_fr=26 dedup_ex=26 min_ex=26 coherent=26 (futures; results 32 30 30 30 30 30)
+litmus-tests/test6/R.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=12 coherent=12 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/test6/R.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/test6/R.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 12 9 9 9 9 9)
+litmus-tests/test6/RWC.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=15 coherent=15 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/test6/RWC.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/test6/RWC.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 15 15 15 15 15 15)
+litmus-tests/test6/RW.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests/test6/RW.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests/test6/RW.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests/test6/SB.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests/test6/SB.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests/test6/SB.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests/test6/S.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=20 coherent=20 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests/test6/S.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/test6/S.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 20 15 15 15 15 15)
+litmus-tests/test6/S with obs thread.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=105 coherent=95 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests/test6/S with obs thread.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/test6/S with obs thread.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 105 85 85 85 85 75)
+litmus-tests/test6/W+RWC.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=27 coherent=27 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/test6/W+RWC.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/test6/W+RWC.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 27 27 27 27 27 27)
+litmus-tests/test6/WRC.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=24 coherent=24 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests/test6/WRC.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests/test6/WRC.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 24 24 24 24 24 24)
+litmus-tests/test6/WRR+2W.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=27 coherent=27 futures_valid=6 futures_nomin=6 futures_true=6 only_nomin=0 only_true=0
+litmus-tests/test6/WRR+2W.lit	S14 rule dominated_combos=0 futures_rule=6 rule_only=0 true_only=0
+litmus-tests/test6/WRR+2W.lit	S14 stages all=6 dedup_fr=6 min_fr=6 dedup_ex=6 min_ex=6 coherent=6 (futures; results 27 21 21 21 21 21)
+litmus-tests/test6/WRW+2W.lit	S14 combos_valid=32 combos_coherent=32 max_futures_per_combo=1 results=52 coherent=52 futures_valid=18 futures_nomin=18 futures_true=18 only_nomin=0 only_true=0
+litmus-tests/test6/WRW+2W.lit	S14 rule dominated_combos=0 futures_rule=18 rule_only=0 true_only=0
+litmus-tests/test6/WRW+2W.lit	S14 stages all=18 dedup_fr=18 min_fr=18 dedup_ex=18 min_ex=18 coherent=18 (futures; results 52 30 30 30 30 30)
+litmus-tests/test6/WRW+WR.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=32 coherent=32 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests/test6/WRW+WR.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/test6/WRW+WR.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 32 24 24 24 24 24)
+litmus-tests/test6/WWC.lit	S14 combos_valid=32 combos_coherent=32 max_futures_per_combo=1 results=65 coherent=65 futures_valid=24 futures_nomin=24 futures_true=24 only_nomin=0 only_true=0
+litmus-tests/test6/WWC.lit	S14 rule dominated_combos=0 futures_rule=24 rule_only=0 true_only=0
+litmus-tests/test6/WWC.lit	S14 stages all=24 dedup_fr=24 min_fr=24 dedup_ex=24 min_ex=24 coherent=24 (futures; results 65 50 50 50 50 50)
+litmus-tests/test6/Z6.0.lit	S14 combos_valid=32 combos_coherent=32 max_futures_per_combo=1 results=60 coherent=60 futures_valid=24 futures_nomin=24 futures_true=24 only_nomin=0 only_true=0
+litmus-tests/test6/Z6.0.lit	S14 rule dominated_combos=0 futures_rule=24 rule_only=0 true_only=0
+litmus-tests/test6/Z6.0.lit	S14 stages all=24 dedup_fr=24 min_fr=24 dedup_ex=24 min_ex=24 coherent=24 (futures; results 60 45 45 45 45 45)
+litmus-tests/test6/Z6.1.lit	S14 combos_valid=64 combos_coherent=64 max_futures_per_combo=1 results=80 coherent=80 futures_valid=36 futures_nomin=36 futures_true=36 only_nomin=0 only_true=0
+litmus-tests/test6/Z6.1.lit	S14 rule dominated_combos=0 futures_rule=36 rule_only=0 true_only=0
+litmus-tests/test6/Z6.1.lit	S14 stages all=36 dedup_fr=36 min_fr=36 dedup_ex=36 min_ex=36 coherent=36 (futures; results 80 45 45 45 45 45)
+litmus-tests/test6/Z6.3.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=36 coherent=36 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests/test6/Z6.3.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests/test6/Z6.3.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 36 27 27 27 27 27)
+litmus-tests/test6/Z6.4.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=72 coherent=72 futures_valid=30 futures_nomin=30 futures_true=30 only_nomin=0 only_true=0
+litmus-tests/test6/Z6.4.lit	S14 rule dominated_combos=0 futures_rule=30 rule_only=0 true_only=0
+litmus-tests/test6/Z6.4.lit	S14 stages all=30 dedup_fr=30 min_fr=30 dedup_ex=30 min_ex=30 coherent=30 (futures; results 72 45 45 45 45 45)
+litmus-tests/test6/Z6.5.lit	S14 combos_valid=32 combos_coherent=32 max_futures_per_combo=1 results=48 coherent=48 futures_valid=18 futures_nomin=18 futures_true=18 only_nomin=0 only_true=0
+litmus-tests/test6/Z6.5.lit	S14 rule dominated_combos=0 futures_rule=18 rule_only=0 true_only=0
+litmus-tests/test6/Z6.5.lit	S14 stages all=18 dedup_fr=18 min_fr=18 dedup_ex=18 min_ex=18 coherent=18 (futures; results 48 27 27 27 27 27)
+litmus-tests/test6/Z6.2.lit	S14 combos_valid=64 combos_coherent=64 max_futures_per_combo=1 results=100 coherent=100 futures_valid=48 futures_nomin=48 futures_true=48 only_nomin=0 only_true=0
+litmus-tests/test6/Z6.2.lit	S14 rule dominated_combos=0 futures_rule=48 rule_only=0 true_only=0
+litmus-tests/test6/Z6.2.lit	S14 stages all=48 dedup_fr=48 min_fr=48 dedup_ex=48 min_ex=48 coherent=48 (futures; results 100 75 75 75 75 75)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add.lit	S14 combos_valid=26 combos_coherent=26 max_futures_per_combo=1 results=38 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 38 32 32 32 32 29)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est-atomic.lit	S14 combos_valid=40 combos_coherent=38 max_futures_per_combo=1 results=116 coherent=107 futures_valid=24 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est-atomic.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est-atomic.lit	S14 stages all=24 dedup_fr=24 min_fr=24 dedup_ex=24 min_ex=24 coherent=22 (futures; results 116 77 77 77 77 69)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-eadd.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=36 coherent=35 futures_valid=14 futures_nomin=14 futures_true=14 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-eadd.lit	S14 rule dominated_combos=0 futures_rule=14 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-eadd.lit	S14 stages all=14 dedup_fr=14 min_fr=14 dedup_ex=14 min_ex=14 coherent=14 (futures; results 36 32 32 32 32 31)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est.lit	S14 combos_valid=40 combos_coherent=38 max_futures_per_combo=1 results=116 coherent=107 futures_valid=24 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est.lit	S14 stages all=24 dedup_fr=24 min_fr=24 dedup_ex=24 min_ex=24 coherent=22 (futures; results 116 77 77 77 77 69)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-est.lit	S14 combos_valid=16 combos_coherent=16 max_futures_per_combo=1 results=22 coherent=20 futures_valid=12 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-est.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-est.lit	S14 stages all=12 dedup_fr=12 min_fr=12 dedup_ex=12 min_ex=12 coherent=12 (futures; results 22 17 17 17 17 16)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-eadd.lit	S14 combos_valid=64 combos_coherent=64 max_futures_per_combo=1 results=240 coherent=206 futures_valid=42 futures_nomin=42 futures_true=42 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-eadd.lit	S14 rule dominated_combos=0 futures_rule=42 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-eadd.lit	S14 stages all=42 dedup_fr=42 min_fr=42 dedup_ex=42 min_ex=42 coherent=42 (futures; results 240 192 192 192 192 160)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs.lit	S14 combos_valid=18 combos_coherent=18 max_futures_per_combo=1 results=26 coherent=22 futures_valid=14 futures_nomin=14 futures_true=14 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs.lit	S14 rule dominated_combos=0 futures_rule=14 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs.lit	S14 stages all=14 dedup_fr=14 min_fr=14 dedup_ex=14 min_ex=14 coherent=14 (futures; results 26 20 20 20 20 18)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-st.lit	S14 combos_valid=128 combos_coherent=128 max_futures_per_combo=1 results=234 coherent=189 futures_valid=44 futures_nomin=44 futures_true=44 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-st.lit	S14 rule dominated_combos=0 futures_rule=44 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-st.lit	S14 stages all=44 dedup_fr=44 min_fr=44 dedup_ex=44 min_ex=44 coherent=44 (futures; results 234 82 82 82 82 73)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est-atomics.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=72 coherent=64 futures_valid=24 futures_nomin=24 futures_true=24 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est-atomics.lit	S14 rule dominated_combos=0 futures_rule=24 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est-atomics.lit	S14 stages all=24 dedup_fr=24 min_fr=24 dedup_ex=24 min_ex=24 coherent=24 (futures; results 72 40 40 40 40 38)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=72 coherent=64 futures_valid=24 futures_nomin=24 futures_true=24 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est.lit	S14 rule dominated_combos=0 futures_rule=24 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est.lit	S14 stages all=24 dedup_fr=24 min_fr=24 dedup_ex=24 min_ex=24 coherent=24 (futures; results 72 40 40 40 40 38)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-strel.lit	S14 combos_valid=18 combos_coherent=18 max_futures_per_combo=1 results=26 coherent=20 futures_valid=14 futures_nomin=14 futures_true=14 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-strel.lit	S14 rule dominated_combos=0 futures_rule=14 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-strel.lit	S14 stages all=14 dedup_fr=14 min_fr=14 dedup_ex=14 min_ex=14 coherent=14 (futures; results 26 20 20 20 20 16)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd-atomics.lit	S14 combos_valid=66 combos_coherent=66 max_futures_per_combo=1 results=150 coherent=132 futures_valid=38 futures_nomin=38 futures_true=38 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd-atomics.lit	S14 rule dominated_combos=0 futures_rule=38 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd-atomics.lit	S14 stages all=38 dedup_fr=38 min_fr=38 dedup_ex=38 min_ex=38 coherent=38 (futures; results 150 106 106 106 106 98)
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd.lit	S14 combos_valid=72 combos_coherent=72 max_futures_per_combo=1 results=142 coherent=129 futures_valid=40 futures_nomin=40 futures_true=40 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd.lit	S14 rule dominated_combos=0 futures_rule=40 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd.lit	S14 stages all=40 dedup_fr=40 min_fr=40 dedup_ex=40 min_ex=40 coherent=40 (futures; results 142 100 100 100 100 95)
+litmus-tests-cpp/models/cpp-release-sequences/RS+cpp20.lit	S14 combos_valid=12 combos_coherent=12 max_futures_per_combo=1 results=30 coherent=30 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests-cpp/models/cpp-release-sequences/RS+cpp20.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests-cpp/models/cpp-release-sequences/RS+cpp20.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 30 24 24 24 24 24)
+litmus-tests-cpp/properties/atomicity-mca/IRIW+scfences.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=25 coherent=25 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests-cpp/properties/atomicity-mca/IRIW+scfences.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests-cpp/properties/atomicity-mca/IRIW+scfences.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 25 25 25 25 25 25)
+litmus-tests-cpp/properties/global-transformations/thread-inlining/opt.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests-cpp/properties/global-transformations/thread-inlining/opt.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests-cpp/properties/global-transformations/thread-inlining/opt.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests-cpp/properties/global-transformations/thread-inlining/src.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests-cpp/properties/global-transformations/thread-inlining/src.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests-cpp/properties/global-transformations/thread-inlining/src.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests-cpp/properties/reasoning-guarantees/external-drf/MP+rlx-race.lit	S14 combos_valid=4 combos_coherent=4 max_futures_per_combo=1 results=9 coherent=9 futures_valid=4 futures_nomin=4 futures_true=4 only_nomin=0 only_true=0
+litmus-tests-cpp/properties/reasoning-guarantees/external-drf/MP+rlx-race.lit	S14 rule dominated_combos=0 futures_rule=4 rule_only=0 true_only=0
+litmus-tests-cpp/properties/reasoning-guarantees/external-drf/MP+rlx-race.lit	S14 stages all=4 dedup_fr=4 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 9 9 9 9 9 9)
+litmus-tests-jmm/jctc/JCTC10.lit	S14 combos_valid=15 combos_coherent=15 max_futures_per_combo=1 results=15 coherent=15 futures_valid=15 futures_nomin=15 futures_true=15 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC10.lit	S14 rule dominated_combos=0 futures_rule=15 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC10.lit	S14 stages all=15 dedup_fr=15 min_fr=15 dedup_ex=15 min_ex=15 coherent=15 (futures; results 15 15 15 15 15 15)
+litmus-tests-jmm/jctc/JCTC13.lit	S14 combos_valid=1 combos_coherent=1 max_futures_per_combo=1 results=1 coherent=1 futures_valid=1 futures_nomin=1 futures_true=1 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC13.lit	S14 rule dominated_combos=0 futures_rule=1 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC13.lit	S14 stages all=1 dedup_fr=1 min_fr=1 dedup_ex=1 min_ex=1 coherent=1 (futures; results 1 1 1 1 1 1)
+litmus-tests-jmm/jctc/JCTC14.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC14.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC14.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests-jmm/jctc/JCTC16.lit	S14 combos_valid=9 combos_coherent=9 max_futures_per_combo=1 results=13 coherent=13 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC16.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC16.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 13 12 12 12 12 12)
+litmus-tests-jmm/jctc/JCTC17-left.lit	S14 combos_valid=6 combos_coherent=6 max_futures_per_combo=1 results=6 coherent=6 futures_valid=6 futures_nomin=6 futures_true=4 only_nomin=2 only_true=0
+litmus-tests-jmm/jctc/JCTC17-left.lit	S14 rule dominated_combos=2 futures_rule=4 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC17-left.lit	S14 stages all=6 dedup_fr=6 min_fr=4 dedup_ex=4 min_ex=4 coherent=4 (futures; results 6 6 4 4 4 4)
+litmus-tests-jmm/jctc/JCTC15.lit	S14 combos_valid=8 combos_coherent=8 max_futures_per_combo=1 results=8 coherent=8 futures_valid=8 futures_nomin=8 futures_true=8 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC15.lit	S14 rule dominated_combos=0 futures_rule=8 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC15.lit	S14 stages all=8 dedup_fr=8 min_fr=8 dedup_ex=8 min_ex=8 coherent=8 (futures; results 8 8 8 8 8 8)
+litmus-tests-jmm/jctc/JCTC17-smaller.lit	S14 combos_valid=2 combos_coherent=2 max_futures_per_combo=1 results=2 coherent=2 futures_valid=2 futures_nomin=2 futures_true=2 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC17-smaller.lit	S14 rule dominated_combos=0 futures_rule=2 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC17-smaller.lit	S14 stages all=2 dedup_fr=2 min_fr=2 dedup_ex=2 min_ex=2 coherent=2 (futures; results 2 2 2 2 2 2)
+litmus-tests-jmm/jctc/JCTC18.lit	S14 combos_valid=41 combos_coherent=37 max_futures_per_combo=1 results=66 coherent=52 futures_valid=34 futures_nomin=32 futures_true=22 only_nomin=10 only_true=0
+litmus-tests-jmm/jctc/JCTC18.lit	S14 rule dominated_combos=11 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC18.lit	S14 stages all=34 dedup_fr=34 min_fr=24 dedup_ex=24 min_ex=24 coherent=22 (futures; results 66 57 43 43 43 33)
+litmus-tests-jmm/jctc/JCTC17.lit	S14 combos_valid=45 combos_coherent=41 max_futures_per_combo=1 results=70 coherent=56 futures_valid=38 futures_nomin=36 futures_true=26 only_nomin=10 only_true=0
+litmus-tests-jmm/jctc/JCTC17.lit	S14 rule dominated_combos=11 futures_rule=26 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC17.lit	S14 stages all=38 dedup_fr=38 min_fr=28 dedup_ex=28 min_ex=28 coherent=26 (futures; results 70 61 47 47 47 37)
+litmus-tests-jmm/jctc/JCTC19.lit	S14 combos_valid=19 combos_coherent=15 max_futures_per_combo=1 results=36 coherent=22 futures_valid=14 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC19.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC19.lit	S14 stages all=14 dedup_fr=14 min_fr=14 dedup_ex=14 min_ex=14 coherent=12 (futures; results 36 29 29 29 29 19)
+litmus-tests-jmm/jctc/JCTC1.lit	S14 combos_valid=28 combos_coherent=28 max_futures_per_combo=1 results=38 coherent=38 futures_valid=26 futures_nomin=26 futures_true=22 only_nomin=4 only_true=0
+litmus-tests-jmm/jctc/JCTC1.lit	S14 rule dominated_combos=4 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC1.lit	S14 stages all=26 dedup_fr=26 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 38 36 31 31 31 31)
+litmus-tests-jmm/jctc/JCTC20.lit	S14 combos_valid=19 combos_coherent=15 max_futures_per_combo=1 results=36 coherent=22 futures_valid=14 futures_nomin=12 futures_true=12 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC20.lit	S14 rule dominated_combos=0 futures_rule=12 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC20.lit	S14 stages all=14 dedup_fr=14 min_fr=14 dedup_ex=14 min_ex=14 coherent=12 (futures; results 36 29 29 29 29 19)
+litmus-tests-jmm/jctc/JCTC2.lit	S14 combos_valid=11 combos_coherent=11 max_futures_per_combo=1 results=21 coherent=18 futures_valid=10 futures_nomin=10 futures_true=10 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC2.lit	S14 rule dominated_combos=0 futures_rule=10 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC2.lit	S14 stages all=10 dedup_fr=10 min_fr=10 dedup_ex=10 min_ex=10 coherent=10 (futures; results 21 20 20 20 20 17)
+litmus-tests-jmm/jctc/JCTC3.lit	S14 combos_valid=33 combos_coherent=33 max_futures_per_combo=1 results=77 coherent=63 futures_valid=25 futures_nomin=25 futures_true=25 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC3.lit	S14 rule dominated_combos=0 futures_rule=25 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC3.lit	S14 stages all=25 dedup_fr=25 min_fr=25 dedup_ex=25 min_ex=25 coherent=25 (futures; results 77 62 62 62 62 51)
+litmus-tests-jmm/jctc/JCTC4.lit	S14 combos_valid=48 combos_coherent=48 max_futures_per_combo=1 results=62 coherent=62 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC4.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC4.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 62 45 45 45 45 45)
+litmus-tests-jmm/jctc/JCTC6.lit	S14 combos_valid=3 combos_coherent=3 max_futures_per_combo=1 results=3 coherent=3 futures_valid=3 futures_nomin=3 futures_true=3 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC6.lit	S14 rule dominated_combos=0 futures_rule=3 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC6.lit	S14 stages all=3 dedup_fr=3 min_fr=3 dedup_ex=3 min_ex=3 coherent=3 (futures; results 3 3 3 3 3 3)
+litmus-tests-jmm/jctc/JCTC8b.lit	S14 combos_valid=24 combos_coherent=24 max_futures_per_combo=1 results=33 coherent=33 futures_valid=22 futures_nomin=22 futures_true=22 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC8b.lit	S14 rule dominated_combos=0 futures_rule=22 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC8b.lit	S14 stages all=22 dedup_fr=22 min_fr=22 dedup_ex=22 min_ex=22 coherent=22 (futures; results 33 31 31 31 31 31)
+litmus-tests-jmm/jctc/JCTC8.lit	S14 combos_valid=23 combos_coherent=23 max_futures_per_combo=1 results=29 coherent=29 futures_valid=21 futures_nomin=21 futures_true=21 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC8.lit	S14 rule dominated_combos=0 futures_rule=21 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC8.lit	S14 stages all=21 dedup_fr=21 min_fr=21 dedup_ex=21 min_ex=21 coherent=21 (futures; results 29 27 27 27 27 27)
+litmus-tests-jmm/jctc/JCTC12.lit	S14 combos_valid=108 combos_coherent=108 max_futures_per_combo=1 results=148 coherent=148 futures_valid=80 futures_nomin=80 futures_true=70 only_nomin=10 only_true=0
+litmus-tests-jmm/jctc/JCTC12.lit	S14 rule dominated_combos=12 futures_rule=70 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC12.lit	S14 stages all=80 dedup_fr=80 min_fr=70 dedup_ex=70 min_ex=70 coherent=70 (futures; results 148 112 100 100 100 100)
+litmus-tests-jmm/jctc/JCTC9.lit	S14 combos_valid=46 combos_coherent=46 max_futures_per_combo=1 results=73 coherent=73 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC9.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC9.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 73 57 57 57 57 57)
+litmus-tests-jmm/jctc/JCTC9b.lit	S14 combos_valid=46 combos_coherent=46 max_futures_per_combo=1 results=73 coherent=73 futures_valid=35 futures_nomin=35 futures_true=35 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC9b.lit	S14 rule dominated_combos=0 futures_rule=35 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC9b.lit	S14 stages all=35 dedup_fr=35 min_fr=35 dedup_ex=35 min_ex=35 coherent=35 (futures; results 73 57 57 57 57 57)
+litmus-tests-jmm/jctc/JCTC7.lit	S14 combos_valid=378 combos_coherent=378 max_futures_per_combo=1 results=521 coherent=521 futures_valid=130 futures_nomin=130 futures_true=130 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC7.lit	S14 rule dominated_combos=0 futures_rule=130 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC7.lit	S14 stages all=130 dedup_fr=130 min_fr=130 dedup_ex=130 min_ex=130 coherent=130 (futures; results 521 209 209 209 209 209)
+litmus-tests-jmm/jctc/JCTC5.lit	S14 combos_valid=568 combos_coherent=568 max_futures_per_combo=1 results=981 coherent=981 futures_valid=338 futures_nomin=338 futures_true=338 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC5.lit	S14 rule dominated_combos=0 futures_rule=338 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC5.lit	S14 stages all=338 dedup_fr=338 min_fr=338 dedup_ex=338 min_ex=338 coherent=338 (futures; results 981 592 592 592 592 592)
+litmus-tests/avoidoota/listing15.lit	S14 combos_valid=10373 combos_coherent=10373 max_futures_per_combo=1 results=12915 coherent=12915 futures_valid=1329 futures_nomin=1329 futures_true=675 only_nomin=654 only_true=0
+litmus-tests/avoidoota/listing15.lit	S14 rule dominated_combos=4810 futures_rule=675 rule_only=0 true_only=0
+litmus-tests/avoidoota/listing15.lit	S14 stages all=1329 dedup_fr=1329 min_fr=675 dedup_ex=675 min_ex=675 coherent=675 (futures; results 12915 2065 1083 1083 1083 1083)
+litmus-tests/3.2W.lit	S14 combos_valid=64 combos_coherent=64 max_futures_per_combo=1 results=9261 coherent=6859 futures_valid=27 futures_nomin=27 futures_true=27 only_nomin=0 only_true=0
+litmus-tests/3.2W.lit	S14 rule dominated_combos=0 futures_rule=27 rule_only=0 true_only=0
+litmus-tests/3.2W.lit	S14 stages all=27 dedup_fr=27 min_fr=27 dedup_ex=27 min_ex=27 coherent=27 (futures; results 9261 4913 4913 4913 4913 3375)
+litmus-tests-jmm/jctc/JCTC11.lit	S14 combos_valid=12654 combos_coherent=12654 max_futures_per_combo=1 results=17112 coherent=17112 futures_valid=778 futures_nomin=778 futures_true=778 only_nomin=0 only_true=0
+litmus-tests-jmm/jctc/JCTC11.lit	S14 rule dominated_combos=0 futures_rule=778 rule_only=0 true_only=0
+litmus-tests-jmm/jctc/JCTC11.lit	S14 stages all=778 dedup_fr=778 min_fr=778 dedup_ex=778 min_ex=778 coherent=778 (futures; results 17112 1447 1447 1447 1447 1447)

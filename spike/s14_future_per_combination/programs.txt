@@ -1,0 +1,375 @@
+litmus-tests/3.2W.lit
+litmus-tests/atomics/mp-atomic2.lit
+litmus-tests/atomics/mp-atomic.lit
+litmus-tests/avoidoota/additional_inventintload.lit
+litmus-tests/avoidoota/additional_nonlb.lit
+litmus-tests/avoidoota/additional_twosource.lit
+litmus-tests/avoidoota/listing10.lit
+litmus-tests/avoidoota/listing11.lit
+litmus-tests/avoidoota/listing12.lit
+litmus-tests/avoidoota/listing13.lit
+litmus-tests/avoidoota/listing14.lit
+litmus-tests/avoidoota/listing15.lit
+litmus-tests/avoidoota/listing16.lit
+litmus-tests/avoidoota/listing17.lit
+litmus-tests/avoidoota/listing18.lit
+litmus-tests/avoidoota/listing19.lit
+litmus-tests/avoidoota/listing1.lit
+litmus-tests/avoidoota/listing20.lit
+litmus-tests/avoidoota/listing21.lit
+litmus-tests/avoidoota/listing22.lit
+litmus-tests/avoidoota/listing23.lit
+litmus-tests/avoidoota/listing24.lit
+litmus-tests/avoidoota/listing2_5.lit
+litmus-tests/avoidoota/listing25.lit
+litmus-tests/avoidoota/listing2_5pwg.lit
+litmus-tests/avoidoota/listing26.lit
+litmus-tests/avoidoota/listing27_allow.lit
+litmus-tests/avoidoota/listing27_forbid.lit
+litmus-tests/avoidoota/listing3.lit
+litmus-tests/avoidoota/listing7.lit
+litmus-tests/avoidoota/listing8.lit
+litmus-tests/avoidoota/listing9.lit
+litmus-tests/basic/coproduct-exns.lit
+litmus-tests/basic/lb.lit
+litmus-tests/basic.lit.lit
+litmus-tests/basic/par-comp.lit
+litmus-tests/basic/rw.lit
+litmus-tests/c20/rs-example.lit
+litmus-tests/esop_problem/cse.lit
+litmus-tests/esop_problem/lb+ctrldat+ctrl-single.lit
+litmus-tests/esop_problem/lb+ctrldata+ctrl-double.lit
+litmus-tests/esop_problem/lb+ctrldata+po.lit
+litmus-tests/esop_problem/lb+datas.lit
+litmus-tests/esop_problem/lb.lit
+litmus-tests/esop_problem/mp.lit
+litmus-tests/esop_problem/sb.lit
+litmus-tests/fowm2024/load intro - no aliasing.lit
+litmus-tests/fowm2024/load intro - potential aliasing.lit
+litmus-tests/fowm2024/nullptr - no use.lit
+litmus-tests/fowm2024/nullptr - use.lit
+litmus-tests/fwd/ra/lift_rel.lit
+litmus-tests/fwd/ra/lift_relrel.lit
+litmus-tests/fwd/rlx/lift_F1r.lit
+litmus-tests/fwd/rlx/lift_F1w.lit
+litmus-tests/fwd/rlx/lift_F1wr.lit
+litmus-tests/fwd/rlx/lift_F2w.lit
+litmus-tests/fwd/rlx/lift.lit
+litmus-tests/imm/FADD RMW Atomicity.lit
+litmus-tests/imm/LB+falsedep+Fsc.lit
+litmus-tests/ISO/1-MP.lit
+litmus-tests/ISO/2-MP+rel+acq.lit
+litmus-tests/ISO/3-LB.lit
+litmus-tests/ISO/4-LB+deps.lit
+litmus-tests/ISO/5-LB+false-dep.lit
+litmus-tests/MP/MP+rel+acq.lit
+litmus-tests/MP/MP.lit
+litmus-tests/on_thin_air_reads19/ex3.5.lit
+litmus-tests/on_thin_air_reads19/P1.lit
+litmus-tests/on_thin_air_reads19/P2.lit
+litmus-tests/on_thin_air_reads19/P3.lit
+litmus-tests/on_thin_air_reads19/P4.lit
+litmus-tests/on_thin_air_reads19/P6.lit
+litmus-tests/on_thin_air_reads19/s5.3.2.lit
+litmus-tests/on_thin_air_reads19/TC7.lit
+litmus-tests/on_thin_air_reads19/TC9a.lit
+litmus-tests/opts/store-forward.lit
+litmus-tests/own/atloc-alias.lit
+litmus-tests/own/atloc-final-value.lit
+litmus-tests/own/atloc-noalias.lit
+litmus-tests/own/atloc-unwritten.lit
+litmus-tests/own/coproductReorder.lit
+litmus-tests/own/co-witness-exported.lit
+litmus-tests/own/co-witness-respects-po.lit
+litmus-tests/own/ctrl_subsumed_by_data.lit
+litmus-tests/own/DOMAIN.lit
+litmus-tests/own/elideanddontobserve.lit
+litmus-tests/own/expressionPreservingSubstitution.lit
+litmus-tests/own/FreeRace2.lit
+litmus-tests/own/FreeRace.lit
+litmus-tests/own/JCTC12.lit
+litmus-tests/own/join-continuation.lit
+litmus-tests/own/LB+deps+const-smrd.lit
+litmus-tests/own/LB+deps-smrd.lit
+litmus-tests/own/LF.lit
+litmus-tests/own/nonatomic-store-no-sync.lit
+litmus-tests/own/nonatomic-store-no-sync-relaxed.lit
+litmus-tests/own/OOTA7.lit
+litmus-tests/own/oota-direct-reuse.lit
+litmus-tests/own/oota-forwarded-reread.lit
+litmus-tests/own/ORI2.lit
+litmus-tests/own/ORI.lit
+litmus-tests/own/paper108.lit
+litmus-tests/own/paper109.lit
+litmus-tests/own/paper112F.lit
+litmus-tests/own/paper113.lit
+litmus-tests/own/paper115.lit
+litmus-tests/own/ptr-overwrite-coherence.lit
+litmus-tests/own/relaxed-store-elided.lit
+litmus-tests/own/SB+sc.lit
+litmus-tests/own/speculative_optimisation.lit
+litmus-tests/own/sync/fence0lift.lit
+litmus-tests/own/sync/fence1lift.lit
+litmus-tests/own/sync/fence2lift.lit
+litmus-tests/own/sync/rel1lift.lit
+litmus-tests/own/sync/rel2lift.lit
+litmus-tests/own/sync/writeElision.lit
+litmus-tests/own/sync/writeElisionRel.lit
+litmus-tests/own/VA-unrelated-guard+const-smrd.lit
+litmus-tests/own/VA-unrelated-guard-smrd.lit
+litmus-tests/own/volatile-store-not-elided.lit
+litmus-tests/own/VRA-JCTC1.lit
+litmus-tests/pldi_repairing/IRIW+acq+sc.lit
+litmus-tests/pldi_repairing/LB+deps.lit
+litmus-tests/pldi_repairing/LB.lit
+litmus-tests/pldi_repairing/RWC+syncs.lit
+litmus-tests/pldi_repairing/W+WRC.lit
+litmus-tests/popl_bridging/ARM FADD.lit
+litmus-tests/popl_bridging/FADD Example.lit
+litmus-tests/popl_bridging/IRIW+Fsc+Fsc.lit
+litmus-tests/popl_bridging/LB.lit
+litmus-tests/popl_bridging/Load buffering with acquire reads.lit
+litmus-tests/popl_bridging/Load buffering with release writes.lit
+litmus-tests/popl_bridging/MP+rel+acq.lit
+litmus-tests/popl_bridging/PSC.lit
+litmus-tests/popl_bridging/rfi is not always preserved.lit
+litmus-tests/popl_bridging/RMW Atomicity.lit
+litmus-tests/popl_bubbly/LB+deps.lit
+litmus-tests/popl_bubbly/LB+false-deps.lit
+litmus-tests/popl_bubbly/LB.lit
+litmus-tests/popl_grounding/Coh-CYC (Soham).lit
+litmus-tests/popl_grounding/Coh.lit
+litmus-tests/popl_grounding/Cwrites.lit
+litmus-tests/popl_grounding/LBfd.lit
+litmus-tests/popl_grounding/LB.lit
+litmus-tests/popl_grounding/RNGb.lit
+litmus-tests/popl_grounding/RNG.lit
+litmus-tests/popl_promising/2+2W.lit
+litmus-tests/popl_promising/ARM-weak.lit
+litmus-tests/popl_promising/COH.lit
+litmus-tests/popl_promising/CYC.lit
+litmus-tests/popl_promising/LBaa/LBa'0.lit
+litmus-tests/popl_promising/LBaa/LBa'1.lit
+litmus-tests/popl_promising/LBa.lit
+litmus-tests/popl_promising/LBa'.lit
+litmus-tests/popl_promising/LBd.lit
+litmus-tests/popl_promising/LBfd.lit
+litmus-tests/popl_promising/LB.lit
+litmus-tests/popl_promising/LBr.lit
+litmus-tests/popl_promising/MP+fences.lit
+litmus-tests/popl_promising/Page 7 Column 1.lit
+litmus-tests/popl_promising/Par-Inc.lit
+litmus-tests/popl_promising/SB+fences.lit
+litmus-tests/popl_promising/SB.lit
+litmus-tests-promising/2+2W.lit
+litmus-tests-promising/ARM-weak.lit
+litmus-tests-promising/Coh-CYC (Promising).lit
+litmus-tests-promising/COH.lit
+litmus-tests-promising/CYC.lit
+litmus-tests-promising/LBaa/LBa'0.lit
+litmus-tests-promising/LBaa/LBa'1.lit
+litmus-tests-promising/LBa.lit
+litmus-tests-promising/LBa'.lit
+litmus-tests-promising/LBd.lit
+litmus-tests-promising/LBfd.lit
+litmus-tests-promising/LB.lit
+litmus-tests-promising/LBr.lit
+litmus-tests-promising/MP+fences.lit
+litmus-tests-promising/Page 7 Column 1b.lit
+litmus-tests-promising/Page 7 Column 1.lit
+litmus-tests-promising/Par-Inc.lit
+litmus-tests-promising/SB+fences.lit
+litmus-tests-promising/SB.lit
+litmus-tests-promising/Upd-Stuck.lit
+litmus-tests/requests/0nONvMSw7 (MP).lit
+litmus-tests/requests/1MR_opBNP (2+2W with obs thread).lit
+litmus-tests/requests/2zm8LRQsJ (LB).lit
+litmus-tests/requests/Aj1vSoVpE (MP).lit
+litmus-tests/requests/E8OKvIVLN (2+2W with obs thread).lit
+litmus-tests/requests/leb0OUCUM (LB).lit
+litmus-tests/requests/oEk0xQtQy (CoWR).lit
+litmus-tests/requests/ptmsQeW4i (CoWR).lit
+litmus-tests/requests/XXLpA6s8E (LB).lit
+litmus-tests/requests/ZcUmGBDR9 (MP).lit
+litmus-tests-review/esop_problem/RRE.lit
+litmus-tests-review/on_thin_air_reads19/P5.lit
+litmus-tests-review/own/FWD-STRENGTHEN-LIFT.lit
+litmus-tests-review/popl_bridging/Preserving detour.lit
+litmus-tests-review/popl_grounding/FADD.lit
+litmus-tests-review/popl_promising/Page 7 Column 1b.lit
+litmus-tests-review/popl_promising/Upd-Stuck.lit
+litmus-tests-review/rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit
+litmus-tests-review/sevcik_thesis/Skip/LB+locks.lit
+litmus-tests-review/symmrd/LB+UB+data+z.lit
+litmus-tests/rmm-zoo/models/ra-sra-wra/2+2W+rel+acq.lit
+litmus-tests/rmm-zoo/models/ra-sra-wra/CAS-both+rel+acq.lit
+litmus-tests/rmm-zoo/models/ra-sra-wra/MP+rel+acq.lit
+litmus-tests/rmm-zoo/models/ra-sra-wra/Oscillating.lit
+litmus-tests/rmm-zoo/models/ra-sra-wra/SF.lit
+litmus-tests/rmm-zoo/models/ra-sra-wra/WW.lit
+litmus-tests/rmm-zoo/models/rc11-rc17/LB.lit
+litmus-tests/rmm-zoo/models/rc11-rc17/RS17.lit
+litmus-tests/rmm-zoo/models/rc11-rc17/uaf-bug.lit
+litmus-tests/rmm-zoo/models/sc-tso/IRIW.lit
+litmus-tests/rmm-zoo/models/sc-tso/SB+cas.lit
+litmus-tests/rmm-zoo/models/sc-tso/SB+failed-cas.lit
+litmus-tests/rmm-zoo/models/sc-tso/SB+fence.lit
+litmus-tests/rmm-zoo/models/sc-tso/SB+fences.lit
+litmus-tests/rmm-zoo/models/sc-tso/SB.lit
+litmus-tests/rmm-zoo/models/sessions/Monotonic-read.lit
+litmus-tests/rmm-zoo/models/steinke-nutt/Cross-own.lit
+litmus-tests/rmm-zoo/models/steinke-nutt/MP.lit
+litmus-tests/rmm-zoo/models/steinke-nutt/Oscillating.lit
+litmus-tests/rmm-zoo/models/steinke-nutt/Readers-disagree.lit
+litmus-tests/rmm-zoo/models/steinke-nutt/Revised-order.lit
+litmus-tests/rmm-zoo/models/steinke-nutt/WRC.lit
+litmus-tests/rmm-zoo/models/steinke-nutt/Writer-reversed.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rel+acq.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/WRC+rlx.lit
+litmus-tests/rmm-zoo/properties/elimination/load-store/opt.lit
+litmus-tests/rmm-zoo/properties/elimination/load-store/src.lit
+litmus-tests/rmm-zoo/properties/elimination/store-store/opt.lit
+litmus-tests/rmm-zoo/properties/elimination/store-store/src.lit
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/opt.lit
+litmus-tests/rmm-zoo/properties/global-transformations/register-promotion/src.lit
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/opt.lit
+litmus-tests/rmm-zoo/properties/global-transformations/value-range/src.lit
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/opt.lit
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/src.lit
+litmus-tests/rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rel+acq-drf.lit
+litmus-tests/rmm-zoo/properties/reordering/load-load/opt.lit
+litmus-tests/rmm-zoo/properties/reordering/load-load/src.lit
+litmus-tests/rmm-zoo/properties/reordering/load-store/opt.lit
+litmus-tests/rmm-zoo/properties/reordering/load-store/src.lit
+litmus-tests/rmm-zoo/properties/reordering/store-load/opt.lit
+litmus-tests/rmm-zoo/properties/reordering/store-load/src.lit
+litmus-tests/rmm-zoo/properties/reordering/store-store/opt.lit
+litmus-tests/rmm-zoo/properties/reordering/store-store/src.lit
+litmus-tests/rmw/cas_acqrel_failure_reorder.lit
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREA.lit
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREB.lit
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (b).lit
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIA.lit
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIB.lit
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction (f1.5)/IRIC.lit
+litmus-tests/sevcik_thesis/Irrelevant Read Introduction.lit
+litmus-tests/sevcik_thesis/LB.lit
+litmus-tests/sevcik_thesis/MP.lit
+litmus-tests/sevcik_thesis/Redundant Read after Read Elimination.lit
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERA.lit
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RRERB.lit
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RA.lit
+litmus-tests/sevcik_thesis/Reordering (f1.3)/RB.lit
+litmus-tests/sevcik_thesis/Roach Motel Semantics.lit
+litmus-tests/sevcik_thesis/Skip/Redundant Write after Read Elimination.lit
+litmus-tests/sevcik_thesis/Skip/Reordering with external actions.lit
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit
+litmus-tests/sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPB.lit
+litmus-tests/single-thread-lift-tests/basic-lift.lit
+litmus-tests/single-thread-lift-tests/basic-not-lift.lit
+litmus-tests/single-thread-lift-tests/lift-above-read-2.lit
+litmus-tests/single-thread-lift-tests/lift-above-read.lit
+litmus-tests/single-thread-lift-tests/lift-with-read-freezing.lit
+litmus-tests/single-thread-lift-tests/lift-with-write-freezing.lit
+litmus-tests/single-thread-lift-tests/lock-test.lit
+litmus-tests/single-thread-lift-tests/one-sided-lift.lit
+litmus-tests/single-thread-lift-tests/read-freezing.lit
+litmus-tests/single-thread-lift-tests/write-after-read-elim.lit
+litmus-tests/single-thread-lift-tests/write-before-lift.lit
+litmus-tests/single-thread-lift-tests/write-chain.lit
+litmus-tests/single-thread-lift-tests/write-freezing.lit
+litmus-tests/symmrd/alignment.lit
+litmus-tests/symmrd/LB+alias+data.lit
+litmus-tests/symmrd/LB+UB+data+arr.lit
+litmus-tests/symmrd/LB+UB+data-forbid.lit
+litmus-tests/symmrd/LB+UB+data.lit
+litmus-tests/symmrd/no-alignment.lit
+litmus-tests/symmrd/refinement/LB+UB+data+z.lit
+litmus-tests/symmrd/refinement/LB+UB+data.lit
+litmus-tests/symmrd/refinement/LB+UBoff+data.lit
+litmus-tests/test6/2+2W.lit
+litmus-tests/test6/2+2W with obs thread.lit
+litmus-tests/test6/3.2W.lit
+litmus-tests/test6/3.LB.lit
+litmus-tests/test6/3.SB.lit
+litmus-tests/test6/CoRR1.lit
+litmus-tests/test6/CoRW.lit
+litmus-tests/test6/CoWR.lit
+litmus-tests/test6/CoWW.lit
+litmus-tests/test6/IRIW.lit
+litmus-tests/test6/IRRWIW.lit
+litmus-tests/test6/IRWIW.lit
+litmus-tests/test6/ISA2+Fsc+Fsc.lit
+litmus-tests/test6/ISA2.lit
+litmus-tests/test6/LB.lit
+litmus-tests/test6/MP.lit
+litmus-tests/test6/PPO000-019.lit
+litmus-tests/test6/R.lit
+litmus-tests/test6/RWC.lit
+litmus-tests/test6/RW.lit
+litmus-tests/test6/SB.lit
+litmus-tests/test6/S.lit
+litmus-tests/test6/S with obs thread.lit
+litmus-tests/test6/W+RWC.lit
+litmus-tests/test6/WRC.lit
+litmus-tests/test6/WRR+2W.lit
+litmus-tests/test6/WRW+2W.lit
+litmus-tests/test6/WRW+WR.lit
+litmus-tests/test6/WWC.lit
+litmus-tests/test6/Z6.0.lit
+litmus-tests/test6/Z6.1.lit
+litmus-tests/test6/Z6.2.lit
+litmus-tests/test6/Z6.3.lit
+litmus-tests/test6/Z6.4.lit
+litmus-tests/test6/Z6.5.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-eadd.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est-atomic.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-est.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-add-st.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-eadd.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-est.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd-atomics.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-eadd.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est-atomics.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-st-est.lit
+litmus-tests-cpp/models/cpp-release-sequences/mp-rs-strel.lit
+litmus-tests-cpp/models/cpp-release-sequences/RS+cpp20.lit
+litmus-tests-cpp/properties/atomicity-mca/IRIW+scfences.lit
+litmus-tests-cpp/properties/global-transformations/thread-inlining/opt.lit
+litmus-tests-cpp/properties/global-transformations/thread-inlining/src.lit
+litmus-tests-cpp/properties/reasoning-guarantees/external-drf/MP+rlx-race.lit
+litmus-tests-jmm/jctc/JCTC10.lit
+litmus-tests-jmm/jctc/JCTC11.lit
+litmus-tests-jmm/jctc/JCTC12.lit
+litmus-tests-jmm/jctc/JCTC13.lit
+litmus-tests-jmm/jctc/JCTC14.lit
+litmus-tests-jmm/jctc/JCTC15.lit
+litmus-tests-jmm/jctc/JCTC16.lit
+litmus-tests-jmm/jctc/JCTC17-left.lit
+litmus-tests-jmm/jctc/JCTC17.lit
+litmus-tests-jmm/jctc/JCTC17-smaller.lit
+litmus-tests-jmm/jctc/JCTC18.lit
+litmus-tests-jmm/jctc/JCTC19.lit
+litmus-tests-jmm/jctc/JCTC1.lit
+litmus-tests-jmm/jctc/JCTC20.lit
+litmus-tests-jmm/jctc/JCTC2.lit
+litmus-tests-jmm/jctc/JCTC3.lit
+litmus-tests-jmm/jctc/JCTC4.lit
+litmus-tests-jmm/jctc/JCTC5.lit
+litmus-tests-jmm/jctc/JCTC6.lit
+litmus-tests-jmm/jctc/JCTC7.lit
+litmus-tests-jmm/jctc/JCTC8b.lit
+litmus-tests-jmm/jctc/JCTC8.lit
+litmus-tests-jmm/jctc/JCTC9b.lit
+litmus-tests-jmm/jctc/JCTC9.lit
