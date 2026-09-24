@@ -393,6 +393,9 @@ type mordor_ctx = {
       (** Forwarding context state *)
   mutable source_spans : event_source_code_span option;
       (** Source code locations for events *)
+  mutable loop_iters : (int, int list) Hashtbl.t option;
+      (** Per event, the iteration of each enclosing loop it was created in
+          (parallel to the structure's [loop_indices]); from the interpreter. *)
   (* Justifications *)
   mutable justification_derivations : (string * string) list option;
       (** Each justification, rendered, paired with the elaboration step that
@@ -476,6 +479,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     structure = None;
     fwd_es_ctx = None;
     source_spans = None;
+    loop_iters = None;
     justification_derivations = None;
     justifications = None;
     executions = None;

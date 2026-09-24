@@ -69,6 +69,9 @@ type events_t = {
       *)
   loop_indices : (int, int list) Hashtbl.t;
       (** Mapping from event labels to loop indices. *)
+  loop_iters : (int, int list) Hashtbl.t;
+      (** Mapping from event labels to the iteration, per enclosing loop and
+          parallel to [loop_indices], the event was created in. *)
   loop_conditions : (int, expr list) Hashtbl.t;
       (** Mapping from a loop index to the continuation guards recorded for it,
           one per interpreted occurrence of the loop. Used with symbolic loop
@@ -115,7 +118,9 @@ val interpret_statements :
 (** [interpret_generic ?ubopt ~stmt_semantics ~defacto ~constraints stmts]
     interprets [stmts] under [stmt_semantics], prefixes the initial event and
     attaches the tables of the events context.
-    @return The symbolic event structure and the source spans table. *)
+    @return
+      The symbolic event structure, the source spans table and the per-event
+      loop iterations table. *)
 val interpret_generic :
   ?ubopt:bool ->
   stmt_semantics:
@@ -128,7 +133,9 @@ val interpret_generic :
   defacto:expr list ->
   constraints:'c ->
   'a ->
-  symbolic_event_structure * (int, source_span) Hashtbl.t
+  symbolic_event_structure
+  * (int, source_span) Hashtbl.t
+  * (int, int list) Hashtbl.t
 
 (** [interpret ?ubopt ?defacto ?constraints stmts] is {!interpret_generic} under
     {!interpret_statements}. *)

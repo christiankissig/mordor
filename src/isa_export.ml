@@ -373,8 +373,12 @@ let emit_program ~tbl (program : ir_node_ann ir_node list) :
       (`List !init_acc, `List threads_json)
 
 (** Iteration suffix ["@<loop-id>:<iter>..."] for an event inside loops. Zips
-    the instruction's loop ids with the event's per-loop iteration counts
-    (best-effort; not exercised by the loop-free UAF fixture). *)
+    the instruction's loop ids with the event's per-loop iterations, which the
+    interpreter records per event ([loop_iters]): the parser tags every loop
+    body with iteration [1], and the step-counter unroller retags each further
+    copy of a body with its iteration, so the events of iteration 2 are told
+    apart from those of iteration 1. (The structure's [loop_indices] holds the
+    loop ids themselves, not iterations.) *)
 let iter_suffix (loops : int list) (iters : int list) : string =
   let n = min (List.length loops) (List.length iters) in
   let rec take k = function
@@ -388,16 +392,23 @@ let iter_suffix (loops : int list) (iters : int list) : string =
 (** Build a map from runtime event id to its event-label, using the per-event
     source spans and loop iterations recorded during interpretation.
 
-    Events are grouped by [(span, iteration)] — i.e. one instruction in one loop
-    iteration — sorted by id, and assigned [k] by position (so an RMW's
-    [R;Branch;W] sub-events, created in that order, get [#0;#1;#2]). Events
-    without a recorded span (init/terminal markers, §4) are left unmapped and
-    their edges are dropped. *)
+    Events are grouped by [(span, iterations)] — i.e. one instruction in one
+    loop iteration, the iterations taken from [ctx.loop_iters] — sorted by id,
+    and assigned [k] by position modulo the instruction's declared event count
+    (so an RMW's [R;Branch;W] sub-events, created in that order, get
+    [#0;#1;#2], and a further copy of the instruction on another branch path
+    gets the same labels again). Events without a recorded span (init/terminal
+    markers, §4) are left unmapped and their edges are dropped. *)
 let build_event_labels (ctx : mordor_ctx)
     (tbl : (int * int, instr_info) Hashtbl.t) : (int, string) Hashtbl.t =
   let evlabels = Hashtbl.create 64 in
+  let loop_iters =
+    match ctx.loop_iters with
+    | Some t -> t
+    | None -> Hashtbl.create 1
+  in
     match (ctx.structure, ctx.source_spans) with
-    | Some structure, Some spans ->
+    | Some _structure, Some spans ->
         let groups : ((int * int) * int list, int list) Hashtbl.t =
           Hashtbl.create 64
         in
@@ -406,7 +417,7 @@ let build_event_labels (ctx : mordor_ctx)
               let key = (span.start_line, span.start_col) in
                 if Hashtbl.mem tbl key then begin
                   let iters =
-                    match Hashtbl.find_opt structure.loop_indices eid with
+                    match Hashtbl.find_opt loop_iters eid with
                     | Some l -> l
                     | None -> []
                   in
@@ -425,10 +436,21 @@ let build_event_labels (ctx : mordor_ctx)
               let info = Hashtbl.find tbl key in
               let sorted = List.sort compare eids in
               let suffix = iter_suffix info.loops iters in
+              (* One instruction in one loop iteration may have been
+                 interpreted several times, once per path of the branches that
+                 precede it: the statements after an unrolled loop are
+                 interpreted again on each of the loop's exit paths, and so
+                 are those after a branch. Each copy is a run of the
+                 instruction's declared events, created in order, so the
+                 copies lie in consecutive blocks of [n] ids. The copies are
+                 in conflict with each other -- no execution has two -- and
+                 they stand for the same instruction instance, so they get
+                 the same labels: [k] is the position within the block. *)
+              let n = max 1 (List.length info.events) in
                 List.iteri
-                  (fun k eid ->
+                  (fun i eid ->
                     Hashtbl.replace evlabels eid
-                      (Printf.sprintf "%s%s#%d" info.label suffix k)
+                      (Printf.sprintf "%s%s#%d" info.label suffix (i mod n))
                   )
                   sorted
             )
@@ -443,7 +465,13 @@ let build_event_labels (ctx : mordor_ctx)
     [rf] is not an edge source: a future is a per-thread order, and reads-from
     is the model's only inter-thread dependency. Cross-thread ordering — a
     release/acquire handshake among it — is the memory semantics' business, not
-    the future set's. *)
+    the future set's.
+
+    Each entry also carries [rf], the reads-from edges of the execution the
+    future was computed from (the witness, under [futures_by_witness]), as
+    [[writer, reader]] label pairs. It is not part of the future; it is data
+    about that one execution, for a consumer that wants to know which write
+    each of its reads took. *)
 let futures_json (ctx : mordor_ctx) (evlabels : (int, string) Hashtbl.t) :
     Yojson.Safe.t =
   match ctx.executions with
@@ -472,12 +500,31 @@ let futures_json (ctx : mordor_ctx) (evlabels : (int, string) Hashtbl.t) :
           )
           |> List.sort_uniq compare
         in
+        let rf =
+          Uset.USet.values exec.rf
+          |> List.filter_map (fun (a, b) ->
+              if
+                (not (Uset.USet.mem exec.e a)) || not (Uset.USet.mem exec.e b)
+              then None
+              else
+                match
+                  (Hashtbl.find_opt evlabels a, Hashtbl.find_opt evlabels b)
+                with
+                | Some la, Some lb -> Some (la, lb)
+                | _ -> None
+          )
+          |> List.sort_uniq compare
+        in
           `Assoc
             [
               ("execution", `Int exec.id);
               ( "edges",
                 `List
                   (List.map (fun (a, b) -> `List [ `String a; `String b ]) edges)
+              );
+              ( "rf",
+                `List
+                  (List.map (fun (a, b) -> `List [ `String a; `String b ]) rf)
               );
             ]
       in

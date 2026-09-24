@@ -17,7 +17,7 @@ let make_source_span startpos endpos =
 let thread_ctx_stack = ref [ { tid = 0; path = [] } ]
 
 let src_ctx_stack = ref [ { pc = 0 } ]
-let loop_ctx_stack = ref [ { lid = 0; loops = [] } ]
+let loop_ctx_stack = ref [ { lid = 0; loops = []; iters = [] } ]
 let current_thread_ctx () = List.hd !thread_ctx_stack
 let current_src_ctx () = List.hd !src_ctx_stack
 let current_loop_ctx () = List.hd !loop_ctx_stack
@@ -26,7 +26,7 @@ let current_loop_ctx () = List.hd !loop_ctx_stack
 let reset_parser_state () =
   thread_ctx_stack := [ { tid = 0; path = [] } ];
   src_ctx_stack := [ { pc = 0 } ];
-  loop_ctx_stack := [ { lid = 0; loops = [] } ]
+  loop_ctx_stack := [ { lid = 0; loops = []; iters = [] } ]
 
 (** Functions tying context objects to parser actions **)
 let push_thread () =
@@ -55,7 +55,9 @@ let inc_pc () =
 
 let push_loop () =
   let curr = List.hd !loop_ctx_stack in
-  let new_loop = { lid = 0; loops = curr.loops @ [ curr.lid ] } in
+  let new_loop =
+    { lid = 0; loops = curr.loops @ [ curr.lid ]; iters = curr.iters @ [ 1 ] }
+  in
     loop_ctx_stack := new_loop :: !loop_ctx_stack
 
 let pop_loop () = loop_ctx_stack := List.tl !loop_ctx_stack

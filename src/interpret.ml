@@ -103,6 +103,11 @@ type events_t = {
       *)
   loop_indices : (int, int list) Hashtbl.t;
       (** Mapping from event labels to loop indices. *)
+  loop_iters : (int, int list) Hashtbl.t;
+      (** Mapping from event labels to the iteration, per enclosing loop and
+          parallel to [loop_indices], the event was created in. Every event of
+          a loop body carries iteration [1] unless the step-counter unroller
+          retagged the body copy it came from. *)
   loop_conditions : (int, expr list) Hashtbl.t;
       (** Mapping from a loop index to the continuation guards recorded for it,
           one per interpreted occurrence of the loop. Used with symbolic loop
@@ -134,6 +139,7 @@ let create_events ?(ubopt = false) defacto =
     thread_index = Hashtbl.create 256;
     threads_allocated = 0;
     loop_indices = Hashtbl.create 256;
+    loop_iters = Hashtbl.create 256;
     loop_conditions = Hashtbl.create 256;
     globals = USet.create ();
     alloc = Allocator.create ();
@@ -242,7 +248,9 @@ let add_event (events : events_t) event env (annotation : ir_node_ann) =
     | None -> ()
     );
     ( match annotation.loop_ctx with
-    | Some loop_ctx -> Hashtbl.replace events.loop_indices lbl loop_ctx.loops
+    | Some loop_ctx ->
+        Hashtbl.replace events.loop_indices lbl loop_ctx.loops;
+        Hashtbl.replace events.loop_iters lbl loop_ctx.iters
     | None -> ()
     );
     event'
@@ -362,6 +370,7 @@ let interpret_thread (events : events_t) interpret env phi =
     into events.env_by_evt label Fun.id fragment.env_by_evt;
     into events.thread_index label (( + ) thread_off) fragment.thread_index;
     into events.loop_indices label Fun.id fragment.loop_indices;
+    into events.loop_iters label Fun.id fragment.loop_iters;
     into events.source_spans label Fun.id fragment.source_spans;
     Hashtbl.iter
       (fun lid guards ->
@@ -1041,7 +1050,7 @@ let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
     }
   in
 
-  (structure, events.source_spans)
+  (structure, events.source_spans, events.loop_iters)
 
 (** Default interpretation function with basic statement semantics.
 
@@ -1053,8 +1062,11 @@ let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
 *)
 let interpret ?(ubopt = false) ?(defacto = None) ?(constraints = None) stmts =
   let defacto = defacto |> Option.value ~default:[] in
+  let structure, source_spans, _ =
     interpret_generic ~ubopt ~stmt_semantics:interpret_statements ~defacto
       ~constraints stmts
+  in
+    (structure, source_spans)
 
 (** {1 Pipeline Integration} *)
 
@@ -1070,7 +1082,7 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
     | Some stmts ->
         let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
         let constraints = ctx.litmus_constraints |> Option.value ~default:[] in
-        let structure, source_spans =
+        let structure, source_spans, loop_iters =
           interpret_generic ~ubopt:ctx.options.ubopt ~stmt_semantics ~defacto
             ~constraints stmts
         in
@@ -1088,6 +1100,7 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
           );
           ctx.structure <- Some structure;
           ctx.source_spans <- Some source_spans;
+          ctx.loop_iters <- Some loop_iters;
           Lwt.return ctx
     | _ ->
         Logs_safe.err (fun m -> m "No program statements for interpretation.");
@@ -1121,83 +1134,171 @@ end = struct
         stmt;
       }
 
-  (** Unroll a while loop once as an if-statement.
+  (** The loop a [Do] / [While] node introduces: its own [lid]. *)
+  let lid_of (node : ir_node) : int =
+    match node.annotations.loop_ctx with
+    | Some lc -> lc.lid
+    | None -> -1
 
+  (** The iteration of loop [lid] that the nodes of [body] carry: what the
+      parser tagged ([1]) or what an earlier unrolling retagged them with. *)
+  let iter_of ~lid (body : ir_node list) : int =
+    let rec find ls is =
+      match (ls, is) with
+      | l :: ls', i :: is' -> if l = lid then i else find ls' is'
+      | _ -> 1
+    in
+      match body with
+      | n :: _ -> (
+          match n.annotations.loop_ctx with
+          | Some lc -> find lc.loops lc.iters
+          | None -> 1
+        )
+      | [] -> 1
+
+  (** [retag lid iter node] marks [node], and everything nested in it, as
+      belonging to iteration [iter] of loop [lid]: the entry for [lid] in the
+      node's [iters] (parallel to [loops]) becomes [iter]. A node outside [lid]
+      is left as it is. This is what tells iteration 2's copy of a loop body
+      apart from iteration 1's once both have been interpreted; without it the
+      copies are indistinguishable (same source span, same loop path) and the
+      Isabelle export cannot label their events. *)
+  let rec retag lid iter (node : ir_node) : ir_node =
+    let loop_ctx =
+      node.annotations.loop_ctx
+      |> Option.map (fun (ctx : loop_ctx) ->
+          let iters =
+            List.mapi
+              (fun i l ->
+                if l = lid then iter
+                else match List.nth_opt ctx.iters i with Some it -> it | None -> 1
+              )
+              ctx.loops
+          in
+            { ctx with iters }
+      )
+    in
+    let annotations = { node.annotations with loop_ctx } in
+    let r = retag lid iter in
+    let stmt : ir_stmt =
+      match node.stmt with
+      | While { condition; body } ->
+          While { condition; body = List.map r body }
+      | Do { body; condition } -> Do { body = List.map r body; condition }
+      | If { condition; then_body; else_body } ->
+          If
+            {
+              condition;
+              then_body = List.map r then_body;
+              else_body = Option.map (List.map r) else_body;
+            }
+      | Labeled { label; stmt } -> Labeled { label; stmt = r stmt }
+      | stmt -> stmt
+    in
+      { stmt; annotations }
+
+  (** Unroll a while loop once as an if-statement. The residual loop keeps the
+      node's annotations, so a later unrolling knows which loop it is, and its
+      body is tagged with the next iteration.
+
+      @param node The while-loop node (for its loop id and annotations).
       @param body The loop body.
       @param condition The loop condition.
       @return A list containing the unrolled loop as an if-statement. *)
-  let unrol_while_loop_once body condition =
-    [
-      make_ir_node
-        (If
-           {
-             condition;
-             then_body = body @ [ make_ir_node (While { condition; body }) ];
-             else_body = None;
-           }
-        );
-    ]
-
-  (** Unroll a do-while loop once as body followed by an if-statement.
-
-      @param body The loop body.
-      @param condition The loop condition.
-      @return The body followed by an if-statement for continuation. *)
-  let unrol_do_loop_once body condition =
-    body
-    @ [
-        make_ir_node
-          (If
-             {
-               condition;
-               then_body = [ make_ir_node (Do { body; condition }) ];
-               else_body = None;
-             }
-          );
-      ]
-
-  (** Unroll a while loop a specific number of times.
-
-      @param body The loop body.
-      @param condition The loop condition.
-      @param times The number of unrollings (must be non-negative).
-      @return A list of nested if-statements representing the unrolled loop. *)
-  let rec unrol_while_loop body condition times =
-    assert (times >= 0);
-    if times = 0 then []
-    else
+  let unrol_while_loop_once (node : ir_node) body condition =
+    let lid = lid_of node in
+    let iter = iter_of ~lid body in
+    let residual =
+      {
+        node with
+        stmt = While { condition; body = List.map (retag lid (iter + 1)) body };
+      }
+    in
       [
         make_ir_node
           (If
              {
                condition;
-               then_body = body @ unrol_while_loop body condition (times - 1);
+               then_body = List.map (retag lid iter) body @ [ residual ];
                else_body = None;
              }
           );
       ]
 
-  (** Unroll a do-while loop a specific number of times.
+  (** Unroll a do-while loop once as body followed by an if-statement.
 
+      @param node The do-loop node (for its loop id and annotations).
       @param body The loop body.
       @param condition The loop condition.
-      @param times The number of unrollings (must be at least 1).
-      @return The unrolled loop as nested body and if-statements. *)
-  let rec unrol_do_loop body condition times =
-    assert (times >= 1);
-    if times = 1 then body
-    else
-      body
+      @return The body followed by an if-statement for continuation. *)
+  let unrol_do_loop_once (node : ir_node) body condition =
+    let lid = lid_of node in
+    let iter = iter_of ~lid body in
+    let residual =
+      {
+        node with
+        stmt = Do { body = List.map (retag lid (iter + 1)) body; condition };
+      }
+    in
+      List.map (retag lid iter) body
       @ [
+          make_ir_node
+            (If { condition; then_body = [ residual ]; else_body = None });
+        ]
+
+  (** Unroll a while loop a specific number of times; the [i]th copy of the
+      body is tagged as iteration [i].
+
+      @param lid The loop's id.
+      @param body The loop body.
+      @param condition The loop condition.
+      @param times The number of unrollings (must be non-negative).
+      @return A list of nested if-statements representing the unrolled loop. *)
+  let rec unrol_while_loop ~lid body condition times =
+    assert (times >= 0);
+    if times = 0 then []
+    else
+      let iter = iter_of ~lid body in
+      let next = List.map (retag lid (iter + 1)) body in
+        [
           make_ir_node
             (If
                {
                  condition;
-                 then_body = unrol_do_loop body condition (times - 1);
+                 then_body =
+                   List.map (retag lid iter) body
+                   @ unrol_while_loop ~lid next condition (times - 1);
                  else_body = None;
                }
             );
         ]
+
+  (** Unroll a do-while loop a specific number of times; the [i]th copy of the
+      body is tagged as iteration [i].
+
+      @param lid The loop's id.
+      @param body The loop body.
+      @param condition The loop condition.
+      @param times The number of unrollings (must be at least 1).
+      @return The unrolled loop as nested body and if-statements. *)
+  let rec unrol_do_loop ~lid body condition times =
+    assert (times >= 1);
+    let iter = iter_of ~lid body in
+    let this = List.map (retag lid iter) body in
+      if times = 1 then this
+      else
+        let next = List.map (retag lid (iter + 1)) body in
+          this
+          @ [
+              make_ir_node
+                (If
+                   {
+                     condition;
+                     then_body = unrol_do_loop ~lid next condition (times - 1);
+                     else_body = None;
+                   }
+                );
+            ]
 
   (** Interpret statements with step counter loop semantics.
 
@@ -1218,20 +1319,24 @@ end = struct
           match Ir.get_stmt node with
           | Do { body; condition } ->
               if per_loop then
-                let unrolled = unrol_do_loop body condition step_counter in
+                let unrolled =
+                  unrol_do_loop ~lid:(lid_of node) body condition step_counter
+                in
                   interpret_statements_step_counter step_counter per_loop
                     (unrolled @ rest) env phi events
               else
-                let unrolled = unrol_do_loop_once body condition in
+                let unrolled = unrol_do_loop_once node body condition in
                   interpret_statements_step_counter (step_counter - 1) per_loop
                     (unrolled @ rest) env phi events
           | While { condition; body } ->
               if per_loop then
-                let unrolled = unrol_while_loop body condition step_counter in
+                let unrolled =
+                  unrol_while_loop ~lid:(lid_of node) body condition step_counter
+                in
                   interpret_statements_step_counter step_counter per_loop
                     (unrolled @ rest) env phi events
               else
-                let unrolled = unrol_while_loop_once body condition in
+                let unrolled = unrol_while_loop_once node body condition in
                   interpret_statements_step_counter (step_counter - 1) per_loop
                     (unrolled @ rest) env phi events
           | _ ->
@@ -1375,7 +1480,13 @@ end = struct
     let peel = peel_loop_membership outer_loops in
     let loop_ctx =
       node.annotations.loop_ctx
-      |> Option.map (fun (ctx : loop_ctx) -> { ctx with loops = outer_loops })
+      |> Option.map (fun (ctx : loop_ctx) ->
+          {
+            ctx with
+            loops = outer_loops;
+            iters = List.map (fun _ -> 1) outer_loops;
+          }
+      )
     in
     let annotations = { node.annotations with loop_ctx } in
     let stmt : ir_stmt =

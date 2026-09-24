@@ -72,8 +72,9 @@ let rec add_loop loop_id ir_node =
   let stmt, ann = (ir_node.stmt, ir_node.annotations) in
   let new_loop_ctx =
     match ann.loop_ctx with
-    | Some ctx -> Some { ctx with loops = loop_id :: ctx.loops }
-    | None -> Some { lid = loop_id; loops = [ loop_id ] }
+    | Some ctx ->
+        Some { ctx with loops = loop_id :: ctx.loops; iters = 1 :: ctx.iters }
+    | None -> Some { lid = loop_id; loops = [ loop_id ]; iters = [ 1 ] }
   in
     match stmt with
     | While { condition; body } ->
