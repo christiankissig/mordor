@@ -87,7 +87,7 @@ let example_library =
     (* The ones cppMem cannot express at all, and which had no one-click route
        into the editor before. *)
     ("MoRDor only", "Use after free", "programs/uaf-bug.lit");
-    ("MoRDor only", "Use after free (fixed)", "programs/uaf-bug-smrd.lit");
+    ("MoRDor only", "Use after free (fixed)", "programs/uaf-bug-fixed.lit");
     ("MoRDor only", "Refinement chain", "litmus-tests/avoidoota/listing7.lit");
     ( "MoRDor only",
       "Episodicity: a register condition",
