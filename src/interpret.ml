@@ -930,7 +930,8 @@ let make_generic_terminal_structure ~add_event env phi events =
 
 (** [distinctness globals structure] is what the program says about its
     locations: [globals] are pairwise distinct, and the allocations of
-    [structure] are pairwise distinct and distinct from every global.
+    [structure] are distinct from every global and pairwise distinct, save for
+    those that {!Eventstructures.may_reuse} an address.
 
     It is a property of the whole program and is computed once, from the
     finished structure. It used to be attached to each terminal structure,
@@ -950,10 +951,14 @@ let distinctness globals (structure : symbolic_event_structure) =
     )
     |> List.map (fun (v1, v2) -> Expr.binop (EVar v1) "!=" (EVar v2))
   in
-  (* Distinct allocations denote distinct locations: a [malloc] never hands back
-     the address of another allocation. Without this the solver may equate two
-     allocation symbols, and then a write to one allocation reads as a possible
-     source for a read of the other. *)
+  (* Distinct allocations denote distinct locations while both are live: a
+     [malloc] never hands back the address of another live allocation. Without
+     this the solver may equate two allocation symbols, and then a write to one
+     allocation reads as a possible source for a read of the other. Once an
+     allocation may have been freed, a later [malloc] may hand its address back
+     out, and that is exactly the case a stale pointer -- the ABA of a CAS on a
+     reclaimed node -- turns on, so the pair is left unconstrained. *)
+  let may_reuse = may_reuse structure in
   let allocation_constraints =
     let locations =
       Hashtbl.fold
@@ -968,7 +973,12 @@ let distinctness globals (structure : symbolic_event_structure) =
     let rec distinct_pairs = function
       | [] -> []
       | loc :: rest ->
-          List.map (fun other -> Expr.binop loc "!=" other) rest
+          List.filter_map
+            (fun other ->
+              if may_reuse loc other then None
+              else Some (Expr.binop loc "!=" other)
+            )
+            rest
           @ distinct_pairs rest
     in
       (* An allocation is also disjoint from every object that already exists:

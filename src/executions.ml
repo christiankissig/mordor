@@ -3628,12 +3628,6 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1) ?witnesses
   in
 
   (* 2. Extract malloc locations *)
-  (* TODO these constraints do not account for intermediate deallocation:
-
-    • enforces the disjointness of symbolic memory locations introduced by
-    consecutive allocation events, i.e. without an intermediate deallocation
-    event.
-    *)
   let malloc_locs =
     (* In label order: each pair below is written in the order the two come
        in, and a set's own order would decide which way round. *)
@@ -3649,14 +3643,18 @@ let calculate_dependencies ?(include_rf = true) ?(num_threads = 1) ?witnesses
   (* 3. Combine both sets *)
   let all_locs = static_locs @ malloc_locs in
 
-  (* 4. Create pairwise disjointness for ALL distinct locations *)
+  (* 4. Create pairwise disjointness for ALL distinct locations, save two
+     allocations one of which may be freed before the other is made: the
+     allocator may hand the freed address straight back out. *)
   let statex =
+    let may_reuse = may_reuse structure in
     let pairs = ref [] in
       for i = 0 to List.length all_locs - 1 do
         for j = i + 1 to List.length all_locs - 1 do
           let loc1 = List.nth all_locs i in
           let loc2 = List.nth all_locs j in
-            pairs := Expr.binop loc1 "!=" loc2 :: !pairs
+            if not (may_reuse loc1 loc2) then
+              pairs := Expr.binop loc1 "!=" loc2 :: !pairs
         done
       done;
       !pairs @ structure.constraints

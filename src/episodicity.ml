@@ -909,8 +909,12 @@ module WriteCondition = struct
          Pairs of locations, so (L + i) != (L' + j) and (L + i) != L' both
          follow. Locations sharing a base are left alone: whether (rrcu + i) and
          (rrcu + j) alias depends on i and j, which is the program's business
-         and not a fact about allocation. *)
+         and not a fact about allocation. So are bases that may share an
+         address, one allocated after the other was freed
+         ({!Eventstructures.may_reuse}): their interiors overlap exactly when the
+         bases do. *)
       let allocation_interiors_are_disjoint =
+        let may_reuse = may_reuse structure in
         let base loc =
           match loc with
           | EBinOp (b, "+", _) -> b
@@ -933,7 +937,7 @@ module WriteCondition = struct
           | (loc, b) :: rest ->
               List.filter_map
                 (fun (loc', b') ->
-                  if Expr.equal b b' then None
+                  if Expr.equal b b' || may_reuse b b' then None
                   else Some (Expr.binop loc "!=" loc')
                 )
                 rest
