@@ -1,0 +1,7 @@
+// A freed region may be handed straight back out: the second allocation may
+// have the first one's address.
+rp := malloc 1;
+free(rp);
+rq := malloc 1;
+%%
+allow (rp = rq) []

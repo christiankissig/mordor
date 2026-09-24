@@ -386,6 +386,82 @@ end
 (* Find the origin of a symbol in a symbolic event structure *)
 let origin structure (s : string) = Hashtbl.find_opt structure.origin s
 
+(** [may_reuse structure a b] holds when allocations [a] and [b] may be handed
+    the same address: one of them may be freed before the other is allocated,
+    and an allocator is free to hand a released region straight back out.
+
+    Which allocation a free releases is read off its location. A free of an
+    allocation's own symbol releases that allocation and no other. A free
+    through a pointer loaded from memory, or computed from one, may release any
+    allocation whose address escapes into memory -- is written somewhere, and
+    so may be loaded back. An address that is never written cannot be loaded:
+    rcu-3's counter cell [rC] is only ever written through, and taking its
+    reclaim loop's [free(rtemp)] to release it let the counter alias a node.
+    The order is approximated by program order: the free cannot follow the
+    later allocation in program order, the earlier allocation cannot follow
+    the free, and the free and the later allocation must be able to occur
+    together. Across threads nothing orders them yet, and a free in one thread
+    may precede an allocation in another -- the allocator synchronises the two
+    when it reuses the region. *)
+let may_reuse (structure : symbolic_event_structure) =
+  let allocations =
+    USet.values structure.malloc_events
+    |> List.filter_map (fun label ->
+        match Hashtbl.find_opt structure.events label with
+        | Some ({ loc = Some loc; _ } : event) -> Some (label, loc)
+        | _ -> None
+    )
+  in
+  let allocation_symbols =
+    List.concat_map (fun (_, loc) -> Expr.get_symbols loc) allocations
+  in
+  let frees =
+    USet.values structure.free_events
+    |> List.filter_map (fun label ->
+        match Hashtbl.find_opt structure.events label with
+        | Some ({ loc = Some loc; _ } : event) -> Some (label, loc)
+        | _ -> None
+    )
+  in
+  let escaped =
+    USet.values structure.write_events
+    |> List.concat_map (fun label ->
+        match Hashtbl.find_opt structure.events label with
+        | Some ({ wval = Some v; _ } : event) -> Expr.get_symbols v
+        | _ -> []
+    )
+  in
+  let releases free_loc loc =
+    Expr.equal free_loc loc
+    || List.exists (fun s -> List.mem s escaped) (Expr.get_symbols loc)
+       && List.exists
+            (fun s -> not (List.mem s allocation_symbols))
+            (Expr.get_symbols free_loc)
+  in
+  let before a b = USet.mem structure.po (a, b) in
+  let conflicting a b =
+    USet.mem structure.conflict (a, b) || USet.mem structure.conflict (b, a)
+  in
+  (* [earlier] is freed by some free, and [later] is allocated after it. *)
+  let reused (earlier, earlier_loc) (later, _) =
+    (not (before later earlier))
+    && List.exists
+         (fun (free, free_loc) ->
+           releases free_loc earlier_loc
+           && (not (before free earlier))
+           && (not (before later free))
+           && not (conflicting free later)
+         )
+         frees
+  in
+    fun a b ->
+      match
+        ( List.find_opt (fun (_, loc) -> Expr.equal loc a) allocations,
+          List.find_opt (fun (_, loc) -> Expr.equal loc b) allocations )
+      with
+      | Some a, Some b -> reused a b || reused b a
+      | _ -> false
+
 (** Path type *)
 type path_info = {
   path : int uset;
