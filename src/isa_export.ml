@@ -471,7 +471,12 @@ let build_event_labels (ctx : mordor_ctx)
     future was computed from (the witness, under [futures_by_witness]), as
     [[writer, reader]] label pairs. It is not part of the future; it is data
     about that one execution, for a consumer that wants to know which write
-    each of its reads took. *)
+    each of its reads took.
+
+    And [events], the labels of all of the execution's events. An event that no
+    [(ppo ∪ dp)] edge touches -- a write nothing is ordered with, a read whose
+    value no event depends on -- is in the execution all the same; without this
+    field a consumer that reads the events off the edges would never see it. *)
 let futures_json (ctx : mordor_ctx) (evlabels : (int, string) Hashtbl.t) :
     Yojson.Safe.t =
   match ctx.executions with
@@ -515,9 +520,15 @@ let futures_json (ctx : mordor_ctx) (evlabels : (int, string) Hashtbl.t) :
           )
           |> List.sort_uniq compare
         in
+        let events =
+          Uset.USet.values exec.e
+          |> List.filter_map (fun a -> Hashtbl.find_opt evlabels a)
+          |> List.sort_uniq compare
+        in
           `Assoc
             [
               ("execution", `Int exec.id);
+              ("events", `List (List.map (fun l -> `String l) events));
               ( "edges",
                 `List
                   (List.map (fun (a, b) -> `List [ `String a; `String b ]) edges)
