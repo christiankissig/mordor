@@ -332,6 +332,93 @@ allow ((2,3) in .dp) []|}
   | exception Failure msg ->
       check bool "the error names .dp" true (Test_zoo_models.contains msg ".dp")
 
+(** [annotate model source] is [source] with its [[Promising]] annotations
+    naming [model] instead. *)
+let annotate model source =
+  Str.global_replace (Str.regexp_string "[Promising]") ("[" ^ model ^ "]") source
+
+(** [PS1] and [PS2] select their version as [IMM] selects a coherence model;
+    [--semantics] chose one already, it stands. *)
+let test_annotation_selects () =
+  let upd v = annotate v upd_stuck in
+  let parsed semantics source =
+    let ctx = make_context { default_options with semantics } () in
+      ctx.litmus <- Some source;
+      Lwt_main.run (Lwt.return ctx |> Parse.step_parse_litmus)
+  in
+    check bool "[PS1] selects PS1.0" true
+      ((parsed Smrd (upd "PS1")).options.semantics = Promising1);
+    check bool "[PS2] selects PS2.0" true
+      ((parsed Smrd (upd "PS2")).options.semantics = Promising2);
+    check bool "--semantics ps1 stands over [PS2]" true
+      ((parsed Promising1 (upd "PS2")).options.semantics = Promising1);
+    (* The settings dialog's primary model replaces the annotation, its
+       semantics included, as it replaces a coherence model. *)
+    let primary model =
+      let ctx = parsed Smrd (upd "PS1") in
+        select_models ctx ~primary:model ~others:[];
+        ctx.options.semantics
+    in
+      check bool "primary ps2 over [PS1]" true (primary "ps2" = Promising2);
+      check bool "primary rc11 over [PS1] is sMRD" true (primary "rc11" = Smrd);
+      check bool "primary default keeps [PS1]" true (primary "default" = Promising1);
+    check bool "RPacq under [PS1] alone" false
+      (valid (run Smrd (annotate "PS1" rpacq)));
+    check bool "RPacq under [PS2] alone" true
+      (valid (run Smrd (annotate "PS2" rpacq)))
+
+(** A compared promising model admits an execution of another semantics by
+    outcome. On load buffering sMRD's [r1 = r2 = 1] executions are admitted by
+    PS1.0 but not by RC11; on RPacq PS1.0 admits every PS2.0 outcome but the
+    one only reservations allow. *)
+let test_compare_by_outcome () =
+  let compared ~primary ~others source =
+    let ctx = make_context default_options () in
+      ctx.litmus_name <- "test";
+      ctx.litmus <- Some source;
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> step_select_models ~primary ~others
+        |> Interpret.step_interpret
+        |> Semantics.step_calculate_executions
+        )
+  in
+  let admitted_by ctx (ex : symbolic_execution) =
+    Option.bind ctx.model_admissions (fun t -> Hashtbl.find_opt t ex.id)
+    |> Option.value ~default:[]
+  in
+  let value ctx (ex : symbolic_execution) r =
+    Assertion.admits_outcome (Option.get ctx.structure) ex [ (r, ENum Z.one) ]
+  in
+  let lb =
+    {|x := 0; y := 0;
+{ r1 := x; y := 1 } ||| { r2 := y; x := r2 }
+%%
+allow (r1 = 1) [PS1]|}
+  in
+  let ctx = compared ~primary:"smrd" ~others:[ "ps1"; "rc11" ] lb in
+  let execs = USet.values (Option.get ctx.executions) in
+  let lb_execs = List.filter (fun ex -> value ctx ex "r1" && value ctx ex "r2") execs in
+    check bool "sMRD has load-buffering executions" true (lb_execs <> []);
+    List.iter
+      (fun ex ->
+        check bool "PS1.0 admits load buffering" true (List.mem "ps1" (admitted_by ctx ex));
+        check bool "RC11 does not" false (List.mem "rc11" (admitted_by ctx ex))
+      )
+      lb_execs;
+    let ctx = compared ~primary:"ps2" ~others:[ "ps1" ] (annotate "PS2" rpacq) in
+    let execs = USet.values (Option.get ctx.executions) in
+      List.iter
+        (fun ex ->
+          let separating = value ctx ex "ra" && not (value ctx ex "rc") in
+            check bool "PS1.0 admits all but RPacq's outcome" (not separating)
+              (List.mem "ps1" (admitted_by ctx ex))
+        )
+        execs;
+      check bool "RPacq's outcome is among PS2.0's" true
+        (List.exists (fun ex -> value ctx ex "ra" && not (value ctx ex "rc")) execs)
+
 let suite =
   ( "Promising",
     [
@@ -372,12 +459,21 @@ allow (r1 = 1) [Promising]|};
 %%
 forbid (r2 = 3 && r3 = 0) [Promising]|};
       holds_under_both "Upd-Stuck" upd_stuck;
+      (* A CAS's register says whether it swapped, as under sMRD: one of two
+         racing CASes from 0 succeeds. *)
+      holds_under_both "CAS reports success"
+        {|x := 0;
+{ rp := &x; r1 := cas(rlx, rlx, rp, 0, 1) } ||| { rq := &x; r2 := cas(rlx, rlx, rq, 0, 2) }
+%%
+forbid (r1 + r2 != 1) [Promising]|};
       test_case "RPacq separates the versions" `Quick test_rpacq_separates;
       test_case "undefined behaviour" `Quick test_undefined_behaviour;
       test_case "an abort certifies under PS2.0" `Quick test_abort_certifies;
       test_case "rf, co and rmw" `Quick test_relations;
       test_case "dp and ppo are refused" `Quick test_sMRD_relations_refused;
       test_case "[Promising] needs --semantics" `Quick test_model_name;
+      test_case "[PS1] and [PS2] select the semantics" `Quick test_annotation_selects;
+      test_case "comparing across semantics by outcome" `Quick test_compare_by_outcome;
       test_case "sMRD through the same step" `Quick test_smrd_unchanged;
       test_case "semantics names" `Quick test_parse_semantics;
     ] )

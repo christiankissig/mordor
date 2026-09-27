@@ -1,34 +1,32 @@
-# Promising-semantics litmus tests (reference only)
+# Promising-semantics litmus tests
 
 These litmus tests are drawn from the Promising-semantics line of work
 (Kang et al., *A Promising Semantics for Relaxed-Memory Concurrency*, POPL 2017,
-and follow-ups). Their `allow`/`forbid` assertions are annotated `[Promising]`
-and encode the outcome **expected under promising semantics**.
+and follow-ups). Their `allow`/`forbid` assertions are annotated `[PS1]` and
+encode the outcome **expected under promising semantics 1.0**.
 
 ## Running them
 
-MoRDor computes promising semantics with `--semantics ps1` (PS1.0, POPL 2017)
-or `--semantics ps2` (PS2.0, Lee et al., PLDI 2020); see `src/promising.ml`.
-Under either, a `[Promising]` annotation is accepted:
+MoRDor computes promising semantics 1.0 (POPL 2017) and 2.0 (Lee et al., PLDI
+2020); see `src/promising.ml`. A `[PS1]` or `[PS2]` annotation selects its
+version the way `[IMM]` selects a coherence model, so these run as they are:
 
 ```
-dune exec mordor -- run --single "litmus-tests-promising/LB.lit" --semantics ps2
+dune exec mordor -- run --single "litmus-tests-promising/LB.lit"
 ```
+
+`--semantics ps1` or `--semantics ps2` chooses a version for a whole run, and
+takes precedence over the annotation: `--semantics ps2` checks these tests
+under PS2.0. A bare `[Promising]` names no version and is an error unless
+`--semantics` chooses one.
 
 Promising is an *operational* model: a thread may *promise* a future write,
 other threads may read from it, and the promise is only legal if the promising
-thread can be *certified* to fulfil it by running thread-locally. It is not a
-coherence model, so under the default `--semantics smrd` a `[Promising]`
-annotation is still an error, naming `--semantics`:
+thread can be *certified* to fulfil it by running thread-locally.
 
-```
-Error: Unknown memory model "promising". [...] Run with --semantics ps1 or
---semantics ps2 to compute the executions under promising semantics instead.
-```
-
-The files stay here rather than in `litmus-tests/` because the integration
-suite scans that directory under sMRD. `test/test_promising.ml` checks the
-papers' verdicts for most of them under both versions.
+The integration suite scans this directory alongside `litmus-tests/`, and
+`test/test_promising.ml` checks the papers' verdicts for most of these tests
+under both versions. All of them hold under both.
 
 A registry entry once aliased the model name `"promising"` to the IMM checker,
 which verified these tests under IMM, not promising; that alias is gone.
@@ -47,7 +45,7 @@ old `"promising"` alias used.
 
 **IMM is not promising semantics.** Where the two models disagree — notably on
 thin-air reads and load-buffering shapes with dependencies — the IMM verdict for
-the reannotated copy may legitimately differ from the `[Promising]` expectation
+the reannotated copy may legitimately differ from the `[PS1]` expectation
 recorded here. Treat the IMM copies as an IMM check, and these originals as the
 record of the intended promising outcome.
 
@@ -74,7 +72,7 @@ record of the intended promising outcome.
 | `Upd-Stuck.lit`        | allow  `r1=1 ∧ r2=0` | allow | allow |
 | `Page 7 Column 1.lit`  | forbid `r1=1 ∧ r2=0 ∧ r3=1 ∧ r4=0` | forbid | forbid |
 | `Page 7 Column 1b.lit` | forbid `r2=3 ∧ r3=0` (release sequence) | forbid | forbid |
-| `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, annotated `[Promising=allow]` — **see below** | forbid | forbid |
+| `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, annotated `[PS1=allow]` — **see below** | forbid | forbid |
 
 **LBa.** The file used to assert `forbid`, but the POPL 2017 paper (section
 4.1) allows the outcome: "In the second variant (LBa), we allow the promise of

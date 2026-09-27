@@ -104,9 +104,24 @@ let parse_semantics s =
       invalid_arg
         (Printf.sprintf "unknown semantics %S (expected smrd, ps1 or ps2)" s)
 
-(** The model names a litmus test uses to ask for promising semantics. *)
+(** The name [--semantics] takes for [s]. *)
+let semantics_name = function
+  | Smrd -> "smrd"
+  | Promising1 -> "ps1"
+  | Promising2 -> "ps2"
+
+(** The model names a litmus test uses to ask for promising semantics:
+    [PS1] or [PS2] for a version, [Promising] for either. *)
 let promising_model_names =
   [ "promising"; "promising1"; "promising2"; "ps"; "ps1"; "ps2" ]
+
+(** The version a promising model name selects, [None] for [Promising] and
+    [PS], which name none. *)
+let semantics_of_model_name name =
+  match String.lowercase_ascii name with
+  | "ps1" | "promising1" -> Some Promising1
+  | "ps2" | "promising2" -> Some Promising2
+  | _ -> None
 
 (** Parse output mode string from command line.
 
@@ -651,10 +666,31 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
     List.mem (String.lowercase_ascii model) promising_model_names
   in
   match Hashtbl.find_opt model_options_table (String.lowercase_ascii model) with
-  | None when promising_name && ctx.options.semantics <> Smrd ->
+  | None when promising_name -> (
       (* The promising semantics is not a coherence model: [Promising] computes
-         the executions itself, so there is nothing to apply. *)
-      ()
+         the executions itself. [PS1] and [PS2] select it, as [IMM] selects a
+         coherence model -- unless [--semantics] already chose a version, which
+         stands. [Promising] names no version, so it needs one chosen. *)
+      match (ctx.options.semantics, semantics_of_model_name model) with
+      | Smrd, Some semantics -> ctx.options.semantics <- semantics
+      | Smrd, None ->
+          let msg =
+            Printf.sprintf
+              "The model %S asks for promising semantics without saying which: \
+               annotate the test [PS1] or [PS2], or run with --semantics ps1 \
+               or --semantics ps2."
+              model
+          in
+            if ctx.options.allow_unknown_model then
+              Logs_safe.warn (fun m -> m "%s" msg)
+            else failwith msg
+      | chosen, Some named when chosen <> named ->
+          Logs_safe.warn (fun m ->
+              m "The test asks for %s; --semantics %s stands." model
+                (semantics_name chosen)
+          )
+      | _ -> ()
+    )
   | None ->
       (* The name is not in the table at all, so there is no coherence model to
          apply and the one already in effect -- the [smrd] default, normally --
@@ -668,24 +704,17 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
          mismatch was noticed -- the release-acquire ones have since come back,
          under models of their own; failing here is what stops the next one
          being added unnoticed. Pass [--allow-unknown-model] to measure them. *)
-      let detail =
-        if promising_name then
-          " Promising semantics is operational -- it needs promise sets, \
-           certification and per-thread views, which the axiomatic coherence \
-           checker has no place for. Run with --semantics ps1 or --semantics \
-           ps2 to compute the executions under promising semantics instead."
-        else ""
-      in
       let msg =
         Printf.sprintf
           "Unknown memory model %S. MoRDor implements imm, rc11, rc11c, smrd \
-           and %s, and maps a further set of names onto those; this one is in \
-           neither, so no coherence model can be applied.%s Re-run with \
+           and %s, maps a further set of names onto those, and computes \
+           promising semantics for [PS1] and [PS2]; this one is in none of \
+           them, so no model can be applied. Re-run with \
            --allow-unknown-model to check the test under the model already in \
            effect instead -- the verdict is then that model's, not %S's."
           model
           (String.concat ", " implemented_zoo_models)
-          detail model
+          model
       in
         if ctx.options.allow_unknown_model then
           Logs_safe.warn (fun m -> m "%s" msg)
@@ -816,6 +845,11 @@ let make_context_with_model options ?(output_mode = Json)
 let select_models (ctx : mordor_ctx) ~primary ~others =
   let stated = ctx.options.coherent in
     if primary <> "default" then begin
+      (* The primary replaces the test's own annotation, its semantics too: a
+         [PS1] test checked under RC11 is checked under sMRD, and under PS2.0
+         when [ps2] is asked. *)
+      ctx.options.semantics <-
+        Option.value (semantics_of_model_name primary) ~default:Smrd;
       apply_model_options ctx primary;
       (* The primary replaces the test's own model, and so every assertion's. *)
       ctx.assertion_models <-
@@ -823,6 +857,9 @@ let select_models (ctx : mordor_ctx) ~primary ~others =
     end;
     let coherence_model = function
       | "default" -> stated
+      (* Promising semantics computes executions of its own, and is compared
+         by outcome; see [Semantics]. *)
+      | name when semantics_of_model_name name <> None -> String.lowercase_ascii name
       | name -> (
           match get_model_options name with
           | Some { coherent = Some coherent; _ } -> coherent
@@ -833,10 +870,14 @@ let select_models (ctx : mordor_ctx) ~primary ~others =
                 )
         )
     in
+      (* Comparing a model with itself says nothing new. Under promising
+         semantics the primary is no coherence model, and none is itself. *)
       ctx.compare_models <-
         List.map coherence_model others
         |> List.sort_uniq String.compare
-        |> List.filter (fun m -> m <> ctx.options.coherent)
+        |> List.filter (fun m ->
+            ctx.options.semantics <> Smrd || m <> ctx.options.coherent
+        )
 
 (** [step_select_models ~primary ~others lwt_ctx] is {!select_models} as a
     pipeline step, to follow [Parse.step_parse_litmus]. *)

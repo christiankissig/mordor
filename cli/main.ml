@@ -366,8 +366,12 @@ module Pipeline = struct
       @param config Complete configuration
       @return A fresh Mordor context *)
   let make_program_context name program config =
+    (* A copy per program: a test's annotation sets the model, the coherence
+       model and the semantics on it, and a directory run must not carry one
+       test's into the next. *)
+    let options = { config.Config.options with model = config.Config.options.model } in
     let context =
-      make_context config.Config.options ?output_mode:config.output_mode
+      make_context options ?output_mode:config.output_mode
         ?output_file:config.output_file ?step_counter:config.step_counter
         ~num_threads:config.num_threads ()
     in

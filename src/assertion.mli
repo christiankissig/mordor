@@ -68,6 +68,13 @@ val check_assertion :
   exhaustive:bool ->
   assertion_result Lwt.t
 
+(** [admits_outcome structure execution outcome] holds when [execution] can
+    end with [outcome], a concrete value per register and global: how an
+    execution of one semantics is matched against another's outcomes. Entries
+    that are not a plain name with an integer value are ignored. *)
+val admits_outcome :
+  symbolic_event_structure -> symbolic_execution -> (string * expr) list -> bool
+
 (** [ub_reasons_to_yojson ubs] converts a UB reason list to Yojson. *)
 val ub_reasons_to_yojson : ub_reason list -> Yojson.Safe.t
 

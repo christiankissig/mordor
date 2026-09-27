@@ -43,13 +43,18 @@ writes, freezes them into executions with their dependencies, and checks those
 executions against memory models: sMRD, RC11 and IMM, and 24 models of the
 [Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org) defined over the same
 relations, from SC and TSO to the release-acquire family and the session
-guarantees.
+guarantees. It can also compute a program's executions under promising
+semantics 1.0 (Kang et al., POPL 2017) and 2.0 (Lee et al., PLDI 2020), which
+are operational: promises, certification and per-thread views instead of
+justifications.
 
 The command-line interface and web UI provide:
 - Parsing and validating programs and litmus tests
 - Computing and visualising event structures, justifications and executions
 - Checking `allow` and `forbid` assertions under a memory model, and comparing
   models execution by execution
+- Computing executions under promising semantics, and comparing them with the
+  other models by outcome
 - Deciding episodicity of unbounded loops
 - Finding use-after-free
 
@@ -200,6 +205,10 @@ MoRDor supports several commands for analyzing litmus tests and generating outpu
 
 #### Execution
 - `--threads <n>`: Number of parallel threads (default: 1)
+- `--semantics smrd|ps1|ps2`: The semantics executions are computed under:
+  sMRD (default), or promising semantics 1.0 or 2.0. A test annotated `[PS1]`
+  or `[PS2]` selects its version without the option; the option takes
+  precedence. Supported by `run` only.
 
 #### Logging
 - `--debug` / `--info` / `--warning` / `--error`: Log verbosity level
@@ -240,6 +249,9 @@ dune exec mordor -- run --all-litmus-tests ./litmus-tests
 
 # Run verification recursively with parallel threads
 dune exec mordor -- run --all-litmus-tests ./litmus-tests -r --threads 4
+
+# Run a litmus test under promising semantics 2.0
+dune exec mordor -- run --single litmus-tests-promising/LB.lit --semantics ps2
 ```
 
 #### Visualizing Event Structures

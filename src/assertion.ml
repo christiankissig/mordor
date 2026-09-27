@@ -764,6 +764,41 @@ module ConditionChecker = struct
       set_valid && solver_valid
 end
 
+(** [admits_outcome structure execution outcome] holds when [execution] can
+    end with [outcome]: every register and global of [outcome] with an integer
+    value taking that value, under the execution's own path predicates. This is
+    how an execution of one semantics is matched against the outcomes of
+    another, which enumerates executions of its own. Locations that are not
+    plain names, and values that are addresses, say nothing comparable and are
+    left out. An aborted execution ends with no outcome. *)
+let admits_outcome structure (execution : symbolic_execution) outcome =
+  let plain k =
+    k <> ""
+    && String.for_all
+         (function
+           | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> true
+           | _ -> false
+           )
+         k
+  in
+  let equalities =
+    List.filter_map
+      (fun (k, v) ->
+        match v with
+        | ENum _ when plain k -> Some (EBinOp (EVar k, "=", v))
+        | _ -> None
+      )
+      outcome
+  in
+    execution.aborted = None
+    &&
+    match equalities with
+    | [] -> true
+    | e :: es ->
+        ConditionChecker.check_condition
+          (List.fold_left (fun acc e -> EBinOp (acc, "&&", e)) e es)
+          structure execution
+
 (** {1 Refinement Checking} *)
 
 (** Refinement checking between programs.

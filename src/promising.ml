@@ -884,8 +884,10 @@ let writes ?at ~world ~tid cfg l v mode =
 
 (** An update of [l]: [update] maps the value read to [Some] value to write, or
     to [None] where the update fails -- a failing CAS, which is a plain read,
-    or a lock already held, which cannot step at all ([blocking]). *)
-let updates ?at ~world ~tid ~blocking cfg l ~rmode ~wmode register update =
+    or a lock already held, which cannot step at all ([blocking]). [register]
+    gets [result read written]: FADD the value it read, CAS whether it wrote. *)
+let updates ?at ~world ~tid ~blocking cfg l ~rmode ~wmode register ~result
+    update =
   let th = cfg.th in
   let cs = cells cfg.mem l in
   let curl = View.get th.cur l in
@@ -935,7 +937,9 @@ let updates ?at ~world ~tid ~blocking cfg l ~rmode ~wmode register update =
   (* The step reading [c] from memory [mem], or [None] if it cannot be made. *)
   let step cs mem c =
     let th_r, r_label =
-      track_read at (set_reg (read_view th l c rmode) register c.value) c c.value
+      track_read at
+        (set_reg (read_view th l c rmode) register (result c.value (update c.value)))
+        c c.value
     in
       match update c.value with
       | None when blocking -> None
@@ -1010,22 +1014,25 @@ and program_steps_exn ?tr ~world ~loops ~tid cfg =
             let expected = eval regs expected and desired = eval regs desired in
               updates ?at ~world ~tid ~blocking:false cfg
                 (Loc.of_value (eval regs address))
-                ~rmode:load_mode ~wmode:assign_mode register (fun v ->
-                  if Val.equal v expected then Some desired else None
-              )
+                ~rmode:load_mode ~wmode:assign_mode register
+                (* Whether the swap happened, as the episodic loops paper's
+                   CAS continues with [ρ[r ↦ ⊤]] or [ρ[r ↦ ⊥]]. *)
+                ~result:(fun _ written -> Val.of_bool (Option.is_some written))
+                (fun v -> if Val.equal v expected then Some desired else None)
         | Ir.Fadd { register; address; operand; load_mode; assign_mode; _ } ->
             let operand = eval regs operand in
               updates ?at ~world ~tid ~blocking:false cfg
                 (Loc.of_value (eval regs address))
-                ~rmode:load_mode ~wmode:assign_mode register (fun v ->
-                  Some (binop "+" v operand)
-              )
+                ~rmode:load_mode ~wmode:assign_mode register
+                (* Fetch-and-add: the value read, [ρ[r ↦ α]]. *)
+                ~result:(fun read _ -> read)
+                (fun v -> Some (binop "+" v operand))
         | Ir.Lock { global } ->
             (* An acquiring CAS from 0 to 1 that waits while the lock is held.
                It has no register to report into. *)
             let l = (Option.value global ~default:"lock", Z.zero) in
               updates ~world ~tid ~blocking:true cfg l ~rmode:Acquire
-                ~wmode:Relaxed " lock" (fun v ->
+                ~wmode:Relaxed " lock" ~result:(fun read _ -> read) (fun v ->
                   if Val.equal v Val.zero then Some (Val.Int Z.one) else None
               )
               |> List.map (fun (w, c) ->
@@ -1900,7 +1907,7 @@ let rec relations_named = function
   | EOr es -> List.concat_map relations_named es
   | _ -> []
 
-let calculate_executions ~version (ctx : mordor_ctx) =
+let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
   match ctx.program_stmts with
   | None ->
       Logs_safe.err (fun m -> m "No program statements for promising semantics.");
@@ -1963,7 +1970,7 @@ let calculate_executions ~version (ctx : mordor_ctx) =
           ctx.assertions
       in
       let tr =
-        match (asks, ctx.structure, ctx.source_spans) with
+        match (asks || track, ctx.structure, ctx.source_spans) with
         | true, Some structure, Some spans -> Some (make_tracker structure spans)
         | true, _, _ ->
             failwith
@@ -2002,7 +2009,9 @@ let calculate_executions ~version (ctx : mordor_ctx) =
         let executions = List.mapi execution_of_result envs in
         (* Every assertion is checked against these executions, whichever model
            it names. *)
-        let model = "promising" in
+        (* The model the executions are under, by the name that selects it.
+           Compared models are {!Semantics}'s to match. *)
+        let model = semantics_name ctx.options.semantics in
           ctx.options.coherent <- model;
           ctx.assertion_models <- List.map (fun _ -> model) ctx.assertions;
           ctx.model_executions <- None;
@@ -2012,14 +2021,17 @@ let calculate_executions ~version (ctx : mordor_ctx) =
 (** [step_calculate_executions lwt_ctx] computes the executions under the
     promising semantics [ctx.options.semantics] selects, in place of sMRD's
     justification and dependency steps: it follows [Interpret.step_interpret]
-    and precedes [Assertion.step_check_assertions].
+    and precedes [Assertion.step_check_assertions]. With [track], each
+    execution carries its events and relations whether or not an assertion
+    asks, for a caller that shows them.
 
     @raise Invalid_argument if the options select sMRD. *)
-let step_calculate_executions (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+let step_calculate_executions ?track (lwt_ctx : mordor_ctx Lwt.t) :
+    mordor_ctx Lwt.t =
   Lwt.map
     (fun ctx ->
       match version_of_semantics ctx.options.semantics with
-      | Some version -> calculate_executions ~version ctx
+      | Some version -> calculate_executions ?track ~version ctx
       | None ->
           invalid_arg
             "Promising.step_calculate_executions: the options select sMRD"

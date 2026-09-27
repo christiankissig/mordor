@@ -386,7 +386,7 @@
                 <p>A <em>justification</em> for a write says which reads the write depends on, and under what condition. Initially a write depends on every read its value or location mentions. <em>Elaborations</em> then derive further justifications that depend on less:</p>
                 <ul>
                     <li><strong>Value assignment</strong> replaces a symbol by the value the condition forces, so the write no longer depends on the read that produced it.</li>
-                    <li><strong>Forwarding</strong> lets a read take its value directly from an earlier write in the same thread, so the read is no longer performed. <strong>Write elision</strong> removes a write that a later write overwrites before anything reads it.</li>
+                    <li><strong>Forwarding</strong> lets a read take its value directly from an earlier write in the same thread, so the read is no longer performed. <strong>Write elision</strong> removes a write that a later write overwrites before anything reads it. Neither applies to a volatile access, or to the read or write of a <code>cas</code> or <code>fadd</code>: those are always performed, and an update's read reads from memory, which is what keeps it atomic.</li>
                     <li><strong>Lifting</strong> merges justifications that hold on both sides of a branch, so the write no longer depends on what the branch tested.</li>
                     <li><strong>Weakening</strong> drops the parts of a justification's condition that the program's de facto guarantees already imply.</li>
                 </ul>
@@ -430,9 +430,11 @@
                         <tr><td><code>pocausal</code></td><td>Per-object causal consistency (Burckhardt et al.), with visibility read off <code>rf</code> and arbitration from <code>co</code>.</td></tr>
                         <tr><td><code>ryw</code>, <code>mr</code>, <code>mw</code>, <code>wfr</code></td><td>Terry et al.'s session guarantees, with a thread as a session and an arbitration order per reader. On its own, <code>mw</code> rejects nothing: a read sees only the write it read, so it never has two writes of one session to put in order.</td></tr>
                         <tr><td><code>imm</code>, <code>rc11c</code></td><td>Further models a test can name in its assertion, but not selectable in the web UI's settings for now.</td></tr>
+                        <tr><td><code>ps1</code>, <code>ps2</code></td><td>Promising semantics 1.0 (Kang et al., POPL 2017) and 2.0 (Lee et al., PLDI 2020). Not a check on sMRD's executions: see below.</td></tr>
                     </tbody>
                 </table>
                 <p>Every model is a check on the executions MoRDor generates. Those are already free of thin air, so a model weaker than sMRD cannot show an out-of-thin-air behaviour it would permit. The names follow the <a href="https://rmm-zoo.kissig.org">Relaxed Memory Model Zoo</a>; a name with a hyphen, such as <code>[x86-TSO]</code>, is written as the zoo spells it.</p>
+                <p><strong>Promising semantics</strong> is operational rather than axiomatic. A thread may <em>promise</em> a write before it reaches it, other threads may read the promise, and the promise stands only if the thread can be <em>certified</em> to fulfil it running alone. So <code>ps1</code> and <code>ps2</code> compute their own executions, one per distinct outcome, instead of checking sMRD's. An execution's relations are those promising defines: <code>rf</code>, which message each read took, and <code>co</code>, the order of timestamps per location. <code>dp</code> and <code>ppo</code> are sMRD's and have no counterpart. Loops need the step counter. A test annotated <code>[PS1]</code> or <code>[PS2]</code> runs under that version; <code>[Promising]</code> names none and needs one chosen. On the command line, <code>--semantics ps1</code> or <code>ps2</code> chooses it for a whole run.</p>
                 <p>A test names its model in its assertion, as in <code>forbid (…) [RC11]</code>, or several, as in <code>forbid (…) [RA, SRA]</code>. Some names map onto a model: <code>[Power]</code> onto IMM, and <code>[UB11]</code>, <code>[RC11UB]</code> and <code>[IMMUB]</code> also allow the undefined-behaviour fold <code>e / !r → e</code>. An unknown model name is an error. <code>[_]</code> means any model.</p>
 
                 <h3 id="concepts-assertions">Assertions</h3>
@@ -462,6 +464,7 @@
                 <h3 id="concepts-uaf">Use-after-free</h3>
                 <p>An execution exhibits a <em>use-after-free</em> when it accesses a location that a deallocation frees, and nothing orders the access before the deallocation: no chain of <code>dp</code>, <code>ppo</code> and <code>rf</code> edges leads from the access to the free. Program order alone does not count, since relaxed memory does not preserve it. Which executions exist depends on the memory model, so a program can be free of use-after-free under RC11 and exhibit one under sMRD.</p>
                 <p>An <em>unbounded pointer dereference</em> is the counterpart for allocations: an access through a pointer to allocated memory that nothing orders after the allocation.</p>
+                <p>Both are sMRD's. Under promising semantics there is no use-after-free; what counts as undefined behaviour there is a dereference of something that is not an address, or a division by zero. The run aborts at that point, is reported as undefined behaviour, and has no final state for a condition to hold of.</p>
             </section>
 
             <section id="getting-started" class="section">
@@ -597,9 +600,11 @@
                 <ul>
                     <li><strong>Primary model</strong> is the model executions are shown for, and the model the assertion is checked under. <em>Default</em> is the model the test's assertion names, or sMRD if it names none. Choosing any other model replaces the test's own model, for every assertion the test has.</li>
                     <li><strong>Also compute executions under</strong> checks every execution against further models, any of those in the table above except IMM and RC11c. The log reports how many executions each model admits. The information box lists, for the execution on screen, the compared models that also admit it.</li>
+                    <li><strong>PS1.0</strong> and <strong>PS2.0</strong>, under <em>Promising (operational)</em>, compute the executions under promising semantics instead of sMRD's. As the primary model, each execution's graph shows its events with their <code>rf</code> and <code>co</code> edges; there are no justifications to show. Symbolic loops are unavailable while either is the primary or a compared model.</li>
                 </ul>
                 <div class="note">
                     <strong>How comparison works.</strong> MoRDor enumerates executions once, and each model checks them. Nothing before the coherence check depends on the model, so a compared model admits exactly the executions it would keep as the primary. Interpretation is the exception: the undefined-behaviour fold of <code>[RC11UB]</code>, for example, happens before any model is consulted, so it follows the primary model.
+                    <br><br>Promising semantics enumerates executions of its own, so between it and the other models it is the <em>outcome</em> that is compared: a model allows an execution when it allows the execution's final values of registers and globals. An sMRD execution is symbolic, and allows an outcome when its values can take those of the outcome. A promising run that aborted has no outcome, and is allowed by none.
                 </div>
                 <h4>Execution Filtering</h4>
                 <p><strong>Show executions with use-after-free</strong> and <strong>Show executions with unbounded pointer dereference</strong> are sent with each request, but the server does not act on them yet. Every admitted execution is shown whichever way they are set.</p>
@@ -1046,7 +1051,7 @@ r0 := cas(sc, sc, rx, 0, 1);</code></pre>
                 </div>
 
                 <h3>Fetch-and-Add (FADD)</h3>
-                <p>Atomically adds the operand to the value at an address. The register is set to the new value. The address and operand are over registers, as for <code>cas</code>:</p>
+                <p>Atomically adds the operand to the value at an address. The register is set to the value read, before the addition: this is fetch-and-add. The address and operand are over registers, as for <code>cas</code>:</p>
                 <div class="syntax-block">
                     <div class="title">Syntax (with RMW mode):</div>
                     <pre><code>r0 := <span class="keyword">fadd</span>(rmw_mode, load_order, store_order, address, operand)</code></pre>
