@@ -23,6 +23,7 @@ let make_test_exec e rf dp ppo rmw ex_p fix_rf_map pointer_map final_env :
     fix_rf_map;
     pointer_map;
     final_env;
+    aborted = None;
   }
 
 (* Helper to create minimal test execution with just events and relations *)

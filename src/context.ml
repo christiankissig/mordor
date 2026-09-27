@@ -218,6 +218,10 @@ let upd_ub_reason_of_yojson = pair_int_uset_of_yojson
 type ub_reason =
   | UAF of uaf_ub_reason [@printer pp_int_urel]  (** Use-after-free *)
   | UPD of upd_ub_reason [@printer pp_int_urel]  (** Unsequenced data race *)
+  | Aborted of string
+      (** A run of an operational semantics aborted: a thread dereferenced
+          something that is not an address, or divided by zero. The string
+          says which. Only {!Promising} reports it. *)
 [@@deriving show, yojson]
 
 (** List of undefined behavior reasons per event. *)

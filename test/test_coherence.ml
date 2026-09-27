@@ -75,6 +75,7 @@ let make_empty_execution () =
     fix_rf_map = Hashtbl.create 10;
     pointer_map = Hashtbl.create 10 |> Option.some;
     final_env = Hashtbl.create 0;
+    aborted = None;
   }
 
 (** Test helper: create uset from list *)
@@ -257,6 +258,7 @@ let test_imm_coherent_simple () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in
@@ -298,6 +300,7 @@ let test_rc11_coherent_simple () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in
@@ -339,6 +342,7 @@ let test_rc11c_coherent_simple () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in
@@ -387,6 +391,7 @@ let imm_rmw_violated () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in
@@ -472,6 +477,7 @@ let test_cache_types () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in

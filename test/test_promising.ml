@@ -191,6 +191,46 @@ let test_parse_semantics () =
     (Invalid_argument "unknown semantics \"ps3\" (expected smrd, ps1 or ps2)")
     (fun () -> ignore (parse_semantics "ps3"))
 
+(** A null dereference is undefined behaviour, reported as such: [forbid (ub)]
+    fails and [allow (ub)] holds. An aborted run has no final state, so it
+    witnesses no outcome. *)
+let test_undefined_behaviour () =
+  let null condition =
+    Printf.sprintf
+      {|x := 0;
+{ r1 := 5; rp := x; r2 := *rp } ||| { x := 0 }
+%%%%
+%s [Promising]|}
+      condition
+  in
+    List.iter
+      (fun (v, semantics) ->
+        let ctx = run semantics (null "forbid (ub)") in
+          check bool ("forbid (ub) under " ^ v) false (valid ctx);
+          check (option bool) ("UB reported under " ^ v) (Some true)
+            ctx.undefined_behaviour;
+          check bool ("allow (ub) under " ^ v) true
+            (valid (run semantics (null "allow (ub)")));
+          check bool ("no final state under " ^ v) false
+            (valid (run semantics (null "allow (r1 = 5)")))
+      )
+      versions
+
+(** PS2.0 certifies a promise through an abort -- here dividing by the 0 the
+    cap holds -- since an abort stands for any behaviour. PS1.0 has to certify
+    for every cap value, 0 among them, and has no aborts. *)
+let abort_certifies =
+  {|x := 0; y := 0;
+{ r1 := x; r2 := 1 / r1; y := 1 } ||| { r3 := y; x := r3 }
+%%
+allow (r1 = 1 && r3 = 1) [Promising]|}
+
+let test_abort_certifies () =
+  check bool "abort certifies under PS1.0" false
+    (valid (run Promising1 abort_certifies));
+  check bool "abort certifies under PS2.0" true
+    (valid (run Promising2 abort_certifies))
+
 let suite =
   ( "Promising",
     [
@@ -232,6 +272,8 @@ allow (r1 = 1) [Promising]|};
 forbid (r2 = 3 && r3 = 0) [Promising]|};
       holds_under_both "Upd-Stuck" upd_stuck;
       test_case "RPacq separates the versions" `Quick test_rpacq_separates;
+      test_case "undefined behaviour" `Quick test_undefined_behaviour;
+      test_case "an abort certifies under PS2.0" `Quick test_abort_certifies;
       test_case "[Promising] needs --semantics" `Quick test_model_name;
       test_case "sMRD through the same step" `Quick test_smrd_unchanged;
       test_case "semantics names" `Quick test_parse_semantics;

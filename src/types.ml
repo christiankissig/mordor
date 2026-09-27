@@ -291,6 +291,9 @@ type symbolic_execution = {
   fix_rf_map : (string, expr) Hashtbl.t; [@printer pp_fix_rf_map]
   pointer_map : (int, value_type) Hashtbl.t option; [@opaque]
   final_env : (string, expr) Hashtbl.t; [@printer pp_env]
+  aborted : string option;
+      (* Why the run aborted with undefined behaviour, for an execution the
+         promising semantics computes; [None] for every other. *)
 }
 (* Declared after symbolic_execution on purpose.  Both records carry fwd and we,
    and OCaml resolves a bare field to the last type that defines it, so this

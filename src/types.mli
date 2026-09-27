@@ -168,6 +168,9 @@ type symbolic_execution = {
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer
   mappings *)
   final_env : (string, expr) Hashtbl.t;
+  aborted : string option;
+      (* Why the run aborted with undefined behaviour, for an execution the
+         promising semantics computes; [None] for every other. *)
 }
 
 (* Declared after symbolic_execution: both records carry fwd and we, and a bare

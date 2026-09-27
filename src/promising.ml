@@ -69,10 +69,17 @@
       [step_counter] iterations per loop, or a shared budget per thread under
       the global step counter. Symbolic loop semantics is not supported.
     - [free] and allocation only name fresh locations: promising semantics has
-      no use-after-free, so no undefined behaviour is reported. A dereference
-      of something that is not an address, or a division by zero, leaves the
-      thread stuck: PS2.0 would make that run undefined -- any behaviour at all
-      -- and here it is discarded instead, with a warning counting such steps.
+      no use-after-free. A dereference of something that is not an address, or
+      a division by zero, aborts the run, as PS2.0's [abort] does (section
+      4.3), if the thread is promise-consistent -- its view below each of its
+      outstanding promises -- and is discarded, with a warning, if not. An
+      aborted run becomes an execution with [aborted] set: {!Assertion}
+      reports it as undefined behaviour, and it witnesses no outcome, having no
+      final state. PS2.0 lets an abort certify promises, as it stands for any
+      behaviour; a thread that can abort may then promise any value of the
+      finite domain PS1.0's caps use, to any location it stores to, and never
+      more promises than it has writes left. PS1.0 defines no undefined
+      behaviour, so there an abort is reported but certifies nothing.
     - Executions are outcomes, not event graphs: an assertion asking about a
       relation ([.rf], [.dp], ...) is refused, a refinement chain too, and
       header constraints on symbolic values are ignored with a warning.
@@ -102,11 +109,12 @@ exception Unsupported of string
 let unsupported fmt = Printf.ksprintf (fun s -> raise (Unsupported s)) fmt
 
 (** Raised by a step with undefined behaviour -- a dereference of something
-    that is not an address, a division by zero. The thread is stuck there, and
-    the path is discarded, as PS2.0 discards a run that aborts. *)
+    that is not an address, a division by zero. The thread aborts there: see
+    {!Abort}. *)
 exception Stuck of string
 
-(** How many paths got stuck, and on what, for the log. *)
+(** How many aborts were discarded, and on what, for the log: those of a thread
+    that could not abort, not being promise-consistent. *)
 let stuck_paths : (string, int) Hashtbl.t = Hashtbl.create 4
 
 let stuck fmt = Printf.ksprintf (fun s -> raise (Stuck s)) fmt
@@ -489,10 +497,11 @@ let rec normalize ~loops th =
         | _ -> th
     )
 
-(** The locations [th]'s remaining updates could address: where a PS2.0
-    reservation can be of use. An address the registers do not determine yet --
-    a pointer loaded later -- could be any location [mem] has. *)
-let rmw_locations th mem =
+(** [locations ~stores th mem] are the locations [th]'s remaining updates --
+    and with [stores], its stores too -- could address. An address the
+    registers do not determine yet -- a pointer loaded later -- could be any
+    location [mem] has. *)
+let locations ~stores th mem =
   let unknown = ref false in
   (* The references the rest of the code takes, [r := &x]: an address held in
      such a register is known before the assignment is reached. *)
@@ -532,6 +541,12 @@ let rmw_locations th mem =
       match node.Ir.stmt with
       | Ir.Cas { address; _ } | Ir.Fadd { address; _ } -> addr address
       | Ir.Lock { global } -> (Option.value global ~default:"lock", Z.zero) :: acc
+      | (Ir.GlobalStore { global; _ } | Ir.GlobalMalloc { global; _ }) when stores
+        ->
+          (global, Z.zero) :: acc
+      | Ir.DerefStore { address; _ } when stores -> addr address
+      | Ir.Unlock { global } when stores ->
+          (Option.value global ~default:"lock", Z.zero) :: acc
       | Ir.If { then_body; else_body; _ } ->
           of_nodes (of_nodes acc then_body) (Option.value else_body ~default:[])
       | Ir.While { body; _ } | Ir.Do { body; _ } -> of_nodes acc body
@@ -549,6 +564,48 @@ let rmw_locations th mem =
   let all = if !unknown then List.map fst (LocMap.bindings mem.locs) else [] in
     List.sort_uniq Loc.compare (known @ all)
 
+(** Where a PS2.0 reservation can be of use. *)
+let rmw_locations = locations ~stores:false
+
+(** [max_writes ~loops th] bounds the writes [th] can still make, along any
+    path, counting each loop at its bound. A run that finishes fulfils each of
+    its promises by a write of its own, so a thread never needs more
+    outstanding promises than this -- which, when an abort certifies them all,
+    is the only bound there is. *)
+let max_writes ~loops th =
+  let rec of_nodes nodes = List.fold_left (fun n node -> n + of_node node) 0 nodes
+  and of_node (node : ir_node) =
+    match node.Ir.stmt with
+    | Ir.GlobalStore _ | Ir.DerefStore _ | Ir.GlobalMalloc _ | Ir.Cas _
+    | Ir.Fadd _ | Ir.Lock _ | Ir.Unlock _ ->
+        1
+    | Ir.If { then_body; else_body; _ } ->
+        max (of_nodes then_body) (of_nodes (Option.value else_body ~default:[]))
+    | Ir.While { body; _ } | Ir.Do { body; _ } ->
+        let bound =
+          match loops with
+          | PerLoop k -> k
+          | Global -> th.budget
+        in
+          bound * of_nodes body
+    | Ir.Labeled { stmt; _ } -> of_node stmt
+    | Ir.Threads { threads } -> List.fold_left (fun n t -> n + of_nodes t) 0 threads
+    | _ -> 0
+  in
+    List.fold_left
+      (fun n -> function
+        | Stmt node -> n + of_node node
+        | Iterate { body; left; _ } -> n + (left * of_nodes body)
+        )
+      0 th.code
+
+let own_promises_of cs tid = List.filter (fun c -> c.kind = Promise tid) cs
+
+let promise_count mem tid =
+  LocMap.fold
+    (fun _ cs n -> n + List.length (own_promises_of cs tid))
+    mem.locs 0
+
 (** {1 Thread Steps} *)
 
 (** Where a thread runs: in the real memory, or alone in a capped memory to
@@ -559,6 +616,23 @@ type config = { th : thread; mem : memory; sc : View.t }
 
 (** A successor of a step, with the write the step made, if any. *)
 type succ = (Loc.t * Val.t) option * config
+
+(** What a thread can do next: a step, or -- on undefined behaviour -- abort,
+    in the configuration it reached. *)
+type move = Step of succ | Abort of string * config
+
+(** PS2.0's condition for aborting (section 4.3): the thread's view of every
+    location is below each of its outstanding promises there, so that it could
+    still fulfil them -- which is all an abort, standing for any behaviour at
+    all, has to be able to do. *)
+let promise_consistent ~tid cfg =
+  LocMap.for_all
+    (fun l cs ->
+      List.for_all
+        (fun p -> p.kind <> Promise tid || Q.lt (View.get cfg.th.cur l) p.to_)
+        cs
+    )
+    cfg.mem.locs
 
 let read_view th l c mode =
   let s = View.single l c.to_ in
@@ -723,14 +797,12 @@ let fence ~tid cfg mode =
           ]
     | Relaxed | Normal | Strong | Nonatomic -> [ (None, cfg) ]
 
-(** [program_steps ~world ~loops ~tid cfg] is every step thread [tid] can take
+(** [program_steps ~world ~loops ~tid cfg] is every move thread [tid] can make
     by running its next memory access, each successor normalized. A fork is not
     among them; {!explore} handles it. *)
 let rec program_steps ~world ~loops ~tid cfg =
   try program_steps_exn ~world ~loops ~tid cfg
-  with Stuck what ->
-    note_stuck what;
-    []
+  with Stuck what -> [ Abort (what, cfg) ]
 
 and program_steps_exn ~world ~loops ~tid cfg =
   match cfg.th.code with
@@ -788,7 +860,11 @@ and program_steps_exn ~world ~loops ~tid cfg =
             unsupported "a statement left after normalization: %s"
               (Ir.to_string ~ann_to_string:(fun _ -> "") node)
       in
-      let norm (w, c) = (w, { c with th = normalize ~loops c.th }) in
+      let norm (w, c) =
+        match normalize ~loops c.th with
+        | th -> Step (w, { c with th })
+        | exception Stuck what -> Abort (what, c)
+      in
         List.map norm succs
   | _ -> []
 
@@ -992,7 +1068,13 @@ let consistent ~version ~loops ~tid cfg =
           | None ->
               let b =
                 List.exists
-                  (fun (_, c) -> certify c)
+                  (function
+                    | Step (_, c) -> certify c
+                    (* PS2.0 lets the certifying thread replace an abort by
+                       any sequence of operations, fulfilling its promises
+                       among them. PS1.0 has no undefined behaviour. *)
+                    | Abort (_, c) -> version = PS2 && promise_consistent ~tid c
+                    )
                   (program_steps ~world:Capped ~loops ~tid cfg)
               in
                 Hashtbl.replace memo k b;
@@ -1001,10 +1083,16 @@ let consistent ~version ~loops ~tid cfg =
       List.for_all certify (certification_starts ~version ~tid cfg)
 
 (** The writes thread [tid] could make running alone from [cfg] in a memory it
-    certifies against: the only promises certification can accept. *)
+    certifies against: the only promises certification can accept.
+
+    Under PS2.0 a reachable abort certifies every promise, as it stands for any
+    behaviour at all. Then the thread may also promise any value of {!domain}
+    to any location its code stores to -- the same finite stand-in for "any
+    value" PS1.0's caps use. *)
 let potential_writes ~version ~loops ~tid cfg =
   let seen = Hashtbl.create 64 in
   let found = ref [] in
+  let aborts = ref false in
   let record = function
     | Some (l, v) ->
         if
@@ -1021,19 +1109,33 @@ let potential_writes ~version ~loops ~tid cfg =
       if not (Hashtbl.mem seen k) then begin
         Hashtbl.add seen k ();
         List.iter
-          (fun (w, c) ->
-            record w;
-            go c
-          )
+          (function
+            | Step (w, c) ->
+                record w;
+                go c
+            | Abort _ -> aborts := true
+            )
           (program_steps ~world:Capped ~loops ~tid cfg)
       end
   in
     List.iter go (certification_starts ~version ~tid cfg);
+    if !aborts && version = PS2 then begin
+      let values = domain cfg.th cfg.mem in
+        List.iter
+          (fun l -> List.iter (fun v -> record (Some (l, v))) values)
+          (locations ~stores:true cfg.th cfg.mem)
+    end;
     List.rev !found
 
 (** {1 Exploration} *)
 
-type state = { threads : thread array; memory : memory; sc_view : View.t }
+type state = {
+  threads : thread array;
+  memory : memory;
+  sc_view : View.t;
+  aborted : string option;
+      (** Why a thread aborted, ending the run with undefined behaviour. *)
+}
 
 (** [canonical st] renames every timestamp to its rank among its location's
     timestamps. Only their order matters -- a gap between two distinct ones is
@@ -1078,10 +1180,15 @@ let canonical st =
                   st.memory.locs;
             };
           sc_view = view st.sc_view;
+          aborted = st.aborted;
         }
 
 let state_key st =
-  key (Array.map thread_repr st.threads, mem_repr st.memory, view_repr st.sc_view)
+  key
+    ( Array.map thread_repr st.threads,
+      mem_repr st.memory,
+      view_repr st.sc_view,
+      st.aborted )
 
 (** Exploration statistics, for the log. *)
 type stats = {
@@ -1166,8 +1273,9 @@ let rec explore ~version ~loops ~stats threads memory sc_view =
         Hashtbl.add visited k ();
         stats.states <- stats.states + 1;
         (* A finished thread has no promises left: the step that finished it
-           had to leave it consistent. *)
-        if Array.for_all (fun th -> th.code = []) st.threads then
+           had to leave it consistent. An aborted run is over. *)
+        if st.aborted <> None || Array.for_all (fun th -> th.code = []) st.threads
+        then
           Hashtbl.replace finals k st
         else
           for tid = 0 to n - 1 do
@@ -1177,10 +1285,10 @@ let rec explore ~version ~loops ~stats threads memory sc_view =
   and successors st tid =
     let th = st.threads.(tid) in
     let cfg = { th; mem = st.memory; sc = st.sc_view } in
-    let rebuild (c : config) =
+    let rebuild ?aborted (c : config) =
       let threads = Array.copy st.threads in
         threads.(tid) <- c.th;
-        { threads; memory = c.mem; sc_view = c.sc }
+        { threads; memory = c.mem; sc_view = c.sc; aborted }
     in
     let admissible (c : config) =
       if has_promises c.mem tid then begin
@@ -1196,33 +1304,40 @@ let rec explore ~version ~loops ~stats threads memory sc_view =
       | Stmt { Ir.stmt = Ir.Threads { threads = forked }; _ } :: rest ->
           if n > 1 then
             unsupported
-              "a parallel composition nested inside a thread that runs                alongside others"
+              "a parallel composition nested inside a thread that runs \
+               alongside others"
           else
             let parent = { th with code = rest } in
-(            match Array.of_list (fork_threads ~loops parent forked) with
-            | exception Stuck what ->
-                note_stuck what;
-                []
+            (* The forking thread has no promises, being alone, so it can
+               always abort. *)
+            begin
+            match Array.of_list (fork_threads ~loops parent forked) with
+            | exception Stuck what -> [ rebuild ~aborted:what cfg ]
             | children ->
-                List.filter_map
+                List.map
                   (fun fin ->
-                    match join ~loops parent (Array.to_list fin.threads) with
-                    | parent' ->
-                        Some
-                          (rebuild
-                             { th = parent'; mem = fin.memory; sc = fin.sc_view }
-                          )
-                    | exception Stuck what ->
-                        note_stuck what;
-                        None
+                    let c = { th = parent; mem = fin.memory; sc = fin.sc_view } in
+                      match fin.aborted with
+                      | Some what -> rebuild ~aborted:what c
+                      | None -> (
+                          match join ~loops parent (Array.to_list fin.threads) with
+                          | parent' -> rebuild { c with th = parent' }
+                          | exception Stuck what -> rebuild ~aborted:what c
+                        )
                   )
-                  (explore ~version ~loops ~stats children st.memory st.sc_view))
+                  (explore ~version ~loops ~stats children st.memory st.sc_view)
+            end
       | _ ->
           let steps =
             List.filter_map
               (function
-                | _, c when admissible c -> Some (rebuild c)
-                | _ -> None
+                | Step (_, c) -> if admissible c then Some (rebuild c) else None
+                | Abort (what, c) ->
+                    if promise_consistent ~tid c then Some (rebuild ~aborted:what c)
+                    else (
+                      note_stuck what;
+                      None
+                    )
                 )
               (program_steps ~world:Real ~loops ~tid cfg)
           in
@@ -1239,6 +1354,8 @@ let rec explore ~version ~loops ~stats threads memory sc_view =
   and promise_steps cfg tid =
     let th = cfg.th in
     let rmw = rmw_locations th cfg.mem in
+    if promise_count cfg.mem tid >= max_writes ~loops th then []
+    else
       List.concat_map
         (fun (l, v) ->
           let cs = cells cfg.mem l in
@@ -1320,7 +1437,7 @@ let rec explore ~version ~loops ~stats threads memory sc_view =
     in
       reserve @ cancel
   in
-    dfs { threads; memory; sc_view };
+    dfs { threads; memory; sc_view; aborted = None };
     Hashtbl.fold (fun _ st acc -> st :: acc) finals []
 
 (** {1 Outcomes} *)
@@ -1339,12 +1456,15 @@ let final_memory mem =
     location under its name -- which is how {!Assertion} reads a condition on
     [x]'s final value. *)
 let outcome (st : state) =
-  let main = st.threads.(0) in
   let env = Hashtbl.create 16 in
     List.iter
       (fun (l, v) -> Hashtbl.replace env (Loc.to_string l) (Val.to_expr v))
       (final_memory st.memory);
-    SMap.iter (fun r v -> Hashtbl.replace env r (Val.to_expr v)) main.regs;
+    (* A run that aborted before its first thread was set up has none. *)
+    if Array.length st.threads > 0 then
+      SMap.iter
+        (fun r v -> Hashtbl.replace env r (Val.to_expr v))
+        st.threads.(0).regs;
     env
 
 let show_outcome env =
@@ -1353,7 +1473,7 @@ let show_outcome env =
   |> List.map (fun (k, v) -> Printf.sprintf "%s=%s" k (Expr.Expr.to_string v))
   |> String.concat " "
 
-let execution_of_outcome id final_env : symbolic_execution =
+let execution_of_outcome id (final_env, aborted) : symbolic_execution =
   {
     id;
     e = USet.create ();
@@ -1369,10 +1489,12 @@ let execution_of_outcome id final_env : symbolic_execution =
     fix_rf_map = Hashtbl.create 0;
     pointer_map = None;
     final_env;
+    aborted;
   }
 
 (** [outcomes ~version ~loops ~step_counter program] is every distinct outcome
-    of [program] under [version], each as its [final_env]. *)
+    of [program] under [version], each as its [final_env] and, for a run that
+    aborted, why. *)
 let outcomes ~version ~loops ~step_counter (program : ir_node list) =
   let stats =
     {
@@ -1403,13 +1525,22 @@ let outcomes ~version ~loops ~step_counter (program : ir_node list) =
     match main () with
     | main -> explore ~version ~loops ~stats [| main |] empty_memory View.bot
     | exception Stuck what ->
-        note_stuck what;
-        []
+        [
+          {
+            threads = [||];
+            memory = empty_memory;
+            sc_view = View.bot;
+            aborted = Some what;
+          };
+        ]
   in
     Hashtbl.iter
       (fun what n ->
         Logs_safe.warn (fun m ->
-            m "%s: %d steps got stuck on %s, and their paths were discarded"
+            m
+              "%s: %d steps had undefined behaviour (%s) in a thread that was \
+               not promise-consistent, so could not abort; their paths were \
+               discarded"
               (show_version version) n what
         )
       )
@@ -1419,15 +1550,17 @@ let outcomes ~version ~loops ~step_counter (program : ir_node list) =
     List.filter_map
       (fun st ->
         let env = outcome st in
-        let k = show_outcome env in
+        let k = (show_outcome env, st.aborted) in
           if Hashtbl.mem seen k then None
           else (
             Hashtbl.add seen k ();
-            Some env
+            Some (env, st.aborted)
           )
       )
       finals
-    |> List.sort (fun a b -> compare (show_outcome a) (show_outcome b))
+    |> List.sort (fun (a, x) (b, y) ->
+        compare (show_outcome a, x) (show_outcome b, y)
+    )
   in
     Logs_safe.info (fun m ->
         m "%s: %d states, %d promises tried, %d certifications, %d outcomes"
@@ -1449,7 +1582,8 @@ let loops_of_options (options : options) step_counter =
   | FiniteStepCounter -> Global
   | Symbolic | Generic ->
       unsupported
-        "symbolic loop semantics; promising semantics needs a step counter          (--step-counter or --step-counter-per-loop)"
+        "symbolic loop semantics; promising semantics needs a step counter \
+         (--step-counter or --step-counter-per-loop)"
 
 (** [calculate_executions ~version ctx] fills [ctx.executions] with the
     outcomes of the program under [version], one execution per outcome. *)
@@ -1506,9 +1640,13 @@ let calculate_executions ~version (ctx : mordor_ctx) =
             )
       in
         List.iter
-          (fun env ->
+          (fun (env, aborted) ->
             Logs_safe.debug (fun m ->
-                m "%s outcome: %s" (show_version version) (show_outcome env)
+                m "%s outcome: %s%s" (show_version version) (show_outcome env)
+                  ( match aborted with
+                  | Some what -> " (aborted: " ^ what ^ ")"
+                  | None -> ""
+                  )
             )
           )
           envs;

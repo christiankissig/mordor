@@ -240,6 +240,9 @@ module JSONSerialization = struct
   (** JSON format for unbounded pointer dereference violations. *)
   type upd_json = { upd : event_pair list } [@@deriving yojson]
 
+  (** JSON format for an aborted run: why it aborted. *)
+  type aborted_json = { aborted : string } [@@deriving yojson]
+
   (** JSON union type for UB reasons. *)
   type ub_reason_json = UAF_json of uaf_json | UPD_json of upd_json
   [@@deriving yojson]
@@ -256,6 +259,7 @@ module JSONSerialization = struct
     | UPD upd_reasons ->
         let pairs = USet.fold (fun acc pair -> pair :: acc) upd_reasons [] in
           upd_json_to_yojson { upd = pairs }
+    | Aborted what -> aborted_json_to_yojson { aborted = what }
 
   (** [ub_reasons_to_yojson ub_reasons] converts list to Yojson.
 
@@ -472,7 +476,11 @@ module UBValidation = struct
     UAF.check structure execution ub_reasons pointer_map rhb
       all_alloc_read_writes;
     UPD.check structure execution ub_reasons pointer_map rhb
-      all_alloc_read_writes
+      all_alloc_read_writes;
+    (* An operational semantics found this one itself, as the run went. *)
+    Option.iter
+      (fun what -> ub_reasons := Aborted what :: !ub_reasons)
+      execution.aborted
 end
 
 (** {1 Execution Analysis} *)
@@ -1243,6 +1251,11 @@ module PerExecutionChecker = struct
   let should_skip_condition already_satisfied is_ub_assertion =
     already_satisfied || is_ub_assertion
 
+  (** An aborted run has no final state, so it neither witnesses nor
+      contradicts a condition on one; it counts only as undefined behaviour. *)
+  let has_final_state (execution : symbolic_execution) =
+    execution.aborted = None
+
   (** [check_outcome_assertion outcome condition structure execution
        already_satisfied] checks assertion on execution.
 
@@ -1289,7 +1302,10 @@ module PerExecutionChecker = struct
         all_alloc_read_writes;
 
       (* Check condition if needed *)
-      if should_skip_condition !already_satisfied is_ub_assertion then
+      if
+        should_skip_condition !already_satisfied is_ub_assertion
+        || not (has_final_state execution)
+      then
         (!already_satisfied, !ub_reasons, None)
       else
         match condition_expr_opt with
