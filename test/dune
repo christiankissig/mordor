@@ -27,6 +27,7 @@
   test_interpret
   test_model_and_tuple_features
   test_parse
+  test_promising
   test_properties_mrd
   test_solver
   test_symbolic_mrd

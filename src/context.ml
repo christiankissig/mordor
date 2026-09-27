@@ -80,6 +80,34 @@ type loop_semantics =
   | Generic  (** Default interpretation strategy *)
 [@@deriving show]
 
+(** The semantics executions are computed under.
+
+    - {b Smrd}: Symbolic MRD -- justifications, dependencies and an axiomatic
+      coherence model ({!Elaborations}, {!Executions}). The default.
+    - {b Promising1}: the promising semantics of Kang et al., POPL 2017.
+    - {b Promising2}: the promising semantics 2.0 of Lee et al., PLDI 2020.
+
+    The two promising semantics are operational and are computed by
+    {!Promising}; they stand in the pipeline where sMRD's justification and
+    execution steps do, and fill the same [executions]. *)
+type semantics = Smrd | Promising1 | Promising2 [@@deriving show]
+
+(** [parse_semantics s] is the semantics [s] names: [smrd], [ps1] /
+    [promising1], or [ps2] / [promising2] (case-insensitive).
+    @raise Invalid_argument if [s] names none of them. *)
+let parse_semantics s =
+  match String.lowercase_ascii s with
+  | "smrd" -> Smrd
+  | "ps1" | "ps1.0" | "promising1" | "promising-1.0" -> Promising1
+  | "ps2" | "ps2.0" | "promising2" | "promising-2.0" -> Promising2
+  | _ ->
+      invalid_arg
+        (Printf.sprintf "unknown semantics %S (expected smrd, ps1 or ps2)" s)
+
+(** The model names a litmus test uses to ask for promising semantics. *)
+let promising_model_names =
+  [ "promising"; "promising1"; "promising2"; "ps"; "ps1"; "ps2" ]
+
 (** Parse output mode string from command line.
 
     @param s String representation (case-insensitive)
@@ -129,6 +157,9 @@ type options = {
           from every execution (R13): exact, and what the [futures] command does
           unless told [--all-executions]. The executions the pipeline then
           returns are the witnesses, not all of them. *)
+  mutable semantics : semantics;
+      (** Which semantics computes the executions: sMRD, or one of the two
+          promising semantics. *)
 }
 [@@deriving show]
 
@@ -153,6 +184,7 @@ let default_options =
     ubopt = false;
     allow_unknown_model = false;
     futures_by_witness = false;
+    semantics = Smrd;
   }
 
 (** {1 Types for Checked Executions} *)
@@ -611,7 +643,14 @@ let get_model_options name =
 let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
   ctx.options.model <- model;
   Logs_safe.info (fun m -> m "applying model options for model %s" model);
+  let promising_name =
+    List.mem (String.lowercase_ascii model) promising_model_names
+  in
   match Hashtbl.find_opt model_options_table (String.lowercase_ascii model) with
+  | None when promising_name && ctx.options.semantics <> Smrd ->
+      (* The promising semantics is not a coherence model: [Promising] computes
+         the executions itself, so there is nothing to apply. *)
+      ()
   | None ->
       (* The name is not in the table at all, so there is no coherence model to
          apply and the one already in effect -- the [smrd] default, normally --
@@ -626,10 +665,11 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
          under models of their own; failing here is what stops the next one
          being added unnoticed. Pass [--allow-unknown-model] to measure them. *)
       let detail =
-        if String.lowercase_ascii model = "promising" then
+        if promising_name then
           " Promising semantics is operational -- it needs promise sets, \
            certification and per-thread views, which the axiomatic coherence \
-           checker has no place for."
+           checker has no place for. Run with --semantics ps1 or --semantics \
+           ps2 to compute the executions under promising semantics instead."
         else ""
       in
       let msg =

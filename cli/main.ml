@@ -399,8 +399,7 @@ module Pipeline = struct
       Lwt.return context
       |> Parse.step_parse_litmus
       |> Interpret.step_interpret
-      |> Elaborations.step_generate_justifications
-      |> Executions.step_calculate_dependencies
+      |> Semantics.step_calculate_executions
       |> Assertion.step_check_assertions
       |> Display.print_results
 
@@ -701,6 +700,14 @@ module Pipeline = struct
           "litmus tests" f
       else f ()
     in
+      ( match config.Config.command with
+      | Config.Run | Config.Parse | Config.Interpret -> ()
+      | command ->
+          Semantics.require_smrd
+            ~command:
+              (String.lowercase_ascii (Config.show_command command))
+            config.Config.options
+      );
       match config.Config.command with
       | Config.Run -> programs (fun () -> run_tests tests config)
       | Config.Parse -> programs (fun () -> parse_tests tests config)
@@ -775,6 +782,7 @@ module CLI = struct
         (** Accept a memory model name the registry does not know *)
     mutable all_executions : bool;
         (** [futures]: from every execution, not one witness per future *)
+    mutable semantics : semantics;  (** sMRD, PS1.0 or PS2.0 *)
   }
 
   (** Create initial parse state with defaults. *)
@@ -792,6 +800,7 @@ module CLI = struct
       num_threads = 1;
       allow_unknown_model = false;
       all_executions = false;
+      semantics = Smrd;
     }
 
   (** Convert parse state to immutable configuration.
@@ -821,6 +830,7 @@ module CLI = struct
             allow_unknown_model = state.allow_unknown_model;
             futures_by_witness =
               command = Config.Futures && not state.all_executions;
+            semantics = state.semantics;
           }
         in
           {
@@ -967,6 +977,16 @@ module CLI = struct
         " futures: compute them from every execution, as the other commands \
          enumerate them, instead of from one witness per future (the default; \
          the same futures, and far fewer executions)"
+      );
+      ( "--semantics",
+        Arg.String
+          (fun s ->
+            try state.semantics <- parse_semantics s
+            with Invalid_argument msg -> raise (Arg.Bad ("--semantics: " ^ msg))
+          ),
+        " Semantics to compute executions under: smrd (default), ps1 \
+         (promising 1.0) or ps2 (promising 2.0). The promising semantics are \
+         supported by run only"
       );
       ( "--allow-unknown-model",
         Arg.Unit (fun () -> state.allow_unknown_model <- true),

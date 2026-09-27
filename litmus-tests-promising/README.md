@@ -5,47 +5,38 @@ These litmus tests are drawn from the Promising-semantics line of work
 and follow-ups). Their `allow`/`forbid` assertions are annotated `[Promising]`
 and encode the outcome **expected under promising semantics**.
 
-## Why they live here and not in the test suite
+## Running them
 
-**MoRDor does not implement promising semantics.** Promising is an *operational*
-model: a thread may *promise* a future write, other threads may read from it, and
-the promise is only legal if the promising thread can be *certified* to fulfil it
-by running thread-locally. Consistency is defined over execution traces with a
-message memory plus per-thread timestamp views — not over a static `(rf, co)`
-graph.
-
-MoRDor's coherence checker is, by contrast, axiomatic and post-hoc: given one
-already-fixed execution and an enumerated coherence order, it checks
-irreflexivity/acyclicity predicates (see `src/coherence.ml`). There is no place
-in that contract for promise sets, certification, or views, and
-`symbolic_execution` carries no such state. MoRDor's dependency/justification
-machinery (MRD / Symbolic MRD) is the project's deliberate *alternative* to
-promises.
-
-A registry entry once aliased the model name `"promising"` to the IMM checker.
-That was misleading — running these tests under that alias verified them under
-**IMM, not promising** — so the alias has been removed. Since #86 a
-`[Promising]` annotation is a hard error naming why:
+MoRDor computes promising semantics with `--semantics ps1` (PS1.0, POPL 2017)
+or `--semantics ps2` (PS2.0, Lee et al., PLDI 2020); see `src/promising.ml`.
+Under either, a `[Promising]` annotation is accepted:
 
 ```
-Error: Unknown memory model "promising". [...] Promising semantics is
-operational -- it needs promise sets, certification and per-thread views, which
-the axiomatic coherence checker has no place for. [...]
+dune exec mordor -- run --single "litmus-tests-promising/LB.lit" --semantics ps2
 ```
 
-`--allow-unknown-model` restores the old warn-and-continue behaviour for
-measurement.
+Promising is an *operational* model: a thread may *promise* a future write,
+other threads may read from it, and the promise is only legal if the promising
+thread can be *certified* to fulfil it by running thread-locally. It is not a
+coherence model, so under the default `--semantics smrd` a `[Promising]`
+annotation is still an error, naming `--semantics`:
 
-These files are therefore kept here **as reference only**. They are *not* scanned
-by the integration suite (which scans `litmus-tests/`). To verify them under
-their intended semantics, use a tool that implements promising semantics.
+```
+Error: Unknown memory model "promising". [...] Run with --semantics ps1 or
+--semantics ps2 to compute the executions under promising semantics instead.
+```
+
+The files stay here rather than in `litmus-tests/` because the integration
+suite scans that directory under sMRD. `test/test_promising.ml` checks the
+papers' verdicts for most of them under both versions.
+
+A registry entry once aliased the model name `"promising"` to the IMM checker,
+which verified these tests under IMM, not promising; that alias is gone.
 
 Two files were left behind in `litmus-tests/popl_grounding/` when the rest moved:
 `CYC.lit`, byte-identical to the copy already here and so simply deleted, and
-`Coh-CYC (Promising).lit`, moved here. Both name `[Promising]`, so the suite was
-checking them under whatever coherence model was in effect, which is the `smrd`
-default. `popl_grounding/` keeps `Coh-CYC (Soham).lit`, the same shape annotated
-`[Soham]` — a model name the registry does know.
+`Coh-CYC (Promising).lit`, moved here. `popl_grounding/` keeps
+`Coh-CYC (Soham).lit`, the same shape annotated `[Soham]`.
 
 ## Runnable approximations
 
@@ -62,25 +53,39 @@ record of the intended promising outcome.
 
 ## Files
 
-| File | Promising expectation |
-|------|-----------------------|
-| `SB.lit`               | allow  `r1=0 ∧ r2=0` |
-| `SB+fences.lit`        | forbid `r1=0 ∧ r2=0` |
-| `LB.lit`               | allow  `r1=1 ∧ r2=1` |
-| `LBa.lit`              | forbid `r1=1` |
-| `LBa'.lit`             | allow  `r2=2` |
-| `LBaa/LBa'0.lit`       | allow  `r1=2` |
-| `LBaa/LBa'1.lit`       | allow  `r1=2` |
-| `LBd.lit`              | forbid `r1=1` |
-| `LBfd.lit`             | allow  `r1=1 ∧ r2=1` |
-| `LBr.lit`              | forbid `r1=1` |
-| `MP+fences.lit`        | forbid `r1=1 ∧ r2=0` |
-| `COH.lit`              | forbid `r1=2 ∧ r2=1` |
-| `CYC.lit`              | forbid `r1=1 ∧ r2=1` |
-| `2+2W.lit`             | allow  `r1=2 ∧ r2=2` |
-| `ARM-weak.lit`         | allow  `r1=1` |
-| `Par-Inc.lit`          | allow  `r1=1 ∨ r2=1` |
-| `Upd-Stuck.lit`        | allow  `r1=1 ∧ r2=0` |
-| `Page 7 Column 1.lit`  | forbid `r1=1 ∧ r2=0 ∧ r3=1 ∧ r4=0` |
-| `Page 7 Column 1b.lit` | forbid `r2=3 ∧ r3=0` (release sequence) |
-| `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, annotated `[Promising=allow]` |
+| File | Promising expectation | PS1.0 | PS2.0 |
+|------|-----------------------|-------|-------|
+| `SB.lit`               | allow  `r1=0 ∧ r2=0` | allow | allow |
+| `SB+fences.lit`        | forbid `r1=0 ∧ r2=0` | forbid | forbid |
+| `LB.lit`               | allow  `r1=1 ∧ r2=1` | allow | allow |
+| `LBa.lit`              | forbid `r1=1` — **but see below** | allow | allow |
+| `LBa'.lit`             | allow  `r2=2` | allow | allow |
+| `LBaa/LBa'0.lit`       | allow  `r1=2` | allow | allow |
+| `LBaa/LBa'1.lit`       | allow  `r1=2` | allow | allow |
+| `LBd.lit`              | forbid `r1=1` | forbid | forbid |
+| `LBfd.lit`             | allow  `r1=1 ∧ r2=1` | allow | allow |
+| `LBr.lit`              | forbid `r1=1` | forbid | forbid |
+| `MP+fences.lit`        | forbid `r1=1 ∧ r2=0` | forbid | forbid |
+| `COH.lit`              | forbid `r1=2 ∧ r2=1` | forbid | forbid |
+| `CYC.lit`              | forbid `r1=1 ∧ r2=1` | forbid | forbid |
+| `2+2W.lit`             | allow  `r1=2 ∧ r2=2` | allow | allow |
+| `ARM-weak.lit`         | allow  `r1=1` | allow | allow |
+| `Par-Inc.lit`          | allow  `r1=1 ∨ r2=1` | allow | allow |
+| `Upd-Stuck.lit`        | allow  `r1=1 ∧ r2=0` | allow | allow |
+| `Page 7 Column 1.lit`  | forbid `r1=1 ∧ r2=0 ∧ r3=1 ∧ r4=0` | forbid | forbid |
+| `Page 7 Column 1b.lit` | forbid `r2=3 ∧ r3=0` (release sequence) | forbid | forbid |
+| `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, annotated `[Promising=allow]` — **see below** | forbid | forbid |
+
+**LBa.** The file asserts `forbid`, but the POPL 2017 paper (section 4.1)
+allows the outcome: "In the second variant (LBa), we allow the promise of
+y := 1 and thus the a = 1 outcome", so that optimizations eliminating an
+acquire read remain sound. Both versions allow it, and the assertion fails;
+the file's expectation is the error.
+
+**Coh-CYC.** The annotation says promising allows the outcome; both versions
+here forbid it. Neither paper discusses this program. The outcome needs T2 to
+promise `x := 3` before reading `y = 1` and T1 to promise `y := 1` before
+reading `x = 3`; certifying either promise needs the other to be in memory
+already, since certification writes `x := 2` after every existing message
+(behind the cap) and reads nothing but its own write. Treat this row as open
+until checked against another implementation.

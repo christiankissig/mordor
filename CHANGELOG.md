@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Promising semantics 1.0 and 2.0.** `--semantics ps1` or `--semantics ps2` computes a program's executions under the promising semantics of Kang et al. (POPL 2017) or Lee et al. (PLDI 2020) instead of sMRD's; `--semantics smrd` is the default. The new `Promising` module explores machine states explicitly -- messages with timestamp intervals and views, per-thread views, promises and their certification, PS2.0's reservations and capped memory -- and turns each distinct final outcome into an execution, so the same `Assertion` step checks it. `Semantics.step_calculate_executions` is the pipeline step that chooses between them. Under a promising semantics an `[Promising]` (or `[PS1]`, `[PS2]`) annotation is accepted; under sMRD it stays an error, now pointing at `--semantics`. Only `run` supports the promising semantics; the commands that show justifications, dependencies or futures refuse it. Assertions about relations and refinement chains are refused too, since promising executions are outcomes rather than event graphs.
 - `--output-mode isa` lists each execution's events under `events`, so a label missing from a future means the event is absent from that execution, not an event no edge touches.
 
 ### Changed
