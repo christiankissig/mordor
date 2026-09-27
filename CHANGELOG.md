@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `--output-mode isa` lists each execution's events under `events`, so a label missing from a future means the event is absent from that execution, not an event no edge touches.
+
+### Changed
+- An allocation may reuse the address of an earlier allocation when a free may release the earlier one first. Allocations used to be distinct in every case, in the structure's constraints and in the static dependency constraints alike. `Eventstructures.may_reuse` now decides per pair whether an intervening free may release the earlier allocation; for such pairs the execution-level check decides. Seven tests in `litmus-tests/own/` cover reuse after a free, through a loaded pointer, and across threads, and the cases that stay distinct.
+
 ## [0.2.0] — 2026-09-27
 
 Second pre-release, accompanying the artifact for "Episodic Loops: Finitary Event
