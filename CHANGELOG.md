@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--output-mode isa` lists each execution's events under `events`, so a label missing from a future means the event is absent from that execution, not an event no edge touches.
 
 ### Fixed
+- **`FADD` returns the value it read.** `r := FADD(...)` gave `r` the sum it wrote -- add-and-fetch -- where the episodic loops paper's rule, the Promising papers' FAA and the corpus's own tests all mean fetch-and-add. Tests such as `imm/FADD RMW Atomicity.lit` assert `forbid (r1 = 0 && ...)`, which could never match while `r1` was at least 1, and so passed without testing anything.
+- **Update atomicity holds when the update's read could be forwarded to.** Forwarding a preceding write into the read of a read-modify-write left that read without an `rf` edge, and `rmw_atomicity`, phrased over `rf`, never saw another thread's write that `co` put between the update's read and write: `x := 0; FADD(x)` could read 0 with `x := 2` in between. Masked by the `FADD` bug above until it was fixed. Like a volatile access, an update's read and write are no longer elidable by forwarding or write elision. Upd-Stuck (both copies) and `popl_grounding/FADD.lit` now verify; eleven other goldens lose only executions that broke atomicity, Par-Inc going from 11 to the 2 atomic ones.
 - `.rf` and `.rmw` can be written in an assertion. The lexer reads `rf` as a register name, which the relation syntax did not accept, so no assertion could name either.
 
 ### Changed

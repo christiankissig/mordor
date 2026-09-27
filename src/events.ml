@@ -338,6 +338,15 @@ let is_volatile structure e =
   | Some event -> event.volatile
   | None -> false
 
+(** [rmw_accesses structure] are the reads and writes of the structure's
+    read-modify-writes. Like a volatile access, each is a real access to
+    memory: an update is atomic only if its read reads, through [rf], the
+    write [co] puts right before its own. *)
+let rmw_accesses (structure : symbolic_event_structure) =
+  USet.fold
+    (fun acc (r, _, w) -> USet.add (USet.add acc r) w)
+    structure.rmw (USet.create ())
+
 (** [wval structure e] is the value event [e] writes in the structure, if [e] is
     a write the structure knows.
 
