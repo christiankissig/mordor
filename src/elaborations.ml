@@ -346,9 +346,18 @@ module ForwardElab = struct
        may not be elided -- every one of them is a real access to memory, so a
        volatile read may not be satisfied from a preceding write and a volatile
        write may not be dropped.  The mode sets do not carry this: a volatile
-       access is relaxed as far as [rlx_read_events] is concerned. *)
+       access is relaxed as far as [rlx_read_events] is concerned.
+
+       Nor may the read or write of a read-modify-write. Forwarding a preceding
+       write into an update's read left the read without an [rf] edge, and
+       [rmw_atomicity], which is phrased over [rf], never saw a write [co]
+       placed between the two halves: [x := 0; FADD(x)] could read 0 while
+       another thread's [x := 2] sat between the update's read and write. *)
+    let rmw = Events.rmw_accesses elab_ctx.structure in
     let elidable =
-      USet.filter (fun e -> not (Events.is_volatile elab_ctx.structure e))
+      USet.filter (fun e ->
+          not (Events.is_volatile elab_ctx.structure e || USet.mem rmw e)
+      )
     in
     let w_cross_r = URelation.cross write_events (elidable rlx_read_events) in
     let r_cross_r = URelation.cross read_events (elidable read_events) in
@@ -374,9 +383,12 @@ module ForwardElab = struct
     (* [inverse] below puts [e1] -- the po-earlier write, the overwritten one --
        in the elided position, so that is the side volatile has to be kept out
        of. *)
+    let rmw = Events.rmw_accesses elab_ctx.structure in
     let elidable =
       USet.filter
-        (fun e -> not (Events.is_volatile elab_ctx.structure e))
+        (fun e ->
+          not (Events.is_volatile elab_ctx.structure e || USet.mem rmw e)
+        )
         write_events
     in
     let w_cross_w = URelation.cross elidable write_events in

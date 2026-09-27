@@ -1,0 +1,10 @@
+// A free through a pointer loaded back from memory releases the allocation
+// whose address was stored there, which a later allocation may then reuse.
+rx := malloc 1;
+rp := malloc 1;
+*rx := rp;
+rq := *rx;
+free(rq);
+rr := malloc 1;
+%%
+allow (rp = rr) []

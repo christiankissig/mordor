@@ -1,0 +1,15 @@
+// A region freed by one thread may be reused by an allocation in another that
+// the free happens before: here through the release/acquire flag.
+x := 0;
+rp := malloc 1;
+{
+  free(rp);
+  x.store(1, rel);
+} ||| {
+  r2 := x.load(acq);
+  if (r2 = 1) {
+    rq := malloc 1;
+  }
+}
+%%
+allow (r2 = 1 && rp = rq) []

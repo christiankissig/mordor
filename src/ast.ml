@@ -41,7 +41,11 @@ type src_ctx = { pc : int }
    { lid = 0; loops = [i1] }, while the loop context for statements in the
    inner loop would be { lid = 1; loops = [i1; i2] }.
    *)
-type loop_ctx = { lid : int; loops : int list }
+type loop_ctx = { lid : int; loops : int list; iters : int list }
+(* [iters] is parallel to [loops]: the iteration of each enclosing loop the
+   statement belongs to, counted from 1. The parser tags every statement with
+   iteration 1; the step-counter unroller retags the copies it makes of a loop
+   body with the copy's iteration. *)
 
 (* Information about memory assignments (loads/stores) : memory mode and volatile
    flag *)

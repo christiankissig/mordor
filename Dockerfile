@@ -44,8 +44,11 @@ COPY --chown=opam:opam *.opam ./
 # Generate opam files if needed
 RUN opam exec -- dune build || true
 
-# Update opam and install dependencies (this layer will be cached)
+# Update opam and install dependencies (this layer will be cached).
+# Pin z3 as CI does: 4.16.0+ requires a C++20 <format> implementation (GCC 13+),
+# which Debian 12 (GCC 12) lacks.
 RUN opam update && \
+    opam install -y z3.4.15.2 && \
     opam install -y . --deps-only --with-test && \
     opam install -y dream yojson
 

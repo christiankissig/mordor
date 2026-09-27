@@ -27,4 +27,5 @@ let () =
       Test_uset.suite;
       Test_episodicity.suite;
       Test_zoo_models.suite;
+      Test_promising.suite;
     ]

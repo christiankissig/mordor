@@ -798,6 +798,7 @@ class GraphVisualizer {
         
         // Enable/disable step counter input based on selection
         this.updateStepCounterState();
+        this.updatePromisingState();
         
         document.getElementById('settings-modal').classList.add('active');
     }
@@ -824,7 +825,7 @@ class GraphVisualizer {
         this.settings.compareModels = Array.from(
             document.querySelectorAll('#compare-models input[type="checkbox"]:checked'),
             box => box.value
-        );
+        ).filter(model => model !== this.settings.memoryModel);
         
         this.closeSettingsModal();
         this.renderSettingsSummary();
@@ -843,6 +844,27 @@ class GraphVisualizer {
         }
     }
     
+    // Promising semantics computes its own executions, and its loops have to
+    // be unravelled: while it is the primary model or a compared one, symbolic
+    // loops are not on offer. Its own version is no model to compare with.
+    updatePromisingState() {
+        const primary = document.getElementById('memory-model').value;
+        const primaryPromising = GraphVisualizer.isPromising(primary);
+        document.getElementById('promising-note').hidden = !primaryPromising;
+        const boxes = document.querySelectorAll('#compare-models input[type="checkbox"]');
+        boxes.forEach(box => {
+            box.disabled = box.value === primary;
+        });
+        const promising = primaryPromising || Array.from(boxes).some(
+            box => box.checked && GraphVisualizer.isPromising(box.value));
+        const symbolic = document.getElementById('symbolic-semantics');
+        symbolic.disabled = promising;
+        if (promising && symbolic.checked) {
+            document.getElementById('step-counter-semantics').checked = true;
+            this.updateStepCounterState();
+        }
+    }
+
     updateStepCounterState() {
         const stepCounterInput = document.getElementById('step-counter');
         const isStepCounterMode = document.getElementById('step-counter-semantics').checked;
@@ -1172,6 +1194,11 @@ class GraphVisualizer {
         });
         
         // Add listeners for loop semantics radio buttons
+        document.getElementById('memory-model').addEventListener('change', () => {
+            this.updatePromisingState();
+        });
+        document.querySelectorAll('#compare-models input[value="ps1"], #compare-models input[value="ps2"]')
+            .forEach(box => box.addEventListener('change', () => this.updatePromisingState()));
         document.getElementById('step-counter-semantics').addEventListener('change', () => {
             this.updateStepCounterState();
         });
@@ -1738,6 +1765,12 @@ class GraphVisualizer {
     }
 
     // Display name for a model as the backend and the settings dialog name it.
+    // PS1.0 and PS2.0 are semantics that compute their own executions, not
+    // coherence models that check sMRD's.
+    static isPromising(model) {
+        return model === 'ps1' || model === 'ps2';
+    }
+
     static modelLabel(model) {
         const labels = {
             default: 'Default', smrd: 'sMRD', rc11: 'RC11', rc11c: 'RC11c', imm: 'IMM',
@@ -1746,6 +1779,7 @@ class GraphVisualizer {
             ra: 'RA', sra: 'SRA', wra: 'WRA', cc: 'CC',
             coherence: 'Coherence', pc: 'PC', pram: 'PRAM', causal: 'Causal', slow: 'Slow', local: 'Local',
             pocausal: 'POCausal', ryw: 'RYW', mr: 'MR', mw: 'MW', wfr: 'WFR',
+            ps1: 'PS1.0', ps2: 'PS2.0',
         };
         return labels[model] || model;
     }

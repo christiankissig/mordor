@@ -1864,6 +1864,237 @@ end
 type restrictions = { coherent : string }
 
 (** Model registry with configs *)
+
+(** {1 Symbolic Models}
+
+    A model asked about a whole combination at once, as constraints a solver
+    decides, rather than about one execution at a time (R16, #102). *)
+
+type encoding = {
+  enc_events : int list;  (** The combination's events. *)
+  enc_reads : int list;  (** Its reads, each choosing a write. *)
+  enc_writes : int list;  (** Its writes, each with a location. *)
+  enc_candidates : int -> int list;  (** A read's candidate writes. *)
+  enc_rmw : (int * int) uset;  (** Its read-modify-write pairs. *)
+  enc_reaches : int -> int -> bool;
+      (** Whether program order and dependencies reach from one event to
+          another: [(dp ∪ ppo)*], which no choice of read-from changes. *)
+  enc_chosen : int -> int -> expr;  (** That read takes that write. *)
+  enc_position : int -> expr;
+      (** A write's place in the coherence order at its location, and a read's
+          the place of the write it takes. *)
+  enc_sameloc : int -> int -> expr option;
+      (** The two events' locations are equal, where both have one. *)
+  enc_fresh : string -> expr;  (** A variable of the model's own. *)
+  enc_structure : symbolic_event_structure;
+}
+
+module type SYMBOLIC_MODEL = sig
+  val name : string
+
+  (** Constraints every execution the model admits satisfies, from the cheapest
+      statement of them to the fullest. A level may leave out what it cannot
+      afford, as long as what it keeps is {e necessary}: unsatisfiable then
+      means the combination has no execution the model admits. The caller takes
+      the first level that decides it. *)
+  val levels : (encoding -> expr list) list
+end
+
+(** smrd as constraints: [hb;eco ∪ hb] irreflexive and [rmw ∩ (rb;co) = ∅] over
+    each write's position in [co], with [eco] in its positional form --
+    [eco (x, y)] is [pos x < pos y], or [x] the write [y] reads.
+
+    Two levels. The first takes [hb] as [(dp ∪ ppo)⁺]; the second adds
+    [sw = [W_rel];rf;[R_acq]], whose edges the read-from decides, as
+    reachability between the candidate edges. The first is a subset of smrd's
+    [hb], so both are necessary; the second decides the combinations whose
+    coherence turns on a release/acquire pair (S19, #96). *)
+module SymbolicSMRD : SYMBOLIC_MODEL = struct
+  let name = "smrd"
+  let num n = ENum (Z.of_int n)
+  let eq a b = EBinOp (a, "=", b)
+  let lt a b = EBinOp (a, "<", b)
+  let imp a b = EBinOp (a, "=>", b)
+  let neg a = EUnOp ("!", a)
+
+  let conj = function
+    | [] -> EBoolean true
+    | x :: xs -> List.fold_left (fun a b -> EBinOp (a, "&&", b)) x xs
+
+  let disj = function
+    | [] -> EBoolean false
+    | [ x ] -> x
+    | l -> EOr l
+
+  (* [eco (b, a)]: the pair is at one location, so the coherence order at it
+     decides them. *)
+  let eco enc b a =
+    disj
+      (lt (enc.enc_position b) (enc.enc_position a)
+      ::
+      ( if List.mem b enc.enc_writes && List.mem a enc.enc_reads then
+          [ enc.enc_chosen a b ]
+        else []
+      )
+      )
+
+  let atomicity enc =
+    List.concat_map
+      (fun (r, w) ->
+        List.filter_map
+          (fun x ->
+            if x = w then None
+            else
+              Option.map
+                (fun same ->
+                  neg
+                    (conj
+                       [
+                         same;
+                         lt (enc.enc_position r) (enc.enc_position x);
+                         lt (enc.enc_position x) (enc.enc_position w);
+                       ]
+                    )
+                )
+                (enc.enc_sameloc x r)
+          )
+          enc.enc_writes
+      )
+      (USet.values enc.enc_rmw)
+
+  (* The candidate [sw] edges: an acquire read and a release write it may read
+     from. *)
+  let sw_edges enc =
+    let matching typ mode =
+      URelation.pi_1
+        (ModelUtils.match_events enc.enc_structure.events
+           (USet.of_list enc.enc_events)
+           typ (Some mode) (Some ">") None
+        )
+    in
+    let releases = matching Write Release
+    and acquires = matching Read Acquire in
+      List.concat_map
+        (fun r ->
+          if not (USet.mem acquires r) then []
+          else
+            List.filter_map
+              (fun w ->
+                if w <> 0 && USet.mem releases w then Some (w, r) else None
+              )
+              (enc.enc_candidates r)
+        )
+        enc.enc_reads
+      |> Array.of_list
+
+  (* [hb] as a formula per pair, and the constraints the encoding of [sw]
+     needs of itself. *)
+  let happens_before enc ~sw =
+    let accesses = enc.enc_reads @ enc.enc_writes in
+    let static a b = a <> b && enc.enc_reaches a b in
+      if not sw then
+        ([], fun a b -> if static a b then Some (EBoolean true) else None)
+      else
+        let edges = sw_edges enc in
+        let indices = List.init (Array.length edges) Fun.id in
+        let active i =
+          let w, r = edges.(i) in
+            enc.enc_chosen r w
+        in
+        let z i j = enc.enc_fresh (Printf.sprintf "sw%d_%d" i j) in
+        let chains =
+          List.concat_map
+            (fun i ->
+              let _, ri = edges.(i) in
+                List.concat_map
+                  (fun j ->
+                    let wj, _ = edges.(j) in
+                      if not (enc.enc_reaches ri wj) then []
+                      else
+                        imp (active j) (eq (z i j) (num 1))
+                        :: List.filter_map
+                             (fun k ->
+                               let wk, _ = edges.(k) in
+                               let _, rj = edges.(j) in
+                                 if k = j || not (enc.enc_reaches rj wk) then
+                                   None
+                                 else
+                                   Some
+                                     (imp
+                                        (conj [ eq (z i j) (num 1); active k ])
+                                        (eq (z i k) (num 1))
+                                     )
+                             )
+                             indices
+                  )
+                  indices
+            )
+            indices
+        in
+        let reach_from i b =
+          let _, ri = edges.(i) in
+            if enc.enc_reaches ri b then Some (EBoolean true)
+            else
+              match
+                List.filter_map
+                  (fun j ->
+                    let _, rj = edges.(j) in
+                      if j = i || not (enc.enc_reaches rj b) then None
+                      else Some (eq (z i j) (num 1))
+                  )
+                  indices
+              with
+              | [] -> None
+              | l -> Some (disj l)
+        in
+        let through a b =
+          List.filter_map
+            (fun i ->
+              let wi, _ = edges.(i) in
+                if not (enc.enc_reaches a wi) then None
+                else
+                  Option.map
+                    (fun reach -> conj [ active i; reach ])
+                    (reach_from i b)
+            )
+            indices
+        in
+          ( chains,
+            fun a b ->
+              if static a b then Some (EBoolean true)
+              else if not (List.mem a accesses && List.mem b accesses) then None
+              else
+                match through a b with
+                | [] -> None
+                | l -> Some (disj l)
+          )
+
+  let coherence enc ~sw =
+    let extra, happens_before = happens_before enc ~sw in
+    let accesses = enc.enc_reads @ enc.enc_writes in
+      extra
+      @ List.concat_map
+          (fun a ->
+            List.filter_map
+              (fun b ->
+                if a = b then None
+                else
+                  match (enc.enc_sameloc a b, happens_before a b) with
+                  | Some same, Some hb ->
+                      Some (imp (conj [ same; hb ]) (neg (eco enc b a)))
+                  | _ -> None
+              )
+              accesses
+          )
+          accesses
+
+  let levels =
+    [
+      (fun enc -> coherence enc ~sw:false @ atomicity enc);
+      (fun enc -> coherence enc ~sw:true @ atomicity enc);
+    ]
+end
+
 module ModelRegistry = struct
   let models : (string, unit -> (module MEMORY_MODEL)) Hashtbl.t =
     Hashtbl.create 10
@@ -1891,6 +2122,14 @@ module ModelRegistry = struct
 
   let names () = Hashtbl.fold (fun name _ acc -> name :: acc) models []
 
+  (* A model with a symbolic form says so here; the rest are asked about one
+     execution at a time, as before. *)
+  let symbolic_models : (string, (module SYMBOLIC_MODEL)) Hashtbl.t =
+    Hashtbl.create 4
+
+  let register_symbolic name m = Hashtbl.replace symbolic_models name m
+  let lookup_symbolic name = Hashtbl.find_opt symbolic_models name
+
   let () =
     register "imm" (fun () -> (module IMM : MEMORY_MODEL));
 
@@ -1909,6 +2148,7 @@ module ModelRegistry = struct
     );
 
     register "smrd" (fun () -> (module SMRD : MEMORY_MODEL));
+    register_symbolic "smrd" (module SymbolicSMRD : SYMBOLIC_MODEL);
 
     let rc11_variant config =
       let module M = RC11 (struct

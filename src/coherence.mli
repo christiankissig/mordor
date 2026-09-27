@@ -178,6 +178,48 @@ module Undefined : MEMORY_MODEL
 
 type restrictions = { coherent : string }
 
+(** {1 Symbolic Models}
+
+    A model asked about a whole justification combination at once, as
+    constraints a solver decides, rather than about one execution at a time
+    (R16, #102). *)
+
+(** What a symbolic model is given: the combination's shape, and the expressions
+    standing for the choices an execution of it makes. *)
+type encoding = {
+  enc_events : int list;  (** The combination's events. *)
+  enc_reads : int list;  (** Its reads, each choosing a write. *)
+  enc_writes : int list;  (** Its writes, each with a location. *)
+  enc_candidates : int -> int list;  (** A read's candidate writes. *)
+  enc_rmw : (int * int) uset;  (** Its read-modify-write pairs. *)
+  enc_reaches : int -> int -> bool;
+      (** Whether program order and dependencies reach from one event to
+          another: [(dp ∪ ppo)*], which no choice of read-from changes. *)
+  enc_chosen : int -> int -> expr;  (** That read takes that write. *)
+  enc_position : int -> expr;
+      (** A write's place in the coherence order at its location, and a read's
+          the place of the write it takes. *)
+  enc_sameloc : int -> int -> expr option;
+      (** The two events' locations are equal, where both have one. *)
+  enc_fresh : string -> expr;  (** A variable of the model's own. *)
+  enc_structure : symbolic_event_structure;
+}
+
+module type SYMBOLIC_MODEL = sig
+  val name : string
+
+  (** Constraints every execution the model admits satisfies, from the cheapest
+      statement of them to the fullest. A level may leave out what it cannot
+      afford, as long as what it keeps is {e necessary}: unsatisfiable then
+      means the combination has no execution the model admits. The caller takes
+      the first level that decides it. *)
+  val levels : (encoding -> expr list) list
+end
+
+(** smrd as constraints, in two levels: [hb] as [(dp ∪ ppo)⁺], then with
+    [sw = [W_rel];rf;[R_acq]] whose edges the read-from decides. *)
+module SymbolicSMRD : SYMBOLIC_MODEL
+
 (** Registry of the memory models, by name. *)
 module ModelRegistry : sig
   val lookup : string -> (module MEMORY_MODEL) option
@@ -188,6 +230,10 @@ module ModelRegistry : sig
 
   (** The names models are registered under. *)
   val names : unit -> string list
+
+  (** [lookup_symbolic name] is the model's symbolic form, if it has one. Only
+      smrd does; every other model is asked about one execution at a time. *)
+  val lookup_symbolic : string -> (module SYMBOLIC_MODEL) option
 end
 
 (** {1 Coherence Checking Entry Points} *)

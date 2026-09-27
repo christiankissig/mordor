@@ -1,0 +1,12 @@
+// The ABA ingredient: a stale pointer into a freed region reads what was
+// written through a later allocation that reused the region. The verdict alone
+// does not show it -- the read may also read the free, whose value is
+// unconstrained -- but the golden does: the execution reading from *rq := 2.
+rp := malloc 1;
+*rp := 1;
+free(rp);
+rq := malloc 1;
+*rq := 2;
+rv := *rp
+%%
+allow (rv = 2) []

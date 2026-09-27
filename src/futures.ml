@@ -253,6 +253,7 @@ module S16 = struct
             match reason with
             | UAF s -> "UAF " ^ pairs s
             | UPD s -> "UPD " ^ pairs s
+            | Aborted what -> "Aborted " ^ what
         )
         (Assertion.ub_reasons structure ex)
       |> sorted

@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 303
+Total tests: 310
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-15
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -245,6 +245,13 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-15
 - own/nonatomic-store-no-sync-relaxed.lit
 - own/nonatomic-store-no-sync.lit
 - own/ptr-overwrite-coherence.lit
+- own/NoReuseAcrossThreadsUnordered.lit
+- own/NoReuseUnescaped.lit
+- own/NoReuseWhileLive.lit
+- own/ReuseAcrossThreads.lit
+- own/ReuseAfterFree.lit
+- own/ReuseStalePointer.lit
+- own/ReuseThroughLoadedPointer.lit
 - popl_promising/LBaa/LBa'0.lit
 - popl_promising/LBaa/LBa'1.lit
 - sevcik_thesis/Irrelevant Read Elimination/IREA.lit

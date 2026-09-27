@@ -1,0 +1,7 @@
+// The free comes after both allocations, so both are live at once and the
+// allocator cannot have handed out the same address twice.
+rp := malloc 1;
+rq := malloc 1;
+free(rp)
+%%
+forbid (rp = rq) []

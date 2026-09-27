@@ -1,0 +1,15 @@
+// Without the free happening before it, an allocation in another thread
+// cannot reuse the region: both may be live at once.
+x := 0;
+rp := malloc 1;
+{
+  free(rp);
+  x := 1;
+} ||| {
+  r2 := x;
+  if (r2 = 1) {
+    rq := malloc 1;
+  }
+}
+%%
+forbid (r2 = 1 && rp = rq) []

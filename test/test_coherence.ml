@@ -75,6 +75,7 @@ let make_empty_execution () =
     fix_rf_map = Hashtbl.create 10;
     pointer_map = Hashtbl.create 10 |> Option.some;
     final_env = Hashtbl.create 0;
+    aborted = None;
   }
 
 (** Test helper: create uset from list *)
@@ -257,6 +258,7 @@ let test_imm_coherent_simple () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in
@@ -298,6 +300,7 @@ let test_rc11_coherent_simple () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in
@@ -339,6 +342,7 @@ let test_rc11c_coherent_simple () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in
@@ -387,6 +391,7 @@ let imm_rmw_violated () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in
@@ -472,6 +477,7 @@ let test_cache_types () =
       fix_rf_map = Hashtbl.create 10;
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
   in
   let loc_restrict x = x in
@@ -559,9 +565,26 @@ let test_coherence_axiom_accepts_acyclic_hb () =
     ()
 
 (** Test suite *)
+(* R16: smrd is the one model with a symbolic form; the rest are asked about
+   one execution at a time. *)
+let test_symbolic_registry () =
+  check bool "smrd has one" true
+    (Option.is_some (ModelRegistry.lookup_symbolic "smrd"));
+  List.iter
+    (fun name ->
+      check bool (name ^ " has none") false
+        (Option.is_some (ModelRegistry.lookup_symbolic name))
+    )
+    [ "rc11"; "imm"; "sc"; "od-lso" ];
+  let symbolic = Option.get (ModelRegistry.lookup_symbolic "smrd") in
+  let module M = (val symbolic : SYMBOLIC_MODEL) in
+    check string "its name" "smrd" M.name;
+    check bool "cheapest first, then fuller" true (List.length M.levels = 2)
+
 let suite =
   ( "Coherence",
     [
+      test_case "symbolic model registry" `Quick test_symbolic_registry;
       test_case "em write events" `Quick test_em_write_events;
       test_case "em with mode" `Quick test_em_with_mode;
       test_case "em relaxed threshold asks own mode" `Quick

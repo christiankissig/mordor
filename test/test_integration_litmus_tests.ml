@@ -3,7 +3,9 @@
 open Lwt.Syntax
 
 (* Configuration *)
-let litmus_dir = "litmus-tests"
+(* [litmus-tests-promising/] is annotated [PS1], which selects promising
+   semantics, so its tests run as they are, without --semantics. *)
+let litmus_dirs = [ "litmus-tests"; "litmus-tests-promising" ]
 let cli_executable = "_build/default/cli/main.exe"
 
 (* Read all .lit files from directory *)
@@ -220,7 +222,7 @@ let test_litmus_file_permissive filepath () =
 
 (* Generate test cases from litmus files *)
 let litmus_test_cases ~strict =
-  let files = read_litmus_files litmus_dir in
+  let files = List.concat_map read_litmus_files litmus_dirs in
   let test_fn =
     if strict then test_litmus_file else test_litmus_file_permissive
   in

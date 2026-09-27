@@ -366,8 +366,12 @@ module Pipeline = struct
       @param config Complete configuration
       @return A fresh Mordor context *)
   let make_program_context name program config =
+    (* A copy per program: a test's annotation sets the model, the coherence
+       model and the semantics on it, and a directory run must not carry one
+       test's into the next. *)
+    let options = { config.Config.options with model = config.Config.options.model } in
     let context =
-      make_context config.Config.options ?output_mode:config.output_mode
+      make_context options ?output_mode:config.output_mode
         ?output_file:config.output_file ?step_counter:config.step_counter
         ~num_threads:config.num_threads ()
     in
@@ -399,8 +403,7 @@ module Pipeline = struct
       Lwt.return context
       |> Parse.step_parse_litmus
       |> Interpret.step_interpret
-      |> Elaborations.step_generate_justifications
-      |> Executions.step_calculate_dependencies
+      |> Semantics.step_calculate_executions
       |> Assertion.step_check_assertions
       |> Display.print_results
 
@@ -701,6 +704,14 @@ module Pipeline = struct
           "litmus tests" f
       else f ()
     in
+      ( match config.Config.command with
+      | Config.Run | Config.Parse | Config.Interpret -> ()
+      | command ->
+          Semantics.require_smrd
+            ~command:
+              (String.lowercase_ascii (Config.show_command command))
+            config.Config.options
+      );
       match config.Config.command with
       | Config.Run -> programs (fun () -> run_tests tests config)
       | Config.Parse -> programs (fun () -> parse_tests tests config)
@@ -773,6 +784,9 @@ module CLI = struct
     mutable num_threads : int;  (** Number of threads for parallel execution *)
     mutable allow_unknown_model : bool;
         (** Accept a memory model name the registry does not know *)
+    mutable all_executions : bool;
+        (** [futures]: from every execution, not one witness per future *)
+    mutable semantics : semantics;  (** sMRD, PS1.0 or PS2.0 *)
   }
 
   (** Create initial parse state with defaults. *)
@@ -789,6 +803,8 @@ module CLI = struct
       log_level = None;
       num_threads = 1;
       allow_unknown_model = false;
+      all_executions = false;
+      semantics = Smrd;
     }
 
   (** Convert parse state to immutable configuration.
@@ -816,6 +832,9 @@ module CLI = struct
             loop_semantics = state.loop_semantics;
             step_counter = Option.value state.step_counter ~default:2;
             allow_unknown_model = state.allow_unknown_model;
+            futures_by_witness =
+              command = Config.Futures && not state.all_executions;
+            semantics = state.semantics;
           }
         in
           {
@@ -956,6 +975,22 @@ module CLI = struct
             state.step_counter <- Some n
           ),
         " Per-loop iteration bound (default: 2)"
+      );
+      ( "--all-executions",
+        Arg.Unit (fun () -> state.all_executions <- true),
+        " futures: compute them from every execution, as the other commands \
+         enumerate them, instead of from one witness per future (the default; \
+         the same futures, and far fewer executions)"
+      );
+      ( "--semantics",
+        Arg.String
+          (fun s ->
+            try state.semantics <- parse_semantics s
+            with Invalid_argument msg -> raise (Arg.Bad ("--semantics: " ^ msg))
+          ),
+        " Semantics to compute executions under: smrd (default), ps1 \
+         (promising 1.0) or ps2 (promising 2.0). The promising semantics are \
+         supported by run only"
       );
       ( "--allow-unknown-model",
         Arg.Unit (fun () -> state.allow_unknown_model <- true),

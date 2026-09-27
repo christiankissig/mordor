@@ -1,0 +1,11 @@
+// A free through a loaded pointer cannot release an allocation whose address
+// is never written anywhere: rc cannot have been freed, so rr is not rc.
+rc := malloc 1;
+rx := malloc 1;
+rp := malloc 1;
+*rx := rp;
+rq := *rx;
+free(rq);
+rr := malloc 1;
+%%
+forbid (rc = rr) []
