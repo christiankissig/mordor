@@ -9,4 +9,4 @@
   x := r1
 }
 %%
-allow (r1 = 2) [Promising]
+allow (r1 = 2) [PS1]

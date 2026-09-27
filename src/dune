@@ -46,6 +46,8 @@
   parser_state
   pretty
   progress
+  promising
+  semantics
   solver
   source_info
   types

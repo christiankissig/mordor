@@ -774,6 +774,7 @@ let partial_execution ~e ~dp ~ppo ~rmw ~rf ~ex_p : symbolic_execution =
     fix_rf_map = Hashtbl.create 1;
     pointer_map = None;
     final_env = Hashtbl.create 1;
+    aborted = None;
   }
 
 (** S10 (step 0 of per-thread read-from enumeration): with
@@ -2888,6 +2889,7 @@ let execution_of_freeze_result (structure : symbolic_event_structure)
         fix_rf_map = final_map;
         pointer_map = None;
         final_env;
+        aborted = None;
       }
     in
       exec

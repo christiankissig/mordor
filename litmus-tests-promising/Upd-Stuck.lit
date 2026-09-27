@@ -15,4 +15,4 @@ z := 0;
   r4 := FADD(rlx, rlx, rpz, 1)
 }
 %%
-allow (r1 = 1 && r2 = 0) [Promising]
+allow (r1 = 1 && r2 = 0) [PS1]

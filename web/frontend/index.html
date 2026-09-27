@@ -354,8 +354,15 @@
                                     <option value="mw">MW</option>
                                     <option value="wfr">WFR</option>
                                 </optgroup>
+                                <optgroup label="Promising (operational)">
+                                    <option value="ps1">PS1.0</option>
+                                    <option value="ps2">PS2.0</option>
+                                </optgroup>
                             </select>
                         </label>
+                        <p class="setting-note" id="promising-note" hidden>
+                            Promising semantics computes its own executions, by exploring promises and their certification, instead of checking sMRD's. It needs step-counter loops.
+                        </p>
                     </div>
                     <div class="setting-item">
                         <span>Also compute executions under</span>
@@ -403,9 +410,14 @@
                                 <label><input type="checkbox" value="mw" /> MW</label>
                                 <label><input type="checkbox" value="wfr" /> WFR</label>
                             </div>
+                            <div class="setting-options-group">Promising (operational)</div>
+                            <div class="setting-options">
+                                <label><input type="checkbox" value="ps1" /> PS1.0</label>
+                                <label><input type="checkbox" value="ps2" /> PS2.0</label>
+                            </div>
                         </div>
                         <p class="setting-note">
-                            Each execution shows which of these also allow it. Executions are enumerated once and each model checks them, so the UB fold follows the primary model.
+                            Each execution shows which of these also allow it. Executions are enumerated once and each model checks them, so the UB fold follows the primary model. PS1.0 and PS2.0 compute executions of their own, so between them and the other models it is the outcome that is compared: a model allows an execution when it allows its final values.
                         </p>
                     </div>
                 </div>

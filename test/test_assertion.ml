@@ -96,6 +96,7 @@ let make_execution ?(ppo = USet.create ()) ?(dp = USet.create ())
     fix_rf_map;
     pointer_map = None;
     final_env;
+    aborted = None;
   }
 
 (** Build an [Outcome] assertion for the given outcome with [CondUB]. *)

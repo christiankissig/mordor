@@ -135,12 +135,22 @@ let examples_handler _request =
 (** {2 Model Selection} *)
 
 (** The models the settings dialog offers to compare, by the names the model
-    table uses. *)
-let comparable_models = "smrd" :: "rc11" :: Context.implemented_zoo_models
+    table uses, and ["ps1"] and ["ps2"]: promising semantics, which computes
+    executions of its own and is compared by outcome (see [Semantics]). *)
+let comparable_models =
+  ("smrd" :: "rc11" :: Context.implemented_zoo_models) @ [ "ps1"; "ps2" ]
 
 (** The primary models it offers: those, or ["default"], the model the litmus
     test states or sMRD, which can be one not offered here. *)
 let selectable_models = "default" :: comparable_models
+
+(** [step_executions ~send_data] computes the executions under the semantics
+    the model selection chose. sMRD's justifications are sent as they are
+    found; promising semantics has none, and tracks each execution's events and
+    relations so that its graph has something to show. *)
+let step_executions ~send_data =
+  Semantics.step_calculate_executions ~track:true
+    ~after_justifications:(Eventstructureviz.step_send_justification_set ~send_data)
 
 (** A request's choice of models: the primary executions are enumerated under,
     and the others each is checked against. *)
@@ -231,9 +241,7 @@ let visualize_to_stream program options step_counter ~models stream =
       |> Eventstructureviz.step_send_event_structure_graph ~send_data
       |> Episodicity.step_test_episodicity
            ~on_loop_result:(Episodicity.send_loop_episodicity_result send_data)
-      |> Elaborations.step_generate_justifications
-      |> Eventstructureviz.step_send_justification_set ~send_data
-      |> Executions.step_calculate_dependencies
+      |> step_executions ~send_data
       |> Eventstructureviz.step_send_model_counts ~send_data
       |> Assertion.step_check_assertions
       |> Assertion.step_send_assertion_results ~send_data
@@ -349,9 +357,7 @@ let visualize_test_assertions_to_stream program options step_counter ~models
       |> Eventstructureviz.step_send_event_structure_graph ~send_data
       |> Episodicity.step_test_episodicity
            ~on_loop_result:(Episodicity.send_loop_episodicity_result send_data)
-      |> Elaborations.step_generate_justifications
-      |> Eventstructureviz.step_send_justification_set ~send_data
-      |> Executions.step_calculate_dependencies
+      |> step_executions ~send_data
       |> Eventstructureviz.step_send_model_counts ~send_data
       |> Assertion.step_check_assertions
       |> Assertion.step_send_assertion_results ~send_data
@@ -571,6 +577,11 @@ let executions_export_handler request =
           Lwt.return context
           |> Parse.step_parse_litmus
           |> select_models models
+          |> Lwt.map (fun (ctx : mordor_ctx) ->
+              (* The export is of sMRD's executions, with their dependencies. *)
+              Semantics.require_smrd ~command:"executions export" ctx.options;
+              ctx
+          )
           |> Interpret.step_interpret
           |> Elaborations.step_generate_justifications
           |> Executions.step_calculate_dependencies

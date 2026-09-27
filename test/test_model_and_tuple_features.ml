@@ -104,6 +104,7 @@ module TestSetMembership = struct
           fix_rf_map = Hashtbl.create 0;
           pointer_map = Some (Hashtbl.create 0);
           final_env = Hashtbl.create 0;
+          aborted = None;
         }
 
   (** Helper to create minimal structure *)
@@ -370,8 +371,9 @@ module TestContextModelOptions = struct
         check bool "names the escape hatch" true
           (contains msg "--allow-unknown-model")
 
-  (* [promising] is unknown like any other, but says why: it is operational, so
-     there is no axiomatic model to map it onto rather than one nobody wrote. *)
+  (* [promising] selects promising semantics without saying which version, so
+     under sMRD it fails, and says how to name one: [PS1] or [PS2] select
+     theirs, as does --semantics. *)
   let test_promising_says_why () =
     match
       apply "promising" { default_options with allow_unknown_model = false }
@@ -379,7 +381,8 @@ module TestContextModelOptions = struct
     with
     | () -> fail "promising did not raise"
     | exception Failure msg ->
-        check bool "explains promising" true (contains msg "operational")
+        check bool "names the versions" true (contains msg "[PS1] or [PS2]");
+        check bool "names --semantics" true (contains msg "--semantics")
 
   let test_unknown_model_allowed_leaves_coherent () =
     let opts = { default_options with allow_unknown_model = true } in

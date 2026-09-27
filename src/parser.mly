@@ -508,6 +508,9 @@ expr:
   | atloc=ATLOC { EAtLoc atloc }
   | DOT s=STRING { EASet s }
   | DOT s=GLOBAL { EASet s }
+  (* The lexer reads [r] and more as a register, so [.rf] and [.rmw] arrive as
+     one. *)
+  | DOT s=REGISTER { EASet s }
   | QUOTE s=STRING { EASet s }
   ;
 

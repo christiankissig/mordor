@@ -240,6 +240,9 @@ module JSONSerialization = struct
   (** JSON format for unbounded pointer dereference violations. *)
   type upd_json = { upd : event_pair list } [@@deriving yojson]
 
+  (** JSON format for an aborted run: why it aborted. *)
+  type aborted_json = { aborted : string } [@@deriving yojson]
+
   (** JSON union type for UB reasons. *)
   type ub_reason_json = UAF_json of uaf_json | UPD_json of upd_json
   [@@deriving yojson]
@@ -256,6 +259,7 @@ module JSONSerialization = struct
     | UPD upd_reasons ->
         let pairs = USet.fold (fun acc pair -> pair :: acc) upd_reasons [] in
           upd_json_to_yojson { upd = pairs }
+    | Aborted what -> aborted_json_to_yojson { aborted = what }
 
   (** [ub_reasons_to_yojson ub_reasons] converts list to Yojson.
 
@@ -472,7 +476,11 @@ module UBValidation = struct
     UAF.check structure execution ub_reasons pointer_map rhb
       all_alloc_read_writes;
     UPD.check structure execution ub_reasons pointer_map rhb
-      all_alloc_read_writes
+      all_alloc_read_writes;
+    (* An operational semantics found this one itself, as the run went. *)
+    Option.iter
+      (fun what -> ub_reasons := Aborted what :: !ub_reasons)
+      execution.aborted
 end
 
 (** {1 Execution Analysis} *)
@@ -755,6 +763,41 @@ module ConditionChecker = struct
     in
       set_valid && solver_valid
 end
+
+(** [admits_outcome structure execution outcome] holds when [execution] can
+    end with [outcome]: every register and global of [outcome] with an integer
+    value taking that value, under the execution's own path predicates. This is
+    how an execution of one semantics is matched against the outcomes of
+    another, which enumerates executions of its own. Locations that are not
+    plain names, and values that are addresses, say nothing comparable and are
+    left out. An aborted execution ends with no outcome. *)
+let admits_outcome structure (execution : symbolic_execution) outcome =
+  let plain k =
+    k <> ""
+    && String.for_all
+         (function
+           | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> true
+           | _ -> false
+           )
+         k
+  in
+  let equalities =
+    List.filter_map
+      (fun (k, v) ->
+        match v with
+        | ENum _ when plain k -> Some (EBinOp (EVar k, "=", v))
+        | _ -> None
+      )
+      outcome
+  in
+    execution.aborted = None
+    &&
+    match equalities with
+    | [] -> true
+    | e :: es ->
+        ConditionChecker.check_condition
+          (List.fold_left (fun acc e -> EBinOp (acc, "&&", e)) e es)
+          structure execution
 
 (** {1 Refinement Checking} *)
 
@@ -1243,6 +1286,11 @@ module PerExecutionChecker = struct
   let should_skip_condition already_satisfied is_ub_assertion =
     already_satisfied || is_ub_assertion
 
+  (** An aborted run has no final state, so it neither witnesses nor
+      contradicts a condition on one; it counts only as undefined behaviour. *)
+  let has_final_state (execution : symbolic_execution) =
+    execution.aborted = None
+
   (** [check_outcome_assertion outcome condition structure execution
        already_satisfied] checks assertion on execution.
 
@@ -1289,7 +1337,10 @@ module PerExecutionChecker = struct
         all_alloc_read_writes;
 
       (* Check condition if needed *)
-      if should_skip_condition !already_satisfied is_ub_assertion then
+      if
+        should_skip_condition !already_satisfied is_ub_assertion
+        || not (has_final_state execution)
+      then
         (!already_satisfied, !ub_reasons, None)
       else
         match condition_expr_opt with

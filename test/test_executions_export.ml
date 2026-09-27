@@ -75,6 +75,7 @@ module TestData = struct
       fix_rf_map = Hashtbl.create 0;
       pointer_map = None;
       final_env = Hashtbl.create 0;
+      aborted = None;
     }
 end
 
