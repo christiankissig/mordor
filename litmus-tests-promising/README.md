@@ -58,7 +58,7 @@ record of the intended promising outcome.
 | `SB.lit`               | allow  `r1=0 ∧ r2=0` | allow | allow |
 | `SB+fences.lit`        | forbid `r1=0 ∧ r2=0` | forbid | forbid |
 | `LB.lit`               | allow  `r1=1 ∧ r2=1` | allow | allow |
-| `LBa.lit`              | forbid `r1=1` — **but see below** | allow | allow |
+| `LBa.lit`              | allow  `r1=1` — **see below** | allow | allow |
 | `LBa'.lit`             | allow  `r2=2` | allow | allow |
 | `LBaa/LBa'0.lit`       | allow  `r1=2` | allow | allow |
 | `LBaa/LBa'1.lit`       | allow  `r1=2` | allow | allow |
@@ -76,11 +76,12 @@ record of the intended promising outcome.
 | `Page 7 Column 1b.lit` | forbid `r2=3 ∧ r3=0` (release sequence) | forbid | forbid |
 | `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, annotated `[Promising=allow]` — **see below** | forbid | forbid |
 
-**LBa.** The file asserts `forbid`, but the POPL 2017 paper (section 4.1)
-allows the outcome: "In the second variant (LBa), we allow the promise of
+**LBa.** The file used to assert `forbid`, but the POPL 2017 paper (section
+4.1) allows the outcome: "In the second variant (LBa), we allow the promise of
 y := 1 and thus the a = 1 outcome", so that optimizations eliminating an
-acquire read remain sound. Both versions allow it, and the assertion fails;
-the file's expectation is the error.
+acquire read remain sound. It now asserts `allow`, which both versions confirm.
+The IMM copy in `litmus-tests/popl_promising/` still asserts `forbid`, as IMM
+should.
 
 **Coh-CYC.** The annotation says promising allows the outcome; both versions
 here forbid it. Neither paper discusses this program. The outcome needs T2 to
