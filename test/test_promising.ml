@@ -231,6 +231,107 @@ let test_abort_certifies () =
   check bool "abort certifies under PS2.0" true
     (valid (run Promising2 abort_certifies))
 
+(** [.rf], [.co] and [.rmw] name the interpreter's events, and a promising
+    run's accesses are matched to them. Each assertion's verdict is the one
+    worked out by hand, and sMRD's on the same program: the two semantics agree
+    on these, so a mismatch in the labels shows. *)
+let relation_cases =
+  [
+    (* Event 3 reads x; [y := 2] is event 6 after the branch taken, 8 after
+       the one not taken; 10 is thread 2's write of x. *)
+    ( {|x := 0; y := 0;
+{ r1 := x; if (r1 = 1) { y := 1 }; y := 2 } ||| { x := 1 }|},
+      [
+        ("allow ((10,3) in .rf && r1 = 1)", true);
+        ("allow ((10,3) in .rf && r1 = 0)", false);
+        ("allow ((1,3) in .rf && r1 = 0)", true);
+        ("allow ((5,6) in .co)", true);
+        ("allow ((6,5) in .co)", false);
+        ("allow ((2,8) in .co && r1 = 0)", true);
+        ("allow ((2,8) in .co && r1 = 1)", false);
+        ("allow ((2,6) in .co && r1 = 0)", false);
+      ] );
+    (* Load buffering: read 4 reads 2, promised before read 1. An initial
+       value is read from no write. *)
+    ( {|{ r1 := x; y := 1 } ||| { r2 := y; x := r2 }|},
+      [
+        ("allow ((2,4) in .rf && r1 = 1)", true);
+        ("allow ((5,1) in .rf && r2 = 1)", true);
+        ("allow ((0,4) in .rf)", false);
+      ] );
+    (* Two iterations of a loop are two write events, 3 and 5. *)
+    ( {|x := 0;
+{ r1 := 0; while (r1 < 2) { r1 := r1 + 1; x := r1 } } ||| { r2 := x; r3 := x }|},
+      [
+        ("allow ((3,7) in .rf && r2 = 1)", true);
+        ("allow ((3,5) in .co)", true);
+        ("allow ((5,3) in .co)", false);
+        ("allow ((3,7) in .rf && (5,8) in .rf)", true);
+        ("allow ((5,7) in .rf && (3,8) in .rf)", false);
+      ] );
+    (* An update's read and write, and its atomicity. *)
+    ( {|x := 0;
+{ rp := &x; r1 := FADD(rlx, rlx, rp, 1) } ||| { rq := &x; r2 := FADD(rlx, rlx, rq, 1) }|},
+      [
+        ("allow ((2,3) in .rmw)", true);
+        ("allow ((1,2) in .rf && (1,5) in .rf)", false);
+        ("allow ((3,6) in .co)", true);
+      ] );
+  ]
+
+let test_relations () =
+  List.iter
+    (fun (program, cases) ->
+      List.iter
+        (fun (assertion, expected) ->
+          let source = program ^ "\n%%\n" ^ assertion ^ " []" in
+          let with_step_counter semantics =
+            let ctx =
+              make_context
+                {
+                  default_options with
+                  semantics;
+                  loop_semantics = StepCounterPerLoop;
+                  step_counter = 2;
+                }
+                ()
+            in
+              ctx.litmus_name <- "test";
+              ctx.litmus <- Some source;
+              Lwt_main.run
+                (Lwt.return ctx
+                |> Parse.step_parse_litmus
+                |> Interpret.step_interpret
+                |> Semantics.step_calculate_executions
+                |> Assertion.step_check_assertions
+                )
+          in
+            List.iter
+              (fun (v, semantics) ->
+                check bool
+                  (Printf.sprintf "%s under %s" assertion v)
+                  expected
+                  (valid (with_step_counter semantics))
+              )
+              (("sMRD", Smrd) :: versions)
+        )
+        cases
+    )
+    relation_cases
+
+(** [.dp] and [.ppo] are sMRD's, and promising semantics refuses them. *)
+let test_sMRD_relations_refused () =
+  match
+    run Promising2
+      {|x := 0;
+{ r1 := x; x := r1 } ||| { x := 1 }
+%%
+allow ((2,3) in .dp) []|}
+  with
+  | _ -> fail "promising semantics answered for .dp"
+  | exception Failure msg ->
+      check bool "the error names .dp" true (Test_zoo_models.contains msg ".dp")
+
 let suite =
   ( "Promising",
     [
@@ -274,6 +375,8 @@ forbid (r2 = 3 && r3 = 0) [Promising]|};
       test_case "RPacq separates the versions" `Quick test_rpacq_separates;
       test_case "undefined behaviour" `Quick test_undefined_behaviour;
       test_case "an abort certifies under PS2.0" `Quick test_abort_certifies;
+      test_case "rf, co and rmw" `Quick test_relations;
+      test_case "dp and ppo are refused" `Quick test_sMRD_relations_refused;
       test_case "[Promising] needs --semantics" `Quick test_model_name;
       test_case "sMRD through the same step" `Quick test_smrd_unchanged;
       test_case "semantics names" `Quick test_parse_semantics;
