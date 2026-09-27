@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-27
+
+Second pre-release, accompanying the artifact for "Episodic Loops: Finitary Event
+Structures and Operational Semantics for C11 Programs with Retries".
+
+> **Caveat:** Pre-release — do not use until version 1.
+
 ### Breaking
 
 - **Unknown memory model names are an error.** An annotation naming a model MoRDor does not implement, such as `[C11]`, `[RA]`, `[Promising]` or `[JMM]`, used to log a warning and fall back to the default model. It now fails, and `--allow-unknown-model` brings back the old warn-and-continue behaviour ([#86](https://github.com/christiankissig/mordor/issues/86)).
