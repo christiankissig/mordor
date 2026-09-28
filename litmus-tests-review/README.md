@@ -17,17 +17,18 @@ the one the literature records.
 
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
-Every file here has an issue in the #36, #41-#65 range, or #90. Each records the symptom, the model actually in
+Every file here has an issue in the #46-#65 range, or #90. Each records the symptom, the model actually in
 effect, where the test comes from and what to look at next. Eight files
-remain, the seven `jctc/` ones having moved to `litmus-tests-jmm/` and
-`avoidoota/listing16.lit` having returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57, #59, #60 and #62 have been fixed and
+remain. The seven `jctc/` ones have moved to `litmus-tests-jmm/`;
+`avoidoota/listing16.lit` returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57, #59, #60 and #62 have been fixed and
 their files returned to `litmus-tests/`.
 
 The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
-models. Three tests are checked under one of those, so a divergence is a defect and the issue is labelled
-`bug`. The rest name a model that is not — `[Problem]`, `[JR]`, `[Bubbly]` and `[Sevcik]` have a
-`model_options_table` entry with `coherent = None` and so fall through to the `smrd` default, while
-`[Bridging]`, `[Grounding]`, `[Power]` and `[IMM]` map to `imm`. Those are labelled `smrd-unsupported` and
+models. Two tests are checked under sMRD, so a divergence is a defect: `own/FWD-STRENGTHEN-LIFT.lit` #90 names
+no model, and `symmrd/LB+UB+data+z.lit` #65 names `[UB11]`, which falls through to `smrd` with UB optimisation
+on. #65 is labelled `bug`; #90, a missing elaboration, `enhancement`. The rest name a model that is not supported —
+`[Problem]`, `[JR]` and `[Sevcik]` have a `model_options_table` entry with `coherent = None` and so fall through
+to the `smrd` default, while `[Bridging]`, `[Power]` and `[IMM]` map to `imm`. Those are labelled `smrd-unsupported` and
 carry no `bug` label: they compare one model's expectation against another model's verdict, and the two are
 not claimed to agree, so a divergence there may be entirely correct. Each needs triaging as "does sMRD agree
 with the reference on this shape?" before it is treated as a defect.
@@ -62,7 +63,6 @@ the first honest reading.
 
 | Test | Note |
 |---|---|
-| [`jctc/JCTC6.lit`](jctc/JCTC6.lit) #36 | Lifting cannot pair the justifications of thread 2's two writes under complementary guards: `find_distinguishing_predicate` returns `None` because the else-path predicate carries an extra conjunct. |
 | [`symmrd/LB+UB+data+z.lit`](symmrd/LB+UB+data+z.lit) #65 | Moved here in `a075ff9` ("consider initial event in dslwb"), which records no reason. |
 
 `avoidoota/listing10.lit` #42 has left this table, and the description it
@@ -80,16 +80,15 @@ written to disagree.
 
 | Test | Assertion | Model |
 |---|---|---|
-| [`jctc/JCTC12.lit`](jctc/JCTC12.lit) #48 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
 | [`on_thin_air_reads19/P5.lit`](on_thin_air_reads19/P5.lit) #54 | forbid `r1=1` | `[JR]` → sMRD |
 | [`popl_bridging/Preserving detour.lit`](popl_bridging/Preserving detour.lit) #58 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | `[Bridging]` → IMM |
 | [`sevcik_thesis/Skip/LB+locks.lit`](sevcik_thesis/Skip/LB+locks.lit) #64 | forbid `r1=1 ∧ r2=1` | `[Sevcik]` → sMRD |
 | [`popl_promising/Page 7 Column 1b.lit`](popl_promising/Page 7 Column 1b.lit) #61 | forbid `r2=3 ∧ r3=0` | `[IMM]` |
 | [`rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit`](rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit) #63 | forbid `r1=1 ∧ r2=0` | `[Power]` → IMM |
 
-Most of this group is out-of-thin-air: the `avoidoota` listings, `JCTC12`, `P5`
-and the load-buffering shapes are all asking that a value not be justified by a
-cycle through its own dependencies. `no_oota` is the property MRD exists to
+Much of this group is out-of-thin-air: `P5`, `Preserving detour` and
+`LB+locks` are all asking that a value not be justified by a cycle through its
+own dependencies. `no_oota` is the property MRD exists to
 deliver, so these are the load-bearing ones.
 
 **Seven have left this table.** `avoidoota/additional_nonlb.lit` #41 was never
@@ -131,11 +130,6 @@ still synchronises with nothing. Fence ordering in the checker is what is left.
 
 | Test | Assertion | Model |
 |---|---|---|
-| [`jctc/JCTC2.lit`](jctc/JCTC2.lit) #50 | allow `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
-| [`jctc/JCTC3.lit`](jctc/JCTC3.lit) #52 | allow `r1=1 ∧ r2=1 ∧ r3=1` | sMRD |
-| [`jctc/JCTC9b.lit`](jctc/JCTC9b.lit) #53 | allow `r1=1 ∧ r3=1` | sMRD |
-| [`jctc/JCTC19.lit`](jctc/JCTC19.lit) #49 | allow `r1=42 ∧ r2=42 ∧ r3=42` | sMRD |
-| [`jctc/JCTC20.lit`](jctc/JCTC20.lit) #51 | allow `r1=42 ∧ r2=42 ∧ r3=42` | sMRD |
 | [`esop_problem/RRE.lit`](esop_problem/RRE.lit) #46 | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[Problem]` → sMRD |
 | [`own/FWD-STRENGTHEN-LIFT.lit`](own/FWD-STRENGTHEN-LIFT.lit) #90 | allow `r0=1 ∧ r1=2` | sMRD |
 
@@ -162,16 +156,12 @@ store forwarding elided the read of a read-modify-write, leaving it without an
 both now verify. Their assertions were rewritten when `FADD` came to return the
 sum it writes (`bcea62d`), which changes no execution.
 
-These generate executions — `JCTC19` gets 8 — but none whose
-path predicates admit the asserted values. Before the path predicates were part
-of the query the outcome was reported satisfiable against an execution that does
-not produce it, which is why the group was invisible.
-
-The `JCTC2`/`JCTC3` and `JCTC19`/`JCTC20` pairs are worth taking together: both
-pairs are the same shape asked twice, and both halves fail, so whatever is
-missing is in the shape rather than in one file's annotation. Check the step
-counter first — it defaults to 2 and is shared by every loop in a program — before
-concluding the justification is not derivable.
+`esop_problem/RRE.lit` generates executions, but none whose path predicates
+admit the asserted values. Before the path predicates were part of the query the
+outcome was reported satisfiable against an execution that does not produce it,
+which is why it was invisible. Check the step counter first — it defaults to 2
+and is shared by every loop in a program — before concluding the justification
+is not derivable.
 
 ## Getting one back into the suite
 
