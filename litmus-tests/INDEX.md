@@ -1,7 +1,7 @@
 # Litmus Tests Index
 
-Total tests: 310
-Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-15
+Total tests: 312
+Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-28
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
@@ -137,6 +137,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-15
 - popl_grounding/Coh-CYC (Soham).lit
 - popl_grounding/Coh.lit
 - popl_grounding/Cwrites.lit
+- popl_grounding/FADD.lit
 - popl_grounding/LB.lit
 - popl_grounding/LBfd.lit
 - popl_grounding/RNG.lit
@@ -156,6 +157,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-15
 - popl_promising/Par-Inc.lit
 - popl_promising/SB+fences.lit
 - popl_promising/SB.lit
+- popl_promising/Upd-Stuck.lit
 - requests/0nONvMSw7 (MP).lit
 - requests/1MR_opBNP (2+2W with obs thread).lit
 - requests/2zm8LRQsJ (LB).lit
