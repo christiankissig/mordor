@@ -8,7 +8,7 @@ z := 0;
   r2 := z;
   rpx := &x;
   r3 := FADD(strong, rlx, rel, rpx, 1);
-  y := r3 + 1
+  y := r3
 }
 %%
-forbid (r1 = 1 && r2 = 1 && r3 = 0) [Bridging]
+forbid (r1 = 1 && r2 = 1 && r3 = 1) [Bridging]
