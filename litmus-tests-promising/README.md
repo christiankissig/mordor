@@ -68,8 +68,8 @@ record of the intended promising outcome.
 | `CYC.lit`              | forbid `r1=1 ∧ r2=1` | forbid | forbid |
 | `2+2W.lit`             | allow  `r1=2 ∧ r2=2` | allow | allow |
 | `ARM-weak.lit`         | allow  `r1=1` | allow | allow |
-| `Par-Inc.lit`          | allow  `r1=1 ∨ r2=1` | allow | allow |
-| `Upd-Stuck.lit`        | allow  `r1=1 ∧ r2=0` | allow | allow |
+| `Par-Inc.lit`          | allow  `r1=2 ∨ r2=2` | allow | allow |
+| `Upd-Stuck.lit`        | allow  `r1=1 ∧ r2=1` | allow | allow |
 | `Page 7 Column 1.lit`  | forbid `r1=1 ∧ r2=0 ∧ r3=1 ∧ r4=0` | forbid | forbid |
 | `Page 7 Column 1b.lit` | forbid `r2=3 ∧ r3=0` (release sequence) | forbid | forbid |
 | `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, annotated `[PS1=allow]` — **see below** | forbid | forbid |

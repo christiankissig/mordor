@@ -138,7 +138,7 @@ still synchronises with nothing. Fence ordering in the checker is what is left.
 | [`jctc/JCTC20.lit`](jctc/JCTC20.lit) #51 | allow `r1=42 ∧ r2=42 ∧ r3=42` | sMRD |
 | [`esop_problem/RRE.lit`](esop_problem/RRE.lit) #46 | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[Problem]` → sMRD |
 | [`popl_grounding/FADD.lit`](popl_grounding/FADD.lit) #60 | allow `r1=1 ∧ r3=1` | `[Grounding]` → IMM |
-| [`popl_promising/Upd-Stuck.lit`](popl_promising/Upd-Stuck.lit) #62 | allow `r1=1 ∧ r2=0` | `[IMM]` |
+| [`popl_promising/Upd-Stuck.lit`](popl_promising/Upd-Stuck.lit) #62 | allow `r1=1 ∧ r2=1` | `[IMM]` |
 | [`own/FWD-STRENGTHEN-LIFT.lit`](own/FWD-STRENGTHEN-LIFT.lit) #90 | allow `r0=1 ∧ r1=2` | sMRD |
 
 `own/FWD-STRENGTHEN-LIFT.lit` #90 joined this table on 2026-09-15, and unlike
