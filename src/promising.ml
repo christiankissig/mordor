@@ -885,7 +885,7 @@ let writes ?at ~world ~tid cfg l v mode =
 (** An update of [l]: [update] maps the value read to [Some] value to write, or
     to [None] where the update fails -- a failing CAS, which is a plain read,
     or a lock already held, which cannot step at all ([blocking]). [register]
-    gets [result read written]: FADD the value it read, CAS whether it wrote. *)
+    gets [result read written]: FADD the sum it wrote, CAS whether it wrote. *)
 let updates ?at ~world ~tid ~blocking cfg l ~rmode ~wmode register ~result
     update =
   let th = cfg.th in
@@ -1024,8 +1024,8 @@ and program_steps_exn ?tr ~world ~loops ~tid cfg =
               updates ?at ~world ~tid ~blocking:false cfg
                 (Loc.of_value (eval regs address))
                 ~rmode:load_mode ~wmode:assign_mode register
-                (* Fetch-and-add: the value read, [ρ[r ↦ α]]. *)
-                ~result:(fun read _ -> read)
+                (* Fetch-and-add: the register gets the sum written. *)
+                ~result:(fun read _ -> binop "+" read operand)
                 (fun v -> Some (binop "+" v operand))
         | Ir.Lock { global } ->
             (* An acquiring CAS from 0 to 1 that waits while the lock is held.

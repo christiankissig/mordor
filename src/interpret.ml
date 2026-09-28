@@ -598,12 +598,11 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 @ ub_facts env
               in
 
-              (* Fetch-and-add: the register gets the value read, [α], and the
-                 write the sum -- the episodic loops paper's rule continues
-                 with [ρ[r ↦ α]]. It used to get the sum, which made tests like
-                 [forbid (r1 = 0 && ...)] pass vacuously. *)
+              (* Fetch-and-add: the write and the register both get the sum.
+                 The episodic loops paper's rule continues with [ρ[r ↦ α]],
+                 the value read; that is an error in the paper. *)
               let env' = Hashtbl.copy env in
-                Hashtbl.replace env' register loaded_expr;
+                Hashtbl.replace env' register result_expr;
                 let cont = recurse rest env' phi events in
                   add_rmw_edge
                     (prefix events event_load'

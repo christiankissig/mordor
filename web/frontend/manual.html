@@ -1051,7 +1051,7 @@ r0 := cas(sc, sc, rx, 0, 1);</code></pre>
                 </div>
 
                 <h3>Fetch-and-Add (FADD)</h3>
-                <p>Atomically adds the operand to the value at an address. The register is set to the value read, before the addition: this is fetch-and-add. The address and operand are over registers, as for <code>cas</code>:</p>
+                <p>Atomically adds the operand to the value at an address. The register is set to the sum, the value written. The address and operand are over registers, as for <code>cas</code>:</p>
                 <div class="syntax-block">
                     <div class="title">Syntax (with RMW mode):</div>
                     <pre><code>r0 := <span class="keyword">fadd</span>(rmw_mode, load_order, store_order, address, operand)</code></pre>

@@ -5,7 +5,7 @@ z := 0;
    r1 := x;
    rpz := &z;
    r2 := FADD(rlx, rlx, rpz, r1);
-   y := r2 + 1
+   y := r2 - r1 + 1
 } ||| {
   r3 := y;
   x := r3

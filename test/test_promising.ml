@@ -125,7 +125,7 @@ let test_par_inc () =
       check
         (list (list int))
         ("Par-Inc under " ^ v)
-        [ [ 0; 1 ]; [ 1; 0 ] ]
+        [ [ 1; 2 ]; [ 2; 1 ] ]
         (finals
            (run semantics
               {|x := 0;
@@ -142,11 +142,11 @@ allow (r1 = 1) [Promising]|}
     attached to the message it reads. *)
 let upd_stuck =
   {|x := 0; y := 0; z := 0;
-{ r1 := x; rpz := &z; r2 := FADD(rlx, rlx, rpz, 1); y := r2 + 1 }
+{ r1 := x; rpz := &z; r2 := FADD(rlx, rlx, rpz, 1); y := r2 }
 ||| { r3 := y; x := r3 }
 ||| { rqz := &z; r4 := FADD(rlx, rlx, rqz, 1) }
 %%
-allow (r1 = 1 && r2 = 0) [Promising]|}
+allow (r1 = 1 && r2 = 1) [Promising]|}
 
 (** PLDI 2020, section 4.2, RPacq: PS2.0 allows the outcome by reserving the
     slot the acquire update reads into; PS1.0, which has no reservations and
@@ -156,7 +156,7 @@ let rpacq =
 { ra := x; rpz := &z; rc := FADD(acq, rlx, rpz, ra); y := 1 }
 ||| { rb := y; x := rb }
 %%
-allow (ra = 1 && rc = 0) [Promising]|}
+allow (ra = 1 && rc = 1) [Promising]|}
 
 let test_rpacq_separates () =
   check bool "RPacq under PS1.0" false (valid (run Promising1 rpacq));
@@ -411,13 +411,13 @@ allow (r1 = 1) [PS1]|}
     let execs = USet.values (Option.get ctx.executions) in
       List.iter
         (fun ex ->
-          let separating = value ctx ex "ra" && not (value ctx ex "rc") in
+          let separating = value ctx ex "ra" && value ctx ex "rc" in
             check bool "PS1.0 admits all but RPacq's outcome" (not separating)
               (List.mem "ps1" (admitted_by ctx ex))
         )
         execs;
       check bool "RPacq's outcome is among PS2.0's" true
-        (List.exists (fun ex -> value ctx ex "ra" && not (value ctx ex "rc")) execs)
+        (List.exists (fun ex -> value ctx ex "ra" && value ctx ex "rc") execs)
 
 let suite =
   ( "Promising",

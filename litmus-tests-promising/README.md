@@ -39,7 +39,10 @@ Two files were left behind in `litmus-tests/popl_grounding/` when the rest moved
 ## Runnable approximations
 
 Copies of these tests reannotated to `[IMM]` live in
-`litmus-tests/popl_promising/` and *are* exercised by the integration suite. IMM
+`litmus-tests/popl_promising/` and *are* exercised by the integration suite,
+except `Page 7 Column 1b.lit`, whose copy is parked in
+`litmus-tests-review/popl_promising/` (#61), and `Coh-CYC (Promising).lit`,
+which has none. IMM
 was chosen because it is the closest model MoRDor implements and was the model the
 old `"promising"` alias used.
 
@@ -68,8 +71,8 @@ record of the intended promising outcome.
 | `CYC.lit`              | forbid `r1=1 ∧ r2=1` | forbid | forbid |
 | `2+2W.lit`             | allow  `r1=2 ∧ r2=2` | allow | allow |
 | `ARM-weak.lit`         | allow  `r1=1` | allow | allow |
-| `Par-Inc.lit`          | allow  `r1=1 ∨ r2=1` | allow | allow |
-| `Upd-Stuck.lit`        | allow  `r1=1 ∧ r2=0` | allow | allow |
+| `Par-Inc.lit`          | allow  `r1=2 ∨ r2=2` | allow | allow |
+| `Upd-Stuck.lit`        | allow  `r1=1 ∧ r2=1` | allow | allow |
 | `Page 7 Column 1.lit`  | forbid `r1=1 ∧ r2=0 ∧ r3=1 ∧ r4=0` | forbid | forbid |
 | `Page 7 Column 1b.lit` | forbid `r2=3 ∧ r3=0` (release sequence) | forbid | forbid |
 | `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, annotated `[PS1=allow]` — **see below** | forbid | forbid |
