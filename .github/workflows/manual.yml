@@ -1,0 +1,54 @@
+# Publishes the manual to GitHub Pages, so it can be linked to as a page rather
+# than as HTML source: https://christiankissig.github.io/mordor/
+#
+# Only the manual is published. The rest of web/frontend is the web UI, which
+# needs the mordor-web backend and does nothing on a static host.
+name: Manual
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - web/frontend/manual.html
+      - .github/workflows/manual.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Publish manual
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # The manual is served at /manual/ next to the web UI, and its header
+      # links back to the UI at "/". There is no UI on Pages, so that link
+      # points at the repository instead.
+      - name: Assemble site
+        run: |
+          mkdir _site
+          sed 's|<a href="/">Open MoRDor</a>|<a href="https://github.com/christiankissig/mordor">Open MoRDor</a>|' \
+            web/frontend/manual.html > _site/index.html
+          grep -q 'href="https://github.com/christiankissig/mordor">Open MoRDor' _site/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
