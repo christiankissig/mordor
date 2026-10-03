@@ -72,6 +72,16 @@ let parallel_compute pool : compute_fn =
 
 (** {1 Basic Types} *)
 
+(** [equal_write_values a b] holds when [a] and [b] narrow the same writes to
+    the same values (see [symbolic_execution.write_values]). Both are in label
+    order. Executions and freeze results that write different values are
+    different executions, whatever their relations. *)
+let equal_write_values a b =
+  List.equal (fun (w1, v1) (w2, v2) -> w1 = w2 && Expr.equal v1 v2) a b
+
+let hash_write_values write_values =
+  Hashtbl.hash (List.map (fun (w, v) -> (w, Expr.to_string v)) write_values)
+
 (** Provides comparison, hashing, and subsumption checking for executions.
     Executions that are subsumed by others can be filtered out to reduce
     redundancy in the final result set. *)
@@ -105,6 +115,7 @@ end = struct
     && USet.equal ex1.dp ex2.dp
     && USet.equal ex1.ppo ex2.ppo
     && USet.equal ex1.rf ex2.rf
+    && equal_write_values ex1.write_values ex2.write_values
 
   (** [hash ex] computes hash value for execution.
 
@@ -118,7 +129,12 @@ end = struct
     in
     let hash_uset uset = USet.values uset |> List.sort compare |> hash_list in
       Hashtbl.hash
-        (hash_uset ex.e, hash_uset ex.dp, hash_uset ex.ppo, hash_uset ex.rf)
+        ( hash_uset ex.e,
+          hash_uset ex.dp,
+          hash_uset ex.ppo,
+          hash_uset ex.rf,
+          hash_write_values ex.write_values
+        )
 
   (** [contains exec1 exec2] checks if [exec1] subsumes [exec2].
 
@@ -131,6 +147,7 @@ end = struct
       @return [true] if [exec1] contains [exec2]. *)
   let contains exec1 exec2 =
     USet.equal exec2.e exec1.e
+    && equal_write_values exec1.write_values exec2.write_values
     && USet.subset exec2.dp exec1.dp
     && USet.subset exec2.ppo exec1.ppo
     && USet.subset exec2.rf exec1.rf
@@ -210,6 +227,95 @@ end
 (** Hash table keyed by executions for deduplication. *)
 module ExecutionCache = Hashtbl.Make (ExecutionCacheKey)
 
+(** {1 Write values}
+
+    A justification's write may carry a narrower value than the structure's
+    event: value assignment concretises it where the justification's context
+    entails a value. The context is the predicate, the forwarding constraints,
+    and the write's de facto constraints. An execution satisfies the first two,
+    so where they alone entail the value it is the value the structure's
+    expression takes in the execution, and nothing needs recording.
+
+    A de facto constraint is different. A UB fold leaves one behind -- [1 / !r1]
+    folded to [1] assumes [r1 = 0] -- and it licenses the optimiser to use the
+    assumed value, not the register to hold it. An execution taking such a
+    justification writes the narrowed value while the read keeps its own: in
+    symmrd/LB+UB+data+z.lit, [z := r1] writes 0 while [r1 = 1], the sMRD notes'
+    "inconsistent values of r1" (github #65). Those writes, and only those, are
+    recorded per execution, and every reader of a write's value in an execution
+    reads it through {!with_write_values}. *)
+
+(** [ub_facts structure w] is the UB assumptions in force at event [w]: the
+    facts its register environment records under [Interpret.ub_fact_prefix]
+    ("%ub:", spelled out because this module comes first). The rest of [w]'s de
+    facto constraints are the litmus test's program-wide guarantees. *)
+let ub_facts (structure : symbolic_event_structure) w =
+  match Hashtbl.find_opt structure.p w with
+  | None -> []
+  | Some env ->
+      Hashtbl.fold
+        (fun k v acc ->
+          if String.starts_with ~prefix:"%ub:" k then v :: acc else acc
+        )
+        env []
+
+(** [narrowed_write_values structure fwd_es_ctx j_list] is, in label order, each
+    write of [j_list] whose justified value differs from the structure's and is
+    entailed only with a UB assumption, with that value.
+
+    A program-wide guarantee is a de facto constraint too, but it holds in every
+    execution, as the predicate does: a value it entails is the value the write
+    takes anyway. Recording it would only split executions that are one
+    (avoidoota/listing2_5pwg.lit, 31 executions to 48). So the guarantees join
+    the predicate and the forwarding constraints, and only what is left needs a
+    UB assumption. *)
+let narrowed_write_values structure fwd_es_ctx (j_list : justification list) =
+  List.filter_map
+    (fun (j : justification) ->
+      match ub_facts structure j.w.label with
+      | [] -> None
+      | ub -> (
+          match (Hashtbl.find_opt structure.events j.w.label, j.w.wval) with
+          | Some (ev : event), Some v when ev.typ = Write -> (
+              match ev.wval with
+              | Some v0 when not (Expr.equal v0 v) ->
+                  let guarantees =
+                    Hashtbl.find_opt structure.defacto j.w.label
+                    |> Option.value ~default:[]
+                    |> List.filter (fun g -> not (List.exists (Expr.equal g) ub))
+                  in
+                  let psi =
+                    (ForwardingContext.create fwd_es_ctx ~fwd:j.fwd ~we:j.we ())
+                      .psi
+                  in
+                    if Solver.exeq ~state:(j.p @ psi @ guarantees) v0 v then
+                      None
+                    else Some (j.w.label, v)
+              | _ -> None
+            )
+          | _ -> None
+        )
+    )
+    j_list
+  |> List.sort_uniq (fun (w1, _) (w2, _) -> compare w1 w2)
+
+(** [with_write_values structure write_values] is [structure] with each write in
+    [write_values] carrying its value there: the structure as one execution sees
+    it. [structure] itself when there are none. *)
+let with_write_values structure = function
+  | [] -> structure
+  | write_values ->
+      let events = Hashtbl.copy structure.events in
+        List.iter
+          (fun (w, v) ->
+            match Hashtbl.find_opt events w with
+            | Some (ev : event) ->
+                Hashtbl.replace events w { ev with wval = Some v }
+            | None -> ()
+          )
+          write_values;
+        { structure with events }
+
 (** Intermediate results from freezing justification combinations.
 
     A freeze result represents a partially validated execution before final
@@ -239,6 +345,11 @@ module FreezeResult = struct
             justified it. *)
     pp : expr list;  (** Path predicates that must be satisfied. *)
     conds : expr list;  (** Additional conditions. *)
+    write_values : (int * expr) list;
+        (** The combination's writes whose value is not the structure's
+            ({!narrowed_write_values}). Part of {!equal}, {!hash} and
+            {!contains}: two results writing different values are different
+            executions, whatever their relations. *)
   }
 
   (** [merge_justs kept fr] folds [fr]'s justifications into [kept]'s.
@@ -279,6 +390,7 @@ module FreezeResult = struct
     && USet.equal fr1.rmw fr2.rmw
     && List.equal Expr.equal fr1.pp fr2.pp
     && List.equal Expr.equal fr1.conds fr2.conds
+    && equal_write_values fr1.write_values fr2.write_values
 
   (** [hash fr] computes hash for freeze result.
 
@@ -294,7 +406,8 @@ module FreezeResult = struct
           hash_uset fr.dp,
           hash_uset fr.ppo,
           hash_uset fr.rf,
-          hash_uset fr.rmw
+          hash_uset fr.rmw,
+          hash_write_values fr.write_values
         )
 
   (** [contains fr1 fr2] checks if [fr1] subsumes [fr2].
@@ -307,6 +420,7 @@ module FreezeResult = struct
       @return [true] if [fr1] contains [fr2]. *)
   let contains fr1 fr2 =
     USet.equal fr2.e fr1.e
+    && equal_write_values fr1.write_values fr2.write_values
     && USet.equal fr1.rf fr2.rf
     && USet.subset fr2.dp fr1.dp
     && USet.subset fr2.ppo fr1.ppo
@@ -463,10 +577,16 @@ module ReadFromValidation = struct
 
              Still true with value assignment made entailment-only: measured
              again after that change, reading the licensed value here loses the
-             LB+UB+data+z refinement chain. rf is the wrong lever -- it pins
-             which write a read takes its value from, where what github #65
-             needs is the value that write puts in the execution's value map.
-             That is fix_rf_map, below. *)
+             LB+UB+data+z refinement chain, because executions writing the two
+             values were deduplicated and pruned as one.
+
+             What github #65 needed is narrower, and is now done upstream of
+             here: a write whose value a UB assumption narrowed carries that
+             value in the execution ([symbolic_execution.write_values]), and the
+             structure this function is given is the execution's view of it
+             ({!with_write_values}), so [vale] below reads it. Every other
+             write keeps the structure's value, which is what this note
+             argues for. *)
           let w_val = vale structure w r in
             match get_val structure r with
             | Some r_val -> Some (Expr.evaluate (Expr.binop w_val "=" r_val))
@@ -772,6 +892,7 @@ let partial_execution ~e ~dp ~ppo ~rmw ~rf ~ex_p : symbolic_execution =
     justifications = [];
     co = None;
     fix_rf_map = Hashtbl.create 1;
+    write_values = [];
     pointer_map = None;
     final_env = Hashtbl.create 1;
     aborted = None;
@@ -1861,6 +1982,7 @@ module Freeze = struct
                       justs = [];
                       pp = execution_predicates;
                       conds = [ EBoolean true ];
+                      write_values = [];
                     }
                   in
                     Logs_safe.debug (fun m ->
@@ -1969,6 +2091,8 @@ module Freeze = struct
     prep_dp : (int * int) uset;
     prep_ppo : (int * int) uset;
     prep_p_combined : expr list;
+    prep_write_values : (int * expr) list;
+        (** {!narrowed_write_values} of the combination. *)
   }
 
   (** [prepare structure fwd_es_ctx path j_list statex ~elided ~constraints]
@@ -2105,6 +2229,8 @@ module Freeze = struct
             prep_dp = dp;
             prep_ppo = ppo;
             prep_p_combined = p_combined;
+            prep_write_values =
+              narrowed_write_values structure fwd_es_ctx j_list;
           }
 
   (** Whether the freeze stage freezes each kind of combination once
@@ -2130,14 +2256,23 @@ module Freeze = struct
              strings p.prep_statex,
              sorted p.prep_dp,
              sorted p.prep_ppo,
-             strings p.prep_p_combined
+             strings p.prep_p_combined,
+             List.map (fun (w, v) -> (w, Expr.to_string v)) p.prep_write_values
            )
            [ Marshal.No_sharing ]
         )
 
   (** [enumerate structure prepared ~include_rf] is the combination's valid
       executions, one per read-from relation that passes. *)
-  let enumerate ?(coherence_models = []) structure prep ~include_rf =
+  let rec enumerate ?(coherence_models = []) structure prep ~include_rf =
+    (* Every value the search and its checks read is the execution's. *)
+    let structure = with_write_values structure prep.prep_write_values in
+      enumerate_values ~coherence_models structure prep ~include_rf
+      |> List.map (fun (fr : FreezeResult.t) ->
+          { fr with write_values = prep.prep_write_values }
+      )
+
+  and enumerate_values ~coherence_models structure prep ~include_rf =
     let {
       prep_path = path;
       prep_justs = j_list;
@@ -2147,6 +2282,7 @@ module Freeze = struct
       prep_dp = dp;
       prep_ppo = ppo;
       prep_p_combined = p_combined;
+      prep_write_values = _;
     } =
       prep
     in
@@ -2674,10 +2810,21 @@ module Freeze = struct
       and where the solver is undecided, the search is ({!search_witness}),
       pruning by [coherence_models]. *)
   let witness ~model ~coherence_models ~admits ~reject structure prep =
-    let check result = admits result && not (reject result) in
+    (* As in {!enumerate}: the search reads the execution's values, and the
+       result carries them, before [admits] and [reject] see it. *)
+    let structure = with_write_values structure prep.prep_write_values in
+    let valued (fr : FreezeResult.t) =
+      { fr with write_values = prep.prep_write_values }
+    in
+    let check result = admits (valued result) && not (reject (valued result)) in
     let from_solver = solver_witness ~model ~check structure prep in
       match from_solver with
-      | Undecided -> search_witness ~coherence_models ~check structure prep
+      | Undecided -> (
+          match search_witness ~coherence_models ~check structure prep with
+          | Witness fr -> Witness (valued fr)
+          | other -> other
+        )
+      | Witness fr -> Witness (valued fr)
       | decided -> decided
 
   (** [freeze structure path j_list statex ~elided ~constraints ~include_rf]
@@ -2802,6 +2949,8 @@ let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
     read-from, and the final register environment. *)
 let execution_of_freeze_result (structure : symbolic_event_structure)
     ~include_rf ~id (freeze_res : FreezeResult.t) : symbolic_execution =
+  (* A read takes the value its write has in this execution. *)
+  let structure = with_write_values structure freeze_res.write_values in
   (* Fixed point computation for RF mapping *)
   let fix_rf_map = Hashtbl.create 16 in
 
@@ -2887,6 +3036,7 @@ let execution_of_freeze_result (structure : symbolic_event_structure)
         justifications = freeze_res.justs;
         co = None;
         fix_rf_map = final_map;
+        write_values = freeze_res.write_values;
         pointer_map = None;
         final_env;
         aborted = None;

@@ -102,6 +102,7 @@ module TestSetMembership = struct
           justifications = [];
           co = None;
           fix_rf_map = Hashtbl.create 0;
+          write_values = [];
           pointer_map = Some (Hashtbl.create 0);
           final_env = Hashtbl.create 0;
           aborted = None;

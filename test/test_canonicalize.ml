@@ -64,6 +64,7 @@ module TestData = struct
       justifications = [];
       co = None;
       fix_rf_map = Hashtbl.create 0;
+      write_values = [];
       pointer_map = None;
       final_env = Hashtbl.create 0;
       aborted = None;

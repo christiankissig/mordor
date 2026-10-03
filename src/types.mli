@@ -165,6 +165,9 @@ type symbolic_execution = {
   mutable co : (int * int) uset option;
       (* The order under which coherence admitted this execution *)
   fix_rf_map : (string, expr) Hashtbl.t; (* Fixed RF mappings *)
+  write_values : (int * expr) list;
+      (** The writes whose value in this execution differs from the structure's,
+          because their justification narrowed it, with that value. *)
   pointer_map : (int, value_type) Hashtbl.t option; (* Pointer
   mappings *)
   final_env : (string, expr) Hashtbl.t;

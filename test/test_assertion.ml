@@ -94,6 +94,7 @@ let make_execution ?(ppo = USet.create ()) ?(dp = USet.create ())
     justifications = [];
     co = None;
     fix_rf_map;
+    write_values = [];
     pointer_map = None;
     final_env;
     aborted = None;

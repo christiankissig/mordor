@@ -73,6 +73,7 @@ let make_empty_execution () =
     justifications = [];
     co = None;
     fix_rf_map = Hashtbl.create 10;
+    write_values = [];
     pointer_map = Hashtbl.create 10 |> Option.some;
     final_env = Hashtbl.create 0;
     aborted = None;
@@ -256,6 +257,7 @@ let test_imm_coherent_simple () =
       justifications = [];
       co = None;
       fix_rf_map = Hashtbl.create 10;
+      write_values = [];
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
       aborted = None;
@@ -298,6 +300,7 @@ let test_rc11_coherent_simple () =
       justifications = [];
       co = None;
       fix_rf_map = Hashtbl.create 10;
+      write_values = [];
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
       aborted = None;
@@ -340,6 +343,7 @@ let test_rc11c_coherent_simple () =
       justifications = [];
       co = None;
       fix_rf_map = Hashtbl.create 10;
+      write_values = [];
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
       aborted = None;
@@ -389,6 +393,7 @@ let imm_rmw_violated () =
       justifications = [];
       co = None;
       fix_rf_map = Hashtbl.create 10;
+      write_values = [];
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
       aborted = None;
@@ -475,6 +480,7 @@ let test_cache_types () =
       justifications = [];
       co = None;
       fix_rf_map = Hashtbl.create 10;
+      write_values = [];
       pointer_map = Hashtbl.create 10 |> Option.some;
       final_env = Hashtbl.create 0;
       aborted = None;
@@ -564,9 +570,10 @@ let test_coherence_axiom_accepts_acyclic_hb () =
     check bool "acyclic hb is coherent" true result;
     ()
 
-(** Test suite *)
 (* R16: smrd is the one model with a symbolic form; the rest are asked about
    one execution at a time. *)
+
+(** Test suite *)
 let test_symbolic_registry () =
   check bool "smrd has one" true
     (Option.is_some (ModelRegistry.lookup_symbolic "smrd"));
@@ -578,8 +585,8 @@ let test_symbolic_registry () =
     [ "rc11"; "imm"; "sc"; "od-lso" ];
   let symbolic = Option.get (ModelRegistry.lookup_symbolic "smrd") in
   let module M = (val symbolic : SYMBOLIC_MODEL) in
-    check string "its name" "smrd" M.name;
-    check bool "cheapest first, then fuller" true (List.length M.levels = 2)
+  check string "its name" "smrd" M.name;
+  check bool "cheapest first, then fuller" true (List.length M.levels = 2)
 
 let suite =
   ( "Coherence",

@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 333
+Total tests: 335
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -191,6 +191,8 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
 - single-thread-lift-tests/write-chain.lit
 - single-thread-lift-tests/write-freezing.lit
 - symmrd/LB+UB+data+arr.lit
+- symmrd/LB+UB+data+z-memory.lit
+- symmrd/LB+UB+data+z.lit
 - symmrd/LB+UB+data-forbid.lit
 - symmrd/LB+UB+data.lit
 - symmrd/LB+alias+data.lit
