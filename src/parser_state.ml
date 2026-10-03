@@ -13,6 +13,16 @@ let make_source_span startpos endpos =
     end_col = endpos.Lexing.pos_cnum - endpos.Lexing.pos_bol;
   }
 
+(** The span of the condition of the [if], [while] or [do] just reduced. The
+    [statement] rule wrapping it is reduced next, and takes it: [stmt_base] is
+    reduced nowhere else, so a span set here never reaches another statement. *)
+let condition_span : source_span option ref = ref None
+
+let take_condition_span () =
+  let span = !condition_span in
+    condition_span := None;
+    span
+
 (** Context stacks *)
 let thread_ctx_stack = ref [ { tid = 0; path = [] } ]
 
@@ -24,6 +34,7 @@ let current_loop_ctx () = List.hd !loop_ctx_stack
 
 (** Reset all context stacks to initial state *)
 let reset_parser_state () =
+  condition_span := None;
   thread_ctx_stack := [ { tid = 0; path = [] } ];
   src_ctx_stack := [ { pc = 0 } ];
   loop_ctx_stack := [ { lid = 0; loops = []; iters = [] } ]

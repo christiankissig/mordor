@@ -91,6 +91,17 @@ const DOT_STYLE_TO_TIKZ = {
 };
 
 class GraphVisualizer {
+    // The colour of each kind of source location an episodicity violation
+    // names: highlight fill, highlight border, and the legend swatch.
+    static VIOLATION_ROLES = {
+        read:    { label: 'read',                 color: 'rgba(97, 175, 239, 0.30)',  border: 'rgba(97, 175, 239, 0.9)',  swatch: '#61afef' },
+        write:   { label: 'write',                color: 'rgba(245, 165, 36, 0.30)',  border: 'rgba(245, 165, 36, 0.9)',  swatch: '#f5a524' },
+        branch:  { label: 'branching condition',  color: 'rgba(198, 120, 221, 0.30)', border: 'rgba(198, 120, 221, 0.9)', swatch: '#c678dd' },
+        symbol:  { label: 'read before the loop', color: 'rgba(240, 98, 146, 0.30)',  border: 'rgba(240, 98, 146, 0.9)',  swatch: '#f06292' },
+        earlier: { label: 'earlier iteration',    color: 'rgba(229, 211, 143, 0.35)', border: 'rgba(229, 211, 143, 0.95)', swatch: '#e5d38f' },
+        later:   { label: 'later iteration',      color: 'rgba(247, 131, 122, 0.30)', border: 'rgba(247, 131, 122, 0.9)', swatch: '#f7837a' },
+    };
+
     constructor() {
         this.graphs = [];  // Array to store all graphs
         this.currentIndex = 0;
@@ -257,6 +268,18 @@ class GraphVisualizer {
     }
     
     highlightSourceSpan(startLine, startCol, endLine, endCol, color = 'rgba(255, 215, 0, 0.25)', borderColor = 'rgba(255, 215, 0, 0.5)') {
+        this.highlightSourceSpans([{
+            span: { start_line: startLine, start_col: startCol, end_line: endLine, end_col: endCol },
+            color, borderColor
+        }]);
+    }
+
+    // Highlight several spans at once, each in its own colour: items are
+    // { span: {start_line, start_col, end_line, end_col}, color, borderColor }.
+    // Lines are 1-based and columns 0-based, as the backend's spans are.
+    // Spans that coincide are drawn as one marker split into colour bands, so
+    // that none hides another. The editor scrolls to the first span.
+    highlightSourceSpans(items) {
         this.clearSourceHighlight();
 
         const textarea    = document.getElementById('litmus-input');
@@ -264,10 +287,14 @@ class GraphVisualizer {
         if (!textarea || !highlightPre) return;
 
         const lines = textarea.value.split('\n');
-        if (startLine < 1 || startLine > lines.length || endLine < 1 || endLine > lines.length) {
-            console.warn('Invalid line numbers:', startLine, endLine);
-            return;
-        }
+        const valid = (items || []).filter(item => {
+            const s = item && item.span;
+            const ok = s && s.start_line >= 1 && s.start_line <= lines.length
+                && s.end_line >= 1 && s.end_line <= lines.length;
+            if (s && !ok) console.warn('Invalid line numbers:', s.start_line, s.end_line);
+            return ok;
+        });
+        if (valid.length === 0) return;
 
         // Read metrics directly from the textarea's computed style so markers
         // share the exact same coordinate space as the rendered text.
@@ -304,16 +331,29 @@ class GraphVisualizer {
             textarea.addEventListener('scroll', this._highlightScrollHandler);
         }
 
+        // Group coinciding spans, keeping the order of their first occurrence.
+        const groups = [];
+        const byKey = new Map();
+        valid.forEach(item => {
+            const s = item.span;
+            const key = `${s.start_line}:${s.start_col}-${s.end_line}:${s.end_col}`;
+            if (!byKey.has(key)) {
+                const group = { span: s, colors: [], borderColor: item.borderColor };
+                byKey.set(key, group);
+                groups.push(group);
+            }
+            byKey.get(key).colors.push(item.color);
+        });
+
         // Cache everything needed to rebuild markers after a scroll.
         this._highlightParams = {
-            startLine, startCol, endLine, endCol,
-            lines, lineHeight, paddingTop, paddingLeft,
-            charWidth, color, borderColor
+            groups, lines, lineHeight, paddingTop, paddingLeft, charWidth
         };
         this._repositionHighlightMarkers();
 
-        // Scroll the highlighted region into view (upper third of the editor).
-        const targetScroll = Math.max(0, paddingTop + (startLine - 1) * lineHeight - textarea.clientHeight / 3);
+        // Scroll the first highlighted region into view (upper third of the editor).
+        const first = valid[0].span;
+        const targetScroll = Math.max(0, paddingTop + (first.start_line - 1) * lineHeight - textarea.clientHeight / 3);
         textarea.scrollTop = targetScroll;
         // Firing the scroll event updates the highlight overlay's transform automatically.
     }
@@ -325,9 +365,7 @@ class GraphVisualizer {
         if (!textarea) return;
 
         const {
-            startLine, startCol, endLine, endCol,
-            lines, lineHeight, paddingTop, paddingLeft,
-            charWidth, color, borderColor
+            groups, lines, lineHeight, paddingTop, paddingLeft, charWidth
         } = this._highlightParams;
 
         const scrollTop  = textarea.scrollTop;
@@ -335,8 +373,18 @@ class GraphVisualizer {
 
         this.highlightContainer.innerHTML = '';
 
-        const makeMarker = (lineNum, colStart, colEnd) => {
+        // One colour fills the marker; several split it into horizontal bands.
+        const background = colors => colors.length === 1
+            ? colors[0]
+            : `linear-gradient(to bottom, ${colors.map((c, i) =>
+                `${c} ${100 * i / colors.length}%, ${c} ${100 * (i + 1) / colors.length}%`
+              ).join(', ')})`;
+
+        const makeMarker = (lineNum, colStart, colEnd, colors, borderColor) => {
             const lineText    = lines[lineNum - 1] || '';
+            // A statement's span starts where the line does; its indentation
+            // is not part of it.
+            while (colStart < colEnd && /\s/.test(lineText.charAt(colStart))) colStart++;
             const beforeText  = lineText.substring(0, colStart);
             const highlighted = lineText.substring(colStart, colEnd);
 
@@ -352,23 +400,23 @@ class GraphVisualizer {
                 left: ${left}px;
                 width: ${width}px;
                 height: ${lineHeight}px;
-                background-color: ${color};
+                background: ${background(colors)};
                 border: 1px solid ${borderColor};
                 box-sizing: border-box;
             `;
             return marker;
         };
 
-        if (startLine === endLine) {
-            this.highlightContainer.appendChild(makeMarker(startLine, startCol, endCol));
-        } else {
+        groups.forEach(({ span, colors, borderColor }) => {
+            const { start_line: startLine, start_col: startCol,
+                    end_line: endLine, end_col: endCol } = span;
             for (let ln = startLine; ln <= endLine; ln++) {
                 const lineText = lines[ln - 1] || '';
                 const s = (ln === startLine) ? startCol : 0;
                 const e = (ln === endLine)   ? endCol   : lineText.length;
-                this.highlightContainer.appendChild(makeMarker(ln, s, e));
+                this.highlightContainer.appendChild(makeMarker(ln, s, e, colors, borderColor));
             }
-        }
+        });
     }
 
     clearSourceHighlight() {
@@ -413,6 +461,10 @@ class GraphVisualizer {
             return;
         }
         
+        // The source locations of each rendered violation, by its data-violation
+        // index, for the hover handlers below.
+        this._violationLocations = [];
+
         let html = '<div style="padding: 0.5rem;">';
         this.loops.forEach(loop => {
             const episodicityData = this.episodicityResults[loop.id];
@@ -461,28 +513,26 @@ class GraphVisualizer {
                                 </div>
                         `;
                         
-                        // Show violations if any
+                        // Show violations if any. Hovering one highlights the
+                        // source locations it names, each in its role's colour.
                         if (hasViolations) {
                             html += '<div class="condition-violations">';
                             cond.violations.forEach(violation => {
-                                const violationType = violation[0];
-                                const violationDetails = violation[1];
-                                
-                                html += `<div style="font-size: 0.8rem; color: var(--red); margin: 0.2rem 0;">`;
-                                
-                                if (Array.isArray(violationDetails)) {
-                                    const [reason, register, span] = violationDetails;
-                                    html += `${this.formatViolationType(violationType)}: ${reason}`;
-                                    if (register) {
-                                        html += ` (${register})`;
-                                    }
-                                    if (span && span.start_line) {
-                                        html += ` at ${span.start_line}:${span.start_col}`;
-                                    }
-                                } else {
-                                    html += `${this.formatViolationType(violationType)}`;
+                                const { text, locations } = this.describeViolation(violation);
+                                const id = this._violationLocations.length;
+                                this._violationLocations.push(locations);
+
+                                html += `<div class="episodicity-violation" data-violation="${id}" style="font-size: 0.8rem; color: var(--red); margin: 0.2rem 0; padding: 0.15rem 0.3rem; border-radius: 3px; cursor: default;">`;
+                                html += `<div>${text}</div>`;
+                                if (locations.length > 0) {
+                                    html += '<div style="display: flex; flex-wrap: wrap; gap: 0.2rem 0.75rem; margin-top: 0.1rem; color: var(--text-muted);">';
+                                    locations.forEach(({ role, span }) => {
+                                        const r = GraphVisualizer.VIOLATION_ROLES[role];
+                                        const at = span ? `${span.start_line}:${span.start_col}` : 'unknown';
+                                        html += `<span style="display: inline-flex; align-items: center; gap: 0.3rem;"><span style="display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 2px; background: ${r.swatch};"></span>${r.label} ${at}</span>`;
+                                    });
+                                    html += '</div>';
                                 }
-                                
                                 html += '</div>';
                             });
                             html += '</div>';
@@ -522,24 +572,27 @@ class GraphVisualizer {
         });
         
         // Add hover listeners to loop items
+        const highlightLoop = item => {
+            const startLine = parseInt(item.getAttribute('data-start-line'));
+            const startCol = parseInt(item.getAttribute('data-start-col'));
+            const endLine = parseInt(item.getAttribute('data-end-line'));
+            const endCol = parseInt(item.getAttribute('data-end-col'));
+
+            // Highlight with green color
+            this.highlightSourceSpan(
+                startLine,
+                startCol,
+                endLine,
+                endCol,
+                'rgba(76, 201, 176, 0.25)',  // Green background
+                'rgba(76, 201, 176, 0.5)'     // Green border
+            );
+        };
         const loopItems = loopsContent.querySelectorAll('.loop-item');
         loopItems.forEach(item => {
             item.addEventListener('mouseenter', () => {
-                const startLine = parseInt(item.getAttribute('data-start-line'));
-                const startCol = parseInt(item.getAttribute('data-start-col'));
-                const endLine = parseInt(item.getAttribute('data-end-line'));
-                const endCol = parseInt(item.getAttribute('data-end-col'));
-                
-                // Highlight with green color
-                this.highlightSourceSpan(
-                    startLine, 
-                    startCol, 
-                    endLine, 
-                    endCol,
-                    'rgba(76, 201, 176, 0.25)',  // Green background
-                    'rgba(76, 201, 176, 0.5)'     // Green border
-                );
-                
+                highlightLoop(item);
+
                 // Visual feedback on the loop item
                 item.style.background = 'var(--bg-elev2)';
             });
@@ -549,8 +602,76 @@ class GraphVisualizer {
                 item.style.background = 'var(--bg-elev)';
             });
         });
+
+        // A violation highlights its own locations instead of its loop's, and
+        // gives the loop's back when the pointer moves off it.
+        loopsContent.querySelectorAll('.episodicity-violation').forEach(el => {
+            const locations = this._violationLocations[parseInt(el.getAttribute('data-violation'))] || [];
+            el.addEventListener('mouseenter', () => {
+                el.style.background = 'var(--bg-elev2)';
+                this.highlightSourceSpans(locations
+                    .filter(({ span }) => span)
+                    .map(({ role, span }) => {
+                        const r = GraphVisualizer.VIOLATION_ROLES[role];
+                        return { span, color: r.color, borderColor: r.border };
+                    }));
+            });
+            el.addEventListener('mouseleave', () => {
+                el.style.background = '';
+                highlightLoop(el.closest('.loop-item'));
+            });
+        });
     }
     
+    // What an episodicity violation says, as HTML, and the source locations it
+    // names, each as { role, span } with role a key of VIOLATION_ROLES. The
+    // backend sends a violation as [condition, [kind, ...arguments]], spans
+    // being null where unknown.
+    describeViolation(violation) {
+        const esc = text => String(text)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const details = Array.isArray(violation) ? violation[1] : null;
+        const kind = Array.isArray(details) ? details[0] : null;
+        const args = Array.isArray(details) ? details.slice(1) : [];
+        switch (kind) {
+            case 'RegisterReadBeforeWrite': {
+                // Older results carry only the write: [register, write].
+                const [register, read, write] = args.length >= 3 ? args : [args[0], null, args[1]];
+                return {
+                    text: `Register <code>${esc(register)}</code> is read before it is written in an iteration`,
+                    locations: [{ role: 'read', span: read }, { role: 'write', span: write }]
+                };
+            }
+            case 'WriteFromPreviousIteration': {
+                const [location, read, write] = args;
+                return {
+                    text: `A read of <code>${esc(location)}</code> may read from a write of an earlier iteration`,
+                    locations: [{ role: 'read', span: read }, { role: 'write', span: write }]
+                };
+            }
+            case 'BranchConstraintsSymbol': {
+                // Older results carry only the branch: [symbol, origin, branch].
+                const [symbol, origin, branch, symbolRead] = args;
+                return {
+                    text: `A branching condition constrains <code>${esc(symbol)}</code>, read before the loop`,
+                    locations: [{ role: 'branch', span: branch }, { role: 'symbol', span: symbolRead || null }]
+                };
+            }
+            case 'LoopIterationOrderingViolation': {
+                const [, earlier, later] = args;
+                return {
+                    text: 'An event of a later iteration may be reordered before one of an earlier iteration: (ppo ∪ dp)* does not order them',
+                    locations: [{ role: 'earlier', span: earlier }, { role: 'later', span: later }]
+                };
+            }
+            default:
+                return {
+                    text: esc(this.formatViolationType(String(kind || (Array.isArray(violation) ? violation[0] : violation)))),
+                    locations: []
+                };
+        }
+    }
+
     formatViolationType(type) {
         // Convert camelCase/PascalCase to readable format
         return type.replace(/([A-Z])/g, ' $1').trim();

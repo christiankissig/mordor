@@ -155,6 +155,7 @@ statement:
         ~src_ctx:(Some (current_src_ctx()))
         ~loop_ctx:(Some (current_loop_ctx()))
         ~source_span:(Some span)
+        ~condition_span:(take_condition_span ())
         (make_labeled labels s)
     }
   (* Parallel threads *)
@@ -360,7 +361,10 @@ stmt_base:
 
   (* Control flow *)
   | IF LPAREN cond=expr RPAREN then_body=block_or_stmt else_part=else_clause?
-    { SIf { condition = cond; then_body; else_body = else_part } }
+    {
+      condition_span := Some (make_source_span $startpos(cond) $endpos(cond));
+      SIf { condition = cond; then_body; else_body = else_part }
+    }
 
   | WHILE LPAREN cond=expr RPAREN body=block_or_stmt
     {
@@ -368,6 +372,7 @@ stmt_base:
       push_loop();
       let result = SWhile { condition = cond; body } in
       pop_loop();
+      condition_span := Some (make_source_span $startpos(cond) $endpos(cond));
       result
     }
 
@@ -377,6 +382,7 @@ stmt_base:
       push_loop();
       let result = SDo { body; condition = cond } in
       pop_loop();
+      condition_span := Some (make_source_span $startpos(cond) $endpos(cond));
       result
     }
 

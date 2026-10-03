@@ -403,14 +403,37 @@ module RegisterCondition = struct
     let satisfied = ref true in
     let written_before_read = USet.create () in
     let must_not_write = USet.create () in
+    (* Where each register of [must_not_write] was read before it was written:
+       the first such read on the path, which a violation reports with the
+       write that comes after it. *)
+    let read_at : (string, source_span option) Hashtbl.t = Hashtbl.create 8 in
+
+    (* Record [span] as where the registers of [regs] not yet written were
+       read, unless an earlier read on the path already is. *)
+    let note_reads read_at span regs =
+      USet.iter
+        (fun reg ->
+          if not (Hashtbl.mem read_at reg) then Hashtbl.replace read_at reg span
+        )
+        regs
+    in
+
+    (* A condition's own span where the parser recorded one; otherwise the
+       statement's, which covers its body too. *)
+    let condition_span (node : ir_node) =
+      match node.annotations.condition_span with
+      | Some span -> Some span
+      | None -> node.annotations.source_span
+    in
 
     (* Recursively traverse IR nodes to check register accesses.
 
      @param nodes The list of IR nodes to traverse
      @param written_before_read Set of registers written before current point
-     @param must_not_write Set of registers that must not be written *)
+     @param must_not_write Set of registers that must not be written
+     @param read_at Where each register of [must_not_write] was read *)
     let rec traverse_nodes (nodes : ir_node list) written_before_read
-        must_not_write =
+        must_not_write read_at =
       match nodes with
       | [] -> ()
       | node :: rest -> (
@@ -423,49 +446,50 @@ module RegisterCondition = struct
                     traverse_nodes thread
                       (USet.clone written_before_read)
                       (USet.clone must_not_write)
+                      (Hashtbl.copy read_at)
                   )
                   threads
             | While { condition; body } ->
                 let read_regs =
                   Ir.extract_read_registers_from_stmt stmt |> USet.of_list
                 in
-                let must_not_write =
-                  USet.set_minus read_regs written_before_read
-                  |> USet.union must_not_write
-                in
+                let unwritten = USet.set_minus read_regs written_before_read in
+                let must_not_write = USet.union unwritten must_not_write in
+                  note_reads read_at (condition_span node) unwritten;
                   traverse_nodes (body @ rest) written_before_read
-                    must_not_write
+                    must_not_write read_at
             | Do { condition; body } ->
-                traverse_nodes body written_before_read must_not_write;
+                traverse_nodes body written_before_read must_not_write read_at;
                 let read_regs =
                   Ir.extract_read_registers_from_stmt stmt |> USet.of_list
                 in
-                let must_not_write =
-                  USet.set_minus read_regs written_before_read
-                  |> USet.union must_not_write
-                in
-                  traverse_nodes rest written_before_read must_not_write
+                let unwritten = USet.set_minus read_regs written_before_read in
+                let must_not_write = USet.union unwritten must_not_write in
+                  note_reads read_at (condition_span node) unwritten;
+                  traverse_nodes rest written_before_read must_not_write read_at
             | If { condition; then_body; else_body } -> (
                 let read_regs =
                   Ir.extract_read_registers_from_stmt stmt |> USet.of_list
                 in
-                let must_not_write =
-                  USet.set_minus read_regs written_before_read
-                  |> USet.union must_not_write
-                in
+                let unwritten = USet.set_minus read_regs written_before_read in
+                let must_not_write = USet.union unwritten must_not_write in
+                  note_reads read_at (condition_span node) unwritten;
                   (* Each branch gets independent copies *)
                   traverse_nodes (then_body @ rest)
                     (USet.clone written_before_read)
-                    (USet.clone must_not_write);
+                    (USet.clone must_not_write)
+                    (Hashtbl.copy read_at);
                   match else_body with
                   | Some else_stmts ->
                       traverse_nodes (else_stmts @ rest)
                         (USet.clone written_before_read)
                         (USet.clone must_not_write)
+                        (Hashtbl.copy read_at)
                   | None -> ()
               )
             | Labeled { stmt; _ } ->
                 traverse_nodes (stmt :: rest) written_before_read must_not_write
+                  read_at
             | _ ->
                 let written_regs =
                   Ir.extract_written_registers_from_stmt stmt |> USet.of_list
@@ -475,52 +499,57 @@ module RegisterCondition = struct
                 in
 
                 (* Check reads against written_before_read *)
-                USet.iter
-                  (fun reg -> USet.add must_not_write reg |> ignore)
-                  (USet.set_minus read_regs written_before_read);
+                let unwritten = USet.set_minus read_regs written_before_read in
+                  note_reads read_at node.annotations.source_span unwritten;
+                  USet.iter
+                    (fun reg -> USet.add must_not_write reg |> ignore)
+                    unwritten;
 
-                let invalid_written_regs =
-                  USet.intersection written_regs must_not_write
-                in
+                  let invalid_written_regs =
+                    USet.intersection written_regs must_not_write
+                  in
 
-                (* Record violations for invalid writes. Named in the log the
-                   way the write condition names its reads: a count alone says
-                   the condition failed but not on what, and which register it
-                   is decides whether a bisection is one boundary away from
-                   working. *)
-                if USet.size invalid_written_regs > 0 then
-                  Logs_safe.debug (fun m ->
-                      m
-                        "Register condition: %s read before written in an \
-                         iteration."
-                        (USet.to_list invalid_written_regs
-                        |> List.sort compare
-                        |> String.concat ", "
-                        )
-                  );
-                USet.iter
-                  (fun reg ->
-                    let violation =
-                      RegisterConditionViolation
-                        (RegisterReadBeforeWrite
-                           (reg, node.annotations.source_span)
-                        )
-                    in
-                      violations := violation :: !violations;
-                      satisfied := false
-                  )
-                  invalid_written_regs;
+                  (* Record violations for invalid writes. Named in the log the
+                     way the write condition names its reads: a count alone
+                     says the condition failed but not on what, and which
+                     register it is decides whether a bisection is one boundary
+                     away from working. *)
+                  if USet.size invalid_written_regs > 0 then
+                    Logs_safe.debug (fun m ->
+                        m
+                          "Register condition: %s read before written in an \
+                           iteration."
+                          (USet.to_list invalid_written_regs
+                          |> List.sort compare
+                          |> String.concat ", "
+                          )
+                    );
+                  USet.iter
+                    (fun reg ->
+                      let violation =
+                        RegisterConditionViolation
+                          (RegisterReadBeforeWrite
+                             ( reg,
+                               Hashtbl.find_opt read_at reg |> Option.join,
+                               node.annotations.source_span
+                             )
+                          )
+                      in
+                        violations := violation :: !violations;
+                        satisfied := false
+                    )
+                    invalid_written_regs;
 
-                (* Update written_before_read with newly written registers *)
-                USet.iter
-                  (fun reg -> USet.add written_before_read reg |> ignore)
-                  (USet.set_minus written_regs must_not_write);
+                  (* Update written_before_read with newly written registers *)
+                  USet.iter
+                    (fun reg -> USet.add written_before_read reg |> ignore)
+                    (USet.set_minus written_regs must_not_write);
 
-                (* Recurse on remaining nodes *)
-                traverse_nodes rest written_before_read must_not_write
+                  (* Recurse on remaining nodes *)
+                  traverse_nodes rest written_before_read must_not_write read_at
         )
     in
-      traverse_nodes loop_body written_before_read must_not_write;
+      traverse_nodes loop_body written_before_read must_not_write read_at;
       { satisfied = !satisfied; violations = !violations }
 
   (** Every source span occurring in a node or in the nodes nested inside it.
@@ -1074,6 +1103,30 @@ end
     and Origin Tracking)} *)
 
 module BranchCondition = struct
+  (** The span of each [if], [while] and [do] condition in [program], by the
+      span of its statement. A branch event's span is its statement's, which
+      covers the body too; this finds the condition within it. *)
+  let condition_spans (program : ir_node list) =
+    let table : (source_span, source_span) Hashtbl.t = Hashtbl.create 16 in
+    let rec visit (node : ir_node) =
+      ( match
+          (node.annotations.source_span, node.annotations.condition_span)
+        with
+      | Some stmt, Some cond -> Hashtbl.replace table stmt cond
+      | _ -> ()
+      );
+      match node.stmt with
+      | While { body; _ } | Do { body; _ } -> List.iter visit body
+      | If { then_body; else_body; _ } ->
+          List.iter visit then_body;
+          Option.iter (List.iter visit) else_body
+      | Labeled { stmt; _ } -> visit stmt
+      | Threads { threads } -> List.iter (List.iter visit) threads
+      | _ -> ()
+    in
+      List.iter visit program;
+      table
+
   (** Check Condition 3: Branch conditions don't constrain pre-loop symbols.
 
       This ensures that branching conditions within the loop don't constrain
@@ -1123,6 +1176,13 @@ module BranchCondition = struct
       let branch_events_in_loop =
         USet.intersection events_in_loop structure.branch_events
       in
+      let condition_spans = condition_spans program in
+      let branch_span e =
+        Hashtbl.find_opt source_spans e
+        |> Option.map (fun stmt ->
+            Hashtbl.find_opt condition_spans stmt |> Option.value ~default:stmt
+        )
+      in
         Logs_safe.debug (fun m ->
             m "  Found %d events in loop" (USet.size events_in_loop)
         );
@@ -1157,14 +1217,18 @@ module BranchCondition = struct
               USet.iter
                 (fun sym ->
                   let violation =
-                    BranchConditionViolation
-                      (BranchConstraintsSymbol
-                         ( sym,
-                           Hashtbl.find_opt structure.origin sym
-                           |> Option.value ~default:(-1),
-                           Hashtbl.find_opt source_spans e
-                         )
-                      )
+                    let origin =
+                      Hashtbl.find_opt structure.origin sym
+                      |> Option.value ~default:(-1)
+                    in
+                      BranchConditionViolation
+                        (BranchConstraintsSymbol
+                           ( sym,
+                             origin,
+                             branch_span e,
+                             Hashtbl.find_opt source_spans origin
+                           )
+                        )
                   in
                     violations := violation :: !violations
                 )
