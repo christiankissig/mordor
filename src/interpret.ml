@@ -923,7 +923,12 @@ let make_generic_terminal_structure ~add_event env phi events =
   let terminal_evt = Event.create Terminal 0 () in
   let terminal_evt : event =
     add_event events terminal_evt env
-      { source_span = None; thread_ctx = None; loop_ctx = None }
+      {
+        source_span = None;
+        thread_ctx = None;
+        loop_ctx = None;
+        condition_span = None;
+      }
   in
   let defacto =
     List.map (Expr.evaluate ~env:(Hashtbl.find_opt env)) events.defacto
@@ -1038,7 +1043,12 @@ let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
     add_event events
       { (Event.create Init 4 ()) with label = 0 }
       env
-      { source_span = None; thread_ctx = None; loop_ctx = None }
+      {
+        source_span = None;
+        thread_ctx = None;
+        loop_ctx = None;
+        condition_span = None;
+      }
   in
 
   (* Interpret program statements *)
@@ -1143,7 +1153,13 @@ end = struct
   let make_ir_node stmt : ir_node =
     Ir.
       {
-        annotations = { source_span = None; thread_ctx = None; loop_ctx = None };
+        annotations =
+          {
+            source_span = None;
+            thread_ctx = None;
+            loop_ctx = None;
+            condition_span = None;
+          };
         stmt;
       }
 

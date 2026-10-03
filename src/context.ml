@@ -26,6 +26,9 @@ type ir_node_ann = {
   source_span : source_span option;  (** Location in the original source code *)
   thread_ctx : thread_ctx option;  (** Which thread this node belongs to *)
   loop_ctx : loop_ctx option;  (** Loop nesting and iteration information *)
+  condition_span : source_span option;
+      (** For an [if], [while] or [do], where its condition is in the source:
+          [source_span] covers the whole statement, body included. *)
 }
 
 (** IR statement with annotations. *)
@@ -310,10 +313,14 @@ type execution_info = {
 
 (** Violation of Condition 1: Register access restriction.
 
-    Occurs when a register is read before being written in the same iteration.
-*)
+    Occurs when a register is read before being written in the same iteration:
+    the read sees the previous iteration's write. Carries the read and the write
+    after it. *)
 type register_condition_violation =
-  | RegisterReadBeforeWrite of string (* register name *) * source_span option
+  | RegisterReadBeforeWrite of
+      string (* register name *)
+      * source_span option (* read source span *)
+      * source_span option (* write source span *)
 [@@deriving show, yojson]
 
 (** Violation of Condition 2: Memory read sources.
@@ -334,7 +341,8 @@ type branch_condition_violation =
   | BranchConstraintsSymbol of
       string (* symbol name *)
       * int (* symbol origin event *)
-      * source_span option
+      * source_span option (* branching condition source span *)
+      * source_span option (* source span of the read the symbol is from *)
 [@@deriving show, yojson]
 
 (** Violation of Condition 4: Inter-iteration ordering.

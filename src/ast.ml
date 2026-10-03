@@ -109,6 +109,8 @@ and ast_node = {
   src_ctx : src_ctx option;
   loop_ctx : loop_ctx option;
   source_span : source_span option; (* source location information *)
+  condition_span : source_span option;
+      (* for an if, while or do, the location of its condition *)
 }
 
 (* Threads are lists of nodes wrapping statements *)
@@ -118,8 +120,8 @@ type ast_thread = ast_node list
 let get_ast_stmt (node : ast_node) : ast_stmt = node.stmt
 
 let make_ast_node ?(thread_ctx = None) ?(src_ctx = None) ?(loop_ctx = None)
-    ?(source_span = None) stmt =
-  { stmt; thread_ctx; src_ctx; loop_ctx; source_span }
+    ?(source_span = None) ?(condition_span = None) stmt =
+  { stmt; thread_ctx; src_ctx; loop_ctx; source_span; condition_span }
 
 (* AST for litmust test config *)
 type ast_config = {

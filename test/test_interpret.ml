@@ -11,7 +11,13 @@ open Uset
 let make_ir_node stmt =
   {
     stmt;
-    annotations = { source_span = None; thread_ctx = None; loop_ctx = None };
+    annotations =
+      {
+        source_span = None;
+        thread_ctx = None;
+        loop_ctx = None;
+        condition_span = None;
+      };
   }
 
 (** Helper to run Lwt tests *)
@@ -76,7 +82,12 @@ let test_add_event () =
   let env = Hashtbl.create 16 in
   let added_evt =
     add_event events evt env
-      { source_span = None; thread_ctx = None; loop_ctx = None }
+      {
+        source_span = None;
+        thread_ctx = None;
+        loop_ctx = None;
+        condition_span = None;
+      }
   in
     Alcotest.(check int) "event label assigned" 0 added_evt.label;
     Alcotest.(check int)
@@ -91,11 +102,21 @@ let test_add_multiple_events () =
   let env = Hashtbl.create 16 in
   let _ =
     add_event events evt1 env
-      { source_span = None; thread_ctx = None; loop_ctx = None }
+      {
+        source_span = None;
+        thread_ctx = None;
+        loop_ctx = None;
+        condition_span = None;
+      }
   in
   let added_evt2 =
     add_event events evt2 env
-      { source_span = None; thread_ctx = None; loop_ctx = None }
+      {
+        source_span = None;
+        thread_ctx = None;
+        loop_ctx = None;
+        condition_span = None;
+      }
   in
     Alcotest.(check int) "second event label" 1 added_evt2.label;
     Alcotest.(check int) "events in table" 2 (Hashtbl.length events.events)

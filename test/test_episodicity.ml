@@ -11,7 +11,13 @@ open Uset
 let make_ir_node stmt : ir_node =
   {
     stmt;
-    annotations = { source_span = None; thread_ctx = None; loop_ctx = None };
+    annotations =
+      {
+        source_span = None;
+        thread_ctx = None;
+        loop_ctx = None;
+        condition_span = None;
+      };
   }
 
 (* Helper to create a dummy assign_info for memory operations *)
@@ -1999,7 +2005,7 @@ module TestPipeline = struct
       @param program The litmus program source.
       @param loop_id The loop to check.
       @return The write condition's result. *)
-  let write_condition_of program loop_id =
+  let cache_of program =
     let ctx =
       make_context { default_options with loop_semantics = Symbolic } ()
     in
@@ -2012,7 +2018,6 @@ module TestPipeline = struct
           |> Elaborations.step_generate_justifications
           )
       in
-      let cache =
         {
           program = Option.get ctx.program_stmts;
           structure = Option.get ctx.structure;
@@ -2020,8 +2025,105 @@ module TestPipeline = struct
           fwd_es_ctx = Option.get ctx.fwd_es_ctx;
           justifications = Option.get ctx.justifications;
         }
-      in
-        Lwt_main.run (WriteCondition.check cache loop_id)
+
+  let write_condition_of program loop_id =
+    Lwt_main.run (WriteCondition.check (cache_of program) loop_id)
+
+  (** A span as [(start_line, start_col, end_line, end_col)], to compare. *)
+  let span_tuple =
+    Option.map (fun (s : source_span) ->
+        (s.start_line, s.start_col, s.end_line, s.end_col)
+    )
+
+  let span = Alcotest.(option (pair (pair int int) (pair int int)))
+  let pairs = Option.map (fun (a, b, c, d) -> ((a, b), (c, d)))
+
+  (* A register violation names the read that sees the previous iteration's
+     value and the write after it, here two statements apart. *)
+  let test_register_violation_spans () =
+    let program =
+      "ri := 0;\ndo {\n  rj := ri;\n  ri := rj + 1\n} while (rj < 5)"
+    in
+    let result = Lwt_main.run (RegisterCondition.check (cache_of program) 1) in
+      match result.violations with
+      | [
+       RegisterConditionViolation (RegisterReadBeforeWrite ("ri", read, write));
+      ] ->
+          (* Statement spans start at column 0 of their line. *)
+          Alcotest.check span "the read is rj := ri"
+            (Some ((3, 0), (3, 10)))
+            (span_tuple read |> pairs);
+          Alcotest.check span "the write is ri := rj + 1"
+            (Some ((4, 0), (4, 14)))
+            (span_tuple write |> pairs)
+      | vs ->
+          Alcotest.failf "expected one violation for ri, got %d" (List.length vs)
+
+  (* A register read in a branching condition is located at the condition, not
+     at the whole if statement. The write after the if is reached along both
+     branches, and reported once along each. *)
+  let test_register_read_in_condition () =
+    let program =
+      "ri := 0;\n\
+       rk := 0;\n\
+       do {\n\
+      \  if (ri = 0) { rk := 1 } else { skip };\n\
+      \  ri := 1\n\
+       } while (rk = 0)"
+    in
+    let result = Lwt_main.run (RegisterCondition.check (cache_of program) 1) in
+      match
+        List.filter_map
+          (function
+            | RegisterConditionViolation
+                (RegisterReadBeforeWrite ("ri", read, _)) -> Some read
+            | _ -> None
+            )
+          result.violations
+      with
+      | [] -> Alcotest.fail "expected a violation for ri"
+      | reads ->
+          List.iter
+            (fun read ->
+              Alcotest.check span "the read is the condition ri = 0"
+                (Some ((4, 6), (4, 12)))
+                (span_tuple read |> pairs)
+            )
+            reads
+
+  (* A branching violation names the branching condition and the read before
+     the loop that the symbol it constrains comes from. *)
+  let test_branch_violation_spans () =
+    let program =
+      "x := 0;\n\
+       {\n\
+      \  rtest := x;\n\
+      \  rtemp := 0;\n\
+      \  while (rtemp = 0)\n\
+      \  {\n\
+      \    if (rtest = 1) {\n\
+      \      rtemp := 1;\n\
+      \    }\n\
+      \  };\n\
+      \  x := 1\n\
+       } ||| {\n\
+      \  x := 1\n\
+       }"
+    in
+    let result = Lwt_main.run (BranchCondition.check (cache_of program) 1) in
+      match result.violations with
+      | [
+       BranchConditionViolation (BranchConstraintsSymbol (_, _, branch, read));
+      ] ->
+          Alcotest.check span "the branch is the condition rtest = 1"
+            (Some ((7, 8), (7, 17)))
+            (span_tuple branch |> pairs);
+          Alcotest.check span "the symbol is read by rtest := x"
+            (Some ((3, 0), (3, 12)))
+            (span_tuple read |> pairs)
+      | vs ->
+          Alcotest.failf "expected one branching violation, got %d"
+            (List.length vs)
 
   (* The write condition asks whether a write in the loop can be the source of a
      read in it, and the answer has to stay on the side of possible aliasing: a
@@ -2062,6 +2164,12 @@ module TestPipeline = struct
         test_write_condition_sees_aliasing_through_memory;
       test_case "write condition resolves the CAS increment loop" `Quick
         test_write_condition_resolves_the_cas_increment_loop;
+      test_case "register violation names its read and write" `Quick
+        test_register_violation_spans;
+      test_case "register read in a condition is the condition" `Quick
+        test_register_read_in_condition;
+      test_case "branching violation names its condition and read" `Quick
+        test_branch_violation_spans;
     ]
 end
 

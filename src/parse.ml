@@ -65,8 +65,9 @@ let convert_expr_list exprs = List.map ast_expr_to_expr exprs
 
 (** Convert parsed AST statements to IR format *)
 
-let make_ir_node ~source_span ~thread_ctx ~loop_ctx stmt =
-  { stmt; annotations = { source_span; thread_ctx; loop_ctx } }
+let make_ir_node ?(condition_span = None) ~source_span ~thread_ctx ~loop_ctx
+    stmt =
+  { stmt; annotations = { source_span; thread_ctx; loop_ctx; condition_span } }
 
 let rec add_loop loop_id ir_node =
   let stmt, ann = (ir_node.stmt, ir_node.annotations) in
@@ -116,7 +117,8 @@ let rec add_loop loop_id ir_node =
           }
     | _ -> { stmt; annotations = { ann with loop_ctx = new_loop_ctx } }
 
-let rec convert_stmt_open ~recurse ~source_span ~thread_ctx ~loop_ctx = function
+let rec convert_stmt_open ?(condition_span = None) ~recurse ~source_span
+    ~thread_ctx ~loop_ctx = function
   | Ast.SThreads { threads } ->
       let ir_threads = List.map (List.map recurse) threads in
         Threads { threads = ir_threads }
@@ -187,7 +189,9 @@ let rec convert_stmt_open ~recurse ~source_span ~thread_ctx ~loop_ctx = function
         Labeled
           {
             label;
-            stmt = make_ir_node ~source_span ~thread_ctx ~loop_ctx ir_stmt;
+            stmt =
+              make_ir_node ~condition_span ~source_span ~thread_ctx ~loop_ctx
+                ir_stmt;
           }
   | Ast.SCAS { register; address; expected; desired; load_mode; assign_mode } ->
       let ir_address = ast_expr_to_expr address in
@@ -227,10 +231,11 @@ let rec convert_stmt (ast_node : ast_node) =
   let source_span = ast_node.source_span in
   let thread_ctx = ast_node.thread_ctx in
   let loop_ctx = ast_node.loop_ctx in
+  let condition_span = ast_node.condition_span in
   let ir_node =
-    convert_stmt_open ~recurse:convert_stmt ~source_span ~thread_ctx ~loop_ctx
-      ast_node.stmt
-    |> make_ir_node ~source_span ~thread_ctx ~loop_ctx
+    convert_stmt_open ~condition_span ~recurse:convert_stmt ~source_span
+      ~thread_ctx ~loop_ctx ast_node.stmt
+    |> make_ir_node ~condition_span ~source_span ~thread_ctx ~loop_ctx
   in
     ir_node
 
