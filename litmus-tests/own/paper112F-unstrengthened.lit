@@ -1,0 +1,14 @@
+// paper112F.lit with an outcome outside the strengthened case. Strengthening
+// with r1 = 1 justifies x := 1 without the read of y, and that execution, valid
+// only where r1 = 1, has fewer dependencies than the general one. Minimality
+// pruning compared relations alone and let it evict the general execution,
+// losing every outcome with r1 != 1.
+r1 := x;
+r2 := y;
+if (r2 < 2) {
+  x := r1
+} else {
+  x := 1
+}
+%%
+allow (r1 = 0 && r2 = 0) []

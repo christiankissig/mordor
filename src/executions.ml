@@ -3351,6 +3351,27 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
         tbl
     in
 
+    (* [entails ps qs]: every model of [ps] satisfies [qs].
+
+       Minimality compares relations only, and two results with the same
+       relations can still hold under different predicates. One that holds
+       under a narrower predicate than another says nothing about the models
+       outside it, so it may only stand in for the other where the other's
+       predicate entails its own. Strengthening is what produces such pairs:
+       own/paper112F.lit strengthens [x := r1] with [r1 = 1] to drop its
+       dependency on the read of y, and without this check that execution,
+       valid only where r1 = 1, pruned the general one and lost the outcome
+       r1 = 0, r2 = 0. *)
+    let entails ps qs =
+      List.for_all
+        (fun q ->
+          List.exists (Expr.equal q) ps
+          || not (Solver.is_sat (Expr.inverse q :: ps))
+        )
+        qs
+    in
+    let fr_preds (fr : FreezeResult.t) = fr.pp @ fr.conds in
+
     (* A freeze result contains another only if the two have the same events
        and the same read-from ([FreezeResult.contains]). *)
     let keep_minimal_freeze_results fr_list =
@@ -3363,7 +3384,11 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             (* Is fr1 contained by another? Keep it if not. *)
             not
               (List.exists
-                 (fun (j, fr2) -> i <> j && FreezeResult.contains fr1 fr2)
+                 (fun (j, fr2) ->
+                   i <> j
+                   && FreezeResult.contains fr1 fr2
+                   && entails (fr_preds fr1) (fr_preds fr2)
+                 )
                  (Hashtbl.find by_key (key fr1))
               )
           )
@@ -3409,7 +3434,11 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             let rf1 = sorted exec1.rf in
             let contained_in members =
               List.exists
-                (fun (j, exec2) -> i <> j && Execution.contains exec2 exec1)
+                (fun (j, (exec2 : symbolic_execution)) ->
+                  i <> j
+                  && Execution.contains exec2 exec1
+                  && entails exec1.ex_p exec2.ex_p
+                )
                 members
             in
               not

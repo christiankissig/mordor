@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 331
+Total tests: 333
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -82,6 +82,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
 - on_thin_air_reads19/s5.3.2.lit
 - opts/store-forward.lit
 - own/DOMAIN.lit
+- own/FWD-STRENGTHEN-LIFT.lit
 - own/FreeRace.lit
 - own/FreeRace2.lit
 - own/JCTC12.lit
@@ -110,6 +111,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
 - own/paper108.lit
 - own/paper109.lit
 - own/paper112F.lit
+- own/paper112F-unstrengthened.lit
 - own/paper113.lit
 - own/paper115.lit
 - own/relaxed-store-elided.lit
