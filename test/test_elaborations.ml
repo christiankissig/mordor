@@ -861,6 +861,90 @@ module LiftElabTests = struct
       ]
 end
 
+(** Strengthening for lifting, on programs elaborated from source. *)
+module StrengthenLiftTests = struct
+  let justifications source =
+    let ctx =
+      Context.make_context
+        { Context.default_options with allow_unknown_model = true }
+        ()
+    in
+      ctx.litmus <- Some source;
+      let ctx =
+        Lwt_main.run
+          (Lwt.return ctx
+          |> Parse.step_parse_litmus
+          |> Interpret.step_interpret
+          |> Elaborations.step_generate_justifications
+          )
+      in
+        (Option.get ctx.structure, Option.get ctx.justifications)
+
+  (* The symbol a program's read of [loc] binds. *)
+  let read_symbol structure loc =
+    Hashtbl.fold
+      (fun _ (e : event) acc ->
+        match (e.typ, e.loc, e.rval) with
+        | Read, Some (EVar l), Some v when l = loc ->
+            Expr.get_symbols (Expr.of_value v) @ acc
+        | _ -> acc
+      )
+      structure.events []
+
+  (* Justifications of a constant write [loc := n] whose predicate mentions
+     none of [avoid]. *)
+  let independent_writes justs loc n avoid =
+    List.filter
+      (fun (j : justification) ->
+        j.w.typ = Write
+        && j.w.loc = Some (EVar loc)
+        && Option.equal Expr.equal j.w.wval (Some (ENum (Z.of_int n)))
+        && List.for_all
+             (fun e ->
+               List.for_all
+                 (fun s -> not (List.mem s avoid))
+                 (Expr.get_symbols e)
+             )
+             j.p
+      )
+      justs
+
+  (* own/FWD-STRENGTHEN-LIFT.lit: the then-arm writes a := r2, 1 by forwarding
+     from x := 1, the else-arm a := r3. Strengthening both with r3 = 1 lifts
+     them to W a 1, independent of the read of y that chose the branch. *)
+  let test_fwd_strengthen_lift () =
+    let structure, justs =
+      justifications
+        "a := 0; x := 0; y := 0;\n\
+         { r0 := a; if (r0 = 1) { y := 2 } }\n\
+         ||| { x := 1; r2 := x; r1 := y;\n\
+        \  if (r1 = 2) { r3 := z; if (r3 < 10) { a := r2 } }\n\
+        \  else { r3 := z; if (r3 >= 10) { y := 1 } else { a := r3 } } }\n\
+         %% allow (r0 = 1 && r1 = 2) []"
+    in
+    let y = read_symbol structure "y" in
+      check bool "the read of y binds a symbol" true (y <> []);
+      check bool "W a 1 is justified independently of the read of y" true
+        (independent_writes justs "a" 1 y <> [])
+
+  (* own/paper112F.lit: if (r2 < 2) { x := r1 } else { x := 1 }. Strengthening
+     with r1 = 1 lifts to W x 1 under r1 = 1, independent of the read of y. *)
+  let test_paper112F () =
+    let structure, justs =
+      justifications "r1 := x; r2 := y; if (r2 < 2) { x := r1 } else { x := 1 }"
+    in
+    let y = read_symbol structure "y" in
+      check bool "W x 1 is justified independently of the read of y" true
+        (independent_writes justs "x" 1 y <> [])
+
+  let suite =
+    [
+      test_case "strengthen-lift FWD-STRENGTHEN-LIFT" `Quick
+        test_fwd_strengthen_lift;
+      test_case "strengthen-lift paper112F" `Quick test_paper112F;
+    ]
+end
+
 (** Test suite *)
 
 let suite =
@@ -905,4 +989,5 @@ let suite =
         )
         TestData.symbol_extraction_cases
     @ LiftElabTests.suite
+    @ StrengthenLiftTests.suite
   )

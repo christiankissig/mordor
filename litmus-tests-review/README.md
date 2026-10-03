@@ -17,16 +17,16 @@ the one the literature records.
 
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
-Every file here has an issue in the #46-#65 range, or #90. Each records the symptom, the model actually in
-effect, where the test comes from and what to look at next. Seven files
+Every file here has an issue in the #46-#65 range. Each records the symptom, the model actually in
+effect, where the test comes from and what to look at next. Six files
 remain. The seven `jctc/` ones have moved to `litmus-tests-jmm/`;
-`avoidoota/listing16.lit` returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57, #59, #60, #61 and #62 have been fixed and
+`avoidoota/listing16.lit` returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57, #59, #60, #61, #62 and #90 have been fixed and
 their files returned to `litmus-tests/`.
 
 The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
-models. Two tests are checked under sMRD, so a divergence is a defect: `own/FWD-STRENGTHEN-LIFT.lit` #90 names
-no model, and `symmrd/LB+UB+data+z.lit` #65 names `[UB11]`, which falls through to `smrd` with UB optimisation
-on. #65 is labelled `bug`; #90, a missing elaboration, `enhancement`. The rest name a model that is not supported —
+models. One test is checked under sMRD, so a divergence is a defect: `symmrd/LB+UB+data+z.lit` #65 names
+`[UB11]`, which falls through to `smrd` with UB optimisation on, and is labelled `bug`. The rest name a model
+that is not supported —
 `[Problem]`, `[JR]` and `[Sevcik]` have a `model_options_table` entry with `coherent = None` and so fall through
 to the `smrd` default, while `[Bridging]`, `[Power]` and `[IMM]` map to `imm`. Those are labelled `smrd-unsupported` and
 carry no `bug` label: they compare one model's expectation against another model's verdict, and the two are
@@ -138,18 +138,16 @@ still synchronises with nothing. Fence ordering in the checker is what is left.
 | Test | Assertion | Model |
 |---|---|---|
 | [`esop_problem/RRE.lit`](esop_problem/RRE.lit) #46 | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[Problem]` → sMRD |
-| [`own/FWD-STRENGTHEN-LIFT.lit`](own/FWD-STRENGTHEN-LIFT.lit) #90 | allow `r0=1 ∧ r1=2` | sMRD |
 
-`own/FWD-STRENGTHEN-LIFT.lit` #90 joined this table on 2026-09-15, and unlike
-the rest it is not a divergence from the literature but a missing elaboration.
-The outcome is allowed in sMRD only by strengthening both arms of thread 2's
-branch with `r3 = 1`, value-assigning the else-arm and lifting the pair, and
-MoRDor implements no Strengthening. The suite used to pass it because
-`ValueAssignElab` discharged every conjunct unrelated to the write value under a
-solver model, which justified the then-arm write with no predicate at all. That
-discharge also admitted out-of-thin-air (`litmus-tests/own/VA-unrelated-guard-smrd.lit`);
-value assignment now keeps the predicate whole, as the paper's Definition 4.10
-does, and this test lost its only witness.
+`own/FWD-STRENGTHEN-LIFT.lit` #90 has left this table, and is back in
+`litmus-tests/own/`. Unlike the rest it was not a divergence from the
+literature but a missing elaboration: the outcome is allowed in sMRD only by
+strengthening both arms of thread 2's branch with `r3 = 1`, value-assigning the
+else-arm and lifting the pair. `StrengthenLiftElab` now does that, strengthening
+a pair of conflicting writes that differ only in value with the equation
+between the values. The suite used to pass it because `ValueAssignElab`
+discharged every conjunct unrelated to the write value under a solver model,
+which also admitted out-of-thin-air (`litmus-tests/own/VA-unrelated-guard-smrd.lit`).
 
 `pldi_repairing/LB.lit` #57 has left this table. Its assertion was the thing
 that was wrong: RC11's no-thin-air axiom is `acyclic(sb ∪ rf)`, which forbids

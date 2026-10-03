@@ -22,6 +22,7 @@ type op =
   | ValueAssignElab of justification
   | Forwarding of justification
   | LiftElab of justification * justification
+  | StrengthenLiftElab of justification * justification
   | WeakElab of justification
 
 (** Pretty print elaboration operation for tracing. *)
@@ -33,6 +34,10 @@ let op_to_string = function
       Printf.sprintf "Forwarding %s" (Justification.to_string just)
   | LiftElab (just1, just2) ->
       Printf.sprintf "LiftElab %s and %s"
+        (Justification.to_string just1)
+        (Justification.to_string just2)
+  | StrengthenLiftElab (just1, just2) ->
+      Printf.sprintf "StrengthenLiftElab %s and %s"
         (Justification.to_string just1)
         (Justification.to_string just2)
   | WeakElab just -> Printf.sprintf "WeakElab %s" (Justification.to_string just)
@@ -1220,6 +1225,159 @@ end = struct
       )
 end
 
+(** {1 Strengthening for lifting.} *)
+
+(** Strengthening (sMRD's [str]) may conjoin any predicate to a justification,
+    which is sound -- a stronger predicate only restricts where the
+    justification applies -- but gives no hint which predicate is worth adding.
+    Lifting gives the hint. Two conflicting writes to the same location that
+    differ only in the value written cannot be lifted, and the equation between
+    the two values is exactly the predicate that, once value assignment has used
+    it, makes them agree.
+
+    In own/FWD-STRENGTHEN-LIFT.lit the then-arm writes [a := r2], 1 by
+    forwarding, and the else-arm [a := r3]. Strengthening both arms with
+    [r3 = 1] and value-assigning lets the pair lift into [W a 1] under
+    [r3 < 10 && r3 = 1], independent of the read that chose the branch.
+
+    The equation stays in the predicate. Dropping it would be the thin air that
+    ValueAssignElab's note describes: its symbols carry the dependency on the
+    reads they come from.
+
+    This is fused with lifting rather than run as a pass of its own because a
+    strengthened justification on its own is covered by the one it came from
+    (same write, forwarding and exclusion; superset of predicates), and
+    filter_justs would discard it. Only the lifted result is emitted. *)
+module StrengthenLiftElab = struct
+  let elab_landmark = Landmark_safe.register "StrengthenLiftElab.elab"
+
+  (** [strengthen elab_ctx just eq] conjoins [eq] to [just]'s predicate, or is
+      [None] if the result is unsatisfiable under [just]'s forwarding. Most
+      candidates are: on avoidoota/listing20 about 98 in 100. The check is the
+      cached one, and value assignment, which calls the solver twice more, waits
+      until both sides of the pair have passed it. *)
+  let strengthen elab_ctx (just : justification) eq =
+    let p = Expr.evaluate_conjunction (just.p @ [ eq ]) in
+    let fwd_ctx =
+      ForwardingContext.create elab_ctx.fwd_es_ctx ~fwd:just.fwd ~we:just.we ()
+    in
+    let defacto =
+      Hashtbl.find_opt elab_ctx.structure.defacto just.w.label
+      |> Option.value ~default:[]
+    in
+      if
+        Solver.quick_check_cached (p @ fwd_ctx.psi @ defacto)
+        |> Option.value ~default:true
+      then Some { just with p }
+      else None
+
+  (** [value_assign elab_ctx just] is [just] value-assigned, or [just] itself
+      where its predicate entails no value for the write. *)
+  let value_assign elab_ctx just =
+    match ValueAssignElab.elab elab_ctx just with
+    | [ just' ] -> just'
+    | _ -> just
+
+  (** [elab elab_ctx just_1 just_2] strengthens a pair of conflicting writes to
+      the same location with the equation between their values, under each
+      candidate relabeling, and lifts the strengthened pair. *)
+  let elab elab_ctx (just_1 : justification) (just_2 : justification) =
+    if
+      (not
+         (USet.mem elab_ctx.structure.conflict (just_1.w.label, just_2.w.label))
+      )
+      || just_1.w.typ <> Write
+      || just_2.w.typ <> Write
+      || (List.length just_1.p = 0 && List.length just_2.p = 0)
+      || (not (URelation.is_function (USet.union just_1.we just_2.we)))
+      || not (URelation.is_function (USet.union just_1.fwd just_2.fwd))
+    then []
+    else
+      match (just_1.w.wval, just_2.w.wval) with
+      | Some v1, Some v2 ->
+          Landmark_safe.enter elab_landmark;
+          let con_1 =
+            ForwardingContext.create elab_ctx.fwd_es_ctx ~fwd:just_1.fwd
+              ~we:just_1.we ()
+          in
+          let con_2 =
+            ForwardingContext.create elab_ctx.fwd_es_ctx ~fwd:just_2.fwd
+              ~we:just_2.we ()
+          in
+          let ppo_1 = ForwardingContext.ppo con_1 just_1.p in
+          let ppo_2 = ForwardingContext.ppo con_2 just_2.p in
+          (* Relabelings are filtered by relab(D_1) = D_2, but D is what
+             strengthening is about to change: a write whose value was
+             concretised has D = {} and its partner, not yet, does not. Lifting
+             the strengthened pair applies the filter to the D it ends up
+             with. *)
+          let no_d (j : justification) = { j with d = USet.create () } in
+          let relabs =
+            LiftElab.generate_relabelings elab_ctx (no_d just_1) (no_d just_2)
+              ppo_1 ppo_2 con_1 con_2
+          in
+          let lifted =
+            USet.values relabs
+            |> List.concat_map (fun relab ->
+                let forward = Hashtbl.find_opt relab in
+                let inverse = Hashtbl.create (Hashtbl.length relab) in
+                  Hashtbl.iter (fun f t -> Hashtbl.replace inverse t f) relab;
+                  let v1' = Expr.relabel ~relab:forward v1 in
+                  let locs_agree =
+                    Option.equal Expr.equal
+                      (Option.map (Expr.relabel ~relab:forward) just_1.w.loc)
+                      just_2.w.loc
+                  in
+                  (* The equation goes into both predicates, so it lands in
+                     their common part and leaves the distinguishing one as it
+                     was: a pair whose predicates do not already differ by a
+                     branch condition will not lift after strengthening
+                     either. Syntactic, and so checked before any solver call;
+                     without it hp-1 spends seven times as long elaborating to
+                     produce nothing. *)
+                  let liftable_shape () =
+                    let p1' =
+                      List.map (Expr.relabel ~relab:forward) just_1.p
+                      |> Expr.evaluate_conjunction
+                    in
+                      match
+                        LiftElab.find_distinguishing_predicate p1' just_2.p
+                      with
+                      | None -> false
+                      | Some (_, common) ->
+                          not (List.equal Expr.equal common just_2.p)
+                  in
+                    if
+                      (not locs_agree)
+                      || Expr.equal v1' v2
+                      || not (liftable_shape ())
+                    then []
+                    else
+                      match Expr.evaluate (EBinOp (v1', "=", v2)) with
+                      | EBoolean _ -> []
+                      | eq_2 -> (
+                          let v2' =
+                            Expr.relabel ~relab:(Hashtbl.find_opt inverse) v2
+                          in
+                          let eq_1 = Expr.evaluate (EBinOp (v1, "=", v2')) in
+                            match strengthen elab_ctx just_2 eq_2 with
+                            | None -> []
+                            | Some j2 -> (
+                                match strengthen elab_ctx just_1 eq_1 with
+                                | None -> []
+                                | Some j1 ->
+                                    LiftElab.elab elab_ctx
+                                      (value_assign elab_ctx j1)
+                                      (value_assign elab_ctx j2)
+                              )
+                        )
+            )
+          in
+            Landmark_safe.exit elab_landmark;
+            lifted
+      | _ -> []
+end
+
 (** {1 WeakElab elaboration operations.} *)
 
 module WeakElab = struct
@@ -1537,36 +1695,53 @@ let batch_elaborations ?(num_threads = 1) ?(collapse_forwarding = false)
                       (List.length new_lift_justs)
                 );
 
-                let* new_weaken_justs =
-                  run ~just_to_string:Justification.to_string ~name:"WeakElab"
-                    WeakElab.elab
-                    (fun just -> WeakElab just)
-                    acc_justs new_justs_e
+                let* new_strengthen_lift_justs =
+                  run ~just_to_string:lift_pair_to_string
+                    ~name:"StrengthenLiftElab"
+                    (fun elab_ctx (j1, j2) ->
+                      StrengthenLiftElab.elab elab_ctx j1 j2
+                    )
+                    (fun (j1, j2) -> StrengthenLiftElab (j1, j2))
+                    acc_justs justs_to_lift
                 in
-                let acc_justs = acc_justs @ new_weaken_justs in
+                let acc_justs = acc_justs @ new_strengthen_lift_justs in
                   Logs_safe.debug (fun m ->
-                      m "Weakening produced %d new justifications."
-                        (List.length new_weaken_justs)
+                      m
+                        "Strengthening for lifting produced %d new \
+                         justifications."
+                        (List.length new_strengthen_lift_justs)
                   );
 
-                  let new_justs = acc_justs in
+                  let* new_weaken_justs =
+                    run ~just_to_string:Justification.to_string ~name:"WeakElab"
+                      WeakElab.elab
+                      (fun just -> WeakElab just)
+                      acc_justs new_justs_e
+                  in
+                  let acc_justs = acc_justs @ new_weaken_justs in
                     Logs_safe.debug (fun m ->
-                        m
-                          "Total new justifications this iteration: %d (%d \
-                           discarded as seen or covered)"
-                          (List.length new_justs) !covered_this_round
+                        m "Weakening produced %d new justifications."
+                          (List.length new_weaken_justs)
                     );
 
-                    if List.length new_justs = 0 then (
+                    let new_justs = acc_justs in
                       Logs_safe.debug (fun m ->
                           m
-                            "Batch elaborations reached fixed point with %d \
-                             justifications."
-                            (List.length old_justs)
+                            "Total new justifications this iteration: %d (%d \
+                             discarded as seen or covered)"
+                            (List.length new_justs) !covered_this_round
                       );
-                      Lwt.return old_justs
-                    )
-                    else fixed_point old_justs new_justs just_cache
+
+                      if List.length new_justs = 0 then (
+                        Logs_safe.debug (fun m ->
+                            m
+                              "Batch elaborations reached fixed point with %d \
+                               justifications."
+                              (List.length old_justs)
+                        );
+                        Lwt.return old_justs
+                      )
+                      else fixed_point old_justs new_justs just_cache
     in
 
     let just_cache = JustificationCache.create 1024 in
