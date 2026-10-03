@@ -237,6 +237,10 @@ type ub_reason =
       (** A run of an operational semantics aborted: a thread dereferenced
           something that is not an address, or divided by zero. The string
           says which. Only {!Promising} reports it. *)
+  | Race of upd_ub_reason [@printer pp_int_urel]
+      (** Data races: pairs of conflicting accesses of two threads, one of them
+          non-atomic, that the model's [hb] leaves unordered in a consistent
+          execution. Only a model with a race clause reports them. *)
 [@@deriving show, yojson]
 
 (** List of undefined behavior reasons per event. *)
@@ -590,6 +594,9 @@ let implemented_zoo_models =
     "mr";
     "mw";
     "wfr";
+    "c11";
+    "c17";
+    "c20";
   ]
 
 (** Predefined configurations for known memory models.
@@ -624,6 +631,12 @@ let model_options_table : (string, model_options) Hashtbl.t =
     List.iter
       (fun name -> Hashtbl.add tbl name { coherent = Some name; ubopt = false })
       implemented_zoo_models;
+    (* The standard's models also under the names of its C++ revisions, as
+       the zoo's cat files are named. *)
+    List.iter
+      (fun (alias, name) ->
+        Hashtbl.add tbl alias { coherent = Some name; ubopt = false })
+      [ ("cpp11", "c11"); ("cpp17", "c17"); ("cpp20", "c20") ];
     Hashtbl.add tbl "ub11" { coherent = None; ubopt = true };
     (* [_] is the litmus syntax for "any model": the grammar's [model_name]
        rule maps UNDERSCORE to the empty string, so [""] is the name that
@@ -698,11 +711,10 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
          Table entries whose [coherent] is [None] are the other case: those are
          deliberate mappings onto the default and fall through to [Some] below.
 
-         This is fatal unless the caller opted in. The reference directories
-         [litmus-tests-cpp/] and [litmus-tests-promising/] exist because 43
-         files had to be moved out of the scanned suite by hand once the
-         mismatch was noticed -- the release-acquire ones have since come back,
-         under models of their own; failing here is what stops the next one
+         This is fatal unless the caller opted in. 43 files once had to be
+         moved out of the scanned suite by hand once the mismatch was noticed
+         -- the release-acquire and C ones have since come back, under models
+         of their own; failing here is what stops the next one
          being added unnoticed. Pass [--allow-unknown-model] to measure them. *)
       let msg =
         Printf.sprintf

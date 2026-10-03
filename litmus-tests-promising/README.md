@@ -40,9 +40,9 @@ Two files were left behind in `litmus-tests/popl_grounding/` when the rest moved
 
 Copies of these tests reannotated to `[IMM]` live in
 `litmus-tests/popl_promising/` and *are* exercised by the integration suite,
-except `Page 7 Column 1b.lit`, whose copy is parked in
-`litmus-tests-review/popl_promising/` (#61), and `Coh-CYC (Promising).lit`,
-which has none. IMM
+except `Coh-CYC (Promising).lit`, which has none. `Page 7 Column 1b.lit`'s copy
+was parked in `litmus-tests-review/` (#61) until IMM stopped letting sMRD elide
+the release store its own thread overwrites. IMM
 was chosen because it is the closest model MoRDor implements and was the model the
 old `"promising"` alias used.
 

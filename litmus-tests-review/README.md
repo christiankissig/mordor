@@ -9,7 +9,7 @@ validate, so a test that records a known divergence cannot live there. Parking i
 here keeps the file, its assertion and its provenance intact while the suite
 stays a statement about what MoRDor does today.
 
-This is the same idea as `litmus-tests-promising/` and `litmus-tests-cpp/`, but
+This is the same idea as `litmus-tests-promising/` and `litmus-tests-jmm/`, but
 for a different reason: those name a memory model MoRDor has no implementation
 of, so their assertions cannot be checked at all. Every
 test here names a model MoRDor *does* implement, and gets a different answer from
@@ -18,9 +18,9 @@ the one the literature records.
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
 Every file here has an issue in the #46-#65 range, or #90. Each records the symptom, the model actually in
-effect, where the test comes from and what to look at next. Eight files
+effect, where the test comes from and what to look at next. Seven files
 remain. The seven `jctc/` ones have moved to `litmus-tests-jmm/`;
-`avoidoota/listing16.lit` returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57, #59, #60 and #62 have been fixed and
+`avoidoota/listing16.lit` returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57, #59, #60, #61 and #62 have been fixed and
 their files returned to `litmus-tests/`.
 
 The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
@@ -83,13 +83,20 @@ written to disagree.
 | [`on_thin_air_reads19/P5.lit`](on_thin_air_reads19/P5.lit) #54 | forbid `r1=1` | `[JR]` → sMRD |
 | [`popl_bridging/Preserving detour.lit`](popl_bridging/Preserving detour.lit) #58 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | `[Bridging]` → IMM |
 | [`sevcik_thesis/Skip/LB+locks.lit`](sevcik_thesis/Skip/LB+locks.lit) #64 | forbid `r1=1 ∧ r2=1` | `[Sevcik]` → sMRD |
-| [`popl_promising/Page 7 Column 1b.lit`](popl_promising/Page 7 Column 1b.lit) #61 | forbid `r2=3 ∧ r3=0` | `[IMM]` |
 | [`rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit`](rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit) #63 | forbid `r1=1 ∧ r2=0` | `[Power]` → IMM |
 
 Much of this group is out-of-thin-air: `P5`, `Preserving detour` and
 `LB+locks` are all asking that a value not be justified by a cycle through its
 own dependencies. `no_oota` is the property MRD exists to
 deliver, so these are the load-bearing ones.
+
+**Eight have left this table.** `popl_promising/Page 7 Column 1b.lit` #61 was
+not out of thin air either. Its release store `y.store(1, rel)` is overwritten by
+`y := 2` in the same thread, and sMRD's write elision dropped it, so the acquire
+reading 3 through the FADD had no release to synchronise with. Under IMM, as
+under RC11 and C++11, that later store continues the release sequence, so the
+elision is unsound there; IMM now rejects executions that elide a release store
+for a relaxed one (`MEMORY_MODEL.elidable`), and the test holds.
 
 **Seven have left this table.** `avoidoota/additional_nonlb.lit` #41 was never
 an out-of-thin-air finding at all: `@x` was the *location* variable rather than

@@ -21,9 +21,9 @@ let s10_lock = Mutex.create ()
     when the model already rejects it. Off by default; enabled via
     [MORDOR_S6_PRUNE]. The counters record what the search did.
 
-    Sound only for a model whose violations grow with co. od-lso's do not: its
-    C++11 release sequence subtracts [coe;coe], so more co can mean less hb.
-    Slower than the exhaustive search on every corpus measured; see
+    Sound only for a model whose violations grow with co. od-lso's and c11's do
+    not: their C++11 release sequence subtracts [coe;coe], so more co can mean
+    less hb. Slower than the exhaustive search on every corpus measured; see
     spike/s6_coherence_bb/RESULTS.md on the bottom-up-refactor branch. *)
 module S6 = struct
   let prune = ref (Option.is_some (Sys.getenv_opt "MORDOR_S6_PRUNE"))
@@ -77,6 +77,20 @@ module type MEMORY_MODEL = sig
   val axioms : (string * (candidate -> bool)) list
 
   val check_thin_air : cache -> symbolic_execution -> bool
+
+  (** The model's data races in a candidate: conflicting accesses of two threads
+      that [hb] leaves unordered. A model with this clause -- herd's
+      [undefined_unless empty dr] -- gives a program with a consistent racy
+      execution undefined behaviour; [None] for a model without one. *)
+  val data_races : (candidate -> (int * int) uset) option
+
+  (** Whether the model lets sMRD elide the write [elided], which the po-later
+      write [by] of its thread to the same location overwrites. sMRD's write
+      elision drops an overwritten write whatever its mode. Under a model whose
+      release sequence continues through later stores of the writer's thread,
+      eliding a release store loses the synchronisation those stores carried,
+      and the model rejects every execution that does. *)
+  val elidable : (int, event) Hashtbl.t -> elided:int -> by:int -> bool
 
   (** Whether [check_coherence] reads the coherence order it is given. A model
       whose axioms quantify over orders of their own -- a view per process, an
@@ -234,6 +248,24 @@ module ModelUtils = struct
         e;
       let result = URelation.identity result in
         result
+
+  (** Every write elision stands. *)
+  let elidable_always _ ~elided:_ ~by:_ = true
+
+  (** A release store may be elided only by a release store. Under a release
+      sequence that later stores of the writer's thread continue -- RC11's,
+      C++11's, IMM's -- a relaxed store overwriting a release store carries its
+      release on, and an acquire reading it synchronises with the release. With
+      the release store elided there is nothing to synchronise with. A release
+      store overwriting it synchronises with everything po-before it, the
+      elided store's predecessors included. *)
+  let release_elidable_by_release events ~elided ~by =
+    let release id =
+      match Hashtbl.find_opt events id with
+      | Some { typ = Write; wmod; _ } -> mode_at_least wmod Release
+      | _ -> false
+    in
+      (not (release elided)) || release by
 
   (** [same_thread thread_index a b]: [a] and [b] are events of one thread.
       Events outside every thread -- the initial event, terminals -- are in
@@ -570,6 +602,10 @@ module IMM : MEMORY_MODEL = struct
 
   let check_coherence cache co = holds axioms (candidate cache co)
   let check_thin_air _ _ = true
+  let data_races = None
+
+  (* IMM's release sequence continues through [po ∩ loc]. *)
+  let elidable = ModelUtils.release_elidable_by_release
   let uses_co = true
   let orders_allocations = false
   let check_program _ = Ok ()
@@ -655,10 +691,17 @@ module RC11Config = struct
     allocations_are_writes : bool;
         (** RC11z: allocations and deallocations are writes to the location they
             allocate or free, ordered by [co] with the stores to it. *)
-    no_thin_air : [ `Hb_rf | `Sb_rf ];
+    no_thin_air : [ `Hb_rf | `Sb_rf | `None ];
         (** [acyclic(hb ∪ rf)], as MoRDor's RC11 has always checked it, or the
             literal [acyclic(sb ∪ rf)] of Ou and Demsky's load-store ordering.
-            The two agree whenever [hb] is built from [sb], [rf] and [rmw]. *)
+            The two agree whenever [hb] is built from [sb], [rf] and [rmw].
+            [`None] for the standard's models, which have no such axiom -- but
+            see {!c11}. *)
+    sc : [ `Psc | `C11 ];
+        (** [acyclic psc], RC11's repaired SC of P0668, or the conditions C11
+            places on its total order [S] over SC events, in the partial form of
+            herd's [c11_partialSC.cat] (Batty, Donaldson and Wickerson, POPL
+            2016). *)
   }
 
   let base =
@@ -668,6 +711,7 @@ module RC11Config = struct
       release_sequence = Rc11;
       allocations_are_writes = false;
       no_thin_air = `Hb_rf;
+      sc = `Psc;
     }
 
   let default = base
@@ -684,6 +728,35 @@ module RC11Config = struct
       release_sequence = Cpp11;
       no_thin_air = `Sb_rf;
     }
+
+  (** The C/C++ standard's model by revision, as the zoo's [cpp11.cat] and
+      [cpp17.cat] state it, but with C11's own SC for C11 and C++17, which keep
+      the SC of C++11 until P0668 repaired it in C++20. The cat files take
+      RC11's [psc] for both, and so forbid IRIW with SC fences, which C11
+      allows.
+
+      None of the three has a thin-air axiom, and none can show a thin-air
+      execution: candidate generation rejects a cycle in [dp ∪ ppo ∪ rf] before
+      any model is asked, so these are the models over sMRD's candidates. *)
+  let c11 =
+    {
+      base with
+      name = "c11";
+      release_sequence = Cpp11;
+      no_thin_air = `None;
+      sc = `C11;
+    }
+
+  (** C++17: C11 with release sequences continued only by RMWs (P0982). *)
+  let c17 = { c11 with name = "c17"; release_sequence = Rc17 }
+
+  (** C++20: C++17's release sequences and RC11's SC (P0668).
+
+      Not the zoo's [cpp2w.cat], which adds [acyclic(tecotsb ∪ rb)] for
+      [tecotsb = ([A];eco;[A])⁺;sb] from a later draft. That axiom forbids
+      message passing over relaxed accesses, which C++20 allows: herd7 answers
+      MP+rlx Never under [cpp2w.cat] and Sometimes under [cpp17.cat]. *)
+  let c20 = { c17 with name = "c20"; sc = `Psc }
 end
 
 module RC11 (Config : sig
@@ -934,21 +1007,115 @@ end) : MEMORY_MODEL = struct
     let psc = USet.union psc_base psc_f in
       URelation.acyclic psc
 
+  (** C11's SC: the conditions S1--S7 of the standard on a total order [S] of
+      the SC events, as herd's [c11_partialSC.cat] states them for a partial
+      one: the union [scp] of what each condition puts before what, restricted
+      to SC events, is acyclic.
+
+      - S1 [hb]; S2 [fsb?;mo;sbf?]; S3 [rf⁻¹;[SC];mo]; S4 [rf⁻¹;hbl;[W]]
+      - S5 [fsb;fr]; S6 [fr;sbf]; S7 [fsb;fr;sbf]
+
+      with [fsb = [F];sb] and [sbf = sb;[F]] over fences of any mode. The fences
+      in S2 and S5--S7 order SC events through the relaxed accesses beside them,
+      which is too weak to forbid IRIW with SC fences: P0668's defect. *)
+  let c11_sc_consistent x =
+    let { sb; e; events; loc_restrict; rfi; _ } = x.cache in
+    let co = x.co and hb = Lazy.force x.hb and fr = Lazy.force x.rb in
+    let opt = URelation.reflexive_closure e in
+    let fences = ModelUtils.match_events events e Fence None None None in
+    let fsb = URelation.compose [ fences; sb ] in
+    let sbf = URelation.compose [ sb; fences ] in
+    let sc =
+      USet.union
+        (ModelUtils.match_events events e Read (Some SC) None None)
+        (ModelUtils.match_events events e Write (Some SC) None None)
+      |> USet.union (ModelUtils.match_events events e Fence (Some SC) None None)
+    in
+    let w = ModelUtils.match_events events e Write None None None in
+    let scp =
+      List.fold_left USet.union hb
+        [
+          URelation.compose [ opt fsb; co; opt sbf ];
+          URelation.compose [ rfi; sc; co ];
+          URelation.compose [ rfi; loc_restrict hb; w ];
+          URelation.compose [ fsb; fr ];
+          URelation.compose [ fr; sbf ];
+          URelation.compose [ fsb; fr; sbf ];
+        ]
+    in
+      URelation.compose [ sc; scp; sc ]
+      |> USet.filter (fun (a, b) -> a <> b)
+      |> URelation.acyclic
+
+  (** The reads and writes of [e]. *)
+  let accesses events e =
+    USet.filter
+      (fun id ->
+        match Hashtbl.find_opt events id with
+        | Some { typ = Read | Write; _ } -> true
+        | _ -> false
+      )
+      e
+
+  let is_atomic events id =
+    match Hashtbl.find_opt events id with
+    | Some { typ = Read; rmod; _ } -> rmod <> Nonatomic
+    | Some { typ = Write; wmod; _ } -> wmod <> Nonatomic
+    | _ -> false
+
+  (** [dr = (cnf ∩ ext) \ (hb ∪ hb⁻¹ ∪ A×A)], with [cnf] the pairs of accesses
+      to one location of which one writes. Initial writes are [sb] before every
+      thread, so [hb] orders them before everything they conflict with. Each
+      race is given once, smaller event first. *)
+  let data_races x =
+    let { events; e; thread_index; loc_restrict; _ } = x.cache in
+    let hb = Lazy.force x.hb in
+    let acc = accesses events e in
+    let writes id =
+      match Hashtbl.find_opt events id with
+      | Some { typ = Write; _ } -> true
+      | _ -> false
+    in
+      URelation.cross acc acc
+      |> USet.filter (fun (a, b) ->
+          a < b
+          && (writes a || writes b)
+          && not (is_atomic events a && is_atomic events b)
+      )
+      |> loc_restrict
+      |> USet.filter (fun (a, b) ->
+          (not (ModelUtils.same_thread thread_index a b))
+          && (not (USet.mem hb (a, b)))
+          && not (USet.mem hb (b, a))
+      )
+
   let axioms =
     [
       ("rmw ∩ (rb;co) = ∅", atomicity);
       ("hb;eco ∪ hb is irreflexive", coherence);
-      ("psc is acyclic", sc_consistent);
     ]
+    @
+    match Config.config.sc with
+    | `Psc -> [ ("psc is acyclic", sc_consistent) ]
+    | `C11 -> [ ("scp is acyclic on SC events", c11_sc_consistent) ]
 
   let check_coherence cache co = holds axioms (candidate cache co)
 
   let check_thin_air (cache : cache) (execution : symbolic_execution) =
     let { hb; rf; sb; _ } = cache in
       match (Config.config.no_thin_air, hb) with
+      | `None, _ -> true
       | `Hb_rf, Some hb -> CoherenceChecks.thin_air_check ~hb ~rf ()
       | _ -> CoherenceChecks.thin_air_check ~hb:sb ~rf ()
 
+  let data_races = Some data_races
+
+  (* C++17's release sequence stops at a relaxed store of the writer's thread,
+     so eliding the release store before it changes nothing. *)
+  let elidable =
+    match Config.config.release_sequence with
+    | Rc11 | Cpp11 -> ModelUtils.release_elidable_by_release
+    | Rc17 -> ModelUtils.elidable_always
   let uses_co = true
   let orders_allocations = Config.config.allocations_are_writes
   let check_program _ = Ok ()
@@ -1034,6 +1201,10 @@ module SMRD : MEMORY_MODEL = struct
     let result = CoherenceChecks.thin_air_check ~hb ~rf () in
       result
 
+  let data_races = None
+
+  (* [sw = [W_rel];rf;[R_acq]], with no release sequence to break. *)
+  let elidable = ModelUtils.elidable_always
   let uses_co = true
   let orders_allocations = false
   let check_program _ = Ok ()
@@ -1075,6 +1246,8 @@ module Undefined : MEMORY_MODEL = struct
 
   let check_coherence cache co = holds axioms (candidate cache co)
   let check_thin_air execution cache = true
+  let data_races = None
+  let elidable = ModelUtils.elidable_always
   let uses_co = true
   let orders_allocations = false
   let check_program _ = Ok ()
@@ -1266,6 +1439,8 @@ end) : MEMORY_MODEL = struct
   let axioms = A.axioms
   let check_coherence cache co = holds axioms (candidate cache co)
   let check_thin_air _ _ = true
+  let data_races = None
+  let elidable = ModelUtils.elidable_always
   let uses_co = A.uses_co
   let orders_allocations = false
   let check_program _ = Ok ()
@@ -2159,6 +2334,9 @@ module ModelRegistry = struct
       register "rc17" (fun () -> rc11_variant RC11Config.rc17);
       register "rc11z" (fun () -> rc11_variant RC11Config.rc11z);
       register "od-lso" (fun () -> rc11_variant RC11Config.od_lso);
+      register "c11" (fun () -> rc11_variant RC11Config.c11);
+      register "c17" (fun () -> rc11_variant RC11Config.c17);
+      register "c20" (fun () -> rc11_variant RC11Config.c20);
       register "mrd" (fun () -> (module MRD : MEMORY_MODEL));
 
       register "sc" (fun () ->
@@ -2352,9 +2530,12 @@ let po_orders_per_location structure execution eqlocs writes =
     (github #66). The order returned is the canonically least admitting one:
     each location's po-respecting permutations are enumerated in sorted order
     and the first accepted combination wins, so the answer is a function of the
-    execution and the model rather than of the traversal. *)
+    execution and the model rather than of the traversal.
+
+    [~prune:false] keeps S6's pruning off, for a [check_coherence] that does not
+    only reject more as co grows. *)
 let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
-    cache structure execution check_coherence eqlocs =
+    ?(prune = true) cache structure execution check_coherence eqlocs =
   if USet.size execution.e = 0 then None
   else
     let writes = coherence_writes ~orders_allocations structure execution in
@@ -2388,7 +2569,8 @@ let try_all_coherence_orders ?(uses_co = true) ?(orders_allocations = false)
             )
         in
         let rejected ~below vals =
-          !S6.prune
+          prune
+          && !S6.prune
           && (Lazy.force leaves_below).(below) >= !S6.min_leaves
           && begin
             incr S6.partial_checks;
@@ -2502,9 +2684,21 @@ let location_equality structure execution =
   in
     USet.inplace_union ~into:eqlocs (URelation.inverse eqlocs)
 
+(** [elisions_admitted model structure execution]: [model] lets every write
+    elision [execution] was built with stand. [we] pairs the overwriting write
+    with the one it elides. A partial execution's elisions are among its
+    completion's, so a partial execution this rejects has no admitted
+    completion. *)
+let elisions_admitted (module M : MEMORY_MODEL)
+    (structure : symbolic_event_structure) (execution : symbolic_execution) =
+  USet.for_all
+    (fun (by, elided) -> M.elidable structure.events ~elided ~by)
+    execution.we
+
 (** [rejected_by_one_location structure execution restrictions]: the model
     rejects [execution] whatever the coherence order at other locations, because
-    its thin-air check fails, or because some location has no po-respecting
+    it elides a write the model does not let be elided, its thin-air check
+    fails, or because some location has no po-respecting
     order its axioms accept with every other location left unordered.
 
     Sound for a model whose violations only grow with co (S6: all but od-lso),
@@ -2526,7 +2720,8 @@ let rejected_by_one_location ?eqlocs structure execution restrictions =
         M.build_cache execution structure
           (build_location_restriction structure execution eqlocs)
       in
-        (not (M.check_thin_air cache execution))
+        (not (elisions_admitted model structure execution))
+        || (not (M.check_thin_air cache execution))
         ||
         let writes =
           coherence_writes ~orders_allocations:M.orders_allocations structure
@@ -2552,9 +2747,9 @@ let rejected_by_one_location ?eqlocs structure execution restrictions =
     partial execution means model [name] rejects every completion of it. It does
     for a model whose violations only grow with co, rf and hb; S6 found that of
     every registered model but od-lso, whose C++11 release sequence subtracts
-    [coe;coe]. *)
+    [coe;coe]. C11 has the same release sequence. *)
 let rejects_partial_executions name =
-  (not (String.equal name "od-lso"))
+  (not (List.mem name [ "od-lso"; "c11" ]))
   && Option.is_some (ModelRegistry.lookup name)
 
 (** [check_for_coherence structure execution restrictions] is the coherence
@@ -2584,7 +2779,10 @@ let check_for_coherence structure execution restrictions =
 
         let s10_t1 = Unix.gettimeofday () in
         (* Check thin-air *)
-        let thin_air = M.check_thin_air cache execution in
+        let thin_air =
+          elisions_admitted model structure execution
+          && M.check_thin_air cache execution
+        in
         let s10_t2 = Unix.gettimeofday () in
         let result =
           if not thin_air then None
@@ -2610,6 +2808,64 @@ let check_for_coherence structure execution restrictions =
                   (Option.is_some result)
             );
           result
+
+(** [data_races structure execution name] is the data races of [execution] under
+    model [name], in the first coherence order the model admits it under that
+    has any; empty if the model has no race clause or no admitting order has a
+    race.
+
+    One racy consistent execution makes the whole program undefined, so the
+    search asks for a racy order rather than taking the witness
+    {!check_for_coherence} kept: under C11's release sequences a different order
+    can mean a different [hb]. Every race clause registered excuses two atomic
+    accesses, so an execution with no non-atomic access has none, and is not
+    searched. *)
+let data_races structure execution name =
+  let none = USet.create () in
+  let has_nonatomic () =
+    USet.exists
+      (fun id ->
+        match Hashtbl.find_opt structure.events id with
+        | Some { typ = Read; rmod = Nonatomic; _ }
+        | Some { typ = Write; wmod = Nonatomic; _ } -> true
+        | _ -> false
+      )
+      execution.e
+  in
+    match ModelRegistry.lookup name with
+    | None -> none
+    | Some model -> (
+        let module M = (val model : MEMORY_MODEL) in
+        match M.data_races with
+        | None -> none
+        | Some _ when USet.size execution.e = 0 || not (has_nonatomic ()) ->
+            none
+        | Some races -> (
+            let eqlocs = location_equality structure execution in
+            let cache =
+              M.build_cache execution structure
+                (build_location_restriction structure execution eqlocs)
+            in
+              if
+                not
+                  (elisions_admitted model structure execution
+                  && M.check_thin_air cache execution
+                  )
+              then none
+              else
+                let racy cache co =
+                  M.check_coherence cache co
+                  && USet.size (races (M.candidate cache co)) > 0
+                in
+                  match
+                    try_all_coherence_orders ~uses_co:M.uses_co
+                      ~orders_allocations:M.orders_allocations ~prune:false
+                      cache structure execution racy eqlocs
+                  with
+                  | Some co -> races (M.candidate cache co)
+                  | None -> none
+          )
+      )
 
 (** [check_model_program structure name] fails, with the model's reason, when
     the coherence model [name] cannot answer for the program [structure] is the

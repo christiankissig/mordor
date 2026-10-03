@@ -240,6 +240,9 @@ module JSONSerialization = struct
   (** JSON format for unbounded pointer dereference violations. *)
   type upd_json = { upd : event_pair list } [@@deriving yojson]
 
+  (** JSON format for data races. *)
+  type race_json = { race : event_pair list } [@@deriving yojson]
+
   (** JSON format for an aborted run: why it aborted. *)
   type aborted_json = { aborted : string } [@@deriving yojson]
 
@@ -260,6 +263,9 @@ module JSONSerialization = struct
         let pairs = USet.fold (fun acc pair -> pair :: acc) upd_reasons [] in
           upd_json_to_yojson { upd = pairs }
     | Aborted what -> aborted_json_to_yojson { aborted = what }
+    | Race races ->
+        let pairs = USet.fold (fun acc pair -> pair :: acc) races [] in
+          race_json_to_yojson { race = pairs }
 
   (** [ub_reasons_to_yojson ub_reasons] converts list to Yojson.
 
@@ -470,13 +476,22 @@ module UBValidation = struct
       @param ub_reasons Mutable reference to accumulate all UB instances.
       @param pointer_map Map from malloc events to symbols.
       @param rhb Happens-before relation.
-      @param all_alloc_read_writes All pointer-related events. *)
-  let check_all structure execution ub_reasons pointer_map rhb
+      @param all_alloc_read_writes All pointer-related events.
+      @param coherent
+        The coherence model the executions are checked under, whose data races,
+        if it has a race clause, are undefined behaviour too. *)
+  let check_all ?coherent structure execution ub_reasons pointer_map rhb
       all_alloc_read_writes =
     UAF.check structure execution ub_reasons pointer_map rhb
       all_alloc_read_writes;
     UPD.check structure execution ub_reasons pointer_map rhb
       all_alloc_read_writes;
+    Option.iter
+      (fun coherent ->
+        let races = Coherence.data_races structure execution coherent in
+          if USet.size races > 0 then ub_reasons := Race races :: !ub_reasons
+      )
+      coherent;
     (* An operational semantics found this one itself, as the run went. *)
     Option.iter
       (fun what -> ub_reasons := Aborted what :: !ub_reasons)
@@ -1304,7 +1319,7 @@ module PerExecutionChecker = struct
       @param already_satisfied Mutable reference tracking satisfaction.
       @return Promise of [(satisfied, ub_reasons, instance_detail_opt)] tuple.
   *)
-  let check_outcome_assertion outcome condition structure execution
+  let check_outcome_assertion ?coherent outcome condition structure execution
       already_satisfied =
     (* Determine if this is a UB assertion *)
     let is_ub_assertion =
@@ -1333,8 +1348,8 @@ module PerExecutionChecker = struct
 
     (* Check for undefined behavior *)
     let ub_reasons = ref [] in
-      UBValidation.check_all structure execution ub_reasons pointer_map rhb
-        all_alloc_read_writes;
+      UBValidation.check_all ?coherent structure execution ub_reasons
+        pointer_map rhb all_alloc_read_writes;
 
       (* Check condition if needed *)
       if
@@ -1370,10 +1385,11 @@ module PerExecutionChecker = struct
       @param exhaustive Whether checking exhaustively.
       @return Promise of [(satisfied, ub_reasons, instance_detail_opt)] tuple.
       @raise Failure if assertion type is unexpected. *)
-  let check assertion execution structure already_satisfied ~exhaustive =
+  let check ?coherent assertion execution structure already_satisfied
+      ~exhaustive =
     match assertion with
     | Outcome { outcome; condition; model } ->
-        check_outcome_assertion outcome condition structure execution
+        check_outcome_assertion ?coherent outcome condition structure execution
           already_satisfied
     | _ -> failwith "unexpected assertion to be checked per execution"
 end
@@ -1404,7 +1420,7 @@ module AssertionChecker = struct
       @param structure The event structure.
       @param execution The execution.
       @return List of UB reasons found. *)
-  let run_ub_validation_on_execution structure execution =
+  let run_ub_validation_on_execution ?coherent structure execution =
     let rhb = ExecutionAnalysis.build_happens_before structure execution in
     let pointers = ExecutionAnalysis.extract_pointers structure execution in
     let pointer_map =
@@ -1415,8 +1431,8 @@ module AssertionChecker = struct
         pointer_map
     in
     let ub_reasons = ref [] in
-      UBValidation.check_all structure execution ub_reasons pointer_map rhb
-        all_alloc_read_writes;
+      UBValidation.check_all ?coherent structure execution ub_reasons
+        pointer_map rhb all_alloc_read_writes;
       !ub_reasons
 
   (** [run_ub_validation_all executions structure] validates all executions.
@@ -1424,12 +1440,14 @@ module AssertionChecker = struct
       @param executions List of executions.
       @param structure The event structure.
       @return Promise of [(all_ub_reasons, execution_results)] pair. *)
-  let run_ub_validation_all executions structure =
+  let run_ub_validation_all ?coherent executions structure =
     let all_ub_reasons = ref [] in
     let execution_results = ref [] in
       List.iter
         (fun execution ->
-          let ub_reasons = run_ub_validation_on_execution structure execution in
+          let ub_reasons =
+            run_ub_validation_on_execution ?coherent structure execution
+          in
             all_ub_reasons := ub_reasons @ !all_ub_reasons;
             execution_results :=
               { exec_id = execution.id; satisfied = false; ub_reasons }
@@ -1446,11 +1464,11 @@ module AssertionChecker = struct
       @param executions List of executions.
       @param structure The event structure.
       @return Promise of assertion result. *)
-  let check_model_assertion model executions structure =
+  let check_model_assertion ?coherent model executions structure =
     Logs_safe.info (fun m -> m "Using memory model: %s" model);
     (* Run UB validation even for model assertions *)
     let%lwt ub_reasons, execution_results =
-      run_ub_validation_all executions structure
+      run_ub_validation_all ?coherent executions structure
     in
     let ub = List.length ub_reasons > 0 in
       Lwt.return
@@ -1480,7 +1498,7 @@ module AssertionChecker = struct
       @param structure The event structure.
       @return
         Promise of [(satisfied, ub_reasons, results, instances)] quadruple. *)
-  let process_executions assertion executions structure =
+  let process_executions ?coherent assertion executions structure =
     let ub_reasons = ref [] in
     let satisfied = ref false in
     let execution_results = ref [] in
@@ -1496,8 +1514,8 @@ module AssertionChecker = struct
     List.iter
       (fun execution ->
         let exec_satisfied, local_ub_reasons, detail_opt =
-          PerExecutionChecker.check assertion execution structure satisfied
-            ~exhaustive:true
+          PerExecutionChecker.check ?coherent assertion execution structure
+            satisfied ~exhaustive:true
         in
           ub_reasons := local_ub_reasons @ !ub_reasons;
           execution_results :=
@@ -1580,8 +1598,8 @@ module AssertionChecker = struct
       @param structure The event structure.
       @param exhaustive Whether checking exhaustively.
       @return Promise of assertion result. *)
-  let check_outcome_assertion outcome condition model executions structure
-      ~exhaustive =
+  let check_outcome_assertion ?coherent outcome condition model executions
+      structure ~exhaustive =
     Logs_safe.info (fun m ->
         m "Checking assertion: %s (%s)"
           (string_of_outcome outcome)
@@ -1614,7 +1632,7 @@ module AssertionChecker = struct
 
         (* Process all executions *)
         let%lwt satisfied, ub_reasons, execution_results, assertion_instances =
-          process_executions
+          process_executions ?coherent
             (Outcome { outcome; condition; model })
             executions structure
         in
@@ -1645,15 +1663,15 @@ module AssertionChecker = struct
       @param executions List of executions.
       @param structure The event structure.
       @return Promise of assertion result. *)
-  let check_chained_assertion ~options ~program ~config model outcome rest
-      executions structure =
+  let check_chained_assertion ?coherent ~options ~program ~config model outcome
+      rest executions structure =
     Logs_safe.info (fun m ->
         m "Performing refinement check for chained assertion"
     );
 
     (* Run UB validation on all executions *)
     let%lwt ub_reasons, execution_results =
-      run_ub_validation_all executions structure
+      run_ub_validation_all ?coherent executions structure
     in
     let ub = List.length ub_reasons > 0 in
 
@@ -1683,12 +1701,13 @@ module AssertionChecker = struct
       @param structure The event structure.
       @param exhaustive Whether to check exhaustively.
       @return Promise of assertion result. *)
-  let check ?ctx assertion executions structure ~exhaustive =
+  let check ?ctx ?coherent assertion executions structure ~exhaustive =
     match assertion with
-    | Model { model } -> check_model_assertion model executions structure
+    | Model { model } ->
+        check_model_assertion ?coherent model executions structure
     | Outcome { outcome; condition; model } ->
-        check_outcome_assertion outcome condition model executions structure
-          ~exhaustive
+        check_outcome_assertion ?coherent outcome condition model executions
+          structure ~exhaustive
     | Chained { model; outcome; rest } -> (
         (* A chain needs the source program itself, which only the context has.
            Without one there is nothing to compare and we say so, rather than
@@ -1709,7 +1728,7 @@ module AssertionChecker = struct
                 assertion_instances = None;
               }
         | Some (ctx : mordor_ctx) ->
-            check_chained_assertion ~options:ctx.options
+            check_chained_assertion ?coherent ~options:ctx.options
               ~program:(Option.value ctx.program_stmts ~default:[])
               ~config:
                 {
@@ -1770,14 +1789,23 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
   let%lwt ctx = ctx in
     match (ctx.structure, ctx.executions) with
     | Some structure, Some executions ->
+        (* Whose data races are undefined behaviour: the model an assertion's
+           executions were admitted under. Promising semantics computes final
+           states only, with no relations to race over. *)
+        let coherent model =
+          match ctx.options.semantics with
+          | Smrd -> Some model
+          | Promising1 | Promising2 -> None
+        in
         let execution_list = USet.to_list executions in
           let* assertion_result =
             match ctx.assertions with
             | [] ->
                 (* Even without assertions, run UB validation *)
                 let%lwt ub_reasons, execution_results =
-                  AssertionChecker.run_ub_validation_all execution_list
-                    structure
+                  AssertionChecker.run_ub_validation_all
+                    ?coherent:(coherent ctx.options.coherent)
+                    execution_list structure
                 in
                 let ub = List.length ub_reasons > 0 in
                   Lwt.return
@@ -1789,7 +1817,9 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                       assertion_instances = None;
                     }
             | [ assertion ] ->
-                check_assertion ~ctx assertion execution_list structure
+                check_assertion ~ctx
+                  ?coherent:(coherent ctx.options.coherent)
+                  assertion execution_list structure
                   ~exhaustive:ctx.options.exhaustive
             | assertions ->
                 (* A conjunction: each assertion against the executions its own
@@ -1806,8 +1836,9 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                   Lwt_list.map_s
                     (fun (assertion, model) ->
                       let%lwt result =
-                        check_assertion ~ctx assertion (executions_under model)
-                          structure ~exhaustive:ctx.options.exhaustive
+                        check_assertion ~ctx ?coherent:(coherent model)
+                          assertion (executions_under model) structure
+                          ~exhaustive:ctx.options.exhaustive
                       in
                         Lwt.return (assertion, result)
                     )

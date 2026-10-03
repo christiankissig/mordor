@@ -198,6 +198,8 @@ let edges =
     ("sc", "pocausal");
     ("rc11", "rc11z");
     ("rc11z", "rc11");
+    (* The same release sequence and psc; RC17 checks thin air too. *)
+    ("rc17", "c20");
   ]
 
 let test_edges_hold () =
@@ -293,6 +295,96 @@ let test_conjunction_refuses_mixed_ub_fold () =
   | exception Failure msg ->
       check bool "says why" true (contains msg "undefined behaviour")
 
+(** The C standard's models answer to the names of its C++ revisions too. *)
+let test_cpp_aliases () =
+  List.iter
+    (fun (alias, name) ->
+      match get_model_options alias with
+      | Some { coherent = Some coherent; _ } ->
+          check string (alias ^ " selects " ^ name) name coherent
+      | _ -> fail (alias ^ " is not a model name")
+    )
+    [ ("cpp11", "c11"); ("cpp17", "c17"); ("cpp20", "c20") ]
+
+let message_passing ~flag verdicts =
+  Printf.sprintf
+    {|data := 0; f := 0;
+{ data.store(1, na); f.store(1, %s) }
+||| { r1 := f.load(%s); if (r1 = 1) { r2 := data.load(na) } else { skip } }
+%%%%
+%s|}
+    (fst flag) (snd flag) verdicts
+
+(** A model with a race clause reports the races of its consistent executions as
+    undefined behaviour, and one without reports none. *)
+let test_races_are_undefined () =
+  let valid, verdicts =
+    check_source
+      (message_passing ~flag:("rlx", "rlx")
+         "allow (ub) [C11, C17, C20, RC11]\nforbid (ub) [smrd]"
+      )
+  in
+    check bool "a relaxed flag leaves the data read racing" true valid;
+    check (list bool) "under every model with a race clause"
+      [ true; true; true; true; true ]
+      (List.map snd verdicts);
+    let valid, _ =
+      check_source
+        (message_passing ~flag:("rel", "acq")
+           "forbid (ub) [C11, C17, C20, RC11]"
+        )
+    in
+      check bool "release and acquire order the data accesses" true valid
+
+(** C++20 repaired C11's SC fences (P0668); C11 and C++17 keep them, too weak to
+    forbid IRIW. *)
+let test_sc_fences_separate_c20 () =
+  let valid, verdicts =
+    check_source
+      {|x := 0; y := 0;
+{ x.store(1, rlx) } ||| { y.store(1, rlx) }
+||| { r1 := x.load(rlx); fence(sc); r2 := y.load(rlx) }
+||| { r3 := y.load(rlx); fence(sc); r4 := x.load(rlx) }
+%%
+allow (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [C11, C17]
+forbid (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [C20, RC11]|}
+  in
+    check bool "C11 and C++17 allow, C++20 and RC11 forbid" true valid;
+    check (list bool) "every assertion holds" [ true; true; true; true ]
+      (List.map snd verdicts)
+
+(** A relaxed store continuing a release store's release sequence keeps sMRD
+    from eliding the release store under RC11's, C++11's and IMM's release
+    sequences, and not under C++17's or sMRD's, where it carries no release. A
+    release store may still elide it. *)
+let test_elision_follows_release_sequences () =
+  let release_then flag verdicts =
+    Printf.sprintf
+      {|x := 0; y := 0;
+{ y.store(1, na); x.store(1, rel); x.store(2, %s) }
+||| { r1 := x.load(acq); if (r1 = 2) { r2 := y.load(na) } else { skip } }
+%%%%
+%s|}
+      flag verdicts
+  in
+  let valid, verdicts =
+    check_source
+      (release_then "rlx"
+         "forbid (r1 = 2 && r2 = 0) [RC11, C11, IMM]\n\
+          allow (r1 = 2 && r2 = 0) [C17, C20, smrd]"
+      )
+  in
+    check bool "a relaxed store may not elide it under RC11, C11 and IMM" true
+      valid;
+    check (list bool) "every assertion holds"
+      [ true; true; true; true; true; true ]
+      (List.map snd verdicts);
+    let valid, _ =
+      check_source
+        (release_then "rel" "forbid (r1 = 2 && r2 = 0) [RC11, C11, C17]")
+    in
+      check bool "a release store synchronises in its place" true valid
+
 let suite =
   ( "Zoo models",
     [
@@ -306,5 +398,10 @@ let suite =
         test_conjunction_checks_each_model;
       test_case "conjunction refuses mixed UB fold" `Quick
         test_conjunction_refuses_mixed_ub_fold;
+      test_case "C++ revision names" `Quick test_cpp_aliases;
+      test_case "races are undefined" `Quick test_races_are_undefined;
+      test_case "SC fences separate C++20" `Quick test_sc_fences_separate_c20;
+      test_case "elision follows release sequences" `Quick
+        test_elision_follows_release_sequences;
     ]
   )
