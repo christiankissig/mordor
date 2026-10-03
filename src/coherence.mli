@@ -64,6 +64,20 @@ module type MEMORY_MODEL = sig
 
   val check_thin_air : cache -> symbolic_execution -> bool
 
+  (** The model's data races in a candidate: conflicting accesses of two threads
+      that [hb] leaves unordered. A model with this clause -- herd's
+      [undefined_unless empty dr] -- gives a program with a consistent racy
+      execution undefined behaviour; [None] for a model without one. *)
+  val data_races : (candidate -> (int * int) uset) option
+
+  (** Whether the model lets sMRD elide the write [elided], which the po-later
+      write [by] of its thread to the same location overwrites. sMRD's write
+      elision drops an overwritten write whatever its mode. Under a model whose
+      release sequence continues through later stores of the writer's thread,
+      eliding a release store loses the synchronisation those stores carried,
+      and the model rejects every execution that does. *)
+  val elidable : (int, event) Hashtbl.t -> elided:int -> by:int -> bool
+
   (** Whether [check_coherence] reads the coherence order it is given. A model
       whose axioms quantify over orders of their own -- a view per process, an
       arbitration per session -- does not, and the search then asks it once
@@ -159,13 +173,23 @@ module RC11Config : sig
     allocations_are_writes : bool;
         (** RC11z: allocations and deallocations are writes to the location they
             allocate or free, ordered by [co] with the stores to it. *)
-    no_thin_air : [ `Hb_rf | `Sb_rf ];
+    no_thin_air : [ `Hb_rf | `Sb_rf | `None ];
         (** [acyclic(hb ∪ rf)], or the literal [acyclic(sb ∪ rf)] of Ou and
-            Demsky's load-store ordering. *)
+            Demsky's load-store ordering, or none, as the standard has. *)
+    sc : [ `Psc | `C11 ];
+        (** RC11's [acyclic psc], or C11's conditions on its order [S] of SC
+            events, as herd's [c11_partialSC.cat] has them. *)
   }
 
   val default : t
   val with_consume : t
+
+  (** C11 and C++17 as the zoo's [cpp11.cat] and [cpp17.cat] have them, but with
+      C11's SC; C++20 as C++17 with RC11's SC (P0668). *)
+  val c11 : t
+
+  val c17 : t
+  val c20 : t
 end
 
 module RC11 (_ : sig
@@ -247,8 +271,9 @@ val check_for_coherence :
   int URelation.t option
 
 (** [rejected_by_one_location structure execution restrictions]: the model
-    rejects [execution] whatever the coherence order at other locations: its
-    thin-air check fails, or some location has no po-respecting order the axioms
+    rejects [execution] whatever the coherence order at other locations: it
+    elides a write the model does not let be elided, its thin-air check fails,
+    or some location has no po-respecting order the axioms
     accept with every other location unordered. For a model whose violations
     only grow with co, rf and hb, it holds of every completion of a partial
     execution it holds of, when the completion's predicates include the partial
@@ -269,8 +294,15 @@ val location_equality :
 
 (** [rejects_partial_executions name]: {!rejected_by_one_location} holding of a
     partial execution means model [name] rejects every completion of it. True of
-    every registered model but od-lso (S6). *)
+    every registered model but od-lso and c11 (S6). *)
 val rejects_partial_executions : string -> bool
+
+(** [data_races structure execution name] is the data races of [execution] under
+    model [name], in the first coherence order the model admits it under that
+    has any; empty if the model has no race clause or no admitting order has a
+    race. *)
+val data_races :
+  symbolic_event_structure -> symbolic_execution -> string -> (int * int) uset
 
 (** [check_model_program structure name] fails, with the model's reason, when
     the coherence model [name] cannot answer for the program [structure] is the

@@ -25,9 +25,8 @@ models/         separating witnesses for the zoo models MoRDor implements
 
 `models/` once also held witness families for models MoRDor did not implement,
 C11/C17/C20 and RA/SRA, checked under the `smrd` fallback rather than the model
-they were written for. The C family still lives in `litmus-tests-cpp/`, out of
-the scanned tree. The RA family is back, now that RA, SRA and WRA are
-implemented.
+they were written for. Both are back, now that RA, SRA and WRA, and C11, C++17
+and C++20, are implemented.
 
 Every `.lit` file carries a header comment naming the zoo property or edge it
 belongs to, the primary literature it comes from, and the reference verdicts
@@ -86,7 +85,7 @@ which attributes it to Poetzl & Kroening (2015) §4.
 | Key | Column | MoRDor coverage |
 |---|---|---|
 | `rp` | Register promotion | **new** `properties/global-transformations/register-promotion/` |
-| `ti` | Thread inlining | **new**, `[C11]`, moved to `litmus-tests-cpp/properties/global-transformations/thread-inlining/` |
+| `ti` | Thread inlining | **new** `properties/global-transformations/thread-inlining/`, under C11, C++17 and C++20 |
 | `vr` | Value range | **new** `properties/global-transformations/value-range/` |
 
 All three were blank. `vr` matters most here: the zoo records `vr = true` for
@@ -97,7 +96,7 @@ own model is characterised by.
 
 | Key | Column | MoRDor coverage |
 |---|---|---|
-| `edrf` | External DRF | **new** `properties/reasoning-guarantees/external-drf/`; its racy witness `MP+rlx-race.lit` is `[C11]` and moved to `litmus-tests-cpp/` |
+| `edrf` | External DRF | **new** `properties/reasoning-guarantees/external-drf/`; its racy witness `MP+rlx-race.lit` is asserted under C11, C++17 and C++20 |
 | `coh` | Coherence | `test6/{CoRR1,CoRW,CoWR,CoWW}.lit`; **new** `models/ra-sra-wra/{WW,Oscillating,SF}.lit` are single-location coherence violations |
 | `no_ub` | No undefined behaviour | `symmrd/` (`LB+UB+data.lit` and the `refinement/` variants) |
 | `in_order` | In-order execution | the LB family: `ISO/3-LB.lit`, `esop_problem/lb.lit`, `popl_bubbly/LB.lit`, … |
@@ -107,7 +106,7 @@ own model is characterised by.
 
 | Key | Column | MoRDor coverage |
 |---|---|---|
-| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (9 tests here, `IRIW+rel+acq.lit` under `[SRA]` among them; one more carries `[C11]` and moved to `litmus-tests-cpp/`; `MP+fence+addr.lit` is parked in `litmus-tests-review/`) |
+| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (9 tests here, `IRIW+rel+acq.lit` under `[SRA]` among them; `IRIW+scfences.lit` separates C11 and C++17 from C++20; `MP+fence+addr.lit` is parked in `litmus-tests-review/`) |
 
 This was the gap. The zoo has an `mca` cell for 63 models (31 true, 32 false) and
 **none for MRD or sMRD**.
@@ -191,14 +190,15 @@ implemented model there is evidence for, as `allow (c) [WRA, CC]` and
 - **The definitions**: the distributed models' verdicts, each with its reason.
 
 A model without such a verdict is listed as not asserted, rather than asserted
-from MoRDor's own output. C11 and C++17, which the original headers also give
-verdicts for, are not implemented.
+from MoRDor's own output. `cpp-release-sequences/` asserts MoRDor's C11, C++17
+and C++20 verdicts and compares them with herd7 in its own README.
 
 | Directory | Shapes |
 |---|---|
 | `sc-tso/` | SB, with fences and with CAS; IRIW |
 | `ra-sra-wra/` | 2+2W, WW, SF, Oscillating and MP over release and acquire; two CASes |
 | `rc11-rc17/` | the zoo's release-sequence witness; LB; use-after-free |
+| `cpp-release-sequences/` | the C++11/17/20 release-sequence family, with data races as undefined behaviour |
 | `steinke-nutt/` | MP, WRC, readers that disagree, a writer seen reversed, Oscillating, Bouajjani et al.'s history (2c), each thread reading the other's write |
 | `sessions/` | monotonic reads |
 
@@ -219,13 +219,14 @@ write it read, so it never has two writes of one session to put in order.
 in the zoo forbids it, sMRD included, and it asserts that under every model with
 a verdict.
 
-## `models/cpp-release-sequences/` — moved
+## `models/cpp-release-sequences/`
 
-The release-sequence family is annotated `[C11]` / `[C17]` / `[C20]`, which
-`ModelRegistry` has no entry for, so the suite was checking it under the `smrd`
-fallback. It now lives in `litmus-tests-cpp/`, with the standards' verdicts, the
-C++11/17/20 comparison table and the finding that MoRDor tracks C++17 on this
-family in `litmus-tests-cpp/README.md`.
+The release-sequence family, under `[C11]`, `[C17]` and `[C20]`. It sat in
+`litmus-tests-cpp/`, out of the scanned tree, while MoRDor had no C models. Its
+README compares MoRDor with herd7 test by test; all three models agree
+throughout, as RC11 does with `rc11.cat`. That needed C11, RC11 and IMM to stop
+sMRD's write elision dropping a release store its own thread overwrites. The
+zoo's C++20 column is `cpp2w.cat`'s, a later draft.
 
 ## Conventions
 

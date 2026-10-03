@@ -57,11 +57,13 @@ end
 
 (** {1 Assertion Checking} *)
 
-(** [check_assertion ?ctx assertion executions structure ~exhaustive] validates
-    [assertion] against [executions]. Main entry point for assertion checking.
-*)
+(** [check_assertion ?ctx ?coherent assertion executions structure ~exhaustive]
+    validates [assertion] against [executions]. Main entry point for assertion
+    checking. The data races of [coherent], the model the executions were
+    admitted under, count as undefined behaviour when it has a race clause. *)
 val check_assertion :
   ?ctx:mordor_ctx ->
+  ?coherent:string ->
   ir_node_ann Ir.ir_assertion ->
   Execution.t list ->
   symbolic_event_structure ->

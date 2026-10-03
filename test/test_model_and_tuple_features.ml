@@ -363,11 +363,11 @@ module TestContextModelOptions = struct
 
   let test_unknown_model_fails () =
     match
-      apply "c11" { default_options with allow_unknown_model = false } |> ignore
+      apply "jmm" { default_options with allow_unknown_model = false } |> ignore
     with
     | () -> fail "unknown model did not raise"
     | exception Failure msg ->
-        check bool "names the model" true (contains msg "\"c11\"");
+        check bool "names the model" true (contains msg "\"jmm\"");
         check bool "names the escape hatch" true
           (contains msg "--allow-unknown-model")
 
@@ -386,9 +386,9 @@ module TestContextModelOptions = struct
 
   let test_unknown_model_allowed_leaves_coherent () =
     let opts = { default_options with allow_unknown_model = true } in
-    let ctx = apply "c11" opts in
+    let ctx = apply "jmm" opts in
       check string "coherence model untouched" "smrd" ctx.options.coherent;
-      check string "model name recorded" "c11" ctx.options.model
+      check string "model name recorded" "jmm" ctx.options.model
 
   (* [coherent = None] in the table is the other case: a name MoRDor knows and
      deliberately maps onto the default. It must keep working. *)

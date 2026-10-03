@@ -1,13 +1,12 @@
 # Litmus Tests Index
 
-Total tests: 312
-Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-28
+Total tests: 331
+Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
-> scanned: `litmus-tests-promising/` (`[Promising]`), `litmus-tests-cpp/`
-> (`[C11]`, `[C17]`, `[C20]`) and `litmus-tests-jmm/` (`[JMM]`, the JSR-133
-> Java Causality Test Cases). Each has
+> scanned: `litmus-tests-promising/` (`[Promising]`) and `litmus-tests-jmm/`
+> (`[JMM]`, the JSR-133 Java Causality Test Cases). Each has
 > a README with the reference verdicts. Tests whose assertion MoRDor does not
 > validate are parked in `litmus-tests-review/`, also unscanned.
 
@@ -154,6 +153,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-28
 - popl_promising/LBr.lit
 - popl_promising/MP+fences.lit
 - popl_promising/Page 7 Column 1.lit
+- popl_promising/Page 7 Column 1b.lit
 - popl_promising/Par-Inc.lit
 - popl_promising/SB+fences.lit
 - popl_promising/SB.lit
@@ -283,6 +283,20 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-28
 - rmm-zoo/models/rc11-rc17/LB.lit
 - rmm-zoo/models/rc11-rc17/RS17.lit
 - rmm-zoo/models/rc11-rc17/uaf-bug.lit
+- rmm-zoo/models/cpp-release-sequences/RS+cpp20.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add-eadd.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add-est-atomic.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add-est.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add-st.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-add.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-eadd.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-est.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-st-eadd-atomics.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-st-eadd.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-st-est-atomics.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-st-est.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs-strel.lit
+- rmm-zoo/models/cpp-release-sequences/mp-rs.lit
 - rmm-zoo/models/sc-tso/IRIW.lit
 - rmm-zoo/models/sc-tso/SB+cas.lit
 - rmm-zoo/models/sc-tso/SB+failed-cas.lit
@@ -306,6 +320,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-28
 - rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit
 - rmm-zoo/properties/atomicity-mca/WRC+rlx.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+rel+acq.lit
+- rmm-zoo/properties/atomicity-mca/IRIW+scfences.lit
 - rmm-zoo/properties/elimination/load-store/opt.lit
 - rmm-zoo/properties/elimination/load-store/src.lit
 - rmm-zoo/properties/elimination/store-store/opt.lit
@@ -314,9 +329,12 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-09-28
 - rmm-zoo/properties/global-transformations/register-promotion/src.lit
 - rmm-zoo/properties/global-transformations/value-range/opt.lit
 - rmm-zoo/properties/global-transformations/value-range/src.lit
+- rmm-zoo/properties/global-transformations/thread-inlining/opt.lit
+- rmm-zoo/properties/global-transformations/thread-inlining/src.lit
 - rmm-zoo/properties/local-transformations/inverse-roach-motel/opt.lit
 - rmm-zoo/properties/local-transformations/inverse-roach-motel/src.lit
 - rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rel+acq-drf.lit
+- rmm-zoo/properties/reasoning-guarantees/external-drf/MP+rlx-race.lit
 - rmm-zoo/properties/reordering/load-load/opt.lit
 - rmm-zoo/properties/reordering/load-load/src.lit
 - rmm-zoo/properties/reordering/load-store/opt.lit
