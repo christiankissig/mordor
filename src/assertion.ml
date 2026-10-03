@@ -725,7 +725,14 @@ module ConditionChecker = struct
       List.iter
         (fun w ->
           let event = Hashtbl.find structure.events w in
-            match (event.loc, event.wval) with
+          (* The value the write has in this execution, which a UB assumption
+             may have narrowed ([symbolic_execution.write_values]). *)
+          let wval =
+            match List.assoc_opt w execution.write_values with
+            | Some v -> Some v
+            | None -> event.wval
+          in
+            match (event.loc, wval) with
             | Some (EVar var), Some wval ->
                 Hashtbl.replace last_writes_to_variables var wval
             | Some loc, Some wval ->
