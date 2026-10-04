@@ -115,9 +115,13 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - own/paper112F-unstrengthened.lit
 - own/paper113.lit
 - own/paper115.lit
+- own/relaxed-read-lifted.lit
 - own/relaxed-store-elided.lit
+- own/relaxed-write-lifted.lit
 - own/speculative_optimisation.lit
+- own/volatile-read-not-lifted.lit
 - own/volatile-store-not-elided.lit
+- own/volatile-write-not-lifted.lit
 - pldi_repairing/IRIW+acq+sc.lit
 - pldi_repairing/LB+deps.lit
 - pldi_repairing/LB.lit

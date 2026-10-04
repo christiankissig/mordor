@@ -1,0 +1,23 @@
+// The control for volatile-read-not-lifted.lit: each arm reads y and writes y
+// on the same inner condition, so lifting pairs the two reads and the two
+// writes and hoists the lot out of the outer branch. The write then depends
+// on its own arm's read of y, and no longer on the read of x.
+x := 0;
+y := 0;
+r1 := x;
+if (r1 = 0) {
+  r2 := y;
+  if (r2 = 0) {
+    y := 1;
+  } else {
+    skip
+  }
+} else {
+  r2 := y;
+  if (r2 = 0) {
+    y := 1;
+  } else {
+    skip
+  }
+}
+%% allow ((3,7) ∉ .dp) []
