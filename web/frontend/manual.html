@@ -419,6 +419,7 @@
                         <tr><td><code>rc11</code></td><td>Repaired C11 (Lahav et al., PLDI 2017). All of program order counts, and accesses in mode <code>sc</code> are sequentially consistent.</td></tr>
                         <tr><td><code>rc17</code></td><td>RC11 with C++17's release sequences, which later same-thread relaxed stores no longer continue.</td></tr>
                         <tr><td><code>rc11z</code></td><td>RC11 with allocations and frees ordered as writes to the memory they allocate or free.</td></tr>
+                        <tr><td><code>c11</code>, <code>c17</code>, <code>c20</code></td><td>The C11, C++17 and C++20 standards, also named <code>cpp11</code>, <code>cpp17</code> and <code>cpp20</code>. C11 and C++17 take the zoo's release sequences with the standard's own SC order, so they allow IRIW with SC fences as the standard did before P0668; C++20 has C++17's release sequence with RC11's SC order. None has a thin-air axiom.</td></tr>
                         <tr><td><code>od-lso</code></td><td>Ou and Demsky's load-store ordering, <code>acyclic(sb ∪ rf)</code>, over the C/C++11 model.</td></tr>
                         <tr><td><code>mrd</code></td><td>Modular Relaxed Dependencies. sMRD's axioms on programs that access only named globals and allocate nothing. Other programs are refused, because there sMRD admits executions MRD does not.</td></tr>
                         <tr><td><code>sc</code>, <code>vbd</code></td><td>Sequential consistency, and Volatile-by-Default, which admits the same outcomes.</td></tr>
