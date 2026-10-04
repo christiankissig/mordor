@@ -1,0 +1,20 @@
+// A volatile write may not be lifted out of the branch that guards it.
+//
+// relaxed-write-lifted.lit is the same program without the volatile
+// annotations: there both arms write 1 to y, lifting merges the two writes into
+// one justified whatever the branch decides, and the write loses its
+// dependency on the read of x. A volatile access stays where the program put
+// it, so here the write stays under the branch and the dependency stands in
+// every execution.
+//
+// Volatile also keeps an access from being elided; see
+// volatile-store-not-elided.lit.
+x := 0;
+y := 0;
+r1 := x;
+if (r1 = 0) {
+  y :v= 1;
+} else {
+  y :v= 1;
+}
+%% forbid ((3,5) ∉ .dp) []
