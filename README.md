@@ -1,5 +1,4 @@
 [![CI](https://github.com/christiankissig/mordor/actions/workflows/ci.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/ci.yml)
-
 [![Litmus Tests](https://github.com/christiankissig/mordor/actions/workflows/integration.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/integration.yml)
 
 
@@ -61,6 +60,44 @@ The command-line interface and web UI provide:
 The web UI's manual, at `/manual/` on a running server
 ([web/frontend/manual.html](web/frontend/manual.html)), explains the concepts,
 the UI and the litmus test language.
+
+## Memory Models
+
+A litmus test names its model in the assertion's annotation, e.g.
+`allow (r1 = 1) [RC11]`; names are case-insensitive. A test that names none runs
+under sMRD.
+
+| Annotation | Model |
+|---|---|
+| `smrd` | Symbolic MRD (Richards et al., OOPSLA 2025): dependencies, preserved program order, release/acquire synchronisation and lock order. The default. |
+| `mrd` | Modular Relaxed Dependencies: sMRD's axioms, on programs that access only named globals and allocate nothing; others are refused. |
+| `rc11`, `rc11c` | Repaired C11 (Lahav et al., PLDI 2017), and RC11 with consume. |
+| `rc17` | RC11 with C++17's release sequences. |
+| `rc11z` | RC11 with allocations and frees ordered as writes. |
+| `c11`, `c17`, `c20` | The C11, C++17 and C++20 standards; also `cpp11`, `cpp17`, `cpp20`. |
+| `od-lso` | Ou and Demsky's load-store ordering over C/C++11. |
+| `imm` | The Intermediate Memory Model (Podkopaev et al., POPL 2019). |
+| `sc`, `vbd` | Sequential consistency, and Volatile-by-Default. |
+| `tso`, `x86-tso`, `clighttso` | Total store order. |
+| `ra`, `sra`, `wra` | Release-acquire, strong and weak release-acquire. |
+| `cc` | Weak causal consistency. |
+| `coherence` | Per-location cache coherence. |
+| `pc`, `pram`, `causal`, `slow`, `local` | Steinke and Nutt's lattice. |
+| `pocausal` | Per-object causal consistency. |
+| `ryw`, `mr`, `mw`, `wfr` | Terry et al.'s session guarantees. |
+| `ps1`, `ps2` | Promising semantics 1.0 and 2.0, computed operationally (or `--semantics ps1\|ps2`); `promising` names no version. |
+
+Every model but `ps1` and `ps2` checks the executions sMRD derives; the
+models from `sc` down are those of the
+[Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org).
+
+Some annotations name a source rather than a model, and map onto one of the
+above: `Power`, `Bridging` and `Grounding` run under `imm`; `Sevcik`, `Problem`,
+`JR`, `Bubbly`, `Soham` and `_` run under the default. `UB11`, `RC11UB` and
+`IMMUB` are sMRD, `rc11` and `imm` with optimisations that exploit undefined
+behaviour. Any other name is an error unless `--allow-unknown-model` is given;
+`litmus-tests-jmm/` keeps tests for the Java Memory Model, which MoRDor does not
+implement.
 
 ## Project Structure
 
