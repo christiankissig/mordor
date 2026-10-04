@@ -1277,55 +1277,45 @@ module EventsCondition = struct
 
        The combination follows ForwardingContext.ppo, which is
        ppo_loc_base (alias-filtered) U ppo_rmw U ppo_base, unioned with ppo_sync
-       by its callers in executions.ml. The alias filtering is the one part not
-       reproduced here: this takes ppo_loc_base raw, which orders more pairs
-       than the filtered relation would and so reports fewer violations. The
-       ppo_iter below is filtered; this one deliberately is not.
+       by its callers in executions.ml. ppo_loc_base is alias-filtered here as
+       well, decided with the structure's constraints alone since no execution's
+       predicates are in hand. Until this was done it was taken raw, which
+       ordered pairs at locations the constraints prove distinct and so
+       reported fewer violations than the relation the executions use.
 
-       Measured, and it does not come out the way the ppo_iter side did. ppo
-       feeds dp_ppo, which cross_iter_ppo composes with on both sides, so
-       filtering removes coverage rather than adding it, and three of the four
-       real-world fixtures recorded episodic stop being so: seqlock-1,
-       spinlock-1 and rcu-1. Only hp-1 survives.
+       The filter keeps a pair where either event has no location. That is the
+       one way it departs from ForwardingContext.ppo, whose test answers false
+       there and so drops every pair touching a branch or a fence. ppo_loc_base
+       is the only relation that reaches those events at all -- it is po less
+       the pairs already known to share a location -- and dropping them lost
+       spinlock-1 on (branch, CAS read) and (branch, CAS write). A missing
+       location is read as "not provably distinct".
 
-       Two things came out of that. Filtering exactly as ForwardingContext.ppo
-       does is wrong here for a reason that has nothing to do with aliasing: its
-       test answers false when either event has no location, so every pair
-       touching a branch or a fence is dropped, and ppo_loc_base is the only
-       relation that reaches those events at all -- it is po less the pairs
-       already known to share a location. That is what loses spinlock-1, on
-       (branch, CAS read) and (branch, CAS write). Reading a missing location as
-       "not provably distinct" and keeping the pair holds spinlock-1 at
-       episodic.
-
-       The other two flip under either reading, and genuinely. seqlock-1's retry
-       loop is three relaxed reads at two locations with no fence between them,
-       and the pairs left unordered are the seq reads against the data read in
-       both directions -- nothing orders those, under any bisection. rcu-1 does
-       have bisections that satisfy this condition once ppo is filtered, [18..21]
-       and [18..22], but both violate the register condition, so no bisection
-       satisfies all four.
-
-       So this is not a precision fix waiting to be made. Landing it changes what
-       the tool says about two programs the paper's table records as episodic,
-       which is a question about the programs and not about this line. See the
-       Todoist task. *)
+       Filtering took three of the four real-world fixtures off episodic at
+       first. spinlock-1 was the missing-location reading above. seqlock-1 was
+       the program: its reader had no ordering between the seq samples and the
+       data read, and is now the C11 seqlock. rcu-1 was the missing
+       cross-iteration ppo_rmw on the ppo_iter side below. *)
     let ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
+    let ppo_loc_alias =
+      EventStructureContext.compute_ppo_loc_alias ~keep_unlocated:true
+        fwd_es_ctx.structure fwd_es_ctx.ppo.ppo_loc_base
+    in
     let ppo =
       fwd_es_ctx.ppo.ppo_sync
       |> USet.union fwd_es_ctx.ppo.ppo_base
-      |> USet.union fwd_es_ctx.ppo.ppo_loc_base
+      |> USet.union ppo_loc_alias
       |> USet.union ppo_rmw
     in
       Logs_safe.debug (fun m ->
           m
-            "Loop %d: ppo components — sync %d, base %d, loc_base %d, rmw %d; \
-             union %d."
+            "Loop %d: ppo components — sync %d, base %d, loc_base %d (%d after \
+             alias filtering), rmw %d; union %d."
             loop_id
             (USet.size fwd_es_ctx.ppo.ppo_sync)
             (USet.size fwd_es_ctx.ppo.ppo_base)
             (USet.size fwd_es_ctx.ppo.ppo_loc_base)
-            (USet.size ppo_rmw) (USet.size ppo)
+            (USet.size ppo_loc_alias) (USet.size ppo_rmw) (USet.size ppo)
       );
 
       let dp =
@@ -1337,17 +1327,26 @@ module EventsCondition = struct
       in
       let dp_ppo = USet.union dp ppo |> URelation.transitive_closure in
 
-      (* No ppo_rmw counterpart on this side: compute_ppo_rmw composes with
-       ppo_sync, and there is no iteration-crossing variant of it. The duplicate
-       ppo_iter_base that stood where one would go is dropped.
+      (* ppo_iter_rmw is ppo_rmw across the boundary: (ppo_iter_sync ; rmw⁻¹)
+       U (rmw⁻¹ ; ppo_iter_sync). Without it an RMW's release write orders the
+       previous iteration's events before itself but not before its own read.
+       rcu-1 needs it at the bisection that starts the iteration at the
+       fetch-and-add, as the paper's ex:episodic-rcu does: the last
+       iteration's rcu marker writes were left unordered against the next
+       fetch-and-add's acquire read, and no other bisection satisfies both
+       this condition and the register condition.
 
        ppo_iter_loc_base is alias-filtered here, the way ForwardingContext.ppo
        filters ppo_loc_base before an execution's predicates narrow it further.
        It is half of one change: the other half is the complement that produces
        it, taken in po_iter rather than po, and neither half works alone. See
        the note at its definition in forwarding.ml. *)
+      let ppo_iter_rmw =
+        ForwardingContext.compute_ppo_rmw ~iter:true fwd_es_ctx []
+      in
       let ppo_iter =
         fwd_es_ctx.ppo.ppo_iter_sync
+        |> USet.union ppo_iter_rmw
         |> USet.union fwd_es_ctx.ppo.ppo_iter_base
         |> USet.union
              (EventStructureContext.compute_ppo_loc_alias ~iter:true

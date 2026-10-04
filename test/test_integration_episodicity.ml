@@ -36,6 +36,9 @@ type episodicity_result = {
   loop_id : int;
   is_episodic : bool;
   conditions : condition_result list;
+  bisection_left_lines : int list;
+      (* Source lines of the events the reported bisection moves to the end of
+         the iteration; empty for the trivial bisection *)
 }
 
 (* Name a parsed condition the way the paper and the analysis logs do, e.g.
@@ -60,6 +63,8 @@ let parse_episodicity_output output_lines =
   let current_loop_id = ref None in
   let current_is_episodic = ref false in
   let current_conditions = ref [] in
+  let current_bisection_left = ref [] in
+  let in_bisection_left = ref false in
 
   (* The summary is one line carrying every loop -- "Episodic: 2: false; 3:
      false; 1: false;" -- so it has to be scanned to the end. Reading only the
@@ -155,6 +160,20 @@ let parse_episodicity_output output_lines =
     with _ -> None
   in
 
+  let contains line sub =
+    try
+      ignore (Str.search_forward (Str.regexp_string sub) line 0);
+      true
+    with Not_found -> false
+  in
+
+  let parse_start_line line =
+    try
+      ignore (Str.search_forward (Str.regexp "start_line = \\([0-9]+\\)") line 0);
+      Some (int_of_string (Str.matched_group 1 line))
+    with Not_found -> None
+  in
+
   (* State machine for parsing *)
   let in_condition = ref None in
   let condition_satisfied = ref true in
@@ -168,12 +187,15 @@ let parse_episodicity_output output_lines =
             loop_id;
             is_episodic = !current_is_episodic;
             conditions = List.rev !current_conditions;
+            bisection_left_lines = List.rev !current_bisection_left;
           }
         in
           results := result :: !results;
           current_loop_id := None;
           current_is_episodic := false;
           current_conditions := [];
+          current_bisection_left := [];
+          in_bisection_left := false;
           in_condition := None;
           condition_satisfied := true;
           has_violations := false
@@ -212,7 +234,14 @@ let parse_episodicity_output output_lines =
           List.filter_map
             (fun (loop_id, is_episodic) ->
               if List.exists (fun r -> r.loop_id = loop_id) parsed then None
-              else Some { loop_id; is_episodic; conditions = [] }
+              else
+                Some
+                  {
+                    loop_id;
+                    is_episodic;
+                    conditions = [];
+                    bisection_left_lines = [];
+                  }
             )
             !summary
         in
@@ -245,6 +274,25 @@ let parse_episodicity_output output_lines =
             )
             final_results;
           final_results
+    | line :: rest when contains line "bisection_left =" ->
+        (* The dump can put is_episodic on the same line, and an empty
+           bisection_left closes on it too. *)
+        Option.iter
+          (fun is_episodic -> current_is_episodic := is_episodic)
+          (parse_is_episodic_value line);
+        in_bisection_left := not (contains line "bisection_left = []");
+        process_lines rest
+    | line :: rest when contains line "bisection_right =" ->
+        in_bisection_left := false;
+        process_lines rest
+    | line :: rest when !in_bisection_left ->
+        (* One event's span spreads over several lines; its start_line is the
+           one to keep. *)
+        ( match parse_start_line line with
+        | Some n -> current_bisection_left := n :: !current_bisection_left
+        | None -> ()
+        );
+        process_lines rest
     | line :: rest -> (
         (* Try parsing episodic line (simple format) *)
         match parse_episodic_line line with
@@ -445,6 +493,9 @@ type loop_expectation = {
   expected_episodic : bool;
   expected_failing_conditions : int list;
       (* Condition numbers expected to fail for this loop *)
+  expected_bisection_left_lines : int list option;
+      (* Source lines of the events the reported bisection moves to the end of
+         the iteration, when the boundary matters; None leaves it unchecked *)
 }
 
 (* Test specification type *)
@@ -467,6 +518,7 @@ let single_episodic filepath description =
           loop_id = 1;
           expected_episodic = true;
           expected_failing_conditions = [];
+          expected_bisection_left_lines = None;
         };
       ];
     description;
@@ -482,6 +534,7 @@ let single_failing filepath failing_conditions description =
           loop_id = 1;
           expected_episodic = false;
           expected_failing_conditions = failing_conditions;
+          expected_bisection_left_lines = None;
         };
       ];
     description;
@@ -598,11 +651,13 @@ let test_specifications =
             loop_id = 1;
             expected_episodic = true;
             expected_failing_conditions = [];
+            expected_bisection_left_lines = None;
           };
           {
             loop_id = 2;
             expected_episodic = true;
             expected_failing_conditions = [];
+            expected_bisection_left_lines = None;
           };
         ];
       description = "Hazard pointers - both loops episodic";
@@ -610,9 +665,27 @@ let test_specifications =
     (* Episodic. Its reads through the pointer the fetch-and-add returns were
        held to alias the writes into the rcu array, because nothing said an
        address inside one allocation is not an address inside another. See
-       allocation_interiors_are_disjoint in the write condition. *)
-    single_episodic "programs/episodicity/rcu-1.lit"
-      "RCU increment loop - episodic";
+       allocation_interiors_are_disjoint in the write condition.
+
+       Episodic at one boundary only, the one the paper's ex:episodic-rcu
+       draws: the iteration starts at the fetch-and-add, with the rcu marker
+       writes of lines 16-17 moved to its end. The fetch-and-add's release
+       write orders them before the next iteration, and the cross-iteration
+       ppo_rmw carries that to its acquire read. Every other boundary fails the
+       events condition or the register condition. *)
+    {
+      filepath = "programs/episodicity/rcu-1.lit";
+      loop_expectations =
+        [
+          {
+            loop_id = 1;
+            expected_episodic = true;
+            expected_failing_conditions = [];
+            expected_bisection_left_lines = Some [ 16; 17 ];
+          };
+        ];
+      description = "RCU increment loop - episodic, starting at the fadd";
+    };
   ]
 
 (* Nothing skipped.
@@ -712,6 +785,21 @@ let test_episodicity_spec spec () =
             Printf.printf "✗ %s: Loop %d is NOT EPISODIC (expected)\n"
               (Filename.basename spec.filepath)
               result.loop_id;
+
+          (* Check the boundary, where the expectation names one *)
+          Option.iter
+            (fun expected ->
+              Alcotest.(check (list int))
+                (Printf.sprintf
+                   "%s: Loop %d's bisection should move lines %s to the end"
+                   (Filename.basename spec.filepath)
+                   exp.loop_id
+                   (String.concat ", " (List.map string_of_int expected))
+                )
+                expected
+                (List.sort_uniq compare result.bisection_left_lines)
+            )
+            exp.expected_bisection_left_lines;
 
           (* Check failing conditions if any are expected *)
           if exp.expected_failing_conditions <> [] then (

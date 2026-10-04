@@ -498,8 +498,8 @@ module EventStructureContext = struct
     USet.inplace_union ~into:(URelation.cross e_acq e) (URelation.cross e e_rel)
     |> USet.intersection po
 
-  (** [compute_ppo_loc ~same ?iter structure po] restricts [po] to the pairs
-      whose locations [same] accepts.
+  (** [compute_ppo_loc ?keep_unlocated ~same ?iter structure po] restricts [po]
+      to the pairs whose locations [same] accepts.
 
       The two relations built on it differ only in that test: [same] is exact
       equality for the pairs preserved unconditionally, and may-aliasing for the
@@ -518,12 +518,16 @@ module EventStructureContext = struct
       TODO the [iter] renaming should factor in symbols read ppo-before this
       location, i.e. not possibly read in a previous iteration.
 
+      @param keep_unlocated
+        What to answer for a pair where either event has no location -- a
+        branch, a fence. Defaults to [false], which drops it.
       @param same The location test.
       @param iter Whether to read the second location as the next iteration's.
       @param structure The symbolic event structure.
       @param po The order to restrict.
       @return The pairs of [po] whose locations [same] accepts. *)
-  let compute_ppo_loc ~same ?(iter = false) structure po =
+  let compute_ppo_loc ?(keep_unlocated = false) ~same ?(iter = false) structure
+      po =
     USet.filter
       (fun (e1, e2) ->
         let loc1 = Events.get_loc structure e1 in
@@ -541,7 +545,7 @@ module EventStructureContext = struct
         in
           match (loc1, loc2) with
           | Some l1, Some l2 -> same l1 l2
-          | _ -> false
+          | _ -> keep_unlocated
       )
       po
 
@@ -554,9 +558,12 @@ module EventStructureContext = struct
 
   (** The pairs of [po] the structure's constraints do not separate — what
       {!ForwardingContext.ppo} keeps of [ppo_loc_base] once an execution's
-      predicates are known, decided here with the constraints alone. *)
-  let compute_ppo_loc_alias ?(iter = false) structure po =
-    compute_ppo_loc
+      predicates are known, decided here with the constraints alone.
+
+      [keep_unlocated] reads a pair without two locations as not provably
+      distinct, and keeps it; see {!compute_ppo_loc}. *)
+  let compute_ppo_loc_alias ?keep_unlocated ?(iter = false) structure po =
+    compute_ppo_loc ?keep_unlocated
       ~same:(fun l1 l2 -> Solver.expoteq ~state:structure.constraints l1 l2)
       ~iter structure po
 
@@ -820,10 +827,22 @@ module ForwardingContext = struct
       write) instead, as this did until it was checked against the paper, puts
       nothing in ppo_sync on either side of it for a real RMW.
 
+      Under [iter] ppo_sync is replaced by ppo_iter_sync, giving the pairs that
+      cross into the next iteration: an event of one iteration synchronised
+      before the next iteration's RMW write is ordered before that RMW's read
+      too, and symmetrically. Episodicity's events condition needs this when a
+      bisection starts the iteration at an RMW, as rcu-1's does at its
+      fetch-and-add.
+
+      @param iter Whether to compose with ppo_iter_sync instead of ppo_sync.
       @param es_ctx The event structure context.
       @param predicates The state under which an RMW's condition must hold.
       @return The computed RMW-induced PPO orderings. *)
-  let compute_ppo_rmw (es_ctx : EventStructureContext.t) predicates =
+  let compute_ppo_rmw ?(iter = false) (es_ctx : EventStructureContext.t)
+      predicates =
+    let ppo_sync =
+      if iter then es_ctx.ppo.ppo_iter_sync else es_ctx.ppo.ppo_sync
+    in
     let rmw_filtered =
       USet.filter
         (fun (er, expr, ew) ->
@@ -833,8 +852,8 @@ module ForwardingContext = struct
     in
     let rmw_inv = USet.map (fun (er, _, ew) -> (ew, er)) rmw_filtered in
       USet.union
-        (URelation.compose [ es_ctx.ppo.ppo_sync; rmw_inv ])
-        (URelation.compose [ rmw_inv; es_ctx.ppo.ppo_sync ])
+        (URelation.compose [ ppo_sync; rmw_inv ])
+        (URelation.compose [ rmw_inv; ppo_sync ])
 
   (** {1 PPO Computation} *)
 
