@@ -1,5 +1,11 @@
 name=seqlock 1
 %%
+// C11 seqlock (Boehm, "Can seqlocks get along with programming language
+// memory models?", MSPC 2012): the reader samples seq with an acquire load,
+// reads the data relaxed, and separates the data read from the re-sample by an
+// acquire fence. The writer orders its first bump before the data write by a
+// release fence and publishes with a release store.
+
 // Allocate the seqlock: seq counter + one data word
 rseq  := malloc 1;
 *rseq := 0;
@@ -11,21 +17,24 @@ rdata := malloc 1;
 // Lock: bump seq to an odd value
 rs := *rseq;
 *rseq := rs + 1;
+fence(release);
 
 // Critical section: store new data
 *rdata := 42;
 
 // Unlock: bump seq to the next even value
-rs2 := *rseq;
-*rseq := rs2 + 1;
+*rseq :rel= rs + 2;
 
 // --- read (retry loop) ---
 do {
   // Sample seq before reading
-  rr1 := *rseq;
+  rr1 :acq= *rseq;
 
   // Read the data
   rval := *rdata;
+
+  // Order the data read before the re-sample
+  fence(acquire);
 
   // Sample seq after reading
   rr2 := *rseq;
