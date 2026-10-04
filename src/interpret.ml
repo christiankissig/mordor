@@ -117,6 +117,9 @@ type events_t = {
           unravelled do-loop body, and per thread, and each occurrence reaches
           the end of the body in a different register environment, so each
           contributes its own guard. *)
+  loop_guards : (int, expr list) Hashtbl.t;
+      (** As [loop_conditions], but the guard alone, without the path condition
+          conjoined to it. *)
   source_spans : (int, source_span) Hashtbl.t;
       (** Mapping from event labels to source code spans. *)
   globals : string USet.t;  (** Set of global variable names. *)
@@ -141,6 +144,7 @@ let create_events ?(ubopt = false) defacto =
     loop_indices = Hashtbl.create 256;
     loop_iters = Hashtbl.create 256;
     loop_conditions = Hashtbl.create 256;
+    loop_guards = Hashtbl.create 256;
     globals = USet.create ();
     alloc = Allocator.create ();
   }
@@ -284,16 +288,24 @@ let prefix (events : events_t) (event : event) structure phi defacto =
     @param loop_index The loop's identifier, if the node carries one.
     @param condition The guard as evaluated at the end of the body.
     @return Unit. *)
-let record_loop_condition (events : events_t) loop_index condition =
+let record_guard table loop_index condition =
   Option.iter
     (fun lid ->
-      let recorded =
-        Hashtbl.find_opt events.loop_conditions lid |> Option.value ~default:[]
-      in
+      let recorded = Hashtbl.find_opt table lid |> Option.value ~default:[] in
         if not (List.exists (Expr.equal condition) recorded) then
-          Hashtbl.replace events.loop_conditions lid (recorded @ [ condition ])
+          Hashtbl.replace table lid (recorded @ [ condition ])
     )
     loop_index
+
+let record_loop_condition (events : events_t) loop_index condition =
+  record_guard events.loop_conditions loop_index condition
+
+(** Record a loop's guard alone, without the path condition
+    {!record_loop_condition} conjoins to it. Episodicity's branching condition
+    reads this: the guard is one of an iteration's branching conditions, the
+    path that reached the loop is not. *)
+let record_loop_guard (events : events_t) loop_index guard =
+  record_guard events.loop_guards loop_index guard
 
 (** Update the register environment with a new binding.
 
@@ -377,6 +389,11 @@ let interpret_thread (events : events_t) interpret env phi =
         List.iter (fun g -> record_loop_condition events (Some lid) g) guards
       )
       fragment.loop_conditions;
+    Hashtbl.iter
+      (fun lid guards ->
+        List.iter (fun g -> record_loop_guard events (Some lid) g) guards
+      )
+      fragment.loop_guards;
     Allocator.resume events.alloc ~after:fragment.alloc;
     events.threads_allocated <- thread_off + fragment.threads_allocated;
     EventStructure.relabel ~off ~thread_off structure
@@ -1069,6 +1086,7 @@ let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
     {
       structure with
       loop_conditions = events.loop_conditions;
+      loop_guards = events.loop_guards;
       constraints = distinctness events.globals structure;
     }
   in
@@ -1200,7 +1218,10 @@ end = struct
             List.mapi
               (fun i l ->
                 if l = lid then iter
-                else match List.nth_opt ctx.iters i with Some it -> it | None -> 1
+                else
+                  match List.nth_opt ctx.iters i with
+                  | Some it -> it
+                  | None -> 1
               )
               ctx.loops
           in
@@ -1689,6 +1710,7 @@ end = struct
              this path" rather than "along some path". A write reachable only on
              another path through the body is then inconsistent with it, instead
              of being kept alive by a sibling path's guard. *)
+          record_loop_guard events loop_index guard;
           record_loop_condition events loop_index
             (List.fold_left
                (fun conjunction p -> Expr.binop conjunction "&&" p)

@@ -64,6 +64,7 @@ let make_structure ?(fj = USet.create ()) ?(malloc_events = USet.create ())
     origin = Hashtbl.create 0;
     loop_indices = Hashtbl.create 0;
     loop_conditions = Hashtbl.create 0;
+    loop_guards = Hashtbl.create 0;
     thread_index = Hashtbl.create 0;
     write_events;
     read_events;

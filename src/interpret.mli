@@ -76,6 +76,9 @@ type events_t = {
       (** Mapping from a loop index to the continuation guards recorded for it,
           one per interpreted occurrence of the loop. Used with symbolic loop
           semantics. *)
+  loop_guards : (int, expr list) Hashtbl.t;
+      (** As [loop_conditions], but the guard alone, without the path condition
+          conjoined to it. *)
   source_spans : (int, source_span) Hashtbl.t;
       (** Mapping from event labels to source code spans. *)
   globals : string USet.t;  (** Set of global variable names. *)

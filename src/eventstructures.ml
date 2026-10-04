@@ -23,6 +23,7 @@ module SymbolicEventStructure = struct
       origin = Hashtbl.create 16;
       loop_indices = Hashtbl.create 16;
       loop_conditions = Hashtbl.create 16;
+      loop_guards = Hashtbl.create 16;
       thread_index = Hashtbl.create 16;
       write_events = USet.create ();
       read_events = USet.create ();
@@ -85,6 +86,7 @@ module SymbolicEventStructure = struct
         );
       loop_indices = with_binding_opt structure.loop_indices event.label loops;
       loop_conditions = structure.loop_conditions;
+      loop_guards = structure.loop_guards;
       thread_index = with_binding_opt structure.thread_index event.label thread;
       write_events =
         ( if event.typ = Write then
@@ -172,10 +174,11 @@ module SymbolicEventStructure = struct
      the operands', and the per-event tables are merged. They differ in
      [conflict] alone.
 
-     [loop_conditions] is the exception. It is keyed by loop, not by event, and
-     holds one guard per interpreted occurrence of the loop, so it is not a
-     table two operands can be asked to agree on; interpretation keeps it and
-     hands it over when it returns (interpret.ml). *)
+     [loop_conditions] and [loop_guards] are the exception. They are keyed by
+     loop, not by event, and hold one guard per interpreted occurrence of the
+     loop, so they are not tables two operands can be asked to agree on;
+     interpretation keeps them and hands them over when it returns
+     (interpret.ml). *)
   let union (a : t) (b : t) ~conflict : t =
     {
       e = join a.e b.e;
@@ -193,6 +196,7 @@ module SymbolicEventStructure = struct
       origin = merged a.origin b.origin;
       loop_indices = merged a.loop_indices b.loop_indices;
       loop_conditions = a.loop_conditions;
+      loop_guards = a.loop_guards;
       thread_index = merged a.thread_index b.thread_index;
       write_events = join a.write_events b.write_events;
       read_events = join a.read_events b.read_events;
@@ -326,6 +330,7 @@ module EventStructure = struct
         origin = map (fun x -> Option.value (relab x) ~default:x) l s.origin;
         loop_indices = map l Fun.id s.loop_indices;
         loop_conditions = s.loop_conditions;
+        loop_guards = s.loop_guards;
         thread_index = map l (( + ) thread_off) s.thread_index;
         write_events = USet.map l s.write_events;
         read_events = USet.map l s.read_events;
@@ -368,6 +373,7 @@ module EventStructure = struct
         tbl Fun.id i s.origin;
         tbl i (fun ls -> String.concat ";" (List.map i ls)) s.loop_indices;
         tbl i exprs s.loop_conditions;
+        tbl i exprs s.loop_guards;
         tbl i i s.thread_index;
         set i s.write_events;
         set i s.read_events;

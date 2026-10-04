@@ -109,7 +109,8 @@ module EventStructure : sig
 
       [env_key] rewrites the keys of the register environments, for the ones
       that spell out a symbol's name, which no traversal of an expression finds.
-      [loop_conditions] is left as it is: it is keyed by loop. *)
+      [loop_conditions] and [loop_guards] are left as they are: they are keyed
+      by loop. *)
   val relabel :
     ?off:int ->
     ?relab:(string -> string option) ->

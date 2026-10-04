@@ -557,6 +557,12 @@ let test_specifications =
        and the events condition had no ppo that could order the other two. *)
     single_failing "programs/episodicity/branch_condition/nested_fail.lit" [ 3 ]
       "Branch condition failure - nested loop constrains pre-loop symbol";
+    (* The loop's guard is one of an iteration's branching conditions, but has
+       no branch event inside the loop; it is checked from loop_guards. *)
+    single_failing "programs/episodicity/branch_condition/guard_fail.lit" [ 3 ]
+      "Branch condition failure - the loop guard constrains a pre-loop symbol";
+    single_episodic "programs/episodicity/valid/guard_in_if.lit"
+      "A branch enclosing the loop is not a condition of its iterations";
     (* write condition *)
     single_failing "programs/episodicity/write_condition/fail.lit" [ 2 ]
       "Write condition failure - a read takes its value from a write of an \
