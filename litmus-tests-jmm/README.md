@@ -4,7 +4,8 @@
 Cases*, 2004](https://www.cs.umd.edu/~pugh/java/memoryModel/CausalityTestCases.html),
 the test battery that accompanies [JSR-133](https://www.cs.umd.edu/~pugh/java/memoryModel/jsr133.pdf),
 Manson and Pugh's Java Memory Model. Each file's assertion message quotes Pugh's
-decision for that test.
+decision for that test. `sevcik_thesis/` holds JMM verdicts from Ševčík's thesis
+([below](#ševčíks-thesis)).
 
 There are 24 files:
 - the twenty tests on Pugh's page;
@@ -175,3 +176,18 @@ The last column is what sMRD decides about the outcome in the assertion, run wit
 | `JCTC18` | allow | allow | open question to SG1; proposes allow | forbids |
 | `JCTC19` | allow | allow | skipped (thread joining) | forbids |
 | `JCTC20` | allow | allow | skipped (thread joining) | forbids |
+
+## Ševčík's thesis
+
+`sevcik_thesis/` holds JMM verdicts from Ševčík, *Program Transformations in Weak
+Memory Models* (PhD thesis, Edinburgh 2008), §5.3, for programs whose sMRD
+verdict lives in `litmus-tests/sevcik_thesis/`.
+
+| Test | File asserts | Ševčík (JMM) | sMRD fallback decides the outcome |
+|---|---|---|---|
+| `Redundant Read after Read Elimination` | forbid `r2 = 1` | forbid; allowed once `r3 := y` becomes `r3 := r2` | allows |
+| `Reordering with external actions` | forbid `r1 = r2 = 1` | forbid; allowed once `print "!"` and `x=1` swap | allows, but of the program without the `print`, which MoRDor cannot express |
+
+sMRD allowing what the JMM forbids here is not a defect in sMRD's terms: the
+thesis' point is that the JMM forbids outcomes that standard compiler
+optimisations produce.

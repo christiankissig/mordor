@@ -285,6 +285,77 @@ module ModelUtils = struct
   let thread_external_of thread_index x =
     USet.filter (fun (a, b) -> not (same_thread thread_index a b)) x
 
+  (** [lock_orders structure e] is the lock orders the events [e] of an
+      execution admit, each as the [[Unlock]; lo; [Lock]] edges it adds to [hb].
+
+      Locks are reentrant, as Java's monitors are: a thread's locks and unlocks
+      of one lock nest as brackets, and only an outermost pair is a critical
+      section. The sections on one lock run one at a time, in some total order
+      that respects [po]: each section's unlock happens before the next
+      section's lock. A section with no unlock never releases the lock, so it
+      must be the last on it; two such admit no order. Locks on different
+      globals are ordered independently.
+
+      With no lock in [e] there is exactly one lock order, and it is empty. *)
+  let lock_orders (structure : symbolic_event_structure) (e : int uset) =
+    let of_type typ =
+      USet.values e
+      |> List.filter (fun x ->
+          match Hashtbl.find_opt structure.events x with
+          | Some (ev : event) -> ev.typ = typ
+          | None -> false
+      )
+      |> List.sort compare
+    in
+    let key x = (Hashtbl.find structure.events x).id in
+    let po a b = USet.mem structure.po (a, b) in
+    let locks = of_type Lock and unlocks = of_type Unlock in
+    (* The lock's depth just after [x]: the locks of it [po]-up to and including
+       [x], less the unlocks. *)
+    let depth x =
+      let count l =
+        List.length (List.filter (fun y -> key y = key x && (y = x || po y x)) l)
+      in
+        count locks - count unlocks
+    in
+    let outermost = List.filter (fun l -> depth l = 1) locks in
+    let release l =
+      List.find_opt
+        (fun u ->
+          key u = key l
+          && po l u
+          && depth u = 0
+          && not
+               (List.exists
+                  (fun x ->
+                    x <> u && key x = key l && po l x && po x u && depth x = 0
+                  )
+                  unlocks
+               )
+        )
+        unlocks
+    in
+    let sections = List.map (fun l -> (l, release l)) outermost in
+    let keys = List.sort_uniq compare (List.map key locks) in
+    let orders_on k =
+      let on_k = List.filter (fun (l, _) -> key l = k) sections in
+      let before (la, _) (lb, ub) = po la lb || (la <> lb && ub = None) in
+        Algorithms.linear_extensions before on_k
+    in
+    let rec edges = function
+      | (_, Some u) :: ((l, _) :: _ as rest) -> (u, l) :: edges rest
+      | _ :: rest -> edges rest
+      | [] -> []
+    in
+      List.fold_left
+        (fun acc k ->
+          List.concat_map
+            (fun order -> List.map (fun prefix -> edges order @ prefix) acc)
+            (orders_on k)
+        )
+        [ [] ] keys
+      |> List.map USet.of_list
+
   (** Common relation builders *)
   (* let build_release_sequence events e po rf rmw loc_restrict = ... *)
 
@@ -1126,7 +1197,9 @@ module SMRD : MEMORY_MODEL = struct
   type cache = {
     rf : (int * int) uset;
     rfi : (int * int) uset;
-    hb : (int * int) uset;
+    hbs : (int * int) uset list;
+        (** [hb] under each lock order the execution admits; none when it admits
+            none. *)
     rmw : (int * int) uset;
   }
 
@@ -1170,13 +1243,20 @@ module SMRD : MEMORY_MODEL = struct
         URelation.compose [ w_rel; rf; r_acq ]
     in
 
-    (* hb = (ppo ∪ dp ∪ sw)⁺ *)
-    let hb =
-      USet.inplace_union ~into:(USet.union ppo dp) sw
-      |> URelation.transitive_closure
+    (* hb = (ppo ∪ dp ∪ sw ∪ [Unlock];lo;[Lock])⁺, for each lock order [lo].
+
+       Lock and unlock are acquire and release in [ppo], so a section's accesses
+       lie between its lock and unlock; the edge from one section's unlock to
+       the next's lock then orders the whole of each before the whole of the
+       next. An execution is coherent when some lock order makes it so. *)
+    let base = USet.inplace_union ~into:(USet.union ppo dp) sw in
+    let hbs =
+      List.map
+        (fun lo -> USet.union base lo |> URelation.transitive_closure)
+        (ModelUtils.lock_orders structure execution.e)
     in
 
-    { rf; rfi; hb; rmw }
+    { rf; rfi; hbs; rmw }
 
   type candidate = cache * (int * int) uset
 
@@ -1188,18 +1268,19 @@ module SMRD : MEMORY_MODEL = struct
         fun ({ rf; rfi; rmw; _ }, co) ->
           CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()
       );
-      ( "hb;eco ∪ hb is irreflexive",
-        fun ({ rf; rfi; hb; _ }, co) ->
-          CoherenceChecks.coherence_axiom ~rf ~rfi ~co ~hb ()
+      ( "hb;eco ∪ hb is irreflexive, for some lock order",
+        fun ({ rf; rfi; hbs; _ }, co) ->
+          List.exists
+            (fun hb -> CoherenceChecks.coherence_axiom ~rf ~rfi ~co ~hb ())
+            hbs
       );
     ]
 
   let check_coherence cache co = holds axioms (candidate cache co)
 
   let check_thin_air cache execution =
-    let { rf; hb; _ } = cache in
-    let result = CoherenceChecks.thin_air_check ~hb ~rf () in
-      result
+    let { rf; hbs; _ } = cache in
+      List.exists (fun hb -> CoherenceChecks.thin_air_check ~hb ~rf ()) hbs
 
   let data_races = None
 

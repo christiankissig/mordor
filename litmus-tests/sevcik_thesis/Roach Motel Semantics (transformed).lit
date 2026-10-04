@@ -1,0 +1,38 @@
+// Roach motel semantics: the transformed program, with r1 := x moved into the
+// critical section.
+//
+// Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008), §5.3.3. Roach Motel Semantics.lit is the source program.
+//
+// The JMM forbids r1 = r2 = r3 = 1 in the source program and ALLOWS it here,
+// which is why the thesis counts roach-motel reordering invalid in the JMM:
+// more synchronisation gives its well-behaved executions more freedom. Under
+// the DRF guarantee the transformation is safe (Table 1.1), and sMRD FORBIDS
+// the outcome in both programs. r3 = 1 needs y = 1; with r1 = 1 that is
+// y := r2, r2 = 1 needs z = 1, and z := r3 closes a cycle out of thin air.
+//
+x := 0; y := 0; z := 0;
+{{
+  lock;
+  x := 2;
+  unlock;
+} ||| {
+  lock;
+  x := 1;
+  unlock;
+}} ||| {{
+  lock;
+    r1 := x;
+    r2 := z;
+    if (r1 = 2) {
+      y := 1;
+    } else {
+      y := r2
+    };
+  unlock;
+} ||| {
+  r3 := y;
+  z := r3
+}}
+%%
+forbid (r1 = 1 && r2 = 1 && r3 = 1) [Sevcik]

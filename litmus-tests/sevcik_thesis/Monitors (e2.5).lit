@@ -1,0 +1,20 @@
+// Store buffering with each location under its own monitor.
+//
+// Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008), Example 2.5, the classic data-race-free program: x under m1, y under m2.
+//
+// Data-race-free, so sequentially consistent: one thread's first section
+// precedes the other's second, so at least one read sees 1, and r1 = r2 = 0 is
+// FORBIDDEN. The other three outcomes are allowed. It needs lock order: before
+// it, sMRD allowed r1 = r2 = 0.
+//
+x := 0; y := 0;
+{
+  lock m1; x := 1; unlock m1;
+  lock m2; r1 := y; unlock m2;
+} ||| {
+  lock m2; y := 1; unlock m2;
+  lock m1; r2 := x; unlock m1;
+}
+%%
+forbid (r1 = 0 && r2 = 0) [Sevcik]
