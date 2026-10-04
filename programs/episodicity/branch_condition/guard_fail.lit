@@ -1,0 +1,16 @@
+// The loop's own guard constrains a value read before the loop.
+//
+// The body touches nothing the guard reads: whether the loop runs once or
+// forever is decided by rv, fixed by the read of x before the loop began. No
+// branch event inside the loop carries the guard, so this is the guard alone
+// failing condition 3. Compare valid/write_only.lit, whose guard reads a
+// pre-loop constant and so constrains nothing.
+x := 0;
+rC := malloc 1;
+*rC := 0;
+rv := x;
+do
+{
+  *rC := 0;
+}
+while (rv = 0)

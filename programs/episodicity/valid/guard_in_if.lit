@@ -1,0 +1,17 @@
+// A loop inside a branch on a pre-loop read.
+//
+// The guard reads only the iteration's own read of *rC. The branch on rv
+// decides whether the loop is entered at all, not whether an iteration is
+// followed by another, so it is not one of the iteration's branching
+// conditions and condition 3 does not see it.
+x := 0;
+rC := malloc 1;
+*rC := 0;
+rv := x;
+if (rv = 0) {
+  do
+  {
+    rt := *rC;
+  }
+  while (rt < 5)
+}

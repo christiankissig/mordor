@@ -206,6 +206,9 @@ type symbolic_event_structure = {
       (* Mapping from events to their loop indices *)
   loop_conditions : (int, expr list) Hashtbl.t; [@printer pp_loop_conditions]
       (* Mapping from events to their loop conditions *)
+  loop_guards : (int, expr list) Hashtbl.t; [@printer pp_loop_conditions]
+      (* Per loop, its guard alone at the end of each interpreted body: the
+         loop_conditions entry without the path condition conjoined *)
   thread_index : (int, int) Hashtbl.t; [@printer pp_thread_index]
   (* Mapping from events to their thread indices *)
   (* cached event filters *)

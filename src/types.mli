@@ -109,6 +109,9 @@ type symbolic_event_structure = {
   loop_conditions : (int, expr list) Hashtbl.t;
       (* Loop conditions for loop
   contexts *)
+  loop_guards : (int, expr list) Hashtbl.t;
+      (* Per loop, its guard alone at the end of each interpreted body: the
+         loop_conditions entry without the path condition conjoined *)
   thread_index : (int, int) Hashtbl.t; (* Thread index per event *)
   (* cached event filters *)
   write_events : int uset;

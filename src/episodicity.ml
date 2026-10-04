@@ -1159,6 +1159,20 @@ module BranchCondition = struct
       over the conjunction — for every valuation of the pre-loop symbols, the
       conjunction is still satisfiable — rather than testing symbol occurrence.
 
+      {2 The loop's own guard}
+
+      The guard deciding whether another iteration follows is one of the
+      iteration's branching conditions too: the paper's algorithms have no other
+      branch, their guard comparing two values read in the iteration. It has no
+      branch event inside the loop, though -- the one the interpreter emits for
+      it sits at the exit, outside -- so it is read from [loop_guards], the
+      guard as evaluated at the end of each interpreted body. Not
+      [loop_conditions], which conjoins the path condition reached there and so
+      carries constraints from outside the loop, such as an [if] the whole loop
+      sits in. A guard on a pre-loop read, [rv := x; do { .. } while (rv = 0)],
+      is the shape this catches: whether the loop ever ends is fixed before it
+      starts.
+
       @param program The complete program as a list of IR nodes
       @param cache The episodicity cache containing event structures
       @param loop_id The identifier of the loop to check
@@ -1236,8 +1250,67 @@ module BranchCondition = struct
           )
           branch_events_in_loop;
 
-        Lwt.return
-          { satisfied = List.length !violations == 0; violations = !violations }
+        let loop_span =
+          Ir_context_utils.collect_loop_ids_and_spans program
+          |> List.assoc_opt loop_id
+          |> Option.join
+        in
+        let guard_span =
+          Option.map
+            (fun stmt ->
+              Hashtbl.find_opt condition_spans stmt
+              |> Option.value ~default:stmt
+            )
+            loop_span
+        in
+        (* A do-while's first copy of the body is unravelled ahead of the loop,
+           so its reads are outside events_in_loop, and the guard recorded at
+           its end is over them. They are an iteration of the loop all the
+           same, and the loop's own text says so. *)
+        let within_loop_text origin =
+          match (loop_span, Hashtbl.find_opt source_spans origin) with
+          | Some loop, Some read ->
+              (loop.start_line, loop.start_col)
+              <= (read.start_line, read.start_col)
+              && (read.end_line, read.end_col) <= (loop.end_line, loop.end_col)
+          | _ -> false
+        in
+        let guard_symbols =
+          Hashtbl.find_opt structure.loop_guards loop_id
+          |> Option.value ~default:[]
+          |> List.concat_map Expr.get_symbols
+          |> USet.of_list
+        in
+          USet.iter
+            (fun sym ->
+              match Hashtbl.find_opt structure.origin sym with
+              | Some origin
+                when not
+                       (USet.mem events_in_loop origin
+                       || within_loop_text origin
+                       ) ->
+                  Logs_safe.debug (fun m ->
+                      m "  Loop guard: constrains %s, read before the loop" sym
+                  );
+                  violations :=
+                    BranchConditionViolation
+                      (BranchConstraintsSymbol
+                         ( sym,
+                           origin,
+                           guard_span,
+                           Hashtbl.find_opt source_spans origin
+                         )
+                      )
+                    :: !violations
+              | _ -> ()
+            )
+            guard_symbols;
+
+          Lwt.return
+            {
+              satisfied = List.length !violations == 0;
+              violations = !violations;
+            }
 end
 
 (** {1 Condition 4: Events Condition — Inter-iteration Ordering (Semantic)} *)
