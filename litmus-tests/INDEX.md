@@ -1,7 +1,7 @@
 # Litmus Tests Index
 
-Total tests: 335
-Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
+Total tests: 345
+Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
@@ -75,6 +75,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
 - on_thin_air_reads19/P2.lit
 - on_thin_air_reads19/P3.lit
 - on_thin_air_reads19/P4.lit
+- on_thin_air_reads19/P5.lit
 - on_thin_air_reads19/P6.lit
 - on_thin_air_reads19/TC7.lit
 - on_thin_air_reads19/TC9a.lit
@@ -173,10 +174,17 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
 - rmw/cas_acqrel_failure_reorder.lit
 - sevcik_thesis/Irrelevant Read Introduction (b).lit
 - sevcik_thesis/Irrelevant Read Introduction.lit
+- sevcik_thesis/LB+ctrl (e2.7).lit
+- sevcik_thesis/LB+monitors (f1.1B).lit
 - sevcik_thesis/LB.lit
 - sevcik_thesis/MP.lit
+- sevcik_thesis/Monitors (e2.5).lit
+- sevcik_thesis/OOTA (f5.1C).lit
 - sevcik_thesis/Redundant Read after Read Elimination.lit
+- sevcik_thesis/Reordering two instructions to one (f6.1).lit
+- sevcik_thesis/Roach Motel Semantics (transformed).lit
 - sevcik_thesis/Roach Motel Semantics.lit
+- sevcik_thesis/Volatile ordering (e2.6).lit
 - single-thread-lift-tests/basic-lift.lit
 - single-thread-lift-tests/basic-not-lift.lit
 - single-thread-lift-tests/lift-above-read-2.lit
@@ -271,6 +279,8 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-03
 - sevcik_thesis/Redundant Read Elimination (f1.4)/RREWB.lit
 - sevcik_thesis/Reordering (f1.3)/RA.lit
 - sevcik_thesis/Reordering (f1.3)/RB.lit
+- sevcik_thesis/Skip/LB+locks.lit
+- sevcik_thesis/Skip/Redundant Write after Read Elimination (transformed).lit
 - sevcik_thesis/Skip/Redundant Write after Read Elimination.lit
 - sevcik_thesis/Skip/Reordering with external actions.lit
 - sevcik_thesis/Trace Preserving Transformation (f1.2)/TPPA.lit

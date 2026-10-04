@@ -1,0 +1,19 @@
+// Load buffering with data dependencies on both sides: out of thin air.
+//
+// Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008), §1.2 and Figure 5.1C, "prohibited".
+//
+// No value other than 0 appears in the program, so r1 = r2 = 1 would be created
+// out of thin air; the JMM's out-of-thin-air guarantee FORBIDS it, as does sMRD.
+// LB.lit is Figure 5.1A, with x := 1 in place of x := r2, which is allowed.
+//
+x := 0; y := 0;
+{
+  r1 := x;
+  y := r1
+} ||| {
+  r2 := y;
+  x := r2
+}
+%%
+forbid (r1 = 1 && r2 = 1) [Sevcik]

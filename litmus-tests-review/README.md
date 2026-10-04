@@ -18,7 +18,7 @@ the one the literature records.
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
 Every file here has an issue in the #46-#62 range. Each records the symptom, the model actually in
-effect, where the test comes from and what to look at next. Five files
+effect, where the test comes from and what to look at next. Three files
 remain. The seven `jctc/` ones have moved to `litmus-tests-jmm/`;
 `avoidoota/listing16.lit` returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57, #59, #60, #61, #62, #65 and #90 have been fixed and
 their files returned to `litmus-tests/`.
@@ -27,8 +27,8 @@ The issues split two ways, and the split decides what is actionable. Only `smrd`
 models. No test here is checked under sMRD any more, so none is a defect as it stands: the two that were,
 `own/FWD-STRENGTHEN-LIFT.lit` #90 and `symmrd/LB+UB+data+z.lit` #65, are fixed. The rest name a model that is
 not supported —
-`[Problem]`, `[JR]` and `[Sevcik]` have a `model_options_table` entry with `coherent = None` and so fall through
-to the `smrd` default, while `[Bridging]`, `[Power]` and `[IMM]` map to `imm`. Those are labelled `smrd-unsupported` and
+`[Problem]` has a `model_options_table` entry with `coherent = None` and so falls through
+to the `smrd` default, while `[Bridging]` and `[Power]` map to `imm`. Those are labelled `smrd-unsupported` and
 carry no `bug` label: they compare one model's expectation against another model's verdict, and the two are
 not claimed to agree, so a divergence there may be entirely correct. Each needs triaging as "does sMRD agree
 with the reference on this shape?" before it is treated as a defect.
@@ -85,15 +85,12 @@ written to disagree.
 
 | Test | Assertion | Model |
 |---|---|---|
-| [`on_thin_air_reads19/P5.lit`](on_thin_air_reads19/P5.lit) #54 | forbid `r1=1` | `[JR]` → sMRD |
 | [`popl_bridging/Preserving detour.lit`](popl_bridging/Preserving detour.lit) #58 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | `[Bridging]` → IMM |
-| [`sevcik_thesis/Skip/LB+locks.lit`](sevcik_thesis/Skip/LB+locks.lit) #64 | forbid `r1=1 ∧ r2=1` | `[Sevcik]` → sMRD |
 | [`rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit`](rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit) #63 | forbid `r1=1 ∧ r2=0` | `[Power]` → IMM |
 
-Much of this group is out-of-thin-air: `P5`, `Preserving detour` and
-`LB+locks` are all asking that a value not be justified by a cycle through its
-own dependencies. `no_oota` is the property MRD exists to
-deliver, so these are the load-bearing ones.
+`Preserving detour` is out-of-thin-air: it asks that a value not be justified by
+a cycle through its own dependencies. `no_oota` is the property MRD exists to
+deliver, so it is the load-bearing one.
 
 **Eight have left this table.** `popl_promising/Page 7 Column 1b.lit` #61 was
 not out of thin air either. Its release store `y.store(1, rel)` is overwritten by

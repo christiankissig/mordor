@@ -1,0 +1,32 @@
+// Redundant read after read elimination, under the Java Memory Model.
+//
+// Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008), §5.3.2. TC18 of Pugh's causality test cases is
+//         similar (Jeffrey & Riely, "On Thin Air Reads", Example 3.7).
+//
+// The JMM FORBIDS r2 = 1 in this program: the only committing sequence that
+// reaches r2 = 1 commits the race on x with value 1, then the race on y with
+// value 1, and after the restart r3 := y can only see the default 0, so x := r3
+// writes 0 and breaks the commitment to write 1. Rewriting r3 := y to r3 := r2
+// keeps that commitment, so the transformed program allows r2 = 1, and the JMM
+// invalidates redundant read after read elimination.
+//
+// litmus-tests/sevcik_thesis/Redundant Read after Read Elimination.lit is the
+// same program asserting allow, which is sMRD's verdict.
+//
+x := 0;
+y := 0;
+{
+  r1 := x;
+  y := r1
+} ||| {
+  r2 := y;
+  if (r2 = 1) {
+    r3 := y;
+    x := r3;
+  } else {
+    x := 1
+  }
+}
+%%
+forbid (r2 = 1) [JMM] "This result is not possible in this program, but it becomes possible after rewriting r3=y to r3=r2."

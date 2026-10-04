@@ -1,0 +1,40 @@
+// Reordering with external actions, under the Java Memory Model.
+//
+// Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008), §5.3.5. The thesis' program:
+//
+//              r1=y                         r2=x
+//              if (r1==1)                   y=r2
+//                 x=1
+//              else {print "!"; x=1}
+//
+// The JMM FORBIDS r1 = r2 = 1: r2 = 1 needs the race on x committed, and the
+// rule for external actions commits the print with it; r1 = 1 then needs the
+// race on y, after which the print cannot be performed. Swapping print "!" and
+// x=1 in the else-branch lifts that rule, and r1 = r2 = 1 becomes allowed, so
+// the JMM invalidates reordering with external actions. Under the DRF
+// guarantee the reordering is safe (Table 1.1).
+//
+// MoRDor has no external actions, so the print is a comment and the program
+// below is the one without it: x := 1 on both branches. That is the shape of
+// Figure 6.1, which sMRD allows by lifting the write over the branch, so the
+// sMRD fallback answers a different program from the one the verdict is about.
+// litmus-tests/sevcik_thesis/Skip/Reordering with external actions.lit is
+// MoRDor's own variant.
+//
+x := 0;
+y := 0;
+{
+  r1 := y;
+  if (r1 = 1) {
+    x := 1;
+  } else {
+    // print "!"
+    x := 1;
+  }
+} ||| {
+  r2 := x;
+  y := r2
+}
+%%
+forbid (r1 = 1 && r2 = 1) [JMM] "cannot result in r1 = r2 = 1 in the JMM"

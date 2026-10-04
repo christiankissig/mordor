@@ -137,6 +137,14 @@ module ModelUtils : sig
     string option ->
     mode option ->
     (int * int) uset
+
+  (** The lock orders the events of an execution admit, each as the
+      [[Unlock]; lo; [Lock]] edges it adds to [hb]: the critical sections on one
+      lock (outermost pairs of reentrant locks) in a total order respecting
+      [po]. One empty order when there is no lock; none when a lock that is
+      never released would have to precede another section. *)
+  val lock_orders :
+    symbolic_event_structure -> int uset -> (int * int) uset list
 end
 
 module CoherenceChecks : sig

@@ -1,0 +1,24 @@
+// Load buffering where the write is the same on both branches.
+//
+// Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008), Figure 6.1, "reordering two instructions to one".
+//
+// r1 := x; if (r1 != 0) y := 1 else y := 1 has the traceset of r1 := x; y := 1,
+// which may be reordered to y := 1; r1 := x. The thesis' framework allows the
+// reordering, so r1 = r2 = 1 is ALLOWED -- as in sMRD, which lifts the two
+// writes over the branch.
+//
+x := 0; y := 0;
+{
+  r1 := x;
+  if (r1 != 0) {
+    y := 1
+  } else {
+    y := 1
+  }
+} ||| {
+  r2 := y;
+  x := r2
+}
+%%
+allow (r1 = 1 && r2 = 1) [Sevcik]

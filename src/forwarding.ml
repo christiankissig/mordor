@@ -471,9 +471,29 @@ module EventStructureContext = struct
         (filter_order structure f ReleaseAcquire)
     in
     let f_sc = filter_order structure f SC in
+    (* A lock acquires and an unlock releases: nothing in a critical section
+       moves out of it, though what is po-before a lock may move in (roach
+       motel). The order between critical sections is the coherence model's
+       ([Coherence.SMRD]). *)
+    let of_type typ =
+      USet.filter
+        (fun x ->
+          match Hashtbl.find_opt structure.events x with
+          | Some (ev : event) -> ev.typ = typ
+          | None -> false
+        )
+        e
+    in
 
-    let e_acq = USet.union r_acq f_sc |> USet.union f_acq |> USet.union f_sc in
-    let e_rel = USet.union w_rel w_sc |> USet.union f_rel |> USet.union f_sc in
+    let e_acq =
+      USet.union r_acq f_sc |> USet.union f_acq |> USet.union (of_type Lock)
+    in
+    let e_rel =
+      USet.union w_rel w_sc
+      |> USet.union f_rel
+      |> USet.union f_sc
+      |> USet.union (of_type Unlock)
+    in
 
     USet.inplace_union ~into:(URelation.cross e_acq e) (URelation.cross e e_rel)
     |> USet.intersection po

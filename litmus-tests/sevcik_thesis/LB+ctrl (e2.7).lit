@@ -1,0 +1,23 @@
+// Load buffering with control dependencies.
+//
+// Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008), Example 2.7, after Manson et al. (POPL 2005).
+//
+// Data-race-free without any synchronisation: no sequentially consistent
+// interleaving writes x or y, so there is no conflicting pair. r1 = 1 is
+// FORBIDDEN.
+//
+x := 0; y := 0;
+{
+  r1 := x;
+  if (r1 = 1) {
+    y := 1
+  }
+} ||| {
+  r2 := y;
+  if (r2 = 1) {
+    x := 1
+  }
+}
+%%
+forbid (r1 = 1) [Sevcik]

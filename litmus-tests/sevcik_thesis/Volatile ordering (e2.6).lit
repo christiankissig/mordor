@@ -1,0 +1,28 @@
+// Synchronisation through volatile flags, with the data in a normal location.
+//
+// Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008), Example 2.6. Java volatiles u and v are written here as release stores and
+//         acquire loads, which is all the example needs of them.
+//
+// Every pair of accesses to x is ordered by a release-acquire pair on u or v, so
+// the program is data-race-free. If r1 = 1, thread 2 has run x := 2 after
+// x := 1, so r2 = 2: r1 = 1, r2 = 1 is FORBIDDEN. The thesis' point is that a C
+// compiler replacing r2 := x by the constant 1 breaks this.
+//
+x := 0; u := 0; v := 0;
+{
+  x := 1;
+  u.store(1, rel);
+  r1 := v.load(acq);
+  if (r1 = 1) {
+    r2 := x
+  }
+} ||| {
+  r3 := u.load(acq);
+  if (r3 = 1) {
+    x := 2;
+    v.store(1, rel)
+  }
+}
+%%
+forbid (r1 = 1 && r2 = 1) [Sevcik]

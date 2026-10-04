@@ -1,20 +1,37 @@
+// Redundant write after read elimination: the source program, with the write
+// x := r1 that the transformation removes.
+//
+// Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
+//         Edinburgh 2008), §5.3.1.
+//
+// The thesis: no well-behaved execution has a read-write race, and r2 := x
+// must see x := r1, which overwrites any other write, so r1 = r2 in every
+// execution and r1 = 1, r2 = 2 is FORBIDDEN. Once the compiler removes
+// x := r1, the JMM allows it through the write-write race between the first two
+// threads, which hold different locks; that is the transformed program,
+// "Redundant Write after Read Elimination (transformed).lit".
+//
+// The assertion used to be allow -- the transformed program's JMM verdict --
+// over a copy with one anonymous lock, and passed only because MoRDor treated
+// lock and unlock as no-ops.
+//
 x := 0;
 {
-  lock;
+  lock m1;
   x := 2;
-  unlock;
+  unlock m1;
 } ||| {{
-  lock;
+  lock m2;
   x := 1;
-  unlock;
+  unlock m2;
 } ||| {
-  lock;
-    lock;
+  lock m1;
+    lock m2;
       r1 := x;
       x := r1;
       r2 := x;
-    unlock;
-  unlock;
+    unlock m2;
+  unlock m1;
 }}
 %%
-allow (r1 = 1 && r2 = 2) [Sevcik]
+forbid (r1 = 1 && r2 = 2) [Sevcik]

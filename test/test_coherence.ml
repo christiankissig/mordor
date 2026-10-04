@@ -588,6 +588,78 @@ let test_symbolic_registry () =
   check string "its name" "smrd" M.name;
   check bool "cheapest first, then fuller" true (List.length M.levels = 2)
 
+(** [lock_orders] over threads given as lists of events, each a [Lock], an
+    [Unlock] or a [Write]: the [hb] edges of every order, sorted. *)
+let lock_orders_of threads =
+  let events =
+    List.concat_map
+      (List.map (fun (id, typ) ->
+           (id, make_event id typ None None None None None None None)
+       )
+      )
+      threads
+    |> make_events_table
+  in
+  let po =
+    List.concat_map
+      (fun thread ->
+        let ids = List.map fst thread in
+          List.concat_map
+            (fun a ->
+              List.filter_map (fun b -> if a < b then Some (a, b) else None) ids
+            )
+            ids
+      )
+      threads
+    |> uset_of_list
+  in
+  let e = uset_of_list (List.concat_map (List.map fst) threads) in
+  let structure = { (SymbolicEventStructure.create ()) with e; events; po } in
+    ModelUtils.lock_orders structure e
+    |> List.map (fun lo -> List.sort compare (USet.values lo))
+    |> List.sort compare
+
+(** One section per thread: either may run first. *)
+let test_lock_orders_two_sections () =
+  check
+    (list (list (pair int int)))
+    "both orders"
+    [ [ (3, 4) ]; [ (6, 1) ] ]
+    (lock_orders_of
+       [
+         [ (1, Lock); (2, Write); (3, Unlock) ];
+         [ (4, Lock); (5, Write); (6, Unlock) ];
+       ]
+    )
+
+(** A lock taken twice by one thread is one section, from the outer lock to the
+    outer unlock. *)
+let test_lock_orders_reentrant () =
+  check
+    (list (list (pair int int)))
+    "outermost pair"
+    [ [ (4, 5) ]; [ (6, 1) ] ]
+    (lock_orders_of
+       [
+         [ (1, Lock); (2, Lock); (3, Unlock); (4, Unlock) ];
+         [ (5, Lock); (6, Unlock) ];
+       ]
+    )
+
+(** Two sections that never release the lock admit no order. *)
+let test_lock_orders_unreleased () =
+  check
+    (list (list (pair int int)))
+    "no order" []
+    (lock_orders_of [ [ (1, Lock) ]; [ (2, Lock) ] ])
+
+(** Without locks there is one order, and it is empty. *)
+let test_lock_orders_none () =
+  check
+    (list (list (pair int int)))
+    "one empty order" [ [] ]
+    (lock_orders_of [ [ (1, Write) ]; [ (2, Write) ] ])
+
 let suite =
   ( "Coherence",
     [
@@ -598,6 +670,10 @@ let suite =
         test_em_relaxed_threshold_own_mode;
       test_case "em fence events" `Quick test_em_fence_events;
       test_case "em strong mode" `Quick test_em_strong_mode;
+      test_case "lock orders: two sections" `Quick test_lock_orders_two_sections;
+      test_case "lock orders: reentrant" `Quick test_lock_orders_reentrant;
+      test_case "lock orders: unreleased" `Quick test_lock_orders_unreleased;
+      test_case "lock orders: none" `Quick test_lock_orders_none;
       test_case "imm_deps data" `Quick test_imm_deps_data;
       test_case "imm_deps control" `Quick test_imm_deps_ctrl;
       test_case "imm_coherent simple" `Quick test_imm_coherent_simple;
