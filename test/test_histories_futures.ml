@@ -21,6 +21,7 @@ let make_test_exec e rf dp ppo rmw ex_p fix_rf_map pointer_map final_env :
     justifications = [];
     co = None;
     fix_rf_map;
+    write_values = [];
     pointer_map;
     final_env;
     aborted = None;

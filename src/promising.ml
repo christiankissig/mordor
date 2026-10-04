@@ -1781,6 +1781,7 @@ let execution_of_result id r : symbolic_execution =
       justifications = [];
       co = Option.map (fun r -> set r.co) r.relations;
       fix_rf_map = Hashtbl.create 0;
+      write_values = [];
       pointer_map = None;
       final_env = r.env;
       aborted = r.why_aborted;

@@ -118,6 +118,10 @@ module FreezeResult : sig
             same terms as [fwd]. *)
     pp : expr list;  (** Path predicates that must be satisfied. *)
     conds : expr list;  (** Additional conditions. *)
+    write_values : (int * expr) list;
+        (** The writes whose value differs from the structure's because their
+            justification narrowed it under a de facto constraint, with that
+            value, in label order. *)
   }
 
   (** [merge_justs kept fr] folds [fr]'s justifications into [kept]'s, skipping

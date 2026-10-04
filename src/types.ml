@@ -237,6 +237,15 @@ let pp_fix_rf_map fmt fix_rf_map =
 let pp_expr_list fmt exprs =
   Format.fprintf fmt "[%s]" (String.concat "; " (List.map show_expr exprs))
 
+let pp_write_values fmt write_values =
+  Format.fprintf fmt "{%s}"
+    (String.concat ", "
+       (List.map
+          (fun (w, v) -> Printf.sprintf "%d -> %s" w (show_expr v))
+          write_values
+       )
+    )
+
 let pp_env fmt env =
   Format.fprintf fmt "{%s}"
     (String.concat ", "
@@ -289,6 +298,18 @@ type symbolic_execution = {
           function of the execution and the model, not of the search's
           traversal. It is still one witness among possibly many. *)
   fix_rf_map : (string, expr) Hashtbl.t; [@printer pp_fix_rf_map]
+  write_values : (int * expr) list; [@printer pp_write_values]
+      (** The writes whose value in this execution is not the structure's, with
+          the value: those whose justification narrowed it, in label order.
+
+          Value assignment concretises a write's value where the justification's
+          context entails it. Mostly that context is the predicate, which the
+          execution satisfies, so the two values agree in the execution and
+          nothing is recorded. A UB fold's assumption is different: it is a de
+          facto constraint, not a predicate, so an execution may write the
+          narrowed value while the register it came from holds another. In
+          symmrd/LB+UB+data+z.lit, [z := r1] writes 0 while [r1 = 1] (the sMRD
+          notes' "inconsistent values of r1", github #65). *)
   pointer_map : (int, value_type) Hashtbl.t option; [@opaque]
   final_env : (string, expr) Hashtbl.t; [@printer pp_env]
   aborted : string option;
