@@ -1,5 +1,4 @@
-[![CI](https://github.com/christiankissig/mordor/actions/workflows/ci.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/ci.yml)
-[![Litmus Tests](https://github.com/christiankissig/mordor/actions/workflows/integration.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/integration.yml)
+[![CI](https://github.com/christiankissig/mordor/actions/workflows/ci.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/ci.yml) [![Litmus Tests](https://github.com/christiankissig/mordor/actions/workflows/litmus-tests.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/litmus-tests.yml) [![Episodicity Tests](https://github.com/christiankissig/mordor/actions/workflows/episodicity-tests.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/episodicity-tests.yml)
 
 
 # MoRDor - Symbolic Modular Relaxed Dependencies (in OCaml)
