@@ -1,0 +1,45 @@
+// Case (b) is not implied by "no write writes a value derived from a read",
+// even when that is asked of every write in the program, not only the loop's.
+//
+// Every write stores a literal. Thread 2 writes y := 1 only under a branch on
+// the value it read from x, so the information travels along a control
+// dependency, which DP contains (the justification predicate P_j of
+// app-defs.tex, def. of freeze). In an execution where the second iteration
+// reads y from thread 2:
+//
+//   W x:=1 (iter 1) -rf-> R x (T2) -DP(ctrl)-> W y:=1 (T2) -rf-> R y (iter 2)
+//
+// so case (b) fails; (a) and (c) do not apply.
+//
+// The acquire read, release write and SC fence are there only so that
+// Condition 4 holds and case (b) is the one condition at stake. Release and
+// acquire alone do not order an iteration's write before the next
+// iteration's read, at another location; the fence does. Without it MoRDor
+// reports Condition 4 failing as well.
+//
+// MoRDor (63403b7) reports the loop episodic, conditions 1-4 all satisfied: its
+// Condition 2 compares a read only against writes of the same loop and does
+// not follow (DP u rf)+ through other threads. caseb_path.py over the
+// `dependencies --output-mode json` export finds the path in 2/7 executions
+// at bound 2 and 12/21 at bound 4.
+rX := malloc 1;
+*rX := 0;
+rY := malloc 1;
+*rY := 0;
+{
+  do
+  {
+    ry :acq= *rY;
+    *rX :rel= 1;
+    fence(sc);
+  }
+  while (ry = 0)
+}
+|||
+{
+  rt := *rX;
+  if (rt = 1)
+  {
+    *rY := 1;
+  }
+}

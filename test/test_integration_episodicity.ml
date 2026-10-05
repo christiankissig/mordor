@@ -594,6 +594,18 @@ let test_specifications =
     single_failing "programs/episodicity/mem_cases/case_c_fails.lit" [ 2 ]
       "Write condition case (c) fails - a modifying RMW's write is read by the \
        next iteration";
+    (* As case_b_fails: case (b) fails by the definition, through a
+       (dp u rf)+ path via thread 2, and MoRDor reports the loop episodic.
+       The relays show that no write storing a value derived from a read
+       implies case (b): thread 2 relays by control or by data. *)
+    single_episodic
+      "programs/episodicity/caseb_no_derived_writes/relay_ctrl.lit"
+      "Write condition case (b) - relayed by a control dependency through \
+       another thread, not followed";
+    single_episodic
+      "programs/episodicity/caseb_no_derived_writes/relay_data.lit"
+      "Write condition case (b) - relayed by a data dependency through another \
+       thread, not followed";
     (* events condition *)
     single_failing "programs/episodicity/events_condition/two_reads_fail.lit"
       [ 4 ] "Event ordering failure - iterations don't separate two reads";
