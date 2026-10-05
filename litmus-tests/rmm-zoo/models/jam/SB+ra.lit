@@ -1,0 +1,16 @@
+// SB+ra -- store buffering over release-acquire accesses, which RA allows.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Sometimes.
+x := 0;
+y := 0;
+{
+  x.store(1, rel);
+  r1 := y.load(acq)
+} ||| {
+  y.store(1, rel);
+  r2 := x.load(acq)
+}
+%%
+allow (r1 = 0 && r2 = 0) [JAM]

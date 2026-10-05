@@ -204,6 +204,7 @@ and C++20 verdicts and compares them with herd7 in its own README.
 | `bmm/` | BMM against TSO: SB with and without volatiles, MP |
 | `crc/` | CRC: release-acquire MP and SB, SB with SC fences, races |
 | `ocaml/` | OCaml: LB, SB plain and atomic, MP through an atomic flag, incoherent non-atomic reads |
+| `jam/` | Java Access Modes: MP, SB, LB, IRIW and RMWs over plain, opaque, release-acquire and volatile accesses, and fences |
 | `wasm/` | WebAssembly: incoherent unordered reads, the JavaScript SC-DRF violation, SB, MP, thin air |
 | `rc11-fragments/` | RC11 against ORC11 and RAR on programs inside their fragments: MP, LB, a race |
 | `steinke-nutt/` | MP, WRC, readers that disagree, a writer seen reversed, Oscillating, Bouajjani et al.'s history (2c), each thread reading the other's write |

@@ -76,7 +76,7 @@ module type MEMORY_MODEL = sig
       release sequence continues through later stores of the writer's thread,
       eliding a release store loses the synchronisation those stores carried,
       and the model rejects every execution that does. *)
-  val elidable : (int, event) Hashtbl.t -> elided:int -> by:int -> bool
+  val elidable : symbolic_event_structure -> elided:int -> by:int -> bool
 
   (** Whether the model allows out-of-thin-air executions: those whose
       reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator

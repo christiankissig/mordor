@@ -1,0 +1,18 @@
+// SB+fullfences -- store buffering over opaque accesses with a full fence between each store and load.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Never.
+x := 0;
+y := 0;
+{
+  x.store(1, rlx);
+  fence(sc);
+  r1 := y.load(rlx)
+} ||| {
+  y.store(1, rlx);
+  fence(sc);
+  r2 := x.load(rlx)
+}
+%%
+forbid (r1 = 0 && r2 = 0) [JAM]

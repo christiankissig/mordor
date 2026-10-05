@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 376
+Total tests: 392
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -349,6 +349,22 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - rmm-zoo/models/crc/MP+rel+acq.lit
 - rmm-zoo/models/crc/SB+rel+acq+fences.lit
 - rmm-zoo/models/crc/SB+rel+acq.lit
+- rmm-zoo/models/jam/CoRR+plain.lit
+- rmm-zoo/models/jam/FADD+FADD.lit
+- rmm-zoo/models/jam/IRIW+vol+ra.lit
+- rmm-zoo/models/jam/IRIW+vol.lit
+- rmm-zoo/models/jam/LB+datas+opq.lit
+- rmm-zoo/models/jam/LB+datas+plain.lit
+- rmm-zoo/models/jam/LB+opq.lit
+- rmm-zoo/models/jam/LB+plain.lit
+- rmm-zoo/models/jam/MP+opq.lit
+- rmm-zoo/models/jam/MP+plain.lit
+- rmm-zoo/models/jam/MP+ra.lit
+- rmm-zoo/models/jam/SB+fullfences.lit
+- rmm-zoo/models/jam/SB+opq.lit
+- rmm-zoo/models/jam/SB+ra.lit
+- rmm-zoo/models/jam/SB+vol.lit
+- rmm-zoo/models/jam/WRC+ra.lit
 - rmm-zoo/models/drf/MP+na+rlx.lit
 - rmm-zoo/models/drf/SB+na.lit
 - rmm-zoo/models/ocaml/CoRR.lit

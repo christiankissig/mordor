@@ -204,6 +204,12 @@ let test_fragments_refuse () =
          %%\n\
          allow (r1 = 1) [CRC]"
       );
+      ( "jam",
+        "x := 0;\n\
+         { lock m; x := 1; unlock m } ||| { r1 := x }\n\
+         %%\n\
+         allow (r1 = 1) [JAM]"
+      );
       ( "ocaml",
         "x := 0;\n\
          { x.store(1, rel) } ||| { r1 := x.load(acq) }\n\

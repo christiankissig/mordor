@@ -1,0 +1,15 @@
+// LB+datas+opq -- LB+datas+plain over opaque accesses, which causality covers.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A.
+x := 0;
+y := 0;
+{
+  r1 := x.load(rlx);
+  y.store(r1, rlx)
+} ||| {
+  r2 := y.load(rlx);
+  x.store(r2, rlx)
+}
+%%
+forbid (r1 = 42 && r2 = 42) [JAM]

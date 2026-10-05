@@ -90,7 +90,7 @@ module type MEMORY_MODEL = sig
       release sequence continues through later stores of the writer's thread,
       eliding a release store loses the synchronisation those stores carried,
       and the model rejects every execution that does. *)
-  val elidable : (int, event) Hashtbl.t -> elided:int -> by:int -> bool
+  val elidable : symbolic_event_structure -> elided:int -> by:int -> bool
 
   (** Whether the model allows out-of-thin-air executions: those whose
       reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator
@@ -265,7 +265,9 @@ module ModelUtils = struct
       the release store elided there is nothing to synchronise with. A release
       store overwriting it synchronises with everything po-before it, the
       elided store's predecessors included. *)
-  let release_elidable_by_release events ~elided ~by =
+  let release_elidable_by_release (structure : symbolic_event_structure)
+      ~elided ~by =
+    let events = structure.events in
     let release id =
       match Hashtbl.find_opt events id with
       | Some { typ = Write; wmod; _ } -> mode_at_least wmod Release
@@ -1681,7 +1683,9 @@ end) : MEMORY_MODEL = struct
   let check_coherence cache co = holds axioms (candidate cache co)
   let check_thin_air _ _ = true
   let data_races = A.data_races
+
   let elidable = ModelUtils.elidable_always
+
   let allows_thin_air = A.allows_thin_air
   let uses_co = A.uses_co
   let orders_allocations = false
@@ -2513,6 +2517,217 @@ module OCaml = AxiomaticWith (struct
       )
 end)
 
+(** Java Access Modes (Bender and Palsberg, OOPSLA 2019), the herd model of
+    their Appendix A. Modes: [na] is Java's plain, [rlx] (and so a plain [:=])
+    opaque, [acq], [rel] and [ra] release-acquire, [sc] volatile.
+
+    The coherence order is the model's own, partial and derived from a
+    visibility order [vo = (rf ∪ svo ∪ ra ∪ push ∪ pushto;push)⁺ ∪ po-loc] by
+    the rules coww, cowr, corw, corr, cofw, coinit, and for RMWs cormwtotal and
+    the recursive cormwexcl; the axioms are [acyclic co] and
+    [acyclic ((po ∪ rf) ∩ (opq × opq))]. So plain accesses are coherent but may
+    be out of thin air, which the model allows. The final writes cofw orders
+    the other writes before are the last in the candidate coherence order, as
+    in herd. The trace order [to], a linearisation of the accesses, matters
+    only for full fences, volatiles and RMWs, and is then searched.
+
+    The paper's [filters.cat], which turns fences into specified orders, is not
+    published; here, after the JDK: a release fence orders accesses before it
+    before writes after it, an acquire fence reads before it before accesses
+    after it, and a full ([sc]) fence is a push order. Java has no undefined
+    behaviour, so a race is defined. Locks and consume are refused. *)
+module JAM = AxiomaticWith (struct
+  let name = "jam"
+  let uses_co = true
+
+  type derived = {
+    nodes : int list;  (** the accesses, less the initial event *)
+    loc : int -> int -> bool;  (** one location, the initial event at all *)
+    writes : int uset;  (** with the initial event *)
+    base : (int * int) uset;  (** [rf ∪ svo ∪ ra ∪ push] *)
+    po_loc : (int * int) uset;
+    push : (int * int) uset;
+    into : (int * int) uset;
+    needs_to : bool;
+    causality : bool;
+  }
+
+  let in_modes (v : Vocab.t) modes =
+    accesses_in v (fun m -> List.mem m modes) |> URelation.identity
+
+  let fences_in (v : Vocab.t) modes =
+    USet.filter
+      (fun id ->
+        match Hashtbl.find_opt v.events id with
+        | Some { typ = Fence; fmod; _ } -> List.mem fmod modes
+        | _ -> false
+      )
+      v.e
+    |> URelation.identity
+
+  let prepare (v : Vocab.t) =
+    let initial = v.initial in
+    let mem = USet.union v.reads v.writes in
+    let m = URelation.identity mem in
+    let opq = accesses_in v (fun m -> m <> Nonatomic) in
+    let rel = URelation.compose [ v.w; in_modes v [ Release; ReleaseAcquire ] ]
+    and acq = URelation.compose [ v.r; in_modes v [ Acquire; ReleaseAcquire ] ]
+    and vol = in_modes v [ SC ] in
+    let after f = URelation.compose [ v.po; f; v.po ] in
+    let svo =
+      Vocab.union
+        [
+          URelation.compose [ m; after (fences_in v [ Release ]); v.w ];
+          URelation.compose [ v.r; after (fences_in v [ Acquire ]); m ];
+          URelation.compose [ m; after (fences_in v [ ReleaseAcquire ]); m ];
+        ]
+    in
+    let spush = URelation.compose [ m; after (fences_in v [ SC ]); m ] in
+    let ra =
+      Vocab.union
+        [ URelation.compose [ v.po; rel ]; URelation.compose [ acq; v.po ] ]
+    in
+    let volint =
+      Vocab.union
+        [
+          URelation.compose [ v.po; URelation.compose [ vol; v.r ] ];
+          URelation.compose [ URelation.compose [ vol; v.w ]; v.po ];
+        ]
+    in
+    let push = Vocab.union [ spush; volint ] in
+    let loc a b =
+      Some a = initial || Some b = initial || USet.mem v.same_loc (a, b)
+    in
+    let causal =
+      Vocab.union [ v.po; v.rf ]
+      |> USet.filter (fun (a, b) -> USet.mem opq a && USet.mem opq b)
+    in
+      {
+        nodes =
+          USet.values mem
+          |> List.filter (fun id -> Some id <> initial)
+          |> List.sort compare;
+        loc;
+        writes = v.writes;
+        base = Vocab.union [ v.rf; svo; ra; push ];
+        po_loc = v.loc_restrict v.po;
+        push;
+        into = Vocab.union [ svo; spush; ra; volint ];
+        needs_to = USet.size push > 0 || USet.size v.rmw > 0;
+        causality = URelation.acyclic causal;
+      }
+
+  let wwco (d : derived) r =
+    USet.filter
+      (fun (a, b) ->
+        a <> b && USet.mem d.writes a && USet.mem d.writes b && d.loc a b
+      )
+      r
+
+  (** [co-jom] under the final writes [cofw] and the trace order [to]. *)
+  let co_jom (x : derived axiomatic_candidate) ~cofw ~to_ =
+    let v = x.v and d = x.d in
+    let pushto =
+      match to_ with
+      | None -> USet.create ()
+      | Some t ->
+          let heads = URelation.pi_1 d.push in
+            USet.filter (fun (a, b) -> USet.mem heads a && USet.mem heads b) t
+    in
+    let vo =
+      Vocab.union
+        [
+          URelation.transitive_closure
+            (Vocab.union [ d.base; URelation.compose [ pushto; d.push ] ]);
+          d.po_loc;
+        ]
+    in
+    let coinit =
+      match v.initial with
+      | None -> USet.create ()
+      | Some i ->
+          USet.filter (fun w -> w <> i) v.writes
+          |> USet.map (fun w -> (i, w))
+    in
+    let rmw_writes = URelation.pi_2 v.rmw in
+    let cormwtotal =
+      match to_ with
+      | None -> USet.create ()
+      | Some t ->
+          USet.filter
+            (fun (a, b) -> USet.mem rmw_writes a || USet.mem rmw_writes b)
+            t
+    in
+    let base =
+      wwco d
+        (Vocab.union
+           [
+             vo;
+             URelation.compose [ vo; v.rfi ];
+             URelation.compose [ vo; v.po ];
+             URelation.compose [ v.rf; v.po; v.rfi ];
+             cofw;
+             coinit;
+             cormwtotal;
+           ]
+        )
+    in
+    let excl = URelation.inverse (URelation.compose [ v.rf; v.rmw ]) in
+    let rec fix co =
+      let next = Vocab.union [ co; wwco d (URelation.compose [ excl; co ]) ] in
+        if USet.size next = USet.size co then co else fix next
+    in
+      fix base
+
+  let coherent (x : derived axiomatic_candidate) =
+    let v = x.v and d = x.d in
+    (* The final write of each location is the last in the candidate order. *)
+    let final w =
+      not
+        (USet.exists
+           (fun w' -> w' <> w && d.loc w w' && USet.mem x.co (w, w'))
+           v.writes
+        )
+    in
+    let cofw =
+      URelation.cross v.writes (USet.filter final v.writes)
+      |> USet.filter (fun (a, b) -> a <> b && d.loc a b)
+    in
+      if not d.needs_to then URelation.acyclic (co_jom x ~cofw ~to_:None)
+      else
+        let order =
+          URelation.transitive_closure (Vocab.union [ cofw; v.rf; d.into ])
+        in
+          List.exists
+            (fun linear ->
+              let rec pairs = function
+                | [] -> []
+                | a :: rest -> List.map (fun b -> (a, b)) rest @ pairs rest
+              in
+              let to_ = USet.of_list (pairs linear) in
+                URelation.acyclic (co_jom x ~cofw ~to_:(Some to_))
+            )
+            (Algorithms.linear_extensions
+               (fun a b -> USet.mem order (a, b))
+               d.nodes
+            )
+
+  let axioms =
+    [
+      ( "(po ∪ rf) ∩ (opq × opq) is acyclic",
+        fun (x : derived axiomatic_candidate) -> x.d.causality
+      );
+      ("co-jom is acyclic for some trace order", coherent);
+    ]
+
+  let data_races = None
+  let allows_thin_air = true
+
+  let check_program =
+    refuse_outside ~name:"JAM" ~description:"programs without locks or consume"
+      (fun ev -> no_locks ev && mode_of ev <> Some Consume)
+end)
+
 (** WebAssembly's memory model (Watt, Rossberg and Pichon-Pharabod, OOPSLA
     2019, Fig. 7), on MoRDor's accesses: each is to one whole location, so all
     are aligned, of one size and tear-free, and each read reads from one write.
@@ -3028,6 +3243,7 @@ module ModelRegistry = struct
         [ "drfx"; "denovosync" ];
       register "crc" (fun () -> (module CRC : MEMORY_MODEL));
       register "ocaml" (fun () -> (module OCaml : MEMORY_MODEL));
+      register "jam" (fun () -> (module JAM : MEMORY_MODEL));
       register "rar" (fun () -> rc11_variant RC11Config.rar);
       register "mrd" (fun () -> (module MRD : MEMORY_MODEL));
 
@@ -3381,12 +3597,27 @@ let location_equality structure execution =
     elision [execution] was built with stand. [we] pairs the overwriting write
     with the one it elides. A partial execution's elisions are among its
     completion's, so a partial execution this rejects has no admitted
-    completion. *)
+    completion.
+
+    An out-of-thin-air execution, one with a cycle in [dp ∪ ppo ∪ rf], reaches
+    a model only if the model allows thin air, and then only with elisions
+    within a thread. Eliding a store because another thread overwrites it -- an
+    initialising store, overwritten through the fork -- left such an execution
+    reading the initial event at a value nothing wrote. *)
 let elisions_admitted (module M : MEMORY_MODEL)
     (structure : symbolic_event_structure) (execution : symbolic_execution) =
   USet.for_all
-    (fun (by, elided) -> M.elidable structure.events ~elided ~by)
+    (fun (by, elided) -> M.elidable structure ~elided ~by)
     execution.we
+  && ((not M.allows_thin_air)
+     || URelation.acyclic
+          (USet.union (USet.union execution.dp execution.ppo) execution.rf)
+     || USet.for_all
+          (fun (by, elided) ->
+            ModelUtils.same_thread structure.thread_index elided by
+          )
+          execution.we
+     )
 
 (** [allows_thin_air models]: some model of [models] allows out-of-thin-air
     executions, so the generator has to keep them for it. *)

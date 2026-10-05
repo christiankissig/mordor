@@ -1,0 +1,19 @@
+// LB+datas+plain -- load buffering through data dependencies over plain
+// accesses, the out-of-thin-air shape.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Causality, acyclic((po | rf) & opq), covers opaque and stronger
+// accesses only: the paper does not tackle thin air for plain accesses, so JAM
+// allows it. Over opaque accesses the same shape is forbidden. herd7 cannot
+// test this: it never makes a value out of a circular dependency.
+x := 0;
+y := 0;
+{
+  r1 := x.load(na);
+  y.store(r1, na)
+} ||| {
+  r2 := y.load(na);
+  x.store(r2, na)
+}
+%%
+allow (r1 = 42 && r2 = 42) [JAM]

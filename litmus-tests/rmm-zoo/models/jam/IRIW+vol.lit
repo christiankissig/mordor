@@ -1,0 +1,20 @@
+// IRIW+vol -- IRIW over volatile accesses, the paper's Fig. 12b: forbidden.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Never.
+x := 0;
+y := 0;
+{
+  x.store(1, sc)
+} ||| {
+  y.store(1, sc)
+} ||| {
+  r1 := x.load(sc);
+  r2 := y.load(sc)
+} ||| {
+  r3 := y.load(sc);
+  r4 := x.load(sc)
+}
+%%
+forbid (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [JAM]

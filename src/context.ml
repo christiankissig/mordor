@@ -613,6 +613,7 @@ let implemented_zoo_models =
     "denovosync";
     "crc";
     "ocaml";
+    "jam";
   ]
 
 (** Predefined configurations for known memory models.

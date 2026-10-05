@@ -1,0 +1,16 @@
+// MP+plain -- message passing over plain accesses.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Sometimes.
+x := 0;
+y := 0;
+{
+  x.store(1, na);
+  y.store(1, na)
+} ||| {
+  r1 := y.load(na);
+  r2 := x.load(na)
+}
+%%
+allow (r1 = 1 && r2 = 0) [JAM]

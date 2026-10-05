@@ -1,0 +1,16 @@
+// MP+ra -- plain data published through a release write and an acquire read.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Never.
+x := 0;
+y := 0;
+{
+  x.store(1, na);
+  y.store(1, rel)
+} ||| {
+  r1 := y.load(acq);
+  r2 := x.load(na)
+}
+%%
+forbid (r1 = 1 && r2 = 0) [JAM]
