@@ -78,6 +78,12 @@ module type MEMORY_MODEL = sig
       and the model rejects every execution that does. *)
   val elidable : (int, event) Hashtbl.t -> elided:int -> by:int -> bool
 
+  (** Whether the model allows out-of-thin-air executions: those whose
+      reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator
+      drops them before any model is asked unless a model of the run allows
+      them; then every model that does not rejects them itself. *)
+  val allows_thin_air : bool
+
   (** Whether [check_coherence] reads the coherence order it is given. A model
       whose axioms quantify over orders of their own -- a view per process, an
       arbitration per session -- does not, and the search then asks it once
@@ -277,6 +283,10 @@ val check_for_coherence :
   symbolic_execution ->
   restrictions ->
   int URelation.t option
+
+(** [allows_thin_air models]: some model of [models] allows out-of-thin-air
+    executions, so the generator has to keep them for it. *)
+val allows_thin_air : string list -> bool
 
 (** [rejected_by_one_location structure execution restrictions]: the model
     rejects [execution] whatever the coherence order at other locations: it

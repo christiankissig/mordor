@@ -385,6 +385,32 @@ let test_elision_follows_release_sequences () =
     in
       check bool "a release store synchronises in its place" true valid
 
+(** The standard's models allow out-of-thin-air executions, and the others of
+    the same run still forbid them: one enumeration keeps the executions for the
+    first and each of the others rejects them itself. *)
+let test_thin_air_per_model () =
+  let valid, verdicts =
+    check_source
+      {|x := 0; y := 0;
+{ r1 := x.load(rlx); y.store(r1, rlx) } ||| { r2 := y.load(rlx); x.store(r2, rlx) }
+%%
+allow (r1 = 42 && r2 = 42) [C11, C20]
+forbid (r1 = 42 && r2 = 42) [RC11, smrd]|}
+  in
+    check bool "C11 and C++20 allow thin air, RC11 and sMRD forbid it" true
+      valid;
+    check (list bool) "every assertion holds" [ true; true; true; true ]
+      (List.map snd verdicts);
+    let valid, _ =
+      check_source
+        {|x := 0; y := 0;
+{ r1 := x.load(rlx); y.store(r1, rlx) } ||| { r2 := y.load(rlx); x.store(r2, rlx) }
+%%
+forbid (r1 = 42 && r2 = 42) [RC11]|}
+    in
+      check bool "without them, the generator drops thin air as before" true
+        valid
+
 let suite =
   ( "Zoo models",
     [
@@ -403,5 +429,6 @@ let suite =
       test_case "SC fences separate C++20" `Quick test_sc_fences_separate_c20;
       test_case "elision follows release sequences" `Quick
         test_elision_follows_release_sequences;
+      test_case "thin air per model" `Quick test_thin_air_per_model;
     ]
   )

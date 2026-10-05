@@ -1323,8 +1323,9 @@ module Freeze = struct
       @param f
         Called as [f acc indices rf], with [rf] as a list of [(read, write)]
         pairs. *)
-  let rf_search ?shuffle ?inspect ?prune ?(order = `Label) structure
-      (path : path_info) ~scope ~elided ~constraints statex ppo dp p_combined =
+  let rf_search ?shuffle ?inspect ?prune ?(order = `Label) ?(thin_air = false)
+      structure (path : path_info) ~scope ~elided ~constraints statex ppo dp
+      p_combined =
     let { reads = read_events; writes = write_events } = scope in
     let w_cross_r = URelation.cross write_events read_events in
 
@@ -1468,6 +1469,7 @@ module Freeze = struct
           then false
           else if
             !rf_prune_rhb
+            && (not thin_air)
             && Validation.rf_closes_rhb_cycle ~succ:rhb_succ ~rf:combo (w, r)
           then false
           else
@@ -1512,10 +1514,10 @@ module Freeze = struct
       in
         (all_rf_inv_map, reads, check_partial)
 
-  let fold_path_rf ?shuffle ?inspect ?prune structure path ~scope ~elided
-      ~constraints statex ppo dp p_combined f init =
+  let fold_path_rf ?shuffle ?inspect ?prune ?thin_air structure path ~scope
+      ~elided ~constraints statex ppo dp p_combined f init =
     let alternatives, reads, check_partial =
-      rf_search ?shuffle ?inspect ?prune structure path ~scope ~elided
+      rf_search ?shuffle ?inspect ?prune ?thin_air structure path ~scope ~elided
         ~constraints statex ppo dp p_combined
     in
       ListMapCombinationBuilder.fold_combinations alternatives ~check_partial
@@ -1732,8 +1734,9 @@ module Freeze = struct
       maps the result over the candidates. That work used to be done per
       candidate, and on rcu-3-2t-trunc, with 138,000 candidates for 3
       combinations, it was half the run. *)
-  let instantiate_execution (structure : symbolic_event_structure) path dp ppo
-      j_list (pp : expr list) p_combined elided =
+  let instantiate_execution ?(thin_air = false)
+      (structure : symbolic_event_structure) path dp ppo j_list (pp : expr list)
+      p_combined elided =
     let e, dp, ppo, read_events, rmw =
       frame structure path dp ppo p_combined elided
     in
@@ -1853,8 +1856,10 @@ module Freeze = struct
                       )
                 )
               );
-              (* TODO discern memory model *)
-              let*? () = (rhb_acyclic, "RHB is not acyclic") in
+              (* Unless a model of the run allows out-of-thin-air executions:
+                 then each model that does not rejects them itself
+                 (Coherence.allows_thin_air). *)
+              let*? () = (rhb_acyclic || thin_air, "RHB is not acyclic") in
                 Logs_safe.debug (fun m ->
                     m "  [instantiate_execution] RHB acyclicity check passed"
                 );
@@ -2273,6 +2278,9 @@ module Freeze = struct
       )
 
   and enumerate_values ~coherence_models structure prep ~include_rf =
+    (* Read-from relations with a cycle in rhb are searched and kept when a
+       model of the run allows out-of-thin-air executions. *)
+    let thin_air = Coherence.allows_thin_air coherence_models in
     let {
       prep_path = path;
       prep_justs = j_list;
@@ -2292,7 +2300,7 @@ module Freeze = struct
         in
         let alternatives, reads =
           try
-            fold_path_rf
+            fold_path_rf ~thin_air
               ~inspect:(fun map reads ->
                 raise (S11.Stop (Hashtbl.copy map, reads))
               )
@@ -2331,8 +2339,8 @@ module Freeze = struct
       )
       else
         let instantiate =
-          instantiate_execution structure path dp ppo j_list path.p p_combined
-            elided
+          instantiate_execution ~thin_air structure path dp ppo j_list path.p
+            p_combined elided
         in
         (* Each relation is instantiated as it is built, and only the executions
          kept: the relations were a list, and on rcu-2 one combination's ran to
@@ -2351,7 +2359,7 @@ module Freeze = struct
                 if List.length !found < k then
                   try
                     incr tries;
-                    fold_path_rf
+                    fold_path_rf ~thin_air
                       ~shuffle:(Random.State.make [| seed; i |])
                       ?inspect:
                         ( if i = 0 then
@@ -2405,7 +2413,7 @@ module Freeze = struct
           else if include_rf && Option.is_some S13.probes then (
             let k = Option.get S13.probes in
             let alternatives, reads, check_partial =
-              rf_search
+              rf_search ~thin_air
                 ~prune:(fun () ->
                   coherence_prune structure path dp ppo p_combined elided
                     coherence_models
@@ -2447,7 +2455,7 @@ module Freeze = struct
           else if include_rf then
             let s12_found = ref [] in
               try
-                fold_path_rf
+                fold_path_rf ~thin_air
                   ~prune:(fun () ->
                     coherence_prune structure path dp ppo p_combined elided
                       coherence_models
@@ -2529,9 +2537,10 @@ module Freeze = struct
       |> Option.value ~default:60.
       )
 
-  let instantiator structure prep =
-    instantiate_execution structure prep.prep_path prep.prep_dp prep.prep_ppo
-      prep.prep_justs prep.prep_path.p prep.prep_p_combined prep.prep_elided
+  let instantiator ?thin_air structure prep =
+    instantiate_execution ?thin_air structure prep.prep_path prep.prep_dp
+      prep.prep_ppo prep.prep_justs prep.prep_path.p prep.prep_p_combined
+      prep.prep_elided
 
   (** [frame_of structure prep] is the combination's events, [dp] and [ppo]:
       what its future, and minimality, compare it by. *)
@@ -2547,6 +2556,7 @@ module Freeze = struct
   let search_space ?order ~coherence_models structure prep =
     let path = prep.prep_path and elided = prep.prep_elided in
       rf_search ?order
+        ~thin_air:(Coherence.allows_thin_air coherence_models)
         ~prune:(fun () ->
           coherence_prune structure path prep.prep_dp prep.prep_ppo
             prep.prep_p_combined elided coherence_models
@@ -2565,7 +2575,11 @@ module Freeze = struct
     let alternatives, reads, check_partial =
       search_space ~coherence_models structure prep
     in
-    let instantiate = instantiator structure prep in
+    let instantiate =
+      instantiator
+        ~thin_air:(Coherence.allows_thin_air coherence_models)
+        structure prep
+    in
       fun rf ->
         let write = Hashtbl.create 16 in
           USet.iter (fun (w, r) -> Hashtbl.replace write r w) rf;
@@ -2597,7 +2611,11 @@ module Freeze = struct
     let alternatives, reads, check_partial =
       search_space ~order:`Constrained ~coherence_models structure prep
     in
-    let instantiate = instantiator structure prep in
+    let instantiate =
+      instantiator
+        ~thin_air:(Coherence.allows_thin_air coherence_models)
+        structure prep
+    in
     let deadline = Unix.gettimeofday () +. !witness_seconds in
     let steps = ref 0 in
     let check_partial combo ?alternatives pair =

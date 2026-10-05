@@ -92,6 +92,12 @@ module type MEMORY_MODEL = sig
       and the model rejects every execution that does. *)
   val elidable : (int, event) Hashtbl.t -> elided:int -> by:int -> bool
 
+  (** Whether the model allows out-of-thin-air executions: those whose
+      reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator
+      drops them before any model is asked unless a model of the run allows
+      them; then every model that does not rejects them itself. *)
+  val allows_thin_air : bool
+
   (** Whether [check_coherence] reads the coherence order it is given. A model
       whose axioms quantify over orders of their own -- a view per process, an
       arbitration per session -- does not, and the search then asks it once
@@ -677,6 +683,7 @@ module IMM : MEMORY_MODEL = struct
 
   (* IMM's release sequence continues through [po ∩ loc]. *)
   let elidable = ModelUtils.release_elidable_by_release
+  let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
   let check_program _ = Ok ()
@@ -806,9 +813,10 @@ module RC11Config = struct
       RC11's [psc] for both, and so forbid IRIW with SC fences, which C11
       allows.
 
-      None of the three has a thin-air axiom, and none can show a thin-air
-      execution: candidate generation rejects a cycle in [dp ∪ ppo ∪ rf] before
-      any model is asked, so these are the models over sMRD's candidates. *)
+      None of the three has a thin-air axiom, and all three allow
+      out-of-thin-air executions ([allows_thin_air]): when one is asked, the
+      generator keeps executions with a cycle in [dp ∪ ppo ∪ rf], which every
+      other model then rejects itself. *)
   let c11 =
     {
       base with
@@ -1187,6 +1195,9 @@ end) : MEMORY_MODEL = struct
     match Config.config.release_sequence with
     | Rc11 | Cpp11 -> ModelUtils.release_elidable_by_release
     | Rc17 -> ModelUtils.elidable_always
+
+  (* The standard's models have no thin-air axiom (RC11Config.no_thin_air). *)
+  let allows_thin_air = Config.config.no_thin_air = `None
   let uses_co = true
   let orders_allocations = Config.config.allocations_are_writes
   let check_program _ = Ok ()
@@ -1286,6 +1297,7 @@ module SMRD : MEMORY_MODEL = struct
 
   (* [sw = [W_rel];rf;[R_acq]], with no release sequence to break. *)
   let elidable = ModelUtils.elidable_always
+  let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
   let check_program _ = Ok ()
@@ -1329,6 +1341,7 @@ module Undefined : MEMORY_MODEL = struct
   let check_thin_air execution cache = true
   let data_races = None
   let elidable = ModelUtils.elidable_always
+  let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
   let check_program _ = Ok ()
@@ -1344,11 +1357,11 @@ end
     primitive.
 
     Two limits apply to all of them, and neither is theirs. A model here is a
-    filter on sMRD's candidate executions, so a model weaker than sMRD's
-    thin-air discipline cannot exhibit an out-of-thin-air execution sMRD never
-    generates. And the distributed consistency models are stated over histories;
-    reading one as a shared-memory predicate needs an encoding, which each
-    module's comment states. *)
+    filter on sMRD's candidate executions, which have no cycle in
+    [dp ∪ ppo ∪ rf] unless a model of the run allows out-of-thin-air
+    executions; none of these does. And the distributed consistency models are
+    stated over histories; reading one as a shared-memory predicate needs an
+    encoding, which each module's comment states. *)
 
 (** The vocabulary shared by the models below: one execution's events and
     relations, restricted to the execution. *)
@@ -1522,6 +1535,7 @@ end) : MEMORY_MODEL = struct
   let check_thin_air _ _ = true
   let data_races = None
   let elidable = ModelUtils.elidable_always
+  let allows_thin_air = false
   let uses_co = A.uses_co
   let orders_allocations = false
   let check_program _ = Ok ()
@@ -2776,6 +2790,29 @@ let elisions_admitted (module M : MEMORY_MODEL)
     (fun (by, elided) -> M.elidable structure.events ~elided ~by)
     execution.we
 
+(** [allows_thin_air models]: some model of [models] allows out-of-thin-air
+    executions, so the generator has to keep them for it. *)
+let allows_thin_air models =
+  List.exists
+    (fun name ->
+      match ModelRegistry.lookup name with
+      | Some model ->
+          let module M = (val model : MEMORY_MODEL) in
+          M.allows_thin_air
+      | None -> false
+    )
+    models
+
+(** [thin_air_admitted model execution]: [model] allows out-of-thin-air
+    executions, or [execution]'s reads-happen-before, [dp ∪ ppo ∪ rf], is
+    acyclic. A model that does not allow them asks this itself, since the
+    generator keeps them when another model of the run does. *)
+let thin_air_admitted (module M : MEMORY_MODEL) (execution : symbolic_execution)
+    =
+  M.allows_thin_air
+  || URelation.acyclic
+       (USet.union (USet.union execution.dp execution.ppo) execution.rf)
+
 (** [rejected_by_one_location structure execution restrictions]: the model
     rejects [execution] whatever the coherence order at other locations, because
     it elides a write the model does not let be elided, its thin-air check
@@ -2802,6 +2839,7 @@ let rejected_by_one_location ?eqlocs structure execution restrictions =
           (build_location_restriction structure execution eqlocs)
       in
         (not (elisions_admitted model structure execution))
+        || (not (thin_air_admitted model execution))
         || (not (M.check_thin_air cache execution))
         ||
         let writes =
@@ -2862,6 +2900,7 @@ let check_for_coherence structure execution restrictions =
         (* Check thin-air *)
         let thin_air =
           elisions_admitted model structure execution
+          && thin_air_admitted model execution
           && M.check_thin_air cache execution
         in
         let s10_t2 = Unix.gettimeofday () in
@@ -2930,6 +2969,7 @@ let data_races structure execution name =
               if
                 not
                   (elisions_admitted model structure execution
+                  && thin_air_admitted model execution
                   && M.check_thin_air cache execution
                   )
               then none
