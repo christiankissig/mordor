@@ -570,6 +570,30 @@ let test_specifications =
     single_episodic "programs/episodicity/valid/rotated.lit"
       "Episodic once the loop boundary moves - a single satisfying bisection \
        suffices";
+    (* Condition 2 case by case: (a) a write of the same iteration, (b) a
+       write no iteration of the loop reaches, (c) a read-don't-modify-write
+       derived from those. Each case has a loop it admits and one it fails. *)
+    single_episodic "programs/episodicity/mem_cases/case_a_admits.lit"
+      "Write condition case (a) - each read takes the write just before it";
+    single_failing "programs/episodicity/mem_cases/case_a_fails.lit" [ 2 ]
+      "Write condition case (a) fails - some read can only read from an \
+       earlier iteration";
+    single_episodic "programs/episodicity/mem_cases/case_b_admits.lit"
+      "Write condition case (b) - the read takes another thread's write, which \
+       no iteration reaches";
+    (* By the definition case (b) fails here: an iteration's write reaches,
+       through (dp u rf)+ via another thread, a write a later iteration reads.
+       MoRDor reports the loop episodic, its write condition not following
+       dp u rf through other threads; the test states what MoRDor does. *)
+    single_episodic "programs/episodicity/mem_cases/case_b_fails.lit"
+      "Write condition case (b) - not followed through other threads, so \
+       MoRDor reports episodic where the definition fails case (b)";
+    single_episodic "programs/episodicity/mem_cases/case_c_admits.lit"
+      "Write condition case (c) - each iteration reads the previous one's \
+       read-don't-modify-write";
+    single_failing "programs/episodicity/mem_cases/case_c_fails.lit" [ 2 ]
+      "Write condition case (c) fails - a modifying RMW's write is read by the \
+       next iteration";
     (* events condition *)
     single_failing "programs/episodicity/events_condition/two_reads_fail.lit"
       [ 4 ] "Event ordering failure - iterations don't separate two reads";

@@ -1,0 +1,26 @@
+name=case b fails
+%%
+// Case (b) fails and nothing else does. Iteration 1's fadd read reaches, by
+// dp, its write; Thread 2 reads that write and writes y by dp from it; a later
+// iteration reads y from that write. The fadd(rX,0) is an acquire/release
+// synchronisation point, keeping Condition 4, and a read-don't-modify-write,
+// keeping case (c) for its own read. MoRDor (8bf006f) reports the loop episodic:
+// its Condition 2 does not follow (dp u rf)+ through other threads.
+// caseb_path.py: 1 of 11 executions violate case (b) at bound 2, 3 of 16 at 3.
+rX := malloc 1;
+*rX := 1;
+rY := malloc 1;
+*rY := 0;
+{
+  do
+  {
+    ry :acq= *rY;
+    rx := fadd(acquire,release,rX,0);
+  }
+  while (ry = 0)
+}
+|||
+{
+  rt := *rX;
+  *rY := rt;
+}

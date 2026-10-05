@@ -1,0 +1,16 @@
+name=case c admits
+%%
+// Case (c) admits the read of each iteration but the first: fadd(rC,0) reads
+// the previous iteration's fadd, a read-don't-modify-write whose own read is
+// admissible. MoRDor (8bf006f): episodic.
+rC := malloc 1;
+*rC := 0;
+{
+  do {
+    rv := fadd(acquire,release,rC,0);
+  } while (rv = 0)
+}
+|||
+{
+  *rC :rel= 1;
+}
