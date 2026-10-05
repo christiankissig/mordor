@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 354
+Total tests: 360
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -334,6 +334,12 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - rmm-zoo/models/steinke-nutt/Revised-order.lit
 - rmm-zoo/models/steinke-nutt/WRC.lit
 - rmm-zoo/models/steinke-nutt/Writer-reversed.lit
+- rmm-zoo/models/wasm/CoRR.lit
+- rmm-zoo/models/wasm/LB+datas.lit
+- rmm-zoo/models/wasm/MP+sc.lit
+- rmm-zoo/models/wasm/SB+sc.lit
+- rmm-zoo/models/wasm/SB.lit
+- rmm-zoo/models/wasm/SC-DRF.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit

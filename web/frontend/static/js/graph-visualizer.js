@@ -1896,7 +1896,7 @@ class GraphVisualizer {
         const labels = {
             default: 'Default', smrd: 'sMRD', rc11: 'RC11', rc11c: 'RC11c', imm: 'IMM',
             rc17: 'RC17', rc11z: 'RC11z', c11: 'C11', c17: 'C++17', c20: 'C++20',
-            orc11: 'ORC11', rar: 'RAR',
+            orc11: 'ORC11', rar: 'RAR', wasm: 'Wasm',
             'od-lso': 'OD-LSO', mrd: 'MRD',
             sc: 'SC', vbd: 'VbD', tso: 'TSO', 'x86-tso': 'x86-TSO', clighttso: 'ClightTSO',
             ra: 'RA', sra: 'SRA', wra: 'WRA', cc: 'CC',

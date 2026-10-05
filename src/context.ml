@@ -607,6 +607,7 @@ let implemented_zoo_models =
     "c20";
     "orc11";
     "rar";
+    "wasm";
   ]
 
 (** Predefined configurations for known memory models.

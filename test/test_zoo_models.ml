@@ -161,6 +161,18 @@ allow (r1 = 1) [RAR]|}
 allow (r1 = 1) [RAR]|}
       "a fence"
 
+(** Wasm has unordered and seqcst accesses only, and refuses the rest. *)
+let test_wasm_refuses_other_modes () =
+  match
+    run ~primary:"wasm" ~others:[]
+      {|x := 0;
+{ x.store(1, rel) } ||| { r1 := x.load(acq) }
+%%
+allow (r1 = 1) [Wasm]|}
+  with
+  | _ -> fail "Wasm answered for a program with release and acquire accesses"
+  | exception Failure msg -> check bool "says why" true (contains msg "WASM")
+
 (** Programs the edges below are checked on. *)
 let programs =
   [
@@ -459,6 +471,7 @@ let suite =
       test_case "MRD refuses pointers" `Quick test_mrd_refuses_pointers;
       test_case "ORC11 and RAR refuse what is outside their fragments" `Quick
         test_rc11_fragments_refuse;
+      test_case "Wasm refuses other modes" `Quick test_wasm_refuses_other_modes;
       test_case "zoo edges hold per execution" `Slow test_edges_hold;
       test_case "conjunction parses" `Quick test_conjunction_parses;
       test_case "conjunction checks each model" `Quick

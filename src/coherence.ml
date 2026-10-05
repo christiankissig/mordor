@@ -2181,6 +2181,169 @@ end)
     admits executions MRD does not, and nothing here can tell which, so the
     model refuses the program. The undefined-behaviour fold is off under this
     model's name. *)
+(** WebAssembly's memory model (Watt, Rossberg and Pichon-Pharabod, OOPSLA
+    2019, Fig. 7), on MoRDor's accesses: each is to one whole location, so all
+    are aligned, of one size and tear-free, and each read reads from one write.
+
+    Two access modes: [sc] accesses are seqcst, every other access unordered.
+    [sw] is [rf] from a seqcst write to a seqcst read, [hb = (po ∪ sw)⁺]. For
+    each [rf] edge from [W] to [R]:
+
+    - hb-consistent: [R] is not hb-before [W], and no write to the location is
+      hb-between them;
+    - sc-last-visible, over a total order [tot ⊇ hb], where [W] happens before
+      [R]: a seqcst [R] of a seqcst [W] reads the last seqcst write to the
+      location tot-before it; (†) a seqcst [R] of an unordered [W] has no
+      seqcst write to the location hb-after [W] and tot-before [R]; (‡) an
+      unordered [R] of a seqcst [W] has no seqcst write to the location
+      tot-after [W] and hb-before [R].
+
+    Every [tot] constraint is between seqcst events, so a [tot] exists iff some
+    linear order of the seqcst events extends [hb] and meets them, which is
+    searched. An RMW is one event in the paper and two here, so the order must
+    also put no seqcst write to its location between its read and its write.
+
+    There is no coherence order, since unordered accesses need not be coherent;
+    no undefined behaviour, a race being defined; and no thin-air axiom, the
+    paper's model admitting out-of-thin-air executions. Wasm 2019 has no fences
+    and no other modes, so a program with them is refused. *)
+module Wasm : MEMORY_MODEL = struct
+  include Axiomatic (struct
+    let name = "wasm"
+    let uses_co = false
+
+    type derived = {
+      hb : (int * int) uset;
+      sc : int list;  (** the seqcst accesses *)
+      sc_set : int uset;
+      sc_writes : int uset;
+    }
+
+    let is_sc (v : Vocab.t) id =
+      match Hashtbl.find_opt v.events id with
+      | Some { typ = Read; rmod = SC; _ }
+      | Some { typ = Write; wmod = SC; _ } ->
+          true
+      | _ -> false
+
+    let prepare (v : Vocab.t) =
+      let sc_set = USet.filter (is_sc v) (USet.union v.reads v.writes) in
+      let sc_rel = URelation.identity sc_set in
+      let sw = URelation.compose [ sc_rel; v.rf; sc_rel ] in
+      let hb = URelation.transitive_closure (Vocab.union [ v.po; sw ]) in
+        {
+          hb;
+          sc = USet.values sc_set |> List.sort compare;
+          sc_set;
+          sc_writes = USet.intersection sc_set v.writes;
+        }
+
+    let hb_consistent (x : derived axiomatic_candidate) =
+      let v = x.v and hb = x.d.hb in
+        USet.for_all
+          (fun (w, r) ->
+            (not (USet.mem hb (r, w)))
+            && not
+                 (USet.exists
+                    (fun w' ->
+                      w' <> w
+                      && USet.mem hb (w, w')
+                      && USet.mem hb (w', r)
+                      && USet.mem v.same_loc (w', r)
+                    )
+                    v.writes
+                 )
+          )
+          v.rf
+
+    (** Some linear order of the seqcst accesses extends [hb] and meets
+        sc-last-visible and the atomicity of RMWs. *)
+    let sc_last_visible (x : derived axiomatic_candidate) =
+      let v = x.v and d = x.d in
+      let hb = d.hb in
+      let same a b = USet.mem v.same_loc (a, b) in
+      let sc = USet.mem d.sc_set in
+      (* (†) and (‡) as edges every order must have. Like the first condition,
+         they apply only where [W] happens before [R] (Fig. 7's premise), so a
+         racing read is not held to them. *)
+      let forced = USet.create () in
+        USet.iter
+          (fun (w, r) ->
+            if not (USet.mem hb (w, r)) then ()
+            else if sc r && not (sc w) then
+              USet.iter
+                (fun w' ->
+                  if same w' r && USet.mem hb (w, w') then
+                    USet.add forced (r, w') |> ignore
+                )
+                d.sc_writes
+            else if sc w && not (sc r) then
+              USet.iter
+                (fun w' ->
+                  if w' <> w && same w' w && USet.mem hb (w', r) then
+                    USet.add forced (w', w) |> ignore
+                )
+                d.sc_writes
+          )
+          v.rf;
+        let before a b = USet.mem hb (a, b) || USet.mem forced (a, b) in
+        let between pos a b c = pos a < pos c && pos c < pos b in
+        let meets order =
+          let index = Hashtbl.create 16 in
+            List.iteri (fun i id -> Hashtbl.replace index id i) order;
+            let pos id = Hashtbl.find index id in
+            let none_between a b =
+              not
+                (USet.exists
+                   (fun w' -> w' <> a && same w' b && between pos a b w')
+                   d.sc_writes
+                )
+            in
+              USet.for_all
+                (fun (w, r) -> not (sc w && sc r) || none_between w r)
+                v.rf
+              && USet.for_all
+                   (fun (r, w) -> not (sc r && sc w) || none_between r w)
+                   v.rmw
+        in
+          List.exists meets (Algorithms.linear_extensions before d.sc)
+
+    let axioms =
+      [
+        ("rf is hb-consistent", hb_consistent);
+        ("some tot meets sc-last-visible", sc_last_visible);
+      ]
+  end)
+
+  let allows_thin_air = true
+
+  let check_program (structure : symbolic_event_structure) =
+    let outside =
+      Hashtbl.fold
+        (fun _ (ev : event) acc ->
+          match ev.typ with
+          | Lock | Unlock | Fence -> ev :: acc
+          | Read when not (List.mem ev.rmod [ SC; Nonatomic; Relaxed ]) ->
+              ev :: acc
+          | Write when not (List.mem ev.wmod [ SC; Nonatomic; Relaxed ]) ->
+              ev :: acc
+          | _ -> acc
+        )
+        structure.events []
+      |> List.sort (fun (a : event) (b : event) -> compare a.label b.label)
+    in
+      match outside with
+      | [] -> Ok ()
+      | ev :: _ ->
+          Error
+            (Printf.sprintf
+               "WASM has unordered and seqcst accesses only, and no fences or \
+                locks; event %d (%s) is outside that fragment. Write [sc] for \
+                seqcst and [na], [rlx] or a plain access for unordered."
+               ev.label (show_event_type ev.typ)
+            )
+end
+
 module MRD : MEMORY_MODEL = struct
   include SMRD
 
@@ -2513,6 +2676,7 @@ module ModelRegistry = struct
       register "c17" (fun () -> rc11_variant RC11Config.c17);
       register "c20" (fun () -> rc11_variant RC11Config.c20);
       register "orc11" (fun () -> rc11_variant RC11Config.orc11);
+      register "wasm" (fun () -> (module Wasm : MEMORY_MODEL));
       register "rar" (fun () -> rc11_variant RC11Config.rar);
       register "mrd" (fun () -> (module MRD : MEMORY_MODEL));
 

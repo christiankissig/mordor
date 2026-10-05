@@ -1,0 +1,22 @@
+// CoRR -- one thread writes 1 then 2, the other reads 2 and then 1.
+//
+// WebAssembly memory model: Watt, Rossberg & Pichon-Pharabod, "Weakening
+// WebAssembly" (OOPSLA 2019), Fig. 7. Accesses in mode sc are seqcst, every
+// other access unordered.
+//
+// The paper's Fig. 1: unordered accesses need not be coherent, so a racing
+// reader may see a writer's stores out of order. Over seqcst accesses
+// sc-last-visible forbids it, but that variant tests nothing here: sMRD's
+// preserved program order keeps two seqcst reads of one location in order, so
+// MoRDor never generates the execution for Wasm to reject.
+x := 0;
+{
+  x.store(1, na);
+  x.store(2, na)
+} ||| {
+  r1 := x.load(na);
+  r2 := x.load(na)
+}
+%%
+allow (r1 = 2 && r2 = 1) [Wasm]
+forbid (r1 = 2 && r2 = 1) [SC, RC11]

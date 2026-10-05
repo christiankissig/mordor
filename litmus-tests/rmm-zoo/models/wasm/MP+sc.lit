@@ -1,0 +1,20 @@
+// MP+sc -- message passing with an unordered payload and a seqcst flag.
+// Synchronisation makes the payload write happen before its read, so the read
+// cannot see the initial value (hb-consistent).
+//
+// WebAssembly memory model: Watt, Rossberg & Pichon-Pharabod, "Weakening
+// WebAssembly" (OOPSLA 2019), Fig. 7. Accesses in mode sc are seqcst, every
+// other access unordered.
+x := 0;
+y := 0;
+{
+  x.store(1, na);
+  y.store(1, sc)
+} ||| {
+  r1 := y.load(sc);
+  if (r1 = 1) {
+    r2 := x.load(na)
+  } else {skip}
+}
+%%
+forbid (r1 = 1 && r2 = 0) [Wasm]
