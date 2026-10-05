@@ -1,0 +1,18 @@
+# The episodicity analysis on programs/episodicity/, against its expected verdicts.
+name: Episodicity Tests
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  run:
+    uses: ./.github/workflows/integration-suite.yml
+    with:
+      name: Episodicity Tests
+      suite: "Integration Tests - Episodicity"

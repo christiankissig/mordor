@@ -1,17 +1,23 @@
-name: Litmus Tests
+# One suite of test/test_integration.exe, called by the workflows that give
+# a suite its own README badge: litmus-tests.yml and episodicity-tests.yml. A
+# badge shows a workflow's status, so each such suite has a workflow. The rest of
+# the integration tests run in ci.yml.
+name: Integration suite
 on:
-  push:
-    branches:
-      - main
-      - master
-  pull_request:
-    branches:
-      - main
-      - master
+  workflow_call:
+    inputs:
+      name:
+        description: The suite's name in the run
+        required: true
+        type: string
+      suite:
+        description: The Alcotest suite to run, as test_integration.exe names it
+        required: true
+        type: string
 
 jobs:
-  integration-tests:
-    name: Integration Tests
+  suite:
+    name: ${{ inputs.name }}
     strategy:
       fail-fast: false
       matrix:
@@ -85,5 +91,5 @@ jobs:
       - name: Build project
         run: opam exec -- dune build
       
-      - name: Run integration tests
-        run: opam exec -- dune exec test/test_integration.exe
+      - name: Run ${{ inputs.name }}
+        run: opam exec -- dune exec test/test_integration.exe -- test "${{ inputs.suite }}"

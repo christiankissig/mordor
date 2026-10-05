@@ -1,0 +1,18 @@
+# Every litmus test under litmus-tests/ and litmus-tests-promising/, each assertion checked strictly.
+name: Litmus Tests
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  run:
+    uses: ./.github/workflows/integration-suite.yml
+    with:
+      name: Litmus Tests
+      suite: "Integration Tests - Litmus Tests Strict"

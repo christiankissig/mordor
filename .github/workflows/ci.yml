@@ -87,6 +87,12 @@ jobs:
       
       - name: Run tests
         run: opam exec -- dune runtest
+
+      # The integration tests other than the litmus and episodicity suites,
+      # which have workflows and badges of their own (litmus-tests.yml,
+      # episodicity-tests.yml): parallel runs against sequential ones.
+      - name: Run integration tests
+        run: opam exec -- dune exec test/test_integration.exe -- test "Integration Tests - Parallel"
       
       - name: Check formatting (optional)
         run: opam exec -- dune build @fmt
