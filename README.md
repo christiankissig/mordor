@@ -1,7 +1,7 @@
 [![CI](https://github.com/christiankissig/mordor/actions/workflows/ci.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/ci.yml) [![Litmus Tests](https://github.com/christiankissig/mordor/actions/workflows/litmus-tests.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/litmus-tests.yml) [![Episodicity Tests](https://github.com/christiankissig/mordor/actions/workflows/episodicity-tests.yml/badge.svg)](https://github.com/christiankissig/mordor/actions/workflows/episodicity-tests.yml)
 
 
-# MoRDor - Symbolic Modular Relaxed Dependencies (in OCaml)
+# MoRDor - Weak Memory Explorer
 
 MoRDor is a tool for exploring weak memory. Given a concurrent C-like program as
 a litmus test, it computes the program's justified executions: the ways its
