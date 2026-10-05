@@ -1,0 +1,27 @@
+// AtomicWrite+acquire -- an atomic write is an acquire as well as a release
+// (section 9.2). The observer thread fixes co on A to 1 then 2. In OCaml the
+// write of 2 happens before the write of b after it, and co on atomics is in
+// hb, so r1 = 1 closes a cycle in hb | rf. C++ and RC11 allow it: an sc store
+// is only a release, and b := 1 may move before it. This is why OCaml compiles
+// an atomic store to xchg on x86, not to a plain store.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+A := 0;
+b := 0;
+{
+  r1 := b;
+  A.store(1, sc)
+} ||| {
+  A.store(2, sc);
+  b := 1
+} ||| {
+  r3 := A.load(sc);
+  r4 := A.load(sc)
+}
+%%
+forbid (r1 = 1 && r3 = 1 && r4 = 2) [OCaml]
+allow (r1 = 1 && r3 = 1 && r4 = 2) [RC11]
+allow (r1 = 1 && r3 = 1 && r4 = 2) [smrd]
+forbid (r1 = 1 && r3 = 1 && r4 = 2) [SC]

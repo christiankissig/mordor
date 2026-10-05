@@ -1,0 +1,20 @@
+// LB+falsedep+data -- load buffering where the first thread's write mentions
+// its read but does not depend on it: r0 + 1 - r0 is 1 whatever r0 is. sMRD
+// computes dependencies semantically, finds none, and allows it as it allows
+// LB+data.lit. OCaml forbids it, as it forbids every load-buffering shape.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+a := 0;
+b := 0;
+{
+  r0 := a;
+  b := r0 + 1 - r0
+} ||| {
+  r1 := b;
+  a := r1
+}
+%%
+forbid (r0 = 1 && r1 = 1) [OCaml]
+allow (r0 = 1 && r1 = 1) [smrd]

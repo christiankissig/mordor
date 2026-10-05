@@ -1,0 +1,24 @@
+// IRIW+atomic -- independent reads of independent writes over atomic
+// locations. OCaml has no total order over atomics, yet forbids it: rf, po,
+// fr_at, rf, po, fr_at is a cycle in hb | rf | fr_at. So atomics are
+// sequentially consistent. RC11 forbids it through psc.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+x := 0;
+y := 0;
+{
+  x.store(1, sc)
+} ||| {
+  y.store(1, sc)
+} ||| {
+  r1 := x.load(sc);
+  r2 := y.load(sc)
+} ||| {
+  r3 := y.load(sc);
+  r4 := x.load(sc)
+}
+%%
+forbid (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [OCaml]
+forbid (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [RC11]

@@ -203,7 +203,7 @@ and C++20 verdicts and compares them with herd7 in its own README.
 | `drf/` | DRFx and DeNovoSync: SB racing, MP race free |
 | `bmm/` | BMM against TSO: SB with and without volatiles, MP |
 | `crc/` | CRC: release-acquire MP and SB, SB with SC fences, races |
-| `ocaml/` | OCaml: LB, SB plain and atomic, MP through an atomic flag, incoherent non-atomic reads |
+| `ocaml/` | OCaml: LB, SB plain and atomic, MP through an atomic flag, incoherent non-atomic reads; the paper's races bounded in the past and future (Examples 2, 3), LB with a data, control or false dependency, CoRR across threads, the atomic write as acquire (§9.2), IRIW over atomics |
 | `jam/` | Java Access Modes: MP, SB, LB, IRIW and RMWs over plain, opaque, release-acquire and volatile accesses, and fences |
 | `wasm/` | WebAssembly: incoherent unordered reads, the JavaScript SC-DRF violation, SB, MP, thin air |
 | `rc11-fragments/` | RC11 against ORC11 and RAR on programs inside their fragments: MP, LB, a race |

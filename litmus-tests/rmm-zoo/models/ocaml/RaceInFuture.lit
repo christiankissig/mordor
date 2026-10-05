@@ -1,0 +1,25 @@
+// RaceInFuture -- the paper's Example 3, races bounded in the future. The
+// read of the fresh block happens before the block is published through g, so
+// the other thread's store through g cannot reach it. Java and C++ allow
+// ra = 7 by reordering the read after the publication; OCaml's causality axiom
+// forbids it, which is why the model bans po from a read to a later write.
+// sMRD allows it: the write of g does not depend on the read.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+g := 0;
+{
+  rc := malloc 1;
+  *rc := 42;
+  ra := *rc;
+  g := rc
+} ||| {
+  rg := g;
+  if (rg != 0) {
+    *rg := 7
+  }
+}
+%%
+forbid (ra = 7) [OCaml]
+allow (ra = 7) [smrd]
