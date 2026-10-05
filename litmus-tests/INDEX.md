@@ -1,7 +1,7 @@
 # Litmus Tests Index
 
-Total tests: 393
-Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
+Total tests: 396
+Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-05
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
@@ -261,6 +261,9 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - own/sync/writeElision.lit
 - own/sync/writeElisionRel.lit
 - own/SB+sc.lit
+- own/MP+sc+sc.lit
+- own/MP+rel+sc.lit
+- own/MP+sc+acq.lit
 - own/nonatomic-store-no-sync-relaxed.lit
 - own/nonatomic-store-no-sync.lit
 - own/ptr-overwrite-coherence.lit
