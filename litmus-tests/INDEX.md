@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 350
+Total tests: 354
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -301,6 +301,10 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - rmm-zoo/models/rc11-rc17/LB.lit
 - rmm-zoo/models/rc11-rc17/RS17.lit
 - rmm-zoo/models/rc11-rc17/uaf-bug.lit
+- rmm-zoo/models/rc11-fragments/LB.lit
+- rmm-zoo/models/rc11-fragments/MP+na+rlx.lit
+- rmm-zoo/models/rc11-fragments/MP+rel+acq.lit
+- rmm-zoo/models/rc11-fragments/MP+rlx.lit
 - rmm-zoo/models/cpp-release-sequences/RS+cpp20.lit
 - rmm-zoo/models/cpp-release-sequences/mp-rs-add-eadd.lit
 - rmm-zoo/models/cpp-release-sequences/mp-rs-add-est-atomic.lit

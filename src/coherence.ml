@@ -775,6 +775,11 @@ module RC11Config = struct
             The two agree whenever [hb] is built from [sb], [rf] and [rmw].
             [`None] for the standard's models, which have no such axiom -- but
             see {!c11}. *)
+    fragment : (string * (event -> bool)) option;
+        (** The programs the model is defined on, described and as a test of
+            each event; [None] for every program. A model stated over a fragment
+            of RC11 refuses a program with an event outside it, rather than
+            answering as RC11 where it says nothing. *)
     sc : [ `Psc | `C11 ];
         (** [acyclic psc], RC11's repaired SC of P0668, or the conditions C11
             places on its total order [S] over SC events, in the partial form of
@@ -789,6 +794,7 @@ module RC11Config = struct
       release_sequence = Rc11;
       allocations_are_writes = false;
       no_thin_air = `Hb_rf;
+      fragment = None;
       sc = `Psc;
     }
 
@@ -836,6 +842,58 @@ module RC11Config = struct
       message passing over relaxed accesses, which C++20 allows: herd7 answers
       MP+rlx Never under [cpp2w.cat] and Sometimes under [cpp17.cat]. *)
   let c20 = { c17 with name = "c20"; sc = `Psc }
+
+  (** The mode of an event of its own type: a read's, a write's or a fence's. *)
+  let mode (ev : event) =
+    match ev.typ with
+    | Read -> Some ev.rmod
+    | Write -> Some ev.wmod
+    | Fence -> Some ev.fmod
+    | _ -> None
+
+  (** Operational RC11 (Dang, Jourdan, Kaiser and Dreyer, POPL 2020): RC11
+      without SC accesses and SC fences, which ORC11 does not have. Its paper
+      sketches the correspondence with that fragment of RC11, and states it in
+      one direction: a program RC11 considers racy, ORC11 does too. MoRDor has
+      no consume in ORC11 either, nor locks. *)
+  let orc11 =
+    {
+      base with
+      name = "orc11";
+      fragment =
+        Some
+          ( "programs without SC accesses, SC fences, consume reads or locks",
+            fun ev ->
+              match (ev.typ, mode ev) with
+              | (Lock | Unlock), _ -> false
+              | _, Some (SC | Consume) -> false
+              | _ -> true
+          );
+    }
+
+  (** The release-acquire/relaxed fragment of RC11 that Doherty, Dongol,
+      Wehrheim and Derrick (PPoPP 2019) give an operational semantics for and
+      prove equivalent to: relaxed, release and acquire accesses and
+      release-acquire updates. No non-atomic or SC accesses, no fences. *)
+  let rar =
+    {
+      base with
+      name = "rar";
+      fragment =
+        Some
+          ( "programs whose accesses are relaxed, release, acquire or \
+             release-acquire, with no fences, non-atomic or SC accesses, or \
+             locks",
+            fun ev ->
+              match (ev.typ, mode ev) with
+              | (Lock | Unlock | Fence), _ -> false
+              | ( (Read | Write),
+                  Some (Relaxed | Acquire | Release | ReleaseAcquire) ) ->
+                  true
+              | (Read | Write), _ -> false
+              | _ -> true
+          );
+    }
 end
 
 module RC11 (Config : sig
@@ -1200,7 +1258,29 @@ end) : MEMORY_MODEL = struct
   let allows_thin_air = Config.config.no_thin_air = `None
   let uses_co = true
   let orders_allocations = Config.config.allocations_are_writes
-  let check_program _ = Ok ()
+
+  (* A model over a fragment refuses a program with an event outside it. *)
+  let check_program (structure : symbolic_event_structure) =
+    match Config.config.fragment with
+    | None -> Ok ()
+    | Some (description, inside) -> (
+        let outside =
+          Hashtbl.fold
+            (fun _ (ev : event) acc -> if inside ev then acc else ev :: acc)
+            structure.events []
+          |> List.sort (fun (a : event) (b : event) -> compare a.label b.label)
+        in
+          match outside with
+          | [] -> Ok ()
+          | ev :: _ ->
+              Error
+                (Printf.sprintf
+                   "%s is defined on %s; event %d (%s) is outside that \
+                    fragment."
+                   (String.uppercase_ascii Config.config.name)
+                   description ev.label (show_event_type ev.typ)
+                )
+      )
   let compute_dependencies _ _ _ _ _ = USet.create ()
 end
 
@@ -2432,6 +2512,8 @@ module ModelRegistry = struct
       register "c11" (fun () -> rc11_variant RC11Config.c11);
       register "c17" (fun () -> rc11_variant RC11Config.c17);
       register "c20" (fun () -> rc11_variant RC11Config.c20);
+      register "orc11" (fun () -> rc11_variant RC11Config.orc11);
+      register "rar" (fun () -> rc11_variant RC11Config.rar);
       register "mrd" (fun () -> (module MRD : MEMORY_MODEL));
 
       register "sc" (fun () ->

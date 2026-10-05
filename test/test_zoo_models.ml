@@ -122,6 +122,45 @@ allow (r1 = 1) [MRD]|}
   | _ -> fail "MRD answered for a program with a pointer"
   | exception Failure msg -> check bool "says why" true (contains msg "MRD")
 
+(** ORC11 and RAR are defined on fragments of RC11, and refuse a program outside
+    theirs, naming the event, rather than answer as RC11. *)
+let test_rc11_fragments_refuse () =
+  let refuses model source what =
+    match run ~primary:model ~others:[] source with
+    | _ -> fail (Printf.sprintf "%s answered for a program with %s" model what)
+    | exception Failure msg ->
+        check bool
+          (Printf.sprintf "%s names its fragment" model)
+          true
+          (contains msg (String.uppercase_ascii model)
+          && contains msg "fragment"
+          )
+  in
+    refuses "orc11"
+      {|x := 0;
+{ x.store(1, sc) } ||| { r1 := x.load(sc) }
+%%
+allow (r1 = 1) [ORC11]|}
+      "an SC access";
+    refuses "orc11"
+      {|x := 0;
+{ x := 1; fence(sc) } ||| { r1 := x }
+%%
+allow (r1 = 1) [ORC11]|}
+      "an SC fence";
+    refuses "rar"
+      {|x := 0;
+{ x.store(1, na) } ||| { r1 := x.load(rlx) }
+%%
+allow (r1 = 1) [RAR]|}
+      "a non-atomic access";
+    refuses "rar"
+      {|x := 0;
+{ x := 1; fence(acq) } ||| { r1 := x }
+%%
+allow (r1 = 1) [RAR]|}
+      "a fence"
+
 (** Programs the edges below are checked on. *)
 let programs =
   [
@@ -418,6 +457,8 @@ let suite =
       test_case "hyphenated names parse" `Quick test_hyphenated_names_parse;
       test_case "threads are numbered" `Quick test_threads_are_numbered;
       test_case "MRD refuses pointers" `Quick test_mrd_refuses_pointers;
+      test_case "ORC11 and RAR refuse what is outside their fragments" `Quick
+        test_rc11_fragments_refuse;
       test_case "zoo edges hold per execution" `Slow test_edges_hold;
       test_case "conjunction parses" `Quick test_conjunction_parses;
       test_case "conjunction checks each model" `Quick

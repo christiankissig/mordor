@@ -190,6 +190,9 @@ module RC11Config : sig
     no_thin_air : [ `Hb_rf | `Sb_rf | `None ];
         (** [acyclic(hb ∪ rf)], or the literal [acyclic(sb ∪ rf)] of Ou and
             Demsky's load-store ordering, or none, as the standard has. *)
+    fragment : (string * (event -> bool)) option;
+        (** The programs the model is defined on, described and as a test of
+            each event; [None] for every program. *)
     sc : [ `Psc | `C11 ];
         (** RC11's [acyclic psc], or C11's conditions on its order [S] of SC
             events, as herd's [c11_partialSC.cat] has them. *)
@@ -204,6 +207,12 @@ module RC11Config : sig
 
   val c17 : t
   val c20 : t
+
+  (** Operational RC11 (POPL 2020): RC11 without SC accesses or SC fences. *)
+  val orc11 : t
+
+  (** RC11's release-acquire/relaxed fragment (PPoPP 2019). *)
+  val rar : t
 end
 
 module RC11 (_ : sig
