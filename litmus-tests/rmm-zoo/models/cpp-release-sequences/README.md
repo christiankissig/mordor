@@ -31,8 +31,11 @@ herd's partial form of the C11 conditions instead. On twelve SC shapes (SB, RWC,
 IRIW and WRC over SC accesses and over SC fences, Z6.U, and an S4 witness) they
 agree with herd7 under `c11_orig.cat`, the standard's total order `S`.
 
-Candidate generation rejects a cycle in `dp ∪ ppo ∪ rf` before any model is
-asked, so none of the three can exhibit an out-of-thin-air execution.
+None of the three has a thin-air axiom, and all three allow out-of-thin-air
+executions: when one is asked, candidate generation keeps the executions with a
+cycle in `dp ∪ ppo ∪ rf`, and every other model of the run rejects them
+itself. `../cpp-thin-air/` tests that; herd7 cannot, because its candidate
+generation never makes a value out of a circular dependency.
 
 ## Verdicts against herd7
 

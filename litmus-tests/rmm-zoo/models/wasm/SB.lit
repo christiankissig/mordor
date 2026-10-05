@@ -1,0 +1,16 @@
+// SB -- store buffering, unordered and seqcst.
+//
+// WebAssembly memory model: Watt, Rossberg & Pichon-Pharabod, "Weakening
+// WebAssembly" (OOPSLA 2019), Fig. 7. Accesses in mode sc are seqcst, every
+// other access unordered.
+x := 0;
+y := 0;
+{
+  x.store(1, na);
+  r1 := y.load(na)
+} ||| {
+  y.store(1, na);
+  r2 := x.load(na)
+}
+%%
+allow (r1 = 0 && r2 = 0) [Wasm]

@@ -122,6 +122,102 @@ allow (r1 = 1) [MRD]|}
   | _ -> fail "MRD answered for a program with a pointer"
   | exception Failure msg -> check bool "says why" true (contains msg "MRD")
 
+(** ORC11 and RAR are defined on fragments of RC11, and refuse a program outside
+    theirs, naming the event, rather than answer as RC11. *)
+let test_rc11_fragments_refuse () =
+  let refuses model source what =
+    match run ~primary:model ~others:[] source with
+    | _ -> fail (Printf.sprintf "%s answered for a program with %s" model what)
+    | exception Failure msg ->
+        check bool
+          (Printf.sprintf "%s names its fragment" model)
+          true
+          (contains msg (String.uppercase_ascii model)
+          && contains msg "fragment"
+          )
+  in
+    refuses "orc11"
+      {|x := 0;
+{ x.store(1, sc) } ||| { r1 := x.load(sc) }
+%%
+allow (r1 = 1) [ORC11]|}
+      "an SC access";
+    refuses "orc11"
+      {|x := 0;
+{ x := 1; fence(sc) } ||| { r1 := x }
+%%
+allow (r1 = 1) [ORC11]|}
+      "an SC fence";
+    refuses "rar"
+      {|x := 0;
+{ x.store(1, na) } ||| { r1 := x.load(rlx) }
+%%
+allow (r1 = 1) [RAR]|}
+      "a non-atomic access";
+    refuses "rar"
+      {|x := 0;
+{ x := 1; fence(acq) } ||| { r1 := x }
+%%
+allow (r1 = 1) [RAR]|}
+      "a fence"
+
+(** Wasm has unordered and seqcst accesses only, and refuses the rest. *)
+let test_wasm_refuses_other_modes () =
+  match
+    run ~primary:"wasm" ~others:[]
+      {|x := 0;
+{ x.store(1, rel) } ||| { r1 := x.load(acq) }
+%%
+allow (r1 = 1) [Wasm]|}
+  with
+  | _ -> fail "Wasm answered for a program with release and acquire accesses"
+  | exception Failure msg -> check bool "says why" true (contains msg "WASM")
+
+(** The models defined on fragments refuse what lies outside them, naming
+    themselves: DRFx and BMM have no lock order, CRC no SC accesses, and OCaml
+    no release-acquire modes. *)
+let test_fragments_refuse () =
+  List.iter
+    (fun (model, source) ->
+      match run ~primary:model ~others:[] source with
+      | _ -> fail (model ^ " answered for a program outside its fragment")
+      | exception Failure msg ->
+          check bool (model ^ " says why") true
+            (contains msg (String.uppercase_ascii model))
+    )
+    [
+      ( "drfx",
+        "x := 0;\n\
+         { lock; x := 1; unlock } ||| { r1 := x }\n\
+         %%\n\
+         allow (r1 = 1) [DRFx]"
+      );
+      ( "bmm",
+        "x := 0;\n\
+         { lock; x := 1; unlock } ||| { r1 := x }\n\
+         %%\n\
+         allow (r1 = 1) [BMM]"
+      );
+      ( "crc",
+        "x := 0;\n\
+         { x.store(1, sc) } ||| { r1 := x.load(sc) }\n\
+         %%\n\
+         allow (r1 = 1) [CRC]"
+      );
+      ( "jam",
+        "x := 0;\n\
+         { lock m; x := 1; unlock m } ||| { r1 := x }\n\
+         %%\n\
+         allow (r1 = 1) [JAM]"
+      );
+      ( "ocaml",
+        "x := 0;\n\
+         { x.store(1, rel) } ||| { r1 := x.load(acq) }\n\
+         %%\n\
+         allow (r1 = 1) [OCaml]"
+      );
+    ]
+
 (** Programs the edges below are checked on. *)
 let programs =
   [
@@ -200,6 +296,13 @@ let edges =
     ("rc11z", "rc11");
     (* The same release sequence and psc; RC17 checks thin air too. *)
     ("rc17", "c20");
+    (* DRFx and DeNovoSync are SC on executions, their difference being in
+       what a race means; BMM is TSO with more of po kept. *)
+    ("drfx", "sc");
+    ("sc", "drfx");
+    ("denovosync", "drfx");
+    ("drfx", "denovosync");
+    ("bmm", "tso");
   ]
 
 let test_edges_hold () =
@@ -385,6 +488,32 @@ let test_elision_follows_release_sequences () =
     in
       check bool "a release store synchronises in its place" true valid
 
+(** The standard's models allow out-of-thin-air executions, and the others of
+    the same run still forbid them: one enumeration keeps the executions for the
+    first and each of the others rejects them itself. *)
+let test_thin_air_per_model () =
+  let valid, verdicts =
+    check_source
+      {|x := 0; y := 0;
+{ r1 := x.load(rlx); y.store(r1, rlx) } ||| { r2 := y.load(rlx); x.store(r2, rlx) }
+%%
+allow (r1 = 42 && r2 = 42) [C11, C20]
+forbid (r1 = 42 && r2 = 42) [RC11, smrd]|}
+  in
+    check bool "C11 and C++20 allow thin air, RC11 and sMRD forbid it" true
+      valid;
+    check (list bool) "every assertion holds" [ true; true; true; true ]
+      (List.map snd verdicts);
+    let valid, _ =
+      check_source
+        {|x := 0; y := 0;
+{ r1 := x.load(rlx); y.store(r1, rlx) } ||| { r2 := y.load(rlx); x.store(r2, rlx) }
+%%
+forbid (r1 = 42 && r2 = 42) [RC11]|}
+    in
+      check bool "without them, the generator drops thin air as before" true
+        valid
+
 let suite =
   ( "Zoo models",
     [
@@ -392,6 +521,11 @@ let suite =
       test_case "hyphenated names parse" `Quick test_hyphenated_names_parse;
       test_case "threads are numbered" `Quick test_threads_are_numbered;
       test_case "MRD refuses pointers" `Quick test_mrd_refuses_pointers;
+      test_case "ORC11 and RAR refuse what is outside their fragments" `Quick
+        test_rc11_fragments_refuse;
+      test_case "Wasm refuses other modes" `Quick test_wasm_refuses_other_modes;
+      test_case "DRFx, BMM, CRC and OCaml refuse what is outside them" `Quick
+        test_fragments_refuse;
       test_case "zoo edges hold per execution" `Slow test_edges_hold;
       test_case "conjunction parses" `Quick test_conjunction_parses;
       test_case "conjunction checks each model" `Quick
@@ -403,5 +537,6 @@ let suite =
       test_case "SC fences separate C++20" `Quick test_sc_fences_separate_c20;
       test_case "elision follows release sequences" `Quick
         test_elision_follows_release_sequences;
+      test_case "thin air per model" `Quick test_thin_air_per_model;
     ]
   )

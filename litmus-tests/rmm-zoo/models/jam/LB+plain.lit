@@ -1,0 +1,16 @@
+// LB+plain -- load buffering over plain accesses, which causality does not cover.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Sometimes.
+x := 0;
+y := 0;
+{
+  r1 := x.load(na);
+  y.store(1, na)
+} ||| {
+  r2 := y.load(na);
+  x.store(1, na)
+}
+%%
+allow (r1 = 1 && r2 = 1) [JAM]

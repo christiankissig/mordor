@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 345
+Total tests: 392
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -301,6 +301,10 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - rmm-zoo/models/rc11-rc17/LB.lit
 - rmm-zoo/models/rc11-rc17/RS17.lit
 - rmm-zoo/models/rc11-rc17/uaf-bug.lit
+- rmm-zoo/models/rc11-fragments/LB.lit
+- rmm-zoo/models/rc11-fragments/MP+na+rlx.lit
+- rmm-zoo/models/rc11-fragments/MP+rel+acq.lit
+- rmm-zoo/models/rc11-fragments/MP+rlx.lit
 - rmm-zoo/models/cpp-release-sequences/RS+cpp20.lit
 - rmm-zoo/models/cpp-release-sequences/mp-rs-add-eadd.lit
 - rmm-zoo/models/cpp-release-sequences/mp-rs-add-est-atomic.lit
@@ -315,6 +319,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - rmm-zoo/models/cpp-release-sequences/mp-rs-st-est.lit
 - rmm-zoo/models/cpp-release-sequences/mp-rs-strel.lit
 - rmm-zoo/models/cpp-release-sequences/mp-rs.lit
+- rmm-zoo/models/cpp-thin-air/LB+datas.lit
 - rmm-zoo/models/sc-tso/IRIW.lit
 - rmm-zoo/models/sc-tso/SB+cas.lit
 - rmm-zoo/models/sc-tso/SB+failed-cas.lit
@@ -329,6 +334,44 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - rmm-zoo/models/steinke-nutt/Revised-order.lit
 - rmm-zoo/models/steinke-nutt/WRC.lit
 - rmm-zoo/models/steinke-nutt/Writer-reversed.lit
+- rmm-zoo/models/wasm/CoRR.lit
+- rmm-zoo/models/wasm/LB+datas.lit
+- rmm-zoo/models/wasm/MP+sc.lit
+- rmm-zoo/models/wasm/SB+sc.lit
+- rmm-zoo/models/wasm/SB.lit
+- rmm-zoo/models/wasm/SC-DRF.lit
+- rmm-zoo/models/bmm/MP.lit
+- rmm-zoo/models/bmm/SB+volatile+plain.lit
+- rmm-zoo/models/bmm/SB+volatiles.lit
+- rmm-zoo/models/bmm/SB.lit
+- rmm-zoo/models/crc/MP+na+rel+acq.lit
+- rmm-zoo/models/crc/MP+na.lit
+- rmm-zoo/models/crc/MP+rel+acq.lit
+- rmm-zoo/models/crc/SB+rel+acq+fences.lit
+- rmm-zoo/models/crc/SB+rel+acq.lit
+- rmm-zoo/models/jam/CoRR+plain.lit
+- rmm-zoo/models/jam/FADD+FADD.lit
+- rmm-zoo/models/jam/IRIW+vol+ra.lit
+- rmm-zoo/models/jam/IRIW+vol.lit
+- rmm-zoo/models/jam/LB+datas+opq.lit
+- rmm-zoo/models/jam/LB+datas+plain.lit
+- rmm-zoo/models/jam/LB+opq.lit
+- rmm-zoo/models/jam/LB+plain.lit
+- rmm-zoo/models/jam/MP+opq.lit
+- rmm-zoo/models/jam/MP+plain.lit
+- rmm-zoo/models/jam/MP+ra.lit
+- rmm-zoo/models/jam/SB+fullfences.lit
+- rmm-zoo/models/jam/SB+opq.lit
+- rmm-zoo/models/jam/SB+ra.lit
+- rmm-zoo/models/jam/SB+vol.lit
+- rmm-zoo/models/jam/WRC+ra.lit
+- rmm-zoo/models/drf/MP+na+rlx.lit
+- rmm-zoo/models/drf/SB+na.lit
+- rmm-zoo/models/ocaml/CoRR.lit
+- rmm-zoo/models/ocaml/LB.lit
+- rmm-zoo/models/ocaml/MP+atomic.lit
+- rmm-zoo/models/ocaml/SB+atomic.lit
+- rmm-zoo/models/ocaml/SB.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit

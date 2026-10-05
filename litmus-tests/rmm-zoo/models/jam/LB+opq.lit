@@ -1,0 +1,16 @@
+// LB+opq -- load buffering over opaque accesses, forbidden by acyclic((po | rf) & opq).
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Never.
+x := 0;
+y := 0;
+{
+  r1 := x.load(rlx);
+  y.store(1, rlx)
+} ||| {
+  r2 := y.load(rlx);
+  x.store(1, rlx)
+}
+%%
+forbid (r1 = 1 && r2 = 1) [JAM]

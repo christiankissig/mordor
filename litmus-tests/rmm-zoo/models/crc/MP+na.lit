@@ -1,0 +1,16 @@
+// MP+na -- the flag is non-atomic too, so the flag accesses race: catch fire.
+//
+// CRC, the C11 fragment of Dodds, Batty & Gotsman (ESOP 2018): every atomic
+// access release-acquire, non-atomic accesses with catch-fire semantics, and
+// SC fences, totally ordered with each happening before the next.
+x := 0;
+y := 0;
+{
+  x.store(1, na);
+  y.store(1, na)
+} ||| {
+  r1 := y.load(na);
+  r2 := x.load(na)
+}
+%%
+allow (ub) [CRC]

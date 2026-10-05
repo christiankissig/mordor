@@ -1,0 +1,36 @@
+"JAM (Bender and Palsberg, OOPSLA 2019), Appendix A, over C annotations: the oracle the tests in this directory cite. Run as herd7 -initwrites true -model jam.cat TEST.litmus"
+(* Modes: NA is Java plain, RLX opaque, ACQ/REL/ACQ_REL release-acquire,
+   SC volatile. Fences reconstructed from the JDK's fence specifications. *)
+let O = RLX
+let RA = ACQ | REL | ACQ_REL
+let V = SC
+let opq = O | RA | V
+let rel = W & RA
+let acq = R & RA
+let vol = V
+let svo = ([M]; po; [F & REL]; po; [W]) | ([R]; po; [F & ACQ]; po; [M])
+        | ([M]; po; [F & ACQ_REL]; po; [M])
+let spush = [M]; po; [F & SC]; po; [M]
+let ra = po;[rel] | [acq];po
+let volint = po;[vol & R] | [vol & W];po
+let into = svo | spush | ra | volint
+let WW(r) = r & (W * W)
+let wwco(r) = WW(r) & loc & ~id
+let coinit = loc & (IW * (W \ IW))
+let cofw = wwco((W * FW))
+with to from linearisations(M \ IW, cofw | rf | into)
+let push = spush | volint
+let pushto = to+ & (domain(push) * domain(push))
+let vvo = rf | svo | ra | push | pushto;push
+let vo = vvo+ | po-loc
+let rmw-jom = [RMW] | rmw
+let invrf = rf^-1
+let coww = wwco(vo)
+let cowr = wwco(vo;invrf)
+let corw = wwco(vo;po)
+let corr = wwco(rf;po;invrf)
+let cormwtotal = wwco(((range(rmw-jom) * _ ) | (_ * range(rmw-jom))) & to)
+let rec co-jom = coww | cowr | corw | corr | cofw | coinit | cormwtotal
+               | wwco((rf;rmw-jom)^-1;co-jom)
+acyclic ((po | rf) & (opq * opq)) as causality
+acyclic co-jom as coherence

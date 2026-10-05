@@ -1,0 +1,21 @@
+// LB -- load buffering over relaxed accesses. RC11's acyclic(sb | rf) forbids
+// it, and so do the operational ORC11 and RAR, which never reorder a load after
+// a later store.
+//
+// RC11 and the two models defined on fragments of it: ORC11 (Dang, Jourdan,
+// Kaiser & Dreyer, POPL 2020), RC11 without SC accesses or SC fences, and RAR
+// (Doherty, Dongol, Wehrheim & Derrick, PPoPP 2019), its release-acquire/relaxed
+// fragment. On a program inside a fragment, each answers as RC11 does: ORC11 by
+// the correspondence its paper sketches, RAR by the equivalence its paper
+// proves. herd7 under rc11.cat agrees with RC11 on this file.
+x := 0;
+y := 0;
+{
+  r1 := x.load(rlx);
+  y.store(1, rlx)
+} ||| {
+  r2 := y.load(rlx);
+  x.store(1, rlx)
+}
+%%
+forbid (r1 = 1 && r2 = 1) [RC11, ORC11, RAR]

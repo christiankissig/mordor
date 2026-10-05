@@ -1,0 +1,25 @@
+// SC-DRF -- the paper's Fig. 10: a data-race-free program that the original
+// JavaScript model let read x as 2 and then 1.
+//
+// WebAssembly memory model: Watt, Rossberg & Pichon-Pharabod, "Weakening
+// WebAssembly" (OOPSLA 2019), Fig. 7. Accesses in mode sc are seqcst, every
+// other access unordered.
+//
+// Both seqcst stores to x happen before the unordered reads, so the program is
+// race free and must behave sequentially consistently. Condition (‡), which the
+// paper adds, forbids the reads seeing the two stores in different orders.
+x := 0;
+y := 0;
+{
+  x.store(1, sc);
+  y.store(1, sc)
+} ||| {
+  x.store(2, sc);
+  r0 := y.load(sc);
+  if (r0 = 1) {
+    r1 := x.load(na);
+    r2 := x.load(na)
+  } else {skip}
+}
+%%
+forbid (r0 = 1 && r1 = 2 && r2 = 1) [Wasm]

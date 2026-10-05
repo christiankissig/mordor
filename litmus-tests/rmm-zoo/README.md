@@ -199,15 +199,24 @@ and C++20 verdicts and compares them with herd7 in its own README.
 | `ra-sra-wra/` | 2+2W, WW, SF, Oscillating and MP over release and acquire; two CASes |
 | `rc11-rc17/` | the zoo's release-sequence witness; LB; use-after-free |
 | `cpp-release-sequences/` | the C++11/17/20 release-sequence family, with data races as undefined behaviour |
-| `steinke-nutt/` | MP, WRC, readers that disagree, a writer seen reversed, Oscillating, Bouajjani et al.'s history (2c), each thread reading the other's write |
+| `cpp-thin-air/` | load buffering through data dependencies, which only C11, C++17 and C++20 allow |
+| `drf/` | DRFx and DeNovoSync: SB racing, MP race free |
+| `bmm/` | BMM against TSO: SB with and without volatiles, MP |
+| `crc/` | CRC: release-acquire MP and SB, SB with SC fences, races |
+| `ocaml/` | OCaml: LB, SB plain and atomic, MP through an atomic flag, incoherent non-atomic reads |
+| `jam/` | Java Access Modes: MP, SB, LB, IRIW and RMWs over plain, opaque, release-acquire and volatile accesses, and fences |
+| `wasm/` | WebAssembly: incoherent unordered reads, the JavaScript SC-DRF violation, SB, MP, thin air |
+| `rc11-fragments/` | RC11 against ORC11 and RAR on programs inside their fragments: MP, LB, a race |
+| `steinke-nutt/` | MP, WRC, readers that disagree, a writer seen reversed, Oscillating, Bouajjani et al.'s history (2c), each thread reading the other's write; its README justifies the encoding and how an oracle checks it |
 | `sessions/` | monotonic reads |
 
 `properties/atomicity-mca/IRIW+rel+acq.lit` asserts across models the same
 way.
 
 Two limits apply to every model here. First, MoRDor's candidate executions are
-free of thin air before any model sees them, so a model weaker than sMRD cannot
-exhibit a thin-air behaviour it allows. Second, over named globals MoRDor never
+free of thin air unless a model of the run allows it, which only C11, C++17 and
+C++20 do, so another model weaker than sMRD cannot exhibit a thin-air behaviour
+it allows. Second, over named globals MoRDor never
 generates a read that skips its own thread's latest store to that location.
 That is the shape of every RYW violation, so on such programs RYW rejects
 nothing, and this suite has no RYW `forbid`. Through a pointer that may

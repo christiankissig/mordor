@@ -1,0 +1,18 @@
+// LB+datas -- load buffering through data dependencies over racing unordered
+// accesses. The paper notes that Wasm non-atomics are weak enough to exhibit
+// out-of-thin-air behaviour when racing, and MoRDor's Wasm allows it.
+//
+// WebAssembly memory model: Watt, Rossberg & Pichon-Pharabod, "Weakening
+// WebAssembly" (OOPSLA 2019), Fig. 7. Accesses in mode sc are seqcst, every
+// other access unordered.
+x := 0;
+y := 0;
+{
+  r1 := x.load(na);
+  y.store(r1, na)
+} ||| {
+  r2 := y.load(na);
+  x.store(r2, na)
+}
+%%
+allow (r1 = 42 && r2 = 42) [Wasm]

@@ -605,6 +605,15 @@ let implemented_zoo_models =
     "c11";
     "c17";
     "c20";
+    "orc11";
+    "rar";
+    "wasm";
+    "bmm";
+    "drfx";
+    "denovosync";
+    "crc";
+    "ocaml";
+    "jam";
   ]
 
 (** Predefined configurations for known memory models.

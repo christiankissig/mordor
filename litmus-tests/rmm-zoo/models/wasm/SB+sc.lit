@@ -1,0 +1,16 @@
+// SB+sc -- store buffering over seqcst accesses, forbidden by sc-last-visible.
+//
+// WebAssembly memory model: Watt, Rossberg & Pichon-Pharabod, "Weakening
+// WebAssembly" (OOPSLA 2019), Fig. 7. Accesses in mode sc are seqcst, every
+// other access unordered.
+x := 0;
+y := 0;
+{
+  x.store(1, sc);
+  r1 := y.load(sc)
+} ||| {
+  y.store(1, sc);
+  r2 := x.load(sc)
+}
+%%
+forbid (r1 = 0 && r2 = 0) [Wasm]

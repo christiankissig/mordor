@@ -1,0 +1,19 @@
+// SB+na -- store buffering over data accesses. The SB outcome is not SC, and
+// the program races.
+//
+// DRFx (Marino et al., PLDI 2010) and DeNovoSync (Sung & Adve, ASPLOS 2015):
+// sequentially consistent for data-race-free programs, an exception or
+// undefined behaviour otherwise. Accesses in mode na are data accesses, every
+// other access synchronises; a race is reported as undefined behaviour.
+x := 0;
+y := 0;
+{
+  x.store(1, na);
+  r1 := y.load(na)
+} ||| {
+  y.store(1, na);
+  r2 := x.load(na)
+}
+%%
+forbid (r1 = 0 && r2 = 0) [DRFx, DeNovoSync]
+allow (ub) [DRFx, DeNovoSync]

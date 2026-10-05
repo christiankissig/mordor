@@ -1,0 +1,17 @@
+// SB -- store buffering over plain accesses: the store-load reordering TSO
+// allows.
+//
+// BMM, the buffered memory model for Java (Demange et al., POPL 2013): TSO,
+// where a store and a later load stay in order when either is volatile.
+// MoRDor writes a Java volatile as mode sc.
+x := 0;
+y := 0;
+{
+  x := 1;
+  r1 := y
+} ||| {
+  y := 1;
+  r2 := x
+}
+%%
+allow (r1 = 0 && r2 = 0) [BMM, TSO]

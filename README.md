@@ -39,10 +39,10 @@ the output on screen is captured from `mordor` itself.
 MoRDor explores weak memory through justified executions. It interprets a
 program symbolically as an event structure, derives justifications for its
 writes, freezes them into executions with their dependencies, and checks those
-executions against memory models: sMRD, RC11 and IMM, and 24 models of the
-[Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org) defined over the same
-relations, from SC and TSO to the release-acquire family and the session
-guarantees. It can also compute a program's executions under promising
+executions against memory models: sMRD, RC11 and IMM, and 36 more models of
+the [Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org) defined over the
+same relations, from SC and TSO through the C/C++ standards, Java, WebAssembly
+and OCaml to the release-acquire family and the session guarantees. It can also compute a program's executions under promising
 semantics 1.0 (Kang et al., POPL 2017) and 2.0 (Lee et al., PLDI 2020), which
 are operational: promises, certification and per-thread views instead of
 justifications.
@@ -71,10 +71,18 @@ under sMRD.
 |---|---|
 | `smrd` | Symbolic MRD (Richards et al., OOPSLA 2025): dependencies, preserved program order, release/acquire synchronisation and lock order. The default. |
 | `mrd` | Modular Relaxed Dependencies: sMRD's axioms, on programs that access only named globals and allocate nothing; others are refused. |
-| `rc11`, `rc11c` | Repaired C11 (Lahav et al., PLDI 2017), and RC11 with consume. |
+| `rc11`, `rc11c` | Repaired C11 (Lahav et al., PLDI 2017), and RC11 with consume, which for now answers as RC11: consume has no semantics of its own yet. |
 | `rc17` | RC11 with C++17's release sequences. |
 | `rc11z` | RC11 with allocations and frees ordered as writes. |
-| `c11`, `c17`, `c20` | The C11, C++17 and C++20 standards; also `cpp11`, `cpp17`, `cpp20`. |
+| `c11`, `c17`, `c20` | The C11, C++17 and C++20 standards; also `cpp11`, `cpp17`, `cpp20`. They allow out-of-thin-air executions. |
+| `orc11` | Operational RC11 (Dang et al., POPL 2020): RC11 without SC accesses or SC fences. |
+| `rar` | RC11's release-acquire/relaxed fragment (Doherty et al., PPoPP 2019). |
+| `crc` | The C11 fragment of Dodds, Batty and Gotsman (ESOP 2018): release-acquire and catch-fire non-atomic accesses, SC fences. |
+| `drfx`, `denovosync` | SC for data-race-free programs, a race being undefined (Marino et al., PLDI 2010; Sung and Adve, ASPLOS 2015). |
+| `jam` | Java Access Modes (Bender and Palsberg, OOPSLA 2019): `na` is plain, `rlx` opaque, `acq`/`rel` release-acquire, `sc` volatile. |
+| `bmm` | The buffered memory model for Java (Demange et al., POPL 2013): TSO with volatile (`sc`) accesses kept in order. |
+| `wasm` | WebAssembly (Watt et al., OOPSLA 2019): `sc` accesses seqcst, the rest unordered. |
+| `ocaml` | The OCaml memory model (Dolan et al., PLDI 2018): `sc` accesses to atomic locations, the rest non-atomic. |
 | `od-lso` | Ou and Demsky's load-store ordering over C/C++11. |
 | `imm` | The Intermediate Memory Model (Podkopaev et al., POPL 2019). |
 | `sc`, `vbd` | Sequential consistency, and Volatile-by-Default. |
@@ -85,11 +93,14 @@ under sMRD.
 | `pc`, `pram`, `causal`, `slow`, `local` | Steinke and Nutt's lattice. |
 | `pocausal` | Per-object causal consistency. |
 | `ryw`, `mr`, `mw`, `wfr` | Terry et al.'s session guarantees. |
-| `ps1`, `ps2` | Promising semantics 1.0 and 2.0, computed operationally (or `--semantics ps1\|ps2`); `promising` names no version. |
+| `ps1`, `ps2` | Promising semantics 1.0 and 2.0, computed operationally (or `--semantics ps1\|ps2`). |
 
-Every model but `ps1` and `ps2` checks the executions sMRD derives; the
-models from `sc` down are those of the
-[Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org).
+Every model but `ps1` and `ps2` checks the executions sMRD derives. Every model
+here but `rc11c` is one of the
+[Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org). A model defined on a
+fragment of programs (`mrd`, `orc11`, `rar`, `crc`, `drfx`, `denovosync`,
+`bmm`, `jam`, `wasm`, `ocaml`) refuses a program outside it, naming the event
+that is.
 
 Some annotations name a source rather than a model, and map onto one of the
 above: `Power`, `Bridging` and `Grounding` run under `imm`; `Sevcik`, `Problem`,

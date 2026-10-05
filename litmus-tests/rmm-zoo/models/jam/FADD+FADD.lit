@@ -1,0 +1,15 @@
+// FADD+FADD -- two concurrent fetch-and-adds, which cannot both read the initial value.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Never.
+x := 0;
+{
+  rpr1 := &x;
+  r1 := FADD(rlx, rlx, rpr1, 1)
+} ||| {
+  rpr2 := &x;
+  r2 := FADD(rlx, rlx, rpr2, 1)
+}
+%%
+forbid (r1 = 1 && r2 = 1) [JAM]

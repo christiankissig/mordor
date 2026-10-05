@@ -165,11 +165,14 @@ module Freeze : sig
       product of the reads' choices is at least {!coherence_prune_min}, and the
       check drops a partial relation, given as [(read, write)] pairs, when it
       holds of it. [shuffle] and [inspect] are S10's: each read's alternatives
-      in a random order, and a look at them. *)
+      in a random order, and a look at them. With [thin_air], a relation
+      closing a cycle in [dp ∪ ppo ∪ rf] is not dropped, for a model that
+      allows out-of-thin-air executions. *)
   val fold_path_rf :
     ?shuffle:Random.State.t ->
     ?inspect:((int, int list) Hashtbl.t -> int list -> unit) ->
     ?prune:(unit -> ((int * int) list -> bool) option) ->
+    ?thin_air:bool ->
     symbolic_event_structure ->
     path_info ->
     scope:scope ->

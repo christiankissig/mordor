@@ -1,0 +1,27 @@
+// LB+datas -- load buffering through data dependencies, the out-of-thin-air
+// shape.
+//
+// Each thread copies what it read into the other thread's location. Reading
+// 42 in both threads justifies itself: each read takes its value from the
+// other thread's write, which writes what the other read read.
+//
+// Source: Batty, Memarian, Nienhuis, Pichon-Pharabod & Sewell, "The Problem of
+//   Programming Language Concurrency Semantics" (ESOP 2015) -- the C/C++11
+//   axiomatic model has no thin-air axiom and admits this execution at any
+//   value; RC11 (Lahav et al., PLDI 2017) forbids it with acyclic(sb | rf).
+//
+// herd7 is no oracle for this test: it answers Never under cpp11.cat and
+// cpp17.cat as under rc11.cat, because its candidate generation computes values
+// from read-from edges and never makes one out of a circular dependency.
+x := 0;
+y := 0;
+{
+  r1 := x.load(rlx);
+  y.store(r1, rlx)
+} ||| {
+  r2 := y.load(rlx);
+  x.store(r2, rlx)
+}
+%%
+allow (r1 = 42 && r2 = 42) [C11, C17, C20]
+forbid (r1 = 42 && r2 = 42) [RC11, IMM, smrd, SC, RA]

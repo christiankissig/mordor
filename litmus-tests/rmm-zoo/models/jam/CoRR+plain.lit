@@ -1,0 +1,15 @@
+// CoRR+plain -- two plain reads seeing a writer's stores out of order: plain accesses are coherent in JAM.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Never.
+x := 0;
+{
+  x.store(1, na);
+  x.store(2, na)
+} ||| {
+  r1 := x.load(na);
+  r2 := x.load(na)
+}
+%%
+forbid (r1 = 2 && r2 = 1) [JAM]

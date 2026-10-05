@@ -1,0 +1,17 @@
+// MP+atomic -- non-atomic data published through an atomic flag: the flag's
+// rf orders the data write before the data read (CoWR).
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+x := 0;
+y := 0;
+{
+  x := 1;
+  y.store(1, sc)
+} ||| {
+  r1 := y.load(sc);
+  r2 := x
+}
+%%
+forbid (r1 = 1 && r2 = 0) [OCaml]

@@ -76,7 +76,13 @@ module type MEMORY_MODEL = sig
       release sequence continues through later stores of the writer's thread,
       eliding a release store loses the synchronisation those stores carried,
       and the model rejects every execution that does. *)
-  val elidable : (int, event) Hashtbl.t -> elided:int -> by:int -> bool
+  val elidable : symbolic_event_structure -> elided:int -> by:int -> bool
+
+  (** Whether the model allows out-of-thin-air executions: those whose
+      reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator
+      drops them before any model is asked unless a model of the run allows
+      them; then every model that does not rejects them itself. *)
+  val allows_thin_air : bool
 
   (** Whether [check_coherence] reads the coherence order it is given. A model
       whose axioms quantify over orders of their own -- a view per process, an
@@ -184,6 +190,9 @@ module RC11Config : sig
     no_thin_air : [ `Hb_rf | `Sb_rf | `None ];
         (** [acyclic(hb ∪ rf)], or the literal [acyclic(sb ∪ rf)] of Ou and
             Demsky's load-store ordering, or none, as the standard has. *)
+    fragment : (string * (event -> bool)) option;
+        (** The programs the model is defined on, described and as a test of
+            each event; [None] for every program. *)
     sc : [ `Psc | `C11 ];
         (** RC11's [acyclic psc], or C11's conditions on its order [S] of SC
             events, as herd's [c11_partialSC.cat] has them. *)
@@ -198,6 +207,12 @@ module RC11Config : sig
 
   val c17 : t
   val c20 : t
+
+  (** Operational RC11 (POPL 2020): RC11 without SC accesses or SC fences. *)
+  val orc11 : t
+
+  (** RC11's release-acquire/relaxed fragment (PPoPP 2019). *)
+  val rar : t
 end
 
 module RC11 (_ : sig
@@ -277,6 +292,10 @@ val check_for_coherence :
   symbolic_execution ->
   restrictions ->
   int URelation.t option
+
+(** [allows_thin_air models]: some model of [models] allows out-of-thin-air
+    executions, so the generator has to keep them for it. *)
+val allows_thin_air : string list -> bool
 
 (** [rejected_by_one_location structure execution restrictions]: the model
     rejects [execution] whatever the coherence order at other locations: it

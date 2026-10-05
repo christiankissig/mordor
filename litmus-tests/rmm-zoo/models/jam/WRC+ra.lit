@@ -1,0 +1,18 @@
+// WRC+ra -- write-to-read causality through a release-acquire pair.
+//
+// Java Access Modes (Bender & Palsberg, OOPSLA 2019), the herd model of their
+// Appendix A. Modes: na is plain, rlx opaque, acq/rel release-acquire, sc
+// volatile. herd7 under a transcription of Appendix A answers Never.
+x := 0;
+y := 0;
+{
+  x.store(1, rlx)
+} ||| {
+  r1 := x.load(rlx);
+  y.store(1, rel)
+} ||| {
+  r2 := y.load(acq);
+  r3 := x.load(rlx)
+}
+%%
+forbid (r1 = 1 && r2 = 1 && r3 = 0) [JAM]
