@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 392
+Total tests: 393
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -135,6 +135,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - popl_bridging/Load buffering with release writes.lit
 - popl_bridging/MP+rel+acq.lit
 - popl_bridging/PSC.lit
+- popl_bridging/Preserving detour.lit
 - popl_bridging/RMW Atomicity.lit
 - popl_bridging/rfi is not always preserved.lit
 - popl_bubbly/LB+deps.lit

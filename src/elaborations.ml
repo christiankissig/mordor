@@ -366,7 +366,22 @@ module ForwardElab = struct
     in
     let w_cross_r = URelation.cross write_events (elidable rlx_read_events) in
     let r_cross_r = URelation.cross read_events (elidable read_events) in
-    let w_cross_w = URelation.cross write_events (elidable rlx_write_events) in
+    (* A store forwarded from an earlier store of the value it writes is
+       dropped: redundant-store elimination. That is sound only within a
+       thread. Initialising stores are po-before every thread through the fork,
+       so a thread's store of the initial value used to be dropped too -- and
+       another thread's store to the location, coherence-between the two, then
+       went unoverwritten. Preserving detour (POPL 2019, #58) is forbidden by
+       IMM's detour on exactly that store. *)
+    let thread = Hashtbl.find_opt elab_ctx.structure.thread_index in
+    let w_cross_w =
+      URelation.cross write_events (elidable rlx_write_events)
+      |> USet.filter (fun (w1, w2) ->
+          match (thread w1, thread w2) with
+          | Some t1, Some t2 -> t1 = t2
+          | _ -> false
+      )
+    in
     let combined = USet.union w_cross_r r_cross_r in
     let combined = USet.union combined w_cross_w in
       USet.filter
