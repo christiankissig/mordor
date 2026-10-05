@@ -158,36 +158,58 @@ type model_selection = { primary : string; others : string list }
 
 (** [model_selection_of_json json] reads [memory_model] and [compare_models].
 
-    A primary outside {!selectable_models}, or none, is ["default"]: until the
-    dialog offered a default, the litmus test's annotation overrode whatever was
-    sent anyway, so that is what an old client gets. Unknown compared names are
-    dropped. *)
+    No [memory_model] is ["default"], the model the litmus test states or sMRD.
+    A model the server does not offer is an error naming it, primary or
+    compared: running under another model and labelling the results with the
+    one asked for would answer a different question. [Failure] carries the
+    message. *)
 let model_selection_of_json json =
   let field key =
     match json with
     | `Assoc fields -> List.assoc_opt key fields
     | _ -> None
   in
-  let selectable m = List.mem (String.lowercase_ascii m) selectable_models in
+  let unknown = ref [] in
+  let known offered m =
+    let m = String.lowercase_ascii m in
+      if List.mem m offered then Some m
+      else (
+        unknown := m :: !unknown;
+        None
+      )
+  in
   let primary =
     match field "memory_model" with
-    | Some (`String m) when selectable m -> String.lowercase_ascii m
-    | _ -> "default"
+    | None | Some `Null -> "default"
+    | Some (`String m) -> known selectable_models m |> Option.value ~default:""
+    | Some other -> (
+        unknown := Yojson.Basic.to_string other :: !unknown;
+        ""
+      )
   in
   let others =
     match field "compare_models" with
     | Some (`List ms) ->
         List.filter_map
           (function
-            | `String m
-              when List.mem (String.lowercase_ascii m) comparable_models ->
-                Some (String.lowercase_ascii m)
-            | _ -> None
+            | `String m -> known comparable_models m
+            | other ->
+                unknown := Yojson.Basic.to_string other :: !unknown;
+                None
             )
           ms
     | _ -> []
   in
-    { primary; others }
+    match List.rev !unknown with
+    | [] -> { primary; others }
+    | names ->
+        failwith
+          (Printf.sprintf
+             "Unknown memory model%s %s. The server offers %s."
+             (if List.length names > 1 then "s" else "")
+             (String.concat ", " (List.map (Printf.sprintf "%S") names))
+             (String.concat ", " selectable_models)
+          )
 
 (** [select_models selection] is {!Context.step_select_models} for a request. It
     follows parsing, which is what resolves ["default"]. *)
@@ -431,12 +453,19 @@ let make_sse_handler pipeline_fn request =
       )
   in
 
-  let models = model_selection_of_json json in
+  (* An unknown model is reported on the stream, as any other error is. *)
+  let models =
+    try Ok (model_selection_of_json json) with Failure msg -> Error msg
+  in
 
-  Printf.printf
-    "📥 SSE request: %d chars, %d steps, model: %s, compared: [%s]\n%!"
-    (String.length program) step_counter models.primary
-    (String.concat ", " models.others);
+  ( match models with
+  | Ok models ->
+      Printf.printf
+        "📥 SSE request: %d chars, %d steps, model: %s, compared: [%s]\n%!"
+        (String.length program) step_counter models.primary
+        (String.concat ", " models.others)
+  | Error msg -> Printf.printf "📥 SSE request refused: %s\n%!" msg
+  );
 
   Dream.stream
     ~headers:
@@ -449,6 +478,11 @@ let make_sse_handler pipeline_fn request =
     (fun stream ->
       Lwt.catch
         (fun () ->
+          let models =
+            match models with
+            | Ok models -> models
+            | Error msg -> failwith msg
+          in
           let* () =
             Dream.write stream
               (sse_data (`Assoc [ ("status", `String "parsing") ]))
@@ -562,8 +596,6 @@ let executions_export_handler request =
       )
   in
 
-  let models = { (model_selection_of_json json) with others = [] } in
-
   let options = { default_options with loop_semantics; step_counter } in
 
   let context =
@@ -573,6 +605,7 @@ let executions_export_handler request =
 
     Lwt.catch
       (fun () ->
+        let models = { (model_selection_of_json json) with others = [] } in
         let* ctx =
           Lwt.return context
           |> Parse.step_parse_litmus
