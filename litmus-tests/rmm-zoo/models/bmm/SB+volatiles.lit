@@ -1,0 +1,17 @@
+// SB+volatiles -- store buffering over volatile accesses, which BMM never
+// reorders.
+//
+// BMM, the buffered memory model for Java (Demange et al., POPL 2013): TSO,
+// where a store and a later load stay in order when either is volatile.
+// MoRDor writes a Java volatile as mode sc.
+x := 0;
+y := 0;
+{
+  x.store(1, sc);
+  r1 := y.load(sc)
+} ||| {
+  y.store(1, sc);
+  r2 := x.load(sc)
+}
+%%
+forbid (r1 = 0 && r2 = 0) [BMM]

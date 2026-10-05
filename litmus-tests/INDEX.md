@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 360
+Total tests: 376
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -340,6 +340,22 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-04
 - rmm-zoo/models/wasm/SB+sc.lit
 - rmm-zoo/models/wasm/SB.lit
 - rmm-zoo/models/wasm/SC-DRF.lit
+- rmm-zoo/models/bmm/MP.lit
+- rmm-zoo/models/bmm/SB+volatile+plain.lit
+- rmm-zoo/models/bmm/SB+volatiles.lit
+- rmm-zoo/models/bmm/SB.lit
+- rmm-zoo/models/crc/MP+na+rel+acq.lit
+- rmm-zoo/models/crc/MP+na.lit
+- rmm-zoo/models/crc/MP+rel+acq.lit
+- rmm-zoo/models/crc/SB+rel+acq+fences.lit
+- rmm-zoo/models/crc/SB+rel+acq.lit
+- rmm-zoo/models/drf/MP+na+rlx.lit
+- rmm-zoo/models/drf/SB+na.lit
+- rmm-zoo/models/ocaml/CoRR.lit
+- rmm-zoo/models/ocaml/LB.lit
+- rmm-zoo/models/ocaml/MP+atomic.lit
+- rmm-zoo/models/ocaml/SB+atomic.lit
+- rmm-zoo/models/ocaml/SB.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit

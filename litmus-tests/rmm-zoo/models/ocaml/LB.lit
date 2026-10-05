@@ -1,0 +1,17 @@
+// LB -- load buffering over non-atomic accesses. Causality, acyclic(hb | rf |
+// fr_at), forbids it: OCaml never lets a load be reordered after a later store.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+x := 0;
+y := 0;
+{
+  r1 := x;
+  y := 1
+} ||| {
+  r2 := y;
+  x := 1
+}
+%%
+forbid (r1 = 1 && r2 = 1) [OCaml]

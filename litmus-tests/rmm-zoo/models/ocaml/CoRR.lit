@@ -1,0 +1,18 @@
+// CoRR -- one thread writes 1 then 2, another reads 2 and then 1. Non-atomic
+// reads need not be coherent in OCaml: a read does not advance the thread's
+// frontier, so the second may read an older write. SC forbids it.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+x := 0;
+{
+  x := 1;
+  x := 2
+} ||| {
+  r1 := x;
+  r2 := x
+}
+%%
+allow (r1 = 2 && r2 = 1) [OCaml]
+forbid (r1 = 2 && r2 = 1) [SC]

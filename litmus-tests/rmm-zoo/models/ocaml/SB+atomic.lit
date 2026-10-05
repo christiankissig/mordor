@@ -1,0 +1,16 @@
+// SB+atomic -- store buffering over atomic locations: forbidden.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+x := 0;
+y := 0;
+{
+  x.store(1, sc);
+  r1 := y.load(sc)
+} ||| {
+  y.store(1, sc);
+  r2 := x.load(sc)
+}
+%%
+forbid (r1 = 0 && r2 = 0) [OCaml]

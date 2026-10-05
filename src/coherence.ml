@@ -1573,6 +1573,67 @@ module Vocab = struct
     |> URelation.identity
 end
 
+(** Helpers for the models below: a model refusing a program outside the
+    fragment it is defined on, and the data races of an execution under an
+    [hb]. *)
+
+(** [refuse_outside ~name ~description inside structure] refuses the program
+    of [structure] when some event is not [inside], naming the first. *)
+let refuse_outside ~name ~description inside
+    (structure : symbolic_event_structure) =
+  let outside =
+    Hashtbl.fold
+      (fun _ (ev : event) acc -> if inside ev then acc else ev :: acc)
+      structure.events []
+    |> List.sort (fun (a : event) (b : event) -> compare a.label b.label)
+  in
+    match outside with
+    | [] -> Ok ()
+    | ev :: _ ->
+        Error
+          (Printf.sprintf "%s is defined on %s; event %d (%s) is outside it."
+             name description ev.label (show_event_type ev.typ)
+          )
+
+(** The mode of an access or fence: [None] for any other event. *)
+let mode_of (ev : event) =
+  match ev.typ with
+  | Read -> Some ev.rmod
+  | Write -> Some ev.wmod
+  | Fence -> Some ev.fmod
+  | _ -> None
+
+(** The accesses of [v] in a mode [atomic] accepts. *)
+let accesses_in (v : Vocab.t) atomic =
+  USet.filter
+    (fun id ->
+      match Option.bind (Hashtbl.find_opt v.events id) mode_of with
+      | Some m -> atomic m
+      | None -> false
+    )
+    (USet.union v.reads v.writes)
+
+(** [races v ~hb ~atomic]: pairs of accesses to one location, of two threads,
+    one a write and not both [atomic], that [hb] leaves unordered. The initial
+    event is [po] before everything, so it races with nothing. *)
+let races (v : Vocab.t) ~hb ~atomic =
+  let accesses =
+    USet.union v.reads v.writes
+    |> USet.filter (fun id -> Some id <> v.initial)
+  in
+    URelation.cross accesses accesses
+    |> USet.filter (fun (a, b) ->
+        a < b
+        && (USet.mem v.writes a || USet.mem v.writes b)
+        && (not (USet.mem atomic a && USet.mem atomic b))
+        && USet.mem v.same_loc (a, b)
+        && (not (ModelUtils.same_thread v.thread_index a b))
+        && (not (USet.mem hb (a, b)))
+        && not (USet.mem hb (b, a))
+    )
+
+let no_locks (ev : event) = ev.typ <> Lock && ev.typ <> Unlock
+
 (** A candidate coherence order as an axiomatic model sees it: the vocabulary,
     what the model prepared from it, and the order as {!Vocab.co} gives it, with
     [fr] derived when an axiom first asks. *)
@@ -1585,7 +1646,7 @@ type 'd axiomatic_candidate = {
 
 (** A model whose cache is {!Vocab.t} plus what [prepare] derives from it once
     per execution. *)
-module Axiomatic (A : sig
+module AxiomaticWith (A : sig
   val name : string
   val uses_co : bool
 
@@ -1593,6 +1654,12 @@ module Axiomatic (A : sig
 
   val prepare : Vocab.t -> derived
   val axioms : (string * (derived axiomatic_candidate -> bool)) list
+
+  val data_races :
+    (derived axiomatic_candidate -> (int * int) uset) option
+
+  val allows_thin_air : bool
+  val check_program : symbolic_event_structure -> (unit, string) result
 end) : MEMORY_MODEL = struct
   type cache = Vocab.t * A.derived
   type config = unit
@@ -1613,14 +1680,32 @@ end) : MEMORY_MODEL = struct
   let axioms = A.axioms
   let check_coherence cache co = holds axioms (candidate cache co)
   let check_thin_air _ _ = true
-  let data_races = None
+  let data_races = A.data_races
   let elidable = ModelUtils.elidable_always
-  let allows_thin_air = false
+  let allows_thin_air = A.allows_thin_air
   let uses_co = A.uses_co
   let orders_allocations = false
-  let check_program _ = Ok ()
+  let check_program = A.check_program
   let compute_dependencies _ _ _ _ _ = USet.create ()
 end
+
+(** {!AxiomaticWith} for a model with no race clause, no thin air, and every
+    program in its domain. *)
+module Axiomatic (A : sig
+  val name : string
+  val uses_co : bool
+
+  type derived
+
+  val prepare : Vocab.t -> derived
+  val axioms : (string * (derived axiomatic_candidate -> bool)) list
+end) : MEMORY_MODEL = AxiomaticWith (struct
+  include A
+
+  let data_races = None
+  let allows_thin_air = false
+  let check_program _ = Ok ()
+end)
 
 (** Sequential consistency: [acyclic(po ∪ rf ∪ co ∪ fr)], with herd's [sc.cat]
     atomicity for RMWs. *)
@@ -1656,8 +1741,13 @@ end)
     Every fence is a full fence: on x86 C11's fences compile to [mfence]. *)
 module TSOAxioms (N : sig
   val name : string
+
+  val java_volatiles : bool
+  (** BMM (Demange et al., POPL 2013), the buffered memory model for Java:
+      TSO, where a store and a later load stay in order when either is
+      volatile, which MoRDor writes as mode [sc]. Locks are refused. *)
 end) =
-Axiomatic (struct
+AxiomaticWith (struct
   let name = N.name
   let uses_co = true
 
@@ -1677,6 +1767,17 @@ Axiomatic (struct
           URelation.compose [ a; pow_r ];
         ]
     in
+    let ppo =
+      if not N.java_volatiles then ppo
+      else
+        let vol = URelation.identity (accesses_in v (fun m -> m = SC)) in
+          Vocab.union
+            [
+              ppo;
+              URelation.compose [ vol; pow_r ];
+              URelation.compose [ pow_r; vol ];
+            ]
+    in
       {
         scperloc = Vocab.union [ v.loc_restrict v.po; v.rf ];
         ghb = Vocab.union [ ppo; Vocab.external_ v v.rf ];
@@ -1694,6 +1795,15 @@ Axiomatic (struct
           URelation.acyclic (Vocab.union [ x.d.ghb; x.co; Lazy.force x.fr ])
       );
     ]
+
+  let data_races = None
+  let allows_thin_air = false
+
+  let check_program =
+    if N.java_volatiles then
+      refuse_outside ~name:(String.uppercase_ascii N.name)
+        ~description:"programs without locks" no_locks
+    else fun _ -> Ok ()
 end)
 
 (** Per-location cache coherence, herd's [scperloc] alone:
@@ -2181,6 +2291,228 @@ end)
     admits executions MRD does not, and nothing here can tell which, so the
     model refuses the program. The undefined-behaviour fold is off under this
     model's name. *)
+
+(** Sequential consistency for data-race-free programs, and catch-fire for the
+    rest: DRFx (Marino et al., PLDI 2010), whose runtime raises an exception at
+    a race, and DeNovoSync (Sung and Adve, ASPLOS 2015), which adopts the DRF
+    model of C++ and Java. Each admits the SC executions, and a race in one is
+    reported as undefined behaviour, an exception being no outcome either. A
+    race is between accesses of two threads to one location, one a write and
+    one non-atomic, that [hb = (po ∪ [A];rf;[A])⁺] does not order: atomic
+    accesses, any but [na], are the synchronisation operations. Locks are
+    refused, the SC axioms here having no lock order. *)
+module DRFSC (N : sig
+  val name : string
+end) =
+AxiomaticWith (struct
+  let name = N.name
+  let uses_co = true
+
+  type derived = {
+    sc : (int * int) uset;  (** [po ∪ rf] *)
+    hb : (int * int) uset;
+    atomic : int uset;
+  }
+
+  let prepare (v : Vocab.t) =
+    let atomic = accesses_in v (fun m -> m <> Nonatomic) in
+    let a = URelation.identity atomic in
+    let hb =
+      URelation.transitive_closure
+        (Vocab.union [ v.po; URelation.compose [ a; v.rf; a ] ])
+    in
+      { sc = Vocab.union [ v.po; v.rf ]; hb; atomic }
+
+  let axioms =
+    [
+      ("rmw ∩ (fr;co) = ∅", fun x -> Vocab.atomicity x.v x.co);
+      ( "po ∪ rf ∪ co ∪ fr is acyclic",
+        fun x ->
+          URelation.acyclic (Vocab.union [ x.d.sc; x.co; Lazy.force x.fr ])
+      );
+    ]
+
+  let data_races = Some (fun x -> races x.v ~hb:x.d.hb ~atomic:x.d.atomic)
+  let allows_thin_air = false
+
+  let check_program =
+    refuse_outside ~name:(String.uppercase_ascii N.name)
+      ~description:"programs without locks" no_locks
+end)
+
+(** CRC, the C11 fragment of Dodds, Batty and Gotsman's compositional
+    semantics (ESOP 2018): release-acquire and non-atomic accesses, and SC
+    fences. Every atomic access is release-acquire, so [rf] between atomic
+    accesses synchronises; a fence is a load-link/store-conditional pair on one
+    fence location, so the fences are totally ordered and each happens before
+    the next. Over [hb = (po ∪ [A];rf;[A] ∪ fences)⁺], RA's axioms (hb acyclic,
+    [co;hb] and [co;hb;rf⁻¹] irreflexive, atomicity) and [rf;hb] irreflexive,
+    for a non-atomic read. A race on a non-atomic access is undefined
+    behaviour. Accesses in [acq], [rel] or [ra] mode are atomic and every
+    other but [sc] non-atomic; SC accesses and fences other than SC fences are
+    refused, and so are locks. *)
+module CRC = AxiomaticWith (struct
+  let name = "crc"
+  let uses_co = true
+
+  type derived = {
+    base : (int * int) uset;  (** [po ∪ [A];rf;[A]] *)
+    fences : int list;
+    atomic : int uset;
+  }
+
+  let atomic_mode = function
+    | Acquire | Release | ReleaseAcquire -> true
+    | _ -> false
+
+  let prepare (v : Vocab.t) =
+    let atomic = accesses_in v atomic_mode in
+    let a = URelation.identity atomic in
+    let fences =
+      USet.filter
+        (fun id ->
+          match Hashtbl.find_opt v.events id with
+          | Some { typ = Fence; fmod = SC; _ } -> true
+          | _ -> false
+        )
+        v.e
+      |> USet.values |> List.sort compare
+    in
+      {
+        base = Vocab.union [ v.po; URelation.compose [ a; v.rf; a ] ];
+        fences;
+        atomic;
+      }
+
+  (** [hb] for each order of the fences that extends [po ∪ sw]. *)
+  let hbs (x : derived axiomatic_candidate) =
+    let base_hb = URelation.transitive_closure x.d.base in
+      Algorithms.linear_extensions
+        (fun a b -> USet.mem base_hb (a, b))
+        x.d.fences
+      |> List.map (fun order ->
+          let chain =
+            let rec pairs = function
+              | a :: (b :: _ as rest) -> (a, b) :: pairs rest
+              | _ -> []
+            in
+              USet.of_list (pairs order)
+          in
+            URelation.transitive_closure (Vocab.union [ x.d.base; chain ])
+      )
+
+  let consistent (x : derived axiomatic_candidate) hb =
+    URelation.is_irreflexive hb
+    && URelation.is_irreflexive (URelation.compose [ x.co; hb ])
+    && URelation.is_irreflexive (URelation.compose [ x.co; hb; x.v.rfi ])
+    && URelation.is_irreflexive (URelation.compose [ x.v.rf; hb ])
+
+  let axioms =
+    [
+      ("rmw ∩ (fr;co) = ∅", fun x -> Vocab.atomicity x.v x.co);
+      ( "some order of the fences makes hb acyclic, and co;hb, co;hb;rf⁻¹ \
+         and rf;hb irreflexive",
+        fun x -> List.exists (consistent x) (hbs x)
+      );
+    ]
+
+  (* The races under some consistent order of the fences that has any. *)
+  let data_races =
+    Some
+      (fun x ->
+        List.filter (consistent x) (hbs x)
+        |> List.map (fun hb -> races x.v ~hb ~atomic:x.d.atomic)
+        |> List.find_opt (fun r -> USet.size r > 0)
+        |> Option.value ~default:(USet.create ())
+      )
+
+  let allows_thin_air = false
+
+  let check_program =
+    refuse_outside ~name:"CRC"
+      ~description:
+        "release-acquire and non-atomic accesses and SC fences, without SC \
+         accesses, other fences or locks"
+      (fun ev ->
+        no_locks ev
+        &&
+        match (ev.typ, mode_of ev) with
+        | Fence, Some m -> m = SC
+        | (Read | Write), Some SC -> false
+        | _ -> true
+      )
+end)
+
+(** The OCaml memory model (Dolan, Sivaramakrishnan and Madhavapeddy, PLDI
+    2018, §6). Atomicity belongs to a location in OCaml, an [Atomic.t]; here an
+    access in mode [sc] is atomic and any other non-atomic, and [rf] and [co]
+    order only between two atomic accesses. [hb] is the transitive closure of
+    [po], the initial writes before everything, and [co ∪ rf] between atomic
+    accesses to one location:
+
+    - Causality: [hb ∪ rf ∪ fr_at] is acyclic, [fr_at] being [fr] between
+      atomic accesses, so load buffering is forbidden
+    - CoWW: [hb;co] is irreflexive
+    - CoWR: [hb;fr] is irreflexive
+
+    A race is defined, not undefined, and non-atomic reads need not be coherent:
+    nothing orders two reads of a location in one thread. Fences, locks and
+    release/acquire modes are refused. *)
+module OCaml = AxiomaticWith (struct
+  let name = "ocaml"
+  let uses_co = true
+
+  type derived = { atomic : (int * int) uset  (** [[A]] *) }
+
+  let prepare (v : Vocab.t) =
+    { atomic = URelation.identity (accesses_in v (fun m -> m = SC)) }
+
+  let hb (x : derived axiomatic_candidate) =
+    let a = x.d.atomic in
+    let com =
+      x.v.loc_restrict
+        (URelation.compose [ a; Vocab.union [ x.co; x.v.rf ]; a ])
+    in
+      URelation.transitive_closure (Vocab.union [ x.v.po; com ])
+
+  let axioms =
+    [
+      ( "hb ∪ rf ∪ fr_at is acyclic",
+        fun x ->
+          let fr_at =
+            URelation.compose [ x.d.atomic; Lazy.force x.fr; x.d.atomic ]
+          in
+            URelation.acyclic (Vocab.union [ hb x; x.v.rf; fr_at ])
+      );
+      ( "hb;co is irreflexive",
+        fun x -> URelation.is_irreflexive (URelation.compose [ hb x; x.co ])
+      );
+      ( "hb;fr is irreflexive",
+        fun x ->
+          URelation.is_irreflexive
+            (URelation.compose [ hb x; Lazy.force x.fr ])
+      );
+    ]
+
+  let data_races = None
+  let allows_thin_air = false
+
+  let check_program =
+    refuse_outside ~name:"OCAML"
+      ~description:
+        "programs whose accesses are atomic ([sc]) or non-atomic, without \
+         fences or locks"
+      (fun ev ->
+        no_locks ev
+        &&
+        match (ev.typ, mode_of ev) with
+        | Fence, _ -> false
+        | (Read | Write), Some (SC | Nonatomic | Relaxed) -> true
+        | (Read | Write), _ -> false
+        | _ -> true
+      )
+end)
+
 (** WebAssembly's memory model (Watt, Rossberg and Pichon-Pharabod, OOPSLA
     2019, Fig. 7), on MoRDor's accesses: each is to one whole location, so all
     are aligned, of one size and tear-free, and each read reads from one write.
@@ -2677,6 +3009,25 @@ module ModelRegistry = struct
       register "c20" (fun () -> rc11_variant RC11Config.c20);
       register "orc11" (fun () -> rc11_variant RC11Config.orc11);
       register "wasm" (fun () -> (module Wasm : MEMORY_MODEL));
+      register "bmm" (fun () ->
+          let module M = TSOAxioms (struct
+            let name = "bmm"
+            let java_volatiles = true
+          end) in
+          (module M : MEMORY_MODEL)
+      );
+      List.iter
+        (fun name ->
+          register name (fun () ->
+              let module M = DRFSC (struct
+                let name = name
+              end) in
+              (module M : MEMORY_MODEL)
+          )
+        )
+        [ "drfx"; "denovosync" ];
+      register "crc" (fun () -> (module CRC : MEMORY_MODEL));
+      register "ocaml" (fun () -> (module OCaml : MEMORY_MODEL));
       register "rar" (fun () -> rc11_variant RC11Config.rar);
       register "mrd" (fun () -> (module MRD : MEMORY_MODEL));
 
@@ -2697,6 +3048,7 @@ module ModelRegistry = struct
           register name (fun () ->
               let module M = TSOAxioms (struct
                 let name = name
+                let java_volatiles = false
               end) in
               (module M : MEMORY_MODEL)
           )

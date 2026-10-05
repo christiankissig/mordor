@@ -173,6 +173,45 @@ allow (r1 = 1) [Wasm]|}
   | _ -> fail "Wasm answered for a program with release and acquire accesses"
   | exception Failure msg -> check bool "says why" true (contains msg "WASM")
 
+(** The models defined on fragments refuse what lies outside them, naming
+    themselves: DRFx and BMM have no lock order, CRC no SC accesses, and OCaml
+    no release-acquire modes. *)
+let test_fragments_refuse () =
+  List.iter
+    (fun (model, source) ->
+      match run ~primary:model ~others:[] source with
+      | _ -> fail (model ^ " answered for a program outside its fragment")
+      | exception Failure msg ->
+          check bool (model ^ " says why") true
+            (contains msg (String.uppercase_ascii model))
+    )
+    [
+      ( "drfx",
+        "x := 0;\n\
+         { lock; x := 1; unlock } ||| { r1 := x }\n\
+         %%\n\
+         allow (r1 = 1) [DRFx]"
+      );
+      ( "bmm",
+        "x := 0;\n\
+         { lock; x := 1; unlock } ||| { r1 := x }\n\
+         %%\n\
+         allow (r1 = 1) [BMM]"
+      );
+      ( "crc",
+        "x := 0;\n\
+         { x.store(1, sc) } ||| { r1 := x.load(sc) }\n\
+         %%\n\
+         allow (r1 = 1) [CRC]"
+      );
+      ( "ocaml",
+        "x := 0;\n\
+         { x.store(1, rel) } ||| { r1 := x.load(acq) }\n\
+         %%\n\
+         allow (r1 = 1) [OCaml]"
+      );
+    ]
+
 (** Programs the edges below are checked on. *)
 let programs =
   [
@@ -251,6 +290,13 @@ let edges =
     ("rc11z", "rc11");
     (* The same release sequence and psc; RC17 checks thin air too. *)
     ("rc17", "c20");
+    (* DRFx and DeNovoSync are SC on executions, their difference being in
+       what a race means; BMM is TSO with more of po kept. *)
+    ("drfx", "sc");
+    ("sc", "drfx");
+    ("denovosync", "drfx");
+    ("drfx", "denovosync");
+    ("bmm", "tso");
   ]
 
 let test_edges_hold () =
@@ -472,6 +518,8 @@ let suite =
       test_case "ORC11 and RAR refuse what is outside their fragments" `Quick
         test_rc11_fragments_refuse;
       test_case "Wasm refuses other modes" `Quick test_wasm_refuses_other_modes;
+      test_case "DRFx, BMM, CRC and OCaml refuse what is outside them" `Quick
+        test_fragments_refuse;
       test_case "zoo edges hold per execution" `Slow test_edges_hold;
       test_case "conjunction parses" `Quick test_conjunction_parses;
       test_case "conjunction checks each model" `Quick
