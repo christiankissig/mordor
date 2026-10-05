@@ -1,0 +1,10 @@
+name=case a admits
+%%
+// Case (a) of Condition 2 admits every read: the read takes the write
+// just before it in the same iteration. MoRDor (8bf006f): episodic.
+rC := malloc 1;
+*rC := 0;
+do {
+  *rC := 1;
+  ra := *rC;
+} while (ra = 0)

@@ -1,0 +1,13 @@
+name=case a fails
+%%
+// Case (a) fails: under any loop boundary some read of *rC precedes a write
+// of *rC in its iteration and can only read from an earlier iteration. Same
+// program as write_condition/fail.lit. MoRDor (8bf006f): only Condition 2 fails.
+rC := malloc 1;
+*rC := 0;
+do {
+  ra := *rC;
+  *rC := 1;
+  rb := *rC;
+  *rC := 2;
+} while (rb < 5)

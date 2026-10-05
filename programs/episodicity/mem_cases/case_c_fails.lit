@@ -1,0 +1,16 @@
+name=case c fails
+%%
+// Case (c) fails: fadd(rC,1) modifies the value, so the next iteration's
+// read of the previous iteration's write is admitted by no case. MoRDor
+// (8bf006f): only Condition 2 fails.
+rC := malloc 1;
+*rC := 0;
+{
+  do {
+    rv := fadd(acquire,release,rC,1);
+  } while (rv < 5)
+}
+|||
+{
+  *rC :rel= 1;
+}

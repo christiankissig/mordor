@@ -1,0 +1,16 @@
+name=case b admits
+%%
+// Case (b) admits the loop's read: it reads Thread 2's write, which no
+// iteration of the loop reaches, as the loop writes nothing. MoRDor (8bf006f):
+// episodic; caseb_path.py at bound 3: 0 of 5 executions violate case (b).
+rY := malloc 1;
+*rY := 0;
+{
+  do {
+    ry :acq= *rY;
+  } while (ry = 0)
+}
+|||
+{
+  *rY :rel= 1;
+}
