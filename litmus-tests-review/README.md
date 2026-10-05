@@ -85,12 +85,7 @@ written to disagree.
 
 | Test | Assertion | Model |
 |---|---|---|
-| [`popl_bridging/Preserving detour.lit`](popl_bridging/Preserving detour.lit) #58 | forbid `r1=1 ∧ r2=1 ∧ r3=1` | `[Bridging]` → IMM |
 | [`rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit`](rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit) #63 | forbid `r1=1 ∧ r2=0` | `[Power]` → IMM |
-
-`Preserving detour` is out-of-thin-air: it asks that a value not be justified by
-a cycle through its own dependencies. `no_oota` is the property MRD exists to
-deliver, so it is the load-bearing one.
 
 **Eight have left this table.** `popl_promising/Page 7 Column 1b.lit` #61 was
 not out of thin air either. Its release store `y.store(1, rel)` is overwritten by
