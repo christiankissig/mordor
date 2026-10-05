@@ -454,10 +454,16 @@ module IMM : MEMORY_MODEL = struct
         USet.inplace_union ~into:part1 part2
     in
 
-    (* release = ([W_rel] ∪ [F_rel];po);rs *)
+    (* release = ([W_rel] ∪ [F_rel];po);rs
+
+       [W_rel], here and in [bob], is a write of mode [rel] or stronger, and
+       [R_acq] a read of mode [acq] or stronger: IMM's modes are ordered
+       [rlx ⊑ acq, rel ⊑ acqrel ⊑ sc]. They were matched exactly, so an [sc]
+       write did not release, nor an [sc] read acquire, and message passing
+       through [sc] accesses came out allowed. *)
     let release =
       let w_rel =
-        ModelUtils.match_events events e Write (Some Release) None None
+        ModelUtils.match_events events e Write (Some Release) (Some ">") None
       in
       let f_rel_po =
         URelation.compose
@@ -480,7 +486,7 @@ module IMM : MEMORY_MODEL = struct
         |> USet.union rfi
       in
       let r_acq =
-        ModelUtils.match_events events e Read (Some Acquire) None None
+        ModelUtils.match_events events e Read (Some Acquire) (Some ">") None
       in
       let po_f_acq =
         URelation.compose
@@ -501,12 +507,18 @@ module IMM : MEMORY_MODEL = struct
       let p1 =
         URelation.compose
           [
-            po; ModelUtils.match_events events e Write (Some Release) None None;
+            po;
+            ModelUtils.match_events events e Write (Some Release) (Some ">")
+              None;
           ]
       in
       let p2 =
         URelation.compose
-          [ ModelUtils.match_events events e Read (Some Acquire) None None; po ]
+          [
+            ModelUtils.match_events events e Read (Some Acquire) (Some ">")
+              None;
+            po;
+          ]
       in
       let p3 =
         URelation.compose
@@ -519,7 +531,8 @@ module IMM : MEMORY_MODEL = struct
       let p5 =
         URelation.compose
           [
-            ModelUtils.match_events events e Write (Some Release) None None;
+            ModelUtils.match_events events e Write (Some Release) (Some ">")
+              None;
             loc_restrict po;
             ModelUtils.match_events events e Write None None None;
           ]

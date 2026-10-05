@@ -1,0 +1,20 @@
+// MP+sc+acq -- message passing through a sc store and a acquire load.
+//
+// MoRDor's own test. A store of mode sc releases and a load of mode acquire
+// acquires, so the data read is ordered after the flag read and must see the
+// data write. sMRD's ppo and IMM's sw and bob matched access modes exactly,
+// leaving sc reads out of acquire (sMRD) and sc accesses out of both release
+// and acquire (IMM), and this outcome came out allowed.
+x := 0;
+y := 0;
+{
+  x := 1;
+  y.store(1, sc)
+} ||| {
+  r1 := y.load(acquire);
+  r2 := x
+}
+%%
+forbid (r1 = 1 && r2 = 0) [smrd]
+forbid (r1 = 1 && r2 = 0) [imm]
+forbid (r1 = 1 && r2 = 0) [rc11]

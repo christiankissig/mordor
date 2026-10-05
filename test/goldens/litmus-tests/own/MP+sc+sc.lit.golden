@@ -1,4 +1,7 @@
 verdict: valid
+  holds forbid (((r1 = 1) && (r2 = 0))) [smrd]
+  holds forbid (((r1 = 1) && (r2 = 0))) [imm]
+  holds forbid (((r1 = 1) && (r2 = 0))) [rc11]
 executions: 7
 --- execution 0 ---
 E: 0=t-:I@ 1=t-:T@ 2=t-:T@ 3=t0:W@x 4=t0:W@y 5=t1:W@x 6=t1:W@y 7=t2:R@y 8=t2:R@x

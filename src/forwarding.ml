@@ -456,9 +456,21 @@ module EventStructureContext = struct
     let w = USet.intersection structure.write_events e in
     let f = USet.intersection structure.fence_events e in
 
-    let w_rel = filter_order structure w Release in
+    (* [filter_order] matches a mode exactly, so the stronger modes are named
+       too: an [sc] or [acq_rel] read acquires and an [sc] or [acq_rel] write
+       releases. [r_sc] was computed and left out of [e_acq] from 0c66850, and
+       message passing through an [sc] load came out allowed. *)
+    let w_rel =
+      USet.inplace_union
+        ~into:(filter_order structure w Release)
+        (filter_order structure w ReleaseAcquire)
+    in
     let w_sc = filter_order structure w SC in
-    let r_acq = filter_order structure r Acquire in
+    let r_acq =
+      USet.inplace_union
+        ~into:(filter_order structure r Acquire)
+        (filter_order structure r ReleaseAcquire)
+    in
     let r_sc = filter_order structure r SC in
     let f_rel =
       USet.inplace_union
@@ -486,7 +498,10 @@ module EventStructureContext = struct
     in
 
     let e_acq =
-      USet.union r_acq f_sc |> USet.union f_acq |> USet.union (of_type Lock)
+      USet.union r_acq r_sc
+      |> USet.union f_sc
+      |> USet.union f_acq
+      |> USet.union (of_type Lock)
     in
     let e_rel =
       USet.union w_rel w_sc
