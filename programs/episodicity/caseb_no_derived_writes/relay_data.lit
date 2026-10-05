@@ -1,0 +1,43 @@
+// Case (b) is not implied by "no loop write writes a value derived from a
+// read of the same iteration".
+//
+// The loop's only write stores the constant 1, and its only read feeds nothing
+// but the guard, so the hypothesis holds. Thread 2 copies x into y. In an
+// execution where the second iteration reads y from thread 2, its value comes
+// along
+//
+//   W x:=1 (iter 1) -rf-> R x (T2) -DP(data)-> W y:=rt (T2) -rf-> R y (iter 2)
+//
+// so an earlier iteration reaches the write w = (W y) in (DP u rf)+ and case
+// (b) fails. Cases (a) and (c) do not apply: w is neither in the iteration nor
+// before the loop, and is not a read-don't-modify-write.
+//
+// The acquire read, release write and SC fence are there only so that
+// Condition 4 holds and case (b) is the one condition at stake. Release and
+// acquire alone do not order an iteration's write before the next
+// iteration's read, at another location; the fence does. Without it MoRDor
+// reports Condition 4 failing as well.
+//
+// MoRDor (63403b7) reports the loop episodic, conditions 1-4 all satisfied: its
+// Condition 2 compares a read only against writes of the same loop and does
+// not follow (DP u rf)+ through other threads. caseb_path.py over the
+// `dependencies --output-mode json` export finds the path in 2/18 executions
+// at bound 2 and 12/38 at bound 4.
+rX := malloc 1;
+*rX := 0;
+rY := malloc 1;
+*rY := 0;
+{
+  do
+  {
+    ry :acq= *rY;
+    *rX :rel= 1;
+    fence(sc);
+  }
+  while (ry = 0)
+}
+|||
+{
+  rt := *rX;
+  *rY := rt;
+}
