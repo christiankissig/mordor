@@ -207,7 +207,7 @@ and C++20 verdicts and compares them with herd7 in its own README.
 | `jam/` | Java Access Modes: MP, SB, LB, IRIW and RMWs over plain, opaque, release-acquire and volatile accesses, and fences |
 | `wasm/` | WebAssembly: incoherent unordered reads, the JavaScript SC-DRF violation, SB, MP, thin air |
 | `rc11-fragments/` | RC11 against ORC11 and RAR on programs inside their fragments: MP, LB, a race |
-| `steinke-nutt/` | MP, WRC, readers that disagree, a writer seen reversed, Oscillating, Bouajjani et al.'s history (2c), each thread reading the other's write |
+| `steinke-nutt/` | MP, WRC, readers that disagree, a writer seen reversed, Oscillating, Bouajjani et al.'s history (2c), each thread reading the other's write; its README justifies the encoding and how an oracle checks it |
 | `sessions/` | monotonic reads |
 
 `properties/atomicity-mca/IRIW+rel+acq.lit` asserts across models the same
