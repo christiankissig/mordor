@@ -138,7 +138,7 @@ let examples_handler _request =
     table uses, and ["ps1"] and ["ps2"]: promising semantics, which computes
     executions of its own and is compared by outcome (see [Semantics]). *)
 let comparable_models =
-  ("smrd" :: "rc11" :: Context.implemented_zoo_models) @ [ "ps1"; "ps2" ]
+  ("smrd" :: "rc11" :: "imm" :: Context.implemented_zoo_models) @ [ "ps1"; "ps2" ]
 
 (** The primary models it offers: those, or ["default"], the model the litmus
     test states or sMRD, which can be one not offered here. *)
