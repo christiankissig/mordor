@@ -1564,9 +1564,15 @@ module Vocab = struct
             v.writes;
           co
 
-  (** [fr = (rf⁻¹;co) \ id]: from a read to the writes after the one it read. *)
+  (** [fr = (rf⁻¹;co) \ id] within a location: from a read to the writes after
+      the one it read. Through the initial event, which writes every location,
+      [rf⁻¹;co] also relates a read of [z] to a store to [x]: in
+      [x := 3; r1 := z] that [fr] edge closed a cycle with [po], and SC and the
+      release-acquire family admitted no execution (github #127). *)
   let fr v co =
-    URelation.compose [ v.rfi; co ] |> USet.filter (fun (a, b) -> a <> b)
+    URelation.compose [ v.rfi; co ]
+    |> USet.filter (fun (a, b) -> a <> b)
+    |> v.loc_restrict
 
   let atomicity v co =
     USet.is_empty v.rmw
@@ -1885,8 +1891,10 @@ Axiomatic (struct
     let hb = URelation.transitive_closure (Vocab.union [ v.po; sw ]) in
       { hb; hb_ok = URelation.is_irreflexive hb }
 
+  (* [co;hb;rf⁻¹] is irreflexive exactly when [fr;hb] is; through [fr] the
+     initial event relates only accesses of one location ({!Vocab.fr}). *)
   let co_hb_rfi (x : derived axiomatic_candidate) =
-    URelation.is_irreflexive (URelation.compose [ x.co; x.d.hb; x.v.rfi ])
+    URelation.is_irreflexive (URelation.compose [ Lazy.force x.fr; x.d.hb ])
 
   let atomicity (x : derived axiomatic_candidate) = Vocab.atomicity x.v x.co
 
@@ -2421,7 +2429,8 @@ module CRC = AxiomaticWith (struct
   let consistent (x : derived axiomatic_candidate) hb =
     URelation.is_irreflexive hb
     && URelation.is_irreflexive (URelation.compose [ x.co; hb ])
-    && URelation.is_irreflexive (URelation.compose [ x.co; hb; x.v.rfi ])
+    (* co;hb;rf⁻¹, as fr;hb: see {!Vocab.fr} *)
+    && URelation.is_irreflexive (URelation.compose [ Lazy.force x.fr; hb ])
     && URelation.is_irreflexive (URelation.compose [ x.v.rf; hb ])
 
   let axioms =
