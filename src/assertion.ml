@@ -1798,11 +1798,12 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
     | Some structure, Some executions ->
         (* Whose data races are undefined behaviour: the model an assertion's
            executions were admitted under. Promising semantics computes final
-           states only, with no relations to race over. *)
+           states only, with no relations to race over. Decided per model: a
+           test's assertions can name both (github #128). *)
         let coherent model =
-          match ctx.options.semantics with
-          | Smrd -> Some model
-          | Promising1 | Promising2 -> None
+          match semantics_of_model_name model with
+          | None -> Some model
+          | Some _ -> None
         in
         let execution_list = USet.to_list executions in
           let* assertion_result =
