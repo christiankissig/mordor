@@ -1,0 +1,19 @@
+// MP+rlx -- MP (MP.lit) over relaxed accesses.
+//
+// Source: Arlt & Vafeiadis, "RGSep under Release/Acquire Consistency",
+//         PACMPL 10 (OOPSLA2), Article 375, 2026. doi:10.1145/3839507, Section 3: the MP assertion "does not hold under the relaxed fragment
+// of the C++ memory model".
+//
+// Reference verdicts:
+//   the paper: the relaxed fragment of C11 allows reading y = 1 and x != 7.
+//   herd7 7.58 on herd/MP+rlx.litmus, under the zoo's abstract-sc, abstract-tso,
+//     ra, sra, wra and abstract-coherence cat models and herd's rc11.cat:
+//     SC and TSO forbid; RA, SRA, WRA, Coherence and RC11 allow.
+// The paper's registers are renamed r -> ry, b -> rb:
+// MoRDor reads only names beginning with r as registers.
+x := 0; y := 0;
+{ x.store(7, rlx); y.store(1, rlx) }
+||| { ry := y.load(rlx); rb := x.load(rlx) }
+%%
+allow (ry = 1 && rb != 7) [RA, SRA, WRA, Coherence, RC11]
+forbid (ry = 1 && rb != 7) [SC, TSO]

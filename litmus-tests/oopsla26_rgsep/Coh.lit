@@ -1,0 +1,30 @@
+// Coh -- two threads each write x and then read it, release-acquire.
+//
+// Source: Arlt & Vafeiadis, "RGSep under Release/Acquire Consistency",
+//         PACMPL 10 (OOPSLA2), Article 375, 2026. doi:10.1145/3839507, Section 3.
+//
+// "Under RA, it can never happen that Thread 1 reads 2 while Thread 2 reads 1."
+// Reading 2 after writing 1 puts W x 1 before W x 2 in coherence order, and
+// reading 1 after writing 2 puts it after: no coherence order allows both.
+// WRA has no coherence order and allows it. The paper states RGSep is unsound
+// under WRA (Section 1) without naming a program; this is one.
+//
+// The paper adds: "In contrast, this weak outcome is possible under the relaxed
+// fragment of the C++ memory model and under the slightly stronger strong
+// coherence model (SCOH)." Neither herd7 nor MoRDor finds that: rc11.cat and
+// Coherence forbid the outcome with relaxed accesses too (Coh+rlx.lit), by the
+// argument above.
+//
+// Reference verdicts:
+//   the paper: RA forbids a = 2 and b = 1.
+//   herd7 7.58 on herd/Coh.litmus, under the zoo's abstract-sc, abstract-tso,
+//     ra, sra, wra and abstract-coherence cat models and herd's rc11.cat:
+//     WRA allows; SC, TSO, RA, SRA, Coherence and RC11 forbid.
+// The paper's registers are renamed a -> ra, b -> rb:
+// MoRDor reads only names beginning with r as registers.
+x := 0; y := 0; z := 0;
+{ x.store(1, rel); ra := x.load(acq); y.store(ra, rel) }
+||| { x.store(2, rel); rb := x.load(acq); z.store(rb, rel) }
+%%
+allow (ra = 2 && rb = 1) [WRA]
+forbid (ra = 2 && rb = 1) [SC, TSO, RA, SRA, Coherence, RC11]

@@ -1,0 +1,22 @@
+// MP-repeat -- message passing with the paper's spin loop, release-acquire.
+//
+// Source: Arlt & Vafeiadis, "RGSep under Release/Acquire Consistency",
+//         PACMPL 10 (OOPSLA2), Article 375, 2026. doi:10.1145/3839507, Section 3:
+//   [x] := 7; [y] := 1  ||  repeat [y]; let b = [x] in assert(b = 7)
+//
+// The loop exits only once it has read y = 1, after which x = 7 is visible.
+// The loop is bounded by MoRDor's step counter.
+//
+// Reference verdicts:
+//   the paper: under RA the assertion b = 7 holds.
+//   MP.lit by reduction: the loop exits on y = 1 only, so this is MP's outcome;
+//     herd7 forbids that under SC, RA and RC11 (MP.lit's comment).
+// Not asserted: PS1 and PS2, which keep a run that exhausts the loop bound with
+// y still 0 and so reach b != 7 (github #133).
+// The paper's registers are renamed r -> ry, b -> rb:
+// MoRDor reads only names beginning with r as registers.
+x := 0; y := 0;
+{ x.store(7, rel); y.store(1, rel) }
+||| { do { ry := y.load(acq) } while (ry = 0); rb := x.load(acq) }
+%%
+forbid (rb != 7) [SC, RA, RC11]

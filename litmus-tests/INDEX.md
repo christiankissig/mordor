@@ -1,7 +1,7 @@
 # Litmus Tests Index
 
-Total tests: 404
-Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-05
+Total tests: 414
+Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-06
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
@@ -81,6 +81,16 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-05
 - on_thin_air_reads19/TC9a.lit
 - on_thin_air_reads19/ex3.5.lit
 - on_thin_air_reads19/s5.3.2.lit
+- oopsla26_rgsep/Coh+rlx.lit
+- oopsla26_rgsep/Coh.lit
+- oopsla26_rgsep/CohRR+rlx.lit
+- oopsla26_rgsep/CohRR.lit
+- oopsla26_rgsep/IRIW.lit
+- oopsla26_rgsep/MP+rlx.lit
+- oopsla26_rgsep/MP-par-MP.lit
+- oopsla26_rgsep/MP-repeat.lit
+- oopsla26_rgsep/MP.lit
+- oopsla26_rgsep/OT.lit
 - opts/store-forward.lit
 - own/DOMAIN.lit
 - own/FWD-STRENGTHEN-LIFT.lit
