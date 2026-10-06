@@ -762,20 +762,48 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
       );
       ctx.options.ubopt <- options.ubopt
 
-(** [assertion_coherence_model ctx model] is the coherence model an assertion
-    naming [model] is checked under: the one the name maps to, or the model
+(** [primary_model_name ctx] is the name of the model the run's own executions
+    are under: the coherence model in effect under sMRD, or [ps1] or [ps2]
+    under promising semantics. *)
+let primary_model_name (ctx : mordor_ctx) =
+  match ctx.options.semantics with
+  | Smrd -> ctx.options.coherent
+  | semantics -> semantics_name semantics
+
+(** [assertion_coherence_model ?forced ctx model] is the model an assertion
+    naming [model] is checked under: the coherence model the name maps to, the
+    promising semantics [PS1] or [PS2] names ([ps1], [ps2]), or the model
     already in effect when the name maps to none.
 
     Asked once the first assertion's model has been applied, so "already in
-    effect" is that model.
+    effect" is that model. [forced] is the semantics chosen before any
+    assertion's model was, by [--semantics] or the header; a promising one
+    stands for every assertion, as [--semantics] is documented to.
 
     @raise Failure
       if [model] is unknown, unless [allow_unknown_model] is set, or if it
       disagrees with the model in effect about the undefined-behaviour fold. The
       fold happens at interpretation, before any model is consulted, and the
       assertions of one test share one interpretation. *)
-let assertion_coherence_model (ctx : mordor_ctx) model =
+let assertion_coherence_model ?(forced = Smrd) (ctx : mordor_ctx) model =
+  let promising_name =
+    List.mem (String.lowercase_ascii model) promising_model_names
+  in
   match get_model_options model with
+  | _ when forced <> Smrd -> semantics_name forced
+  | None when promising_name -> (
+      (* Promising semantics is no coherence model: the assertion is checked
+         against the semantics' own executions, which {!Semantics} computes
+         when the run's are another's (github #128). [Promising] names no
+         version, and takes the one chosen, if any, as [apply_model_options]
+         does. *)
+      match semantics_of_model_name model with
+      | Some semantics -> semantics_name semantics
+      | None ->
+          let probe = { ctx with options = { ctx.options with model } } in
+            apply_model_options probe model;
+            primary_model_name probe
+    )
   | Some { coherent; ubopt } ->
       if ubopt <> ctx.options.ubopt then
         failwith
@@ -786,7 +814,7 @@ let assertion_coherence_model (ctx : mordor_ctx) model =
               consulted. Put the assertions under %S in a test of their own."
              model ctx.options.model model
           );
-      Option.value coherent ~default:ctx.options.coherent
+      Option.value coherent ~default:(primary_model_name ctx)
   | None ->
       (* Unknown: fail as [apply_model_options] does, or measure under the
          model in effect when asked to. *)
@@ -794,7 +822,7 @@ let assertion_coherence_model (ctx : mordor_ctx) model =
         { ctx with options = { ctx.options with model = ctx.options.model } }
       in
         apply_model_options probe model;
-        ctx.options.coherent
+        primary_model_name ctx
 
 (** [set_assertions ctx assertions] records a test's assertions, applies the
     first one's model, and resolves the model every assertion is checked under.
@@ -808,6 +836,7 @@ let set_assertions (ctx : mordor_ctx) (assertions : ir_assertion list) =
     | Ir.Model { model } -> Some model
     | Ir.Chained _ -> None
   in
+    let forced = ctx.options.semantics in
     ( match assertions with
     | _ :: _ :: _
       when List.exists
@@ -831,8 +860,8 @@ let set_assertions (ctx : mordor_ctx) (assertions : ir_assertion list) =
       List.map
         (fun a ->
           match model_of a with
-          | Some model -> assertion_coherence_model ctx model
-          | None -> ctx.options.coherent
+          | Some model -> assertion_coherence_model ~forced ctx model
+          | None -> primary_model_name ctx
         )
         assertions
 
@@ -882,7 +911,7 @@ let select_models (ctx : mordor_ctx) ~primary ~others =
       apply_model_options ctx primary;
       (* The primary replaces the test's own model, and so every assertion's. *)
       ctx.assertion_models <-
-        List.map (fun _ -> ctx.options.coherent) ctx.assertion_models
+        List.map (fun _ -> primary_model_name ctx) ctx.assertion_models
     end;
     let coherence_model = function
       | "default" -> stated

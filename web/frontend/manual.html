@@ -1388,7 +1388,7 @@ r0 := flag;
                 </div>
 
                 <h3>Several Models</h3>
-                <p>An assertion can name several models, and a test can have several assertions, one per line. Each assertion is checked under each model it names, and the test is valid when every one holds. Executions are enumerated once and each model checks them, so the models of one test must agree on the undefined-behaviour fold. The first model named is the one executions are shown for.</p>
+                <p>An assertion can name several models, and a test can have several assertions, one per line. Each assertion is checked under each model it names, and the test is valid when every one holds. Executions are enumerated once and each model checks them, so the models of one test must agree on the undefined-behaviour fold. PS1 and PS2 compute executions of their own: naming one beside a coherence model, as in <code>allow (…) [RC11, PS1]</code>, runs both, and each verdict is its own model's. <code>--semantics</code> chooses one semantics for every assertion. The first model named is the one executions are shown for.</p>
                 <div class="syntax-block">
                     <pre><code><span class="operator">%%</span>
 <span class="keyword">allow</span> (r0 = 1 && r1 = 2 && r2 = 1) [WRA, CC]

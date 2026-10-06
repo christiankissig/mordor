@@ -82,18 +82,61 @@ let promising_run (ctx : mordor_ctx) semantics =
   let%lwt sub = Promising.step_calculate_executions (Lwt.return sub) in
     Lwt.return (executions_of sub)
 
-(** [step_calculate_executions ?track ?after_justifications lwt_ctx] is sMRD's
-    [Elaborations.step_generate_justifications] followed by
-    [Executions.step_calculate_dependencies], or {!Promising}'s step for PS1.0
-    and PS2.0, as [ctx.options.semantics] says. [after_justifications] runs
-    between sMRD's two steps, where the justifications are known; [track] is
-    {!Promising.step_calculate_executions}'s.
+(** {1 Assertions Under Another Semantics}
 
-    The compared models are then matched against the primary's executions:
-    coherence models by sMRD as ever when sMRD is primary, and otherwise by
-    outcome, as above. *)
-let step_calculate_executions ?track ?(after_justifications = Fun.id)
-    (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+    An assertion is checked against the executions of the model it names
+    ([Context.set_assertions]). A coherence model checks sMRD's executions, and
+    a promising semantics computes its own, so a test whose assertions name
+    both -- [allow P [RC11, PS1]] -- needs the other semantics' executions
+    besides the run's own. They go into [model_executions], where
+    [Assertion.step_check_assertions] looks up every model but the primary.
+    Before, every assertion got the primary's executions and its verdict
+    (github #128). *)
+
+(** [assertion_executions ctx] adds to [ctx.model_executions] the executions of
+    each model an assertion names whose semantics is not the run's: a promising
+    semantics' own, and the sMRD executions a coherence model admits. *)
+let assertion_executions (ctx : mordor_ctx) =
+  let primary = ctx.options.semantics in
+  let foreign =
+    ctx.assertion_models
+    |> List.filter (fun m ->
+        m <> ctx.options.coherent
+        &&
+        match semantics_of_model_name m with
+        | Some semantics -> semantics <> primary
+        | None -> primary <> Smrd
+    )
+    |> List.sort_uniq String.compare
+  in
+    if foreign = [] then Lwt.return ctx
+    else begin
+      let tbl =
+        match ctx.model_executions with
+        | Some tbl -> tbl
+        | None -> Hashtbl.create 8
+      in
+      let promising, coherence = List.partition is_promising foreign in
+      let%lwt by_model = smrd_admitted ctx coherence in
+        List.iter (fun (m, executions) -> Hashtbl.replace tbl m executions) by_model;
+        let%lwt () =
+          Lwt_list.iter_s
+            (fun m ->
+              let%lwt executions =
+                promising_run ctx (Option.get (semantics_of_model_name m))
+              in
+                Hashtbl.replace tbl m executions;
+                Lwt.return_unit
+            )
+            promising
+        in
+          ctx.model_executions <- Some tbl;
+          Lwt.return ctx
+    end
+
+(** [calculate_executions ?track ~after_justifications lwt_ctx] is
+    {!step_calculate_executions} but for the assertions' other semantics. *)
+let calculate_executions ?track ~after_justifications lwt_ctx =
   let%lwt ctx = lwt_ctx in
   let primary_run ctx =
     match ctx.options.semantics with
@@ -173,6 +216,22 @@ let step_calculate_executions ?track ?(after_justifications = Fun.id)
         ctx.model_admissions <- Some admissions;
         Lwt.return ctx
     end
+
+(** [step_calculate_executions ?track ?after_justifications lwt_ctx] is sMRD's
+    [Elaborations.step_generate_justifications] followed by
+    [Executions.step_calculate_dependencies], or {!Promising}'s step for PS1.0
+    and PS2.0, as [ctx.options.semantics] says. [after_justifications] runs
+    between sMRD's two steps, where the justifications are known; [track] is
+    {!Promising.step_calculate_executions}'s.
+
+    The compared models are then matched against the primary's executions:
+    coherence models by sMRD as ever when sMRD is primary, and otherwise by
+    outcome, as above. Last, an assertion naming a model of the other semantics
+    gets that semantics' executions ({!assertion_executions}). *)
+let step_calculate_executions ?track ?(after_justifications = Fun.id)
+    (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
+  let%lwt ctx = calculate_executions ?track ~after_justifications lwt_ctx in
+    assertion_executions ctx
 
 (** [require_smrd ~command ctx] fails unless [ctx] computes executions under
     sMRD: for the commands that show what only sMRD computes -- justifications,
