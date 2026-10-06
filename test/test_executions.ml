@@ -36,6 +36,7 @@ module TestData = struct
       Hashtbl.add events 2 (create_event 2 Read ~id_val:(VVar "x") ());
       Hashtbl.add events 3 (create_event 3 Write ~id_val:(VVar "y") ());
       Hashtbl.add events 4 (create_event 4 Read ~id_val:(VVar "y") ());
+      Hashtbl.add events 5 (create_event 5 Terminal ());
       events
 
   let basic_origin () =
@@ -111,13 +112,20 @@ module TestData = struct
   let path_gen_cases =
     [
       ( "linear",
+        USet.of_list [ 1; 2; 3; 4; 5 ],
+        USet.of_list [ (1, 2); (2, 3); (3, 4); (4, 5) ],
+        fun paths -> List.length paths > 0
+      );
+      (* A run ends at a terminal event. One ending anywhere else was cut off
+         by a loop bound and is no run (github #133). *)
+      ( "cut_off",
         USet.of_list [ 1; 2; 3; 4 ],
         USet.of_list [ (1, 2); (2, 3); (3, 4) ],
-        fun paths -> List.length paths > 0
+        fun paths -> paths = []
       );
       ("empty", USet.create (), USet.create (), fun _paths -> true);
       ( "single_event",
-        USet.of_list [ 1 ],
+        USet.of_list [ 5 ],
         USet.create (),
         fun paths -> List.length paths = 1
       );
@@ -198,8 +206,8 @@ let test_integration () =
   let events = TestData.basic_events () in
   let structure =
     TestData.make_structure
-      ~e:(USet.of_list [ 1; 2; 3; 4 ])
-      ~po:(USet.of_list [ (1, 2); (1, 3); (2, 4); (3, 4) ])
+      ~e:(USet.of_list [ 1; 2; 3; 4; 5 ])
+      ~po:(USet.of_list [ (1, 2); (1, 3); (2, 4); (3, 4); (4, 5) ])
       ()
   in
 

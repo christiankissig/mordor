@@ -11,12 +11,12 @@
 //   the paper: under RA the assertion b = 7 holds.
 //   MP.lit by reduction: the loop exits on y = 1 only, so this is MP's outcome;
 //     herd7 forbids that under SC, RA and RC11 (MP.lit's comment).
-// Not asserted: PS1 and PS2, which keep a run that exhausts the loop bound with
-// y still 0 and so reach b != 7 (github #133).
+//   PS1 and PS2: promising semantics forbids MP (MP.lit's verdicts), and a run
+//     whose loop runs out of unrollings with y still 0 is no run (github #133).
 // The paper's registers are renamed r -> ry, b -> rb:
 // MoRDor reads only names beginning with r as registers.
 x := 0; y := 0;
 { x.store(7, rel); y.store(1, rel) }
 ||| { do { ry := y.load(acq) } while (ry = 0); rb := x.load(acq) }
 %%
-forbid (rb != 7) [SC, RA, RC11]
+forbid (rb != 7) [SC, RA, RC11, PS1, PS2]

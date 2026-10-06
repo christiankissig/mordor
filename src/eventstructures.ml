@@ -532,8 +532,14 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
       Hashtbl.find_opt po_tree current |> Option.value ~default:(USet.create ())
     in
       if USet.size neighbours == 0 then
-        (* leaf node *)
-        [ USet.singleton current ]
+        (* A leaf ends a path only if it is where a run ends, a terminal event.
+           Any other leaf is a run the loop bound cut off -- the step counter
+           ran out inside a loop whose condition still held -- and is no run of
+           the program: kept, it became an execution with no final registers,
+           so every assertion over them held (github #133). *)
+        ( match Hashtbl.find_opt structure.events current with
+        | Some { typ = Terminal; _ } -> [ USet.singleton current ]
+        | _ -> [] )
       else if USet.size neighbours == 1 then
         (* one neighbour; continue down that path *)
         let next = USet.values neighbours |> List.hd in

@@ -60,6 +60,11 @@ and 'a ir_stmt =
   | GlobalMalloc of { global : string; size : expr }
   | Labeled of { label : string list; stmt : 'a ir_node }
   | Skip
+  | Blocked of { condition : expr }
+      (** A loop's unrolling ran out: if [condition] holds the loop would go
+          round again, and the run goes no further -- it is no run of the
+          program. Otherwise the run goes on past the loop. Made by loop
+          unrolling, never parsed (github #133). *)
 
 (* annotated ir node wrapping ir statements with annotations *)
 and 'a ir_node = { stmt : 'a ir_stmt; annotations : 'a }
