@@ -54,6 +54,7 @@ type assign_info = { mode : mode; volatile : bool }
 (* AST for expressions and statements *)
 type ast_expr =
   | EInt of Z.t
+  | EBool of bool
   | ERegister of string
   | EGlobal of string
   | EAtLoc of string
@@ -154,6 +155,7 @@ and ast_litmus = {
 let rec expr_to_string (expr : ast_expr) : string =
   match expr with
   | EInt z -> Printf.sprintf "EInt %s" (Z.to_string z)
+  | EBool b -> Printf.sprintf "EBool %b" b
   | ERegister r -> Printf.sprintf "ERegister %s" r
   | EGlobal g -> Printf.sprintf "EGlobal %s" g
   | EAtLoc l -> Printf.sprintf "EAtLoc %s" l

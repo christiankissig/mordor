@@ -49,6 +49,7 @@ let parse_expr = parse Parser.expr_only
 (** Convert ast_expr to Types.expr *)
 let rec ast_expr_to_expr : ast_expr -> Types.expr = function
   | EInt n -> Types.ENum n
+  | EBool b -> Types.EBoolean b
   | ERegister r -> Types.EVar r
   | EGlobal g -> Types.EVar g
   | EAtLoc l -> Types.EVar l
@@ -316,7 +317,7 @@ and convert_litmus ast_litmus =
 (** [program_expression_error e] is what is wrong with [e] as an expression in a
     program, if anything. *)
 let rec program_expression_error : ast_expr -> string option = function
-  | EInt _ | ERegister _ -> None
+  | EInt _ | EBool _ | ERegister _ -> None
   | EGlobal g ->
       Some
         (Printf.sprintf
