@@ -974,6 +974,39 @@ let pointer_tests =
       );
   ]
 
+(* ------------------------------------------------------------------ *)
+(*  Boolean literals                                                   *)
+(* ------------------------------------------------------------------ *)
+
+(* [true] and [false] were not keywords: they lexed as globals, and a condition
+   [true] reached the solver as an integer-sorted variable, which Z3 rejected
+   with "invalid argument" (github #129). *)
+
+let check_verdict name source expected () =
+  Alcotest.(check (option bool))
+    name (Some expected) (run_litmus_ctx source).valid
+
+let boolean_literal_tests =
+  [
+    Alcotest.test_case "literal: allow (true) holds when an execution exists"
+      `Quick
+      (check_verdict "allow true" "r1 := x\n%% allow (true) [sMRD]" true);
+    Alcotest.test_case "literal: forbid (true) fails when an execution exists"
+      `Quick
+      (check_verdict "forbid true" "r1 := x\n%% forbid (true) [sMRD]" false);
+    Alcotest.test_case "literal: allow (false) never holds" `Quick
+      (check_verdict "allow false" "r1 := x\n%% allow (false) [sMRD]" false);
+    Alcotest.test_case "literal: true in a conjunction" `Quick
+      (check_verdict "true && r1 = 0" "r1 := x\n%% allow (true && r1 = 0) [RC11]"
+         true
+      );
+    Alcotest.test_case "literal: a program branch on true" `Quick
+      (check_verdict "if (true)"
+         "x := 0;\nr1 := 1;\nif (true) { x := r1 }\n%% forbid (x = 0) [sMRD]"
+         true
+      );
+  ]
+
 let suite =
   ( "Test_assertion",
     (* Bug 1: allow (ub) — data-driven over exec counts *)
@@ -1114,4 +1147,6 @@ let suite =
     @ refinement_tests
     (* globals, references and pointers *)
     @ pointer_tests
+    (* boolean literals *)
+    @ boolean_literal_tests
   )

@@ -44,6 +44,8 @@ rule token = parse
   | "fadd"                { Parser.FADD }
   | "CAS"                 { Parser.CAS }
   | "cas"                 { Parser.CAS }
+  | "true"                { Parser.TRUE }
+  | "false"               { Parser.FALSE }
   | "if"                  { Parser.IF }
   | "else"                { Parser.ELSE }
   | "while"               { Parser.WHILE }

@@ -12,6 +12,7 @@ open Types
 %token FADD CAS IF ELSE WHILE DO FENCE
 %token MALLOC FREE LOCK UNLOCK
 %token ALLOW FORBID NAME MODEL VALUES
+%token TRUE FALSE
 %token LOAD STORE SKIP
 %token <Z.t> INT
 %token <string> REGISTER ATLOC GLOBAL STRING BACKTICK
@@ -509,6 +510,8 @@ expr:
   | LPAREN e=expr RPAREN { e }
 
   | n=INT { EInt n }
+  | TRUE { EBool true }
+  | FALSE { EBool false }
   | reg=REGISTER { ERegister reg }
   | global=GLOBAL { EGlobal global }
   | atloc=ATLOC { EAtLoc atloc }
