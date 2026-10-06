@@ -1,0 +1,22 @@
+// LB+ctrl+data -- load buffering where the first thread's write is control
+// dependent on its read: out of thin air, forbidden by every model here.
+// sMRD forbids it on the dependency, OCaml on load buffering as such.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+a := 0;
+b := 0;
+{
+  r0 := a;
+  if (r0 = 1) {
+    b := 1
+  }
+} ||| {
+  r1 := b;
+  a := r1
+}
+%%
+forbid (r0 = 1 && r1 = 1) [OCaml]
+forbid (r0 = 1 && r1 = 1) [RC11]
+forbid (r0 = 1 && r1 = 1) [smrd]

@@ -1,0 +1,24 @@
+// RaceInPast -- the paper's Example 2, races bounded in the past. Once r0
+// reads the flag, both writes of a happen before both reads, and CoWR keeps
+// each read from seeing a write that the other write follows in co. So the two
+// reads agree. Java's model lets them differ.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+a := 0;
+flag := 0;
+{
+  a := 1;
+  flag.store(1, sc)
+} ||| {
+  a := 2;
+  r0 := flag.load(sc);
+  r1 := a;
+  r2 := a
+}
+%%
+forbid (r0 = 1 && r1 = 1 && r2 = 2) [OCaml]
+forbid (r0 = 1 && r1 = 2 && r2 = 1) [OCaml]
+forbid (r0 = 1 && r1 = 2 && r2 = 1) [RC11]
+forbid (r0 = 1 && r1 = 2 && r2 = 1) [smrd]

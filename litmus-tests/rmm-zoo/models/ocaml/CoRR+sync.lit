@@ -1,0 +1,28 @@
+// CoRR+sync -- read-read coherence over writes of two threads. The second
+// write is made after reading the flag the first write is published with, so
+// it happens after the first and follows it in co (CoWW). A third thread then
+// reads 2 and then 1. OCaml allows it: non-atomic reads need not be coherent.
+// RC11 forbids it: po between the reads, then fr and rf, is a cycle in hb;eco.
+// Unlike CoRR.lit, the writes are in two threads.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+a := 0;
+f := 0;
+{
+  a := 1;
+  f.store(1, sc)
+} ||| {
+  rf := f.load(sc);
+  if (rf = 1) {
+    a := 2
+  }
+} ||| {
+  r1 := a;
+  r2 := a
+}
+%%
+allow (rf = 1 && r1 = 2 && r2 = 1) [OCaml]
+forbid (rf = 1 && r1 = 2 && r2 = 1) [RC11]
+forbid (rf = 1 && r1 = 2 && r2 = 1) [smrd]

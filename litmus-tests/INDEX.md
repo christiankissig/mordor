@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 396
+Total tests: 404
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-05
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -371,9 +371,17 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-05
 - rmm-zoo/models/jam/WRC+ra.lit
 - rmm-zoo/models/drf/MP+na+rlx.lit
 - rmm-zoo/models/drf/SB+na.lit
+- rmm-zoo/models/ocaml/AtomicWrite+acquire.lit
 - rmm-zoo/models/ocaml/CoRR.lit
+- rmm-zoo/models/ocaml/CoRR+sync.lit
+- rmm-zoo/models/ocaml/IRIW+atomic.lit
 - rmm-zoo/models/ocaml/LB.lit
+- rmm-zoo/models/ocaml/LB+ctrl+data.lit
+- rmm-zoo/models/ocaml/LB+data.lit
+- rmm-zoo/models/ocaml/LB+falsedep+data.lit
 - rmm-zoo/models/ocaml/MP+atomic.lit
+- rmm-zoo/models/ocaml/RaceInFuture.lit
+- rmm-zoo/models/ocaml/RaceInPast.lit
 - rmm-zoo/models/ocaml/SB+atomic.lit
 - rmm-zoo/models/ocaml/SB.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit

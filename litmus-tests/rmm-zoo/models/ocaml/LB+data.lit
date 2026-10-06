@@ -1,0 +1,21 @@
+// LB+data -- load buffering with a data dependency on one side only. OCaml
+// forbids every load-buffering shape, dependency or not, and so does RC11;
+// sMRD allows this one, the first thread's write depending on nothing.
+// LB+ctrl+data.lit and LB+falsedep+data.lit are the pair it is read with.
+//
+// The OCaml memory model (Dolan, Sivaramakrishnan & Madhavapeddy, PLDI 2018,
+// section 6). An access in mode sc is to an atomic location, any other access
+// non-atomic.
+a := 0;
+b := 0;
+{
+  r0 := a;
+  b := 1
+} ||| {
+  r1 := b;
+  a := r1
+}
+%%
+forbid (r0 = 1 && r1 = 1) [OCaml]
+forbid (r0 = 1 && r1 = 1) [RC11]
+allow (r0 = 1 && r1 = 1) [smrd]
