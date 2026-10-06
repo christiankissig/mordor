@@ -1,0 +1,5 @@
+C CohRR+rlx
+{ [x] = 0; }
+P0 (atomic_int* x) { int a = atomic_load_explicit(x, memory_order_relaxed); int b = atomic_load_explicit(x, memory_order_relaxed); }
+P1 (atomic_int* x) { atomic_store_explicit(x, 1, memory_order_relaxed); atomic_store_explicit(x, 2, memory_order_relaxed); }
+exists (0:a=2 /\ 0:b=1 \/ 0:a=2 /\ 0:b=0 \/ 0:a=1 /\ 0:b=0)

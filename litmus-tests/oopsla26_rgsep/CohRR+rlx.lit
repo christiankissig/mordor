@@ -1,0 +1,21 @@
+// CohRR+rlx -- CohRR (CohRR.lit) over relaxed accesses.
+//
+// Source: Arlt & Vafeiadis, "RGSep under Release/Acquire Consistency",
+//         PACMPL 10 (OOPSLA2), Article 375, 2026. doi:10.1145/3839507, Section 3 (CohRR), accesses made relaxed.
+//
+// Not in the paper. The release-acquire family's cat models order a thread's
+// accesses only through hb, which relaxed reads do not extend across threads,
+// so they allow the reads to go backwards; coherence per location forbids it.
+//
+// Reference verdicts:
+//   herd7 7.58 on herd/CohRR+rlx.litmus, under the zoo's abstract-sc, abstract-tso,
+//     ra, sra, wra and abstract-coherence cat models and herd's rc11.cat:
+//     SC, TSO, Coherence and RC11 forbid; RA, SRA and WRA allow.
+// The paper's registers are renamed a -> ra, b -> rb:
+// MoRDor reads only names beginning with r as registers.
+x := 0;
+{ ra := x.load(rlx); rb := x.load(rlx) }
+||| { x.store(1, rlx); x.store(2, rlx) }
+%%
+allow (rb < ra) [RA, SRA, WRA]
+forbid (rb < ra) [SC, TSO, Coherence, RC11]

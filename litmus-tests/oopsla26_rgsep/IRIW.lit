@@ -1,0 +1,25 @@
+// IRIW -- independent reads of independent writes, release-acquire throughout.
+//
+// Source: Arlt & Vafeiadis, "RGSep under Release/Acquire Consistency",
+//         PACMPL 10 (OOPSLA2), Article 375, 2026. doi:10.1145/3839507, Section 1.
+//
+// The two readers may see the independent writes to x and y in opposite orders:
+// RA is not multi-copy atomic. The paper uses it to motivate reasoning under
+// weak memory; RGSep proves a trivial postcondition for it although it is not
+// robust (Section 7).
+//
+// Reference verdicts:
+//   the paper: RA allows a = c = 1 and b = d = 0.
+//   herd7 7.58 on herd/IRIW.litmus, under the zoo's abstract-sc, abstract-tso,
+//     ra, sra, wra and abstract-coherence cat models and herd's rc11.cat:
+//     SC and TSO forbid; RA, SRA, WRA, Coherence and RC11 allow.
+// The paper's registers are renamed a -> ra, b -> rb, c -> rc, d -> rd:
+// MoRDor reads only names beginning with r as registers.
+x := 0; y := 0;
+{ x.store(1, rel) }
+||| { ra := x.load(acq); rb := y.load(acq) }
+||| { rc := y.load(acq); rd := x.load(acq) }
+||| { y.store(1, rel) }
+%%
+allow (ra = 1 && rb = 0 && rc = 1 && rd = 0) [RA, SRA, WRA, Coherence, RC11]
+forbid (ra = 1 && rb = 0 && rc = 1 && rd = 0) [SC, TSO]
