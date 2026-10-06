@@ -36,6 +36,16 @@ let test_parse_negative_int () =
         Alcotest.(check bool) "parsed -5" true (Z.equal n (Z.of_int 5))
     | _ -> Alcotest.fail "Expected EUnOp with EInt"
 
+(* [true] and [false] are literals, not globals (github #129). *)
+let test_parse_bool_literals () =
+  ( match parse_expr "true" with
+  | EBool true -> ()
+  | _ -> Alcotest.fail "Expected EBool true"
+  );
+  match parse_expr "false && r0 = 1" with
+  | EBinOp (EBool false, "&&", EBinOp (ERegister "r0", "=", EInt _)) -> ()
+  | _ -> Alcotest.fail "Expected false && r0 = 1"
+
 let test_parse_register_expr () =
   let expr = parse_expr "r0" in
     check_register_expr "parsed r0" "r0" expr
@@ -814,6 +824,7 @@ let suite =
       Alcotest.test_case "Parse integer" `Quick test_parse_int;
       Alcotest.test_case "Parse hex integer" `Quick test_parse_hex_int;
       Alcotest.test_case "Parse negative integer" `Quick test_parse_negative_int;
+      Alcotest.test_case "Parse boolean literals" `Quick test_parse_bool_literals;
       Alcotest.test_case "Parse register" `Quick test_parse_register_expr;
       Alcotest.test_case "Parse global" `Quick test_parse_global_expr;
       Alcotest.test_case "Parse atloc" `Quick test_parse_atloc_expr;
