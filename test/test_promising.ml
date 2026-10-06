@@ -419,6 +419,54 @@ allow (r1 = 1) [PS1]|}
       check bool "RPacq's outcome is among PS2.0's" true
         (List.exists (fun ex -> value ctx ex "ra" && value ctx ex "rc") execs)
 
+(** One assertion can name models of both semantics, each checked against its
+    own executions. Every model used to get the first one's verdict: under
+    [RC11, PS1] PS1.0 was said to forbid load buffering, under [PS1, RC11]
+    RC11 to allow it (github #128). *)
+let test_mixed_semantics () =
+  let lb models =
+    Printf.sprintf
+      {|x := 0; y := 0;
+{ r1 := x; y := 1 } ||| { r2 := y; x := r2 }
+%%%%
+%s|}
+      models
+  in
+  let verdicts semantics source =
+    List.map
+      (fun (assertion, holds) ->
+        (* "allow (...) [model]" -> model *)
+        let i = String.rindex assertion '[' in
+          ( String.sub assertion (i + 1) (String.length assertion - i - 2),
+            holds
+          )
+      )
+      (run semantics source).assertion_verdicts
+  in
+  let expect name semantics source expected =
+    check
+      (list (pair string bool))
+      name expected (verdicts semantics source)
+  in
+  let lb_allow models = lb (Printf.sprintf "allow (r1 = 1 && r2 = 1) [%s]" models) in
+    expect "sMRD primary" Smrd
+      (lb_allow "sMRD, RC11, PS1, PS2")
+      [ ("smrd", true); ("rc11", false); ("ps1", true); ("ps2", true) ];
+    expect "coherence primary" Smrd (lb_allow "RC11, PS1")
+      [ ("rc11", false); ("ps1", true) ];
+    expect "promising primary" Smrd (lb_allow "PS1, RC11")
+      [ ("ps1", true); ("rc11", false) ];
+    expect "separate lines" Smrd
+      (lb "allow (r1 = 1 && r2 = 1) [RC11]\nallow (r1 = 1 && r2 = 1) [PS2]")
+      [ ("rc11", false); ("ps2", true) ];
+    (* RPacq: only PS2.0's reservations reach the outcome. *)
+    expect "both versions" Smrd
+      (annotate "PS1, PS2" rpacq)
+      [ ("ps1", false); ("ps2", true) ];
+    (* --semantics chooses for the whole run, every assertion included. *)
+    expect "--semantics stands" Promising1 (lb_allow "RC11, PS1")
+      [ ("rc11", true); ("ps1", true) ]
+
 let suite =
   ( "Promising",
     [
@@ -474,6 +522,7 @@ forbid (r1 + r2 != 1) [Promising]|};
       test_case "[Promising] needs --semantics" `Quick test_model_name;
       test_case "[PS1] and [PS2] select the semantics" `Quick test_annotation_selects;
       test_case "comparing across semantics by outcome" `Quick test_compare_by_outcome;
+      test_case "an assertion naming both semantics" `Quick test_mixed_semantics;
       test_case "sMRD through the same step" `Quick test_smrd_unchanged;
       test_case "semantics names" `Quick test_parse_semantics;
     ] )

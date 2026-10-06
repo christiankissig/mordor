@@ -1908,6 +1908,18 @@ let rec relations_named = function
   | EOr es -> List.concat_map relations_named es
   | _ -> []
 
+(** [own_assertions ctx] are the assertions this run answers: those resolved to
+    its semantics. The others name a model of another semantics, whose
+    executions {!Semantics} computes (github #128). *)
+let own_assertions (ctx : mordor_ctx) =
+  let model = semantics_name ctx.options.semantics in
+    if List.length ctx.assertion_models <> List.length ctx.assertions then
+      ctx.assertions
+    else
+      List.combine ctx.assertions ctx.assertion_models
+      |> List.filter (fun (_, m) -> m = model)
+      |> List.map fst
+
 let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
   match ctx.program_stmts with
   | None ->
@@ -1951,7 +1963,7 @@ let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
               )
           | _ -> ()
           )
-        ctx.assertions;
+        (own_assertions ctx);
       if Option.value ctx.litmus_constraints ~default:[] <> [] then
         Logs_safe.warn (fun m ->
             m
@@ -1968,7 +1980,7 @@ let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
             | Ir.Outcome { condition = Ir.CondExpr e; _ } -> relations_named e <> []
             | _ -> false
             )
-          ctx.assertions
+          (own_assertions ctx)
       in
       let tr =
         match (asks || track, ctx.structure, ctx.source_spans) with
@@ -2008,13 +2020,13 @@ let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
           )
           envs;
         let executions = List.mapi execution_of_result envs in
-        (* Every assertion is checked against these executions, whichever model
-           it names. *)
         (* The model the executions are under, by the name that selects it.
-           Compared models are {!Semantics}'s to match. *)
+           [Context.set_assertions] resolved each assertion's model: this
+           semantics' assertions are checked against these executions, and
+           compared models and the other assertions' are {!Semantics}'s to
+           compute. *)
         let model = semantics_name ctx.options.semantics in
           ctx.options.coherent <- model;
-          ctx.assertion_models <- List.map (fun _ -> model) ctx.assertions;
           ctx.model_executions <- None;
           ctx.executions <- Some (USet.of_list executions);
           ctx

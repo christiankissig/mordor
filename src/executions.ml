@@ -3897,10 +3897,14 @@ let step_calculate_dependencies (lwt_ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t
       match (ctx.structure, ctx.justifications, ctx.num_threads) with
       | Some structure, Some final_justs, num_threads ->
           (* The models the assertions name, besides the primary, are checked
-           as compared models are: every execution, once enumerated. *)
+           as compared models are: every execution, once enumerated. An
+           assertion under promising semantics is checked against that
+           semantics' own executions, which [Semantics] computes. *)
           let assertion_models =
             List.filter
-              (fun m -> m <> ctx.options.coherent)
+              (fun m ->
+                m <> ctx.options.coherent && semantics_of_model_name m = None
+              )
               ctx.assertion_models
             |> List.sort_uniq String.compare
           in
