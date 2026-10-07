@@ -1,3 +1,4 @@
+// Expected verdict from J. Pichon-Pharabod and P. Sewell, "A Concurrency Semantics for Relaxed Atomics that Permits Optimisation and Avoids Thin-Air Executions", POPL 2016, Example 2 (§2.1, §6); checked here under sMRD.
 x := 0;
 y := 0;
 {
@@ -12,4 +13,4 @@ y := 0;
   }
 }
 %%
-forbid (r1 = 42 && r2 = 42) [Bubbly]
+forbid (r1 = 42 && r2 = 42) [sMRD]

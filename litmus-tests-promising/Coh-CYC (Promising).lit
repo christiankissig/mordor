@@ -15,4 +15,7 @@ y := 0;
   }
 }
 %%
-forbid (r1 = 3 && r2 = 2 && r3 = 1) [PS1=allow] "Edge case."
+// Promising semantics 1.0 allows this outcome according to S. Chakraborty and V. Vafeiadis, "Grounding
+// Thin-Air Reads with Event Structures", POPL 2019, Example 2 and Fig. 5a, which give a promise execution
+// reaching it (the program is their Fig. 3). MoRDor's PS1 and PS2 forbid it (#138), and the assertion checks that.
+forbid (r1 = 3 && r2 = 2 && r3 = 1) [PS1] "Edge case."

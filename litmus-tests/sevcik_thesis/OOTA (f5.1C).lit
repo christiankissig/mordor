@@ -1,3 +1,4 @@
+// Expected verdict from J. Ševčík, "Program Transformations in Weak Memory Models", PhD thesis, University of Edinburgh, 2008; checked here under sMRD.
 // Load buffering with data dependencies on both sides: out of thin air.
 //
 // Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
@@ -16,4 +17,4 @@ x := 0; y := 0;
   x := r2
 }
 %%
-forbid (r1 = 1 && r2 = 1) [Sevcik]
+forbid (r1 = 1 && r2 = 1) [sMRD]

@@ -1,3 +1,4 @@
+// Expected verdict from M. Batty, K. Memarian, K. Nienhuis, J. Pichon-Pharabod and P. Sewell, "The Problem of Programming Language Concurrency Semantics", ESOP 2015; checked here under sMRD.
 x := 0;
 y := 0;
 {
@@ -12,4 +13,4 @@ y := 0;
   }
 }
 %%
-forbid (r1 = 42 && r2 = 42) [Problem]
+forbid (r1 = 42 && r2 = 42) [sMRD]

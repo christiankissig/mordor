@@ -1,3 +1,4 @@
+// Expected verdict from J. Ševčík, "Program Transformations in Weak Memory Models", PhD thesis, University of Edinburgh, 2008; checked here under sMRD.
 x := 0;
 y := 0;
 {
@@ -8,4 +9,4 @@ y := 0;
   x := 1
 }
 %%
-allow (r1 = 1 && r2 = 1) [Sevcik]
+allow (r1 = 1 && r2 = 1) [sMRD]

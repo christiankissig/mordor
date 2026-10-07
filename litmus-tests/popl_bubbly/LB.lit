@@ -1,3 +1,4 @@
+// Expected verdict from J. Pichon-Pharabod and P. Sewell, "A Concurrency Semantics for Relaxed Atomics that Permits Optimisation and Avoids Thin-Air Executions", POPL 2016, not a numbered example: forbidden by §6's no-thin-air argument for arithmetic-free programs; checked here under sMRD.
 x := 0;
 y := 0;
 {
@@ -8,4 +9,4 @@ y := 0;
   x := r2
 }
 %%
-forbid (r1 = 42 && r2 = 42) [Bubbly]
+forbid (r1 = 42 && r2 = 42) [sMRD]

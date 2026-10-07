@@ -34,7 +34,7 @@ which verified these tests under IMM, not promising; that alias is gone.
 Two files were left behind in `litmus-tests/popl_grounding/` when the rest moved:
 `CYC.lit`, byte-identical to the copy already here and so simply deleted, and
 `Coh-CYC (Promising).lit`, moved here. `popl_grounding/` keeps
-`Coh-CYC (Soham).lit`, the same shape annotated `[Soham]`.
+`Coh-CYC (Soham).lit`, the same shape annotated `[sMRD]`.
 
 ## Runnable approximations
 
