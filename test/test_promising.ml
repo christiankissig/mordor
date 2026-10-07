@@ -373,7 +373,9 @@ let test_annotation_selects () =
     one only reservations allow. *)
 let test_compare_by_outcome () =
   let compared ~primary ~others source =
-    let ctx = make_context default_options () in
+    (* A copy: [select_models] sets the semantics on the options it is given,
+       which would otherwise be every later test's [default_options]. *)
+    let ctx = make_context { default_options with model = default_options.model } () in
       ctx.litmus_name <- "test";
       ctx.litmus <- Some source;
       Lwt_main.run
@@ -467,6 +469,57 @@ let test_mixed_semantics () =
     expect "--semantics stands" Promising1 (lb_allow "RC11, PS1")
       [ ("rc11", true); ("ps1", true) ]
 
+(** A run whose loop runs out of unrollings while its condition still holds is
+    no run. sMRD kept it as an execution with no final registers, so any
+    assertion over them held, and promising semantics and the per-loop counter
+    went on past the loop (github #133). A loop that exits within its
+    unrollings is unaffected. *)
+let test_loop_bound () =
+  let run_with loop_semantics semantics source =
+    let ctx =
+      make_context
+        { default_options with semantics; loop_semantics; step_counter = 2 }
+        ()
+    in
+      ctx.litmus_name <- "test";
+      ctx.litmus <- Some source;
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Semantics.step_calculate_executions
+        |> Assertion.step_check_assertions
+        )
+  in
+  let spin_while = "y := 0;\nry := y;\nrx := 0;\nwhile (ry = 0) { ry := y };\nrx := 5;" in
+  let spin_do = "y := 0;\nrx := 0;\ndo { ry := y } while (ry = 0);\nrx := 5;" in
+  let exits = "rc := 0;\nwhile (rc < 1) { rc := rc + 1 };\nrx := 5;" in
+  let mp_spin =
+    {|x := 0; y := 0;
+{ x.store(7, rel); y.store(1, rel) }
+||| { ry := y.load(acq); while (ry = 0) { ry := y.load(acq) }; rb := x.load(acq) }|}
+  in
+    List.iter
+      (fun (counter, loops) ->
+        List.iter
+          (fun (v, semantics) ->
+            let holds source assertion =
+              valid (run_with loops semantics (source ^ "\n%%\n" ^ assertion))
+            in
+            let name what = Printf.sprintf "%s, %s counter, %s" what counter v in
+              check bool (name "spinning while-loop leaves no run") false
+                (holds spin_while "allow (rx = 5 || rx = 0) []");
+              check bool (name "spinning do-loop leaves no run") false
+                (holds spin_do "allow (rx = 5 || rx = 0) []");
+              check bool (name "a loop that exits has its run") true
+                (holds exits "allow (rc = 1 && rx = 5) []");
+              check bool (name "MP with a spin loop sees x = 7") true
+                (holds mp_spin "forbid (rb != 7) []")
+          )
+          (("sMRD", Smrd) :: versions)
+      )
+      [ ("global", FiniteStepCounter); ("per-loop", StepCounterPerLoop) ]
+
 let suite =
   ( "Promising",
     [
@@ -523,6 +576,7 @@ forbid (r1 + r2 != 1) [Promising]|};
       test_case "[PS1] and [PS2] select the semantics" `Quick test_annotation_selects;
       test_case "comparing across semantics by outcome" `Quick test_compare_by_outcome;
       test_case "an assertion naming both semantics" `Quick test_mixed_semantics;
+      test_case "a loop out of unrollings" `Quick test_loop_bound;
       test_case "sMRD through the same step" `Quick test_smrd_unchanged;
       test_case "semantics names" `Quick test_parse_semantics;
     ] )

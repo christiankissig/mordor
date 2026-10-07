@@ -378,10 +378,13 @@ let place (lo, hi) =
 (** {1 Threads} *)
 
 (** What a thread has left to run. [Iterate] is a loop under the per-loop step
-    counter, with the iterations it may still make. *)
+    counter, with the iterations it may still make. [Blocked] is a thread whose
+    loop ran out of iterations while its condition still held: it takes no
+    step and never finishes, so the run is not an outcome (github #133). *)
 type item =
   | Stmt of ir_node
   | Iterate of { condition : expr; body : ir_node list; left : int }
+  | Blocked
 
 (** How loops are bounded: per loop, or by a budget each thread spends. *)
 type loops = PerLoop of int | Global
@@ -445,20 +448,25 @@ let fresh_alloc th =
     running them eagerly loses no behaviour and saves interleavings. *)
 let rec normalize ~loops th =
   match th.code with
-  | [] -> th
+  | [] | Blocked :: _ -> th
   | Iterate { condition; body; left } :: rest ->
-      if left > 0 && Val.truthy (eval th.regs condition) then
-        normalize ~loops
-          {
-            th with
-            code =
-              stmts body @ (Iterate { condition; body; left = left - 1 } :: rest);
-          }
+      if Val.truthy (eval th.regs condition) then
+        if left > 0 then
+          normalize ~loops
+            {
+              th with
+              code =
+                stmts body @ (Iterate { condition; body; left = left - 1 } :: rest);
+            }
+        else { th with code = [ Blocked ] }
       else normalize ~loops { th with code = rest }
   | Stmt node :: rest -> (
       let next = { th with code = rest } in
         match node.Ir.stmt with
         | Ir.Skip | Ir.Free _ -> normalize ~loops next
+        | Ir.Blocked { condition } ->
+            if Val.truthy (eval th.regs condition) then { th with code = [ Blocked ] }
+            else normalize ~loops next
         | Ir.Labeled { stmt; _ } ->
             normalize ~loops { th with code = Stmt stmt :: rest }
         | Ir.RegisterStore { register; expr } ->
@@ -481,11 +489,16 @@ let rec normalize ~loops th =
                   { th with code = Iterate { condition; body; left = k } :: rest }
             | Global ->
                 (* As the interpreter's global step counter: each unrolling
-                   spends one, and the one that exhausts the budget ends the
-                   thread there. *)
-                let budget = th.budget - 1 in
-                  if budget <= 0 then { th with code = []; budget }
-                  else
+                   spends one, and the one that would exhaust the budget is
+                   the loop's exit check instead. A thread that would go round
+                   again is blocked: it never finishes, so the run is no
+                   outcome (github #133). *)
+                if th.budget <= 1 then
+                  if Val.truthy (eval th.regs condition) then
+                    { th with code = [ Blocked ] }
+                  else normalize ~loops { th with code = rest }
+                else
+                  let budget = th.budget - 1 in
                     let again =
                       Ir.If { condition; then_body = body @ [ node ]; else_body = None }
                     in
@@ -498,6 +511,7 @@ let rec normalize ~loops th =
           )
         | Ir.Do { body; condition } -> (
             match loops with
+            | PerLoop k when k <= 0 -> { th with code = [ Blocked ] }
             | PerLoop k ->
                 normalize ~loops
                   {
@@ -507,9 +521,10 @@ let rec normalize ~loops th =
                       @ (Iterate { condition; body; left = k - 1 } :: rest);
                   }
             | Global ->
-                let budget = th.budget - 1 in
-                  if budget <= 0 then { th with code = []; budget }
-                  else
+                (* With no unrolling left a do-loop cannot run its body. *)
+                if th.budget <= 1 then { th with code = [ Blocked ] }
+                else
+                  let budget = th.budget - 1 in
                     let again =
                       Ir.If { condition; then_body = [ node ]; else_body = None }
                     in
@@ -548,6 +563,7 @@ let locations ~stores th mem =
       (fun acc -> function
         | Stmt n -> ref_of acc n
         | Iterate { body; _ } -> refs acc body
+        | Blocked -> acc
         )
       th.regs th.code
   in
@@ -585,6 +601,7 @@ let locations ~stores th mem =
       (fun acc -> function
         | Stmt n -> of_node acc n
         | Iterate { body; _ } -> of_nodes acc body
+        | Blocked -> acc
         )
       [] th.code
   in
@@ -623,6 +640,7 @@ let max_writes ~loops th =
       (fun n -> function
         | Stmt node -> n + of_node node
         | Iterate { body; left; _ } -> n + (left * of_nodes body)
+        | Blocked -> n
         )
       0 th.code
 
@@ -1137,6 +1155,7 @@ let domain th mem =
         | Iterate { condition; body; _ } ->
             of_expr condition;
             of_nodes body
+        | Blocked -> ()
         )
       th.code;
     let largest =

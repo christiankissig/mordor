@@ -210,7 +210,8 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
               ],
             [ (0, "Unlock") ]
           )
-    | Skip -> None
+    (* [Blocked] is made by loop unrolling, after parsing. *)
+    | Skip | Blocked _ -> None
     (* Control flow and thread spawns are handled by the structural emitter. *)
     | If _ | While _ | Do _ | Labeled _ | Threads _ -> None
 
@@ -267,7 +268,7 @@ let rec emit_node ~prefix ~(seq : int ref) ~tbl (node : ir_node_ann ir_node) :
   in
     match node.stmt with
     | Labeled { stmt = inner; _ } -> emit_node ~prefix ~seq ~tbl inner
-    | Skip -> []
+    | Skip | Blocked _ -> []
     | If { condition; then_body; else_body } ->
         let label = next_label () in
         let loops = loops_of ann in

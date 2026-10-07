@@ -918,6 +918,28 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
         | Skip ->
             let cont = recurse rest env phi events in
               cont
+        | Blocked { condition } -> (
+            (* The exit check of a loop out of unrollings. A run that would go
+               round again ends here, with no terminal event, so no path ends
+               here ([Eventstructures.generate_max_conflictfree_sets]). A
+               decided condition makes no branch event, so a loop that exits
+               numbers its events as it did before the check existed. *)
+            match
+              Expr.evaluate ~env:(Hashtbl.find_opt env) condition
+              |> apply_ub_constraints events
+            with
+            | EBoolean false -> recurse rest env phi events
+            | EBoolean true -> EventStructure.empty ()
+            | _ ->
+                let blocked = { node with stmt = Blocked { condition = EBoolean true } } in
+                  recurse
+                    ({
+                       node with
+                       stmt = If { condition; then_body = [ blocked ]; else_body = None };
+                     }
+                    :: rest)
+                    env phi events
+          )
         | _ ->
             (* Simplified - return empty structure for unhandled cases *)
             Logs_safe.err (fun m ->
@@ -1306,7 +1328,9 @@ end = struct
       @return A list of nested if-statements representing the unrolled loop. *)
   let rec unrol_while_loop ~lid body condition times =
     assert (times >= 0);
-    if times = 0 then []
+    if times = 0 then
+      (* Out of unrollings: a run whose loop would go on is no run. *)
+      [ make_ir_node (Blocked { condition }) ]
     else
       let iter = iter_of ~lid body in
       let next = List.map (retag lid (iter + 1)) body in
@@ -1335,7 +1359,9 @@ end = struct
     assert (times >= 1);
     let iter = iter_of ~lid body in
     let this = List.map (retag lid iter) body in
-      if times = 1 then this
+      if times = 1 then
+        (* Out of unrollings: a run whose loop would go on is no run. *)
+        this @ [ make_ir_node (Blocked { condition }) ]
       else
         let next = List.map (retag lid (iter + 1)) body in
           this
@@ -1362,11 +1388,25 @@ end = struct
   let rec interpret_statements_step_counter step_counter per_loop nodes env phi
       events =
     assert (step_counter >= 0);
-    if step_counter = 0 then EventStructure.empty ()
-    else
+    (* Out of unrollings, a [while] loop still has its exit check and a [do]
+       loop cannot run its body: a run that would go round again is blocked,
+       and is no run of the program. The global counter runs out at the
+       unrolling that would take it to 0, which used to cut the whole run off
+       there, exit check included, and the cut-off run became an execution
+       with no final registers (github #133). The number of copies of a loop's
+       body is what it was. *)
+    let exhausted = if per_loop then step_counter = 0 else step_counter <= 1 in
       match nodes with
       | node :: rest -> (
           match Ir.get_stmt node with
+          | Do _ when exhausted ->
+              interpret_statements_step_counter step_counter per_loop
+                (make_ir_node (Blocked { condition = EBoolean true }) :: rest)
+                env phi events
+          | While { condition; _ } when exhausted ->
+              interpret_statements_step_counter step_counter per_loop
+                (make_ir_node (Blocked { condition }) :: rest)
+                env phi events
           | Do { body; condition } ->
               if per_loop then
                 let unrolled =
