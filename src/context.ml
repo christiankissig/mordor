@@ -628,15 +628,8 @@ let implemented_zoo_models =
 let model_options_table : (string, model_options) Hashtbl.t =
   let tbl = Hashtbl.create 20 in
     Hashtbl.add tbl "power" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "sevcik" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "problem" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "jr" { coherent = None; ubopt = false };
     Hashtbl.add tbl "rc11" { coherent = Some "rc11"; ubopt = false };
     Hashtbl.add tbl "rc11c" { coherent = Some "rc11c"; ubopt = false };
-    Hashtbl.add tbl "bridging" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "bubbly" { coherent = None; ubopt = false };
-    Hashtbl.add tbl "grounding" { coherent = Some "imm"; ubopt = false };
-    Hashtbl.add tbl "soham" { coherent = None; ubopt = false };
     Hashtbl.add tbl "imm" { coherent = Some "imm"; ubopt = false };
     Hashtbl.add tbl "rc11ub" { coherent = Some "rc11"; ubopt = true };
     Hashtbl.add tbl "immub" { coherent = Some "imm"; ubopt = true };
