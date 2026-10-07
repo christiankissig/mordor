@@ -1,3 +1,4 @@
+// Expected verdict from J. Ševčík, "Program Transformations in Weak Memory Models", PhD thesis, University of Edinburgh, 2008; checked here under sMRD.
 // Redundant write after read elimination: the transformed program, with the
 // write x := r1 removed.
 //
@@ -34,4 +35,4 @@ x := 0;
   unlock m1;
 }}
 %%
-forbid (r1 = 1 && r2 = 2) [Sevcik]
+forbid (r1 = 1 && r2 = 2) [sMRD]

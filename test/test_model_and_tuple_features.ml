@@ -37,11 +37,6 @@ module TestModelAssertions = struct
         expected_coherent = Some "imm";
         expected_ubopt = true;
       };
-      {
-        model_name = "Sevcik";
-        expected_coherent = None;
-        expected_ubopt = false;
-      };
     ]
 
   (** Parameterized test function for model options *)
@@ -394,10 +389,22 @@ module TestContextModelOptions = struct
   (* [coherent = None] in the table is the other case: a name MoRDor knows and
      deliberately maps onto the default. It must keep working. *)
   let test_known_model_mapped_to_default_is_not_unknown () =
-    let ctx = apply "sevcik" default_options in
+    let ctx = apply "ub11" default_options in
       check string "coherence model left at the default" "smrd"
         ctx.options.coherent;
-      check string "model name recorded" "sevcik" ctx.options.model
+      check string "model name recorded" "ub11" ctx.options.model
+
+  (* A model name is valid when the Relaxed Memory Model Zoo has it. The names
+     of a test's source ([Sevcik], [Bridging], ...) are not models, and are
+     unknown like any other name. *)
+  let test_source_name_is_unknown () =
+    match
+      apply "bridging" { default_options with allow_unknown_model = false }
+      |> ignore
+    with
+    | () -> fail "a source name was accepted as a model"
+    | exception Failure msg ->
+        check bool "names the model" true (contains msg "\"bridging\"")
 
   let test_known_model_sets_coherent () =
     let ctx = apply "rc11" default_options in
@@ -451,10 +458,10 @@ module TestContextModelOptions = struct
         ctx.compare_models
 
   let test_select_other_without_coherence_model_fails () =
-    match selected ~primary:"default" ~others:[ "sevcik" ] () with
+    match selected ~primary:"default" ~others:[ "ub11" ] () with
     | _ -> fail "a name with no coherence model was compared"
     | exception Failure msg ->
-        check bool "names the model" true (contains msg "\"sevcik\"")
+        check bool "names the model" true (contains msg "\"ub11\"")
 
   let lb_source =
     {|x := 0;
@@ -540,6 +547,7 @@ forbid (r1 = 1 && r2 = 1) []|}
       test_case "default_options_allow_unknown_model" `Quick
         test_default_options_allow_unknown_model;
       test_case "unknown_model_fails" `Quick test_unknown_model_fails;
+      test_case "source_name_is_unknown" `Quick test_source_name_is_unknown;
       test_case "promising_says_why" `Quick test_promising_says_why;
       test_case "unknown_model_allowed_leaves_coherent" `Quick
         test_unknown_model_allowed_leaves_coherent;

@@ -1,3 +1,4 @@
+// Expected verdict from A. Jeffrey and J. Riely, "On Thin Air Reads: Towards an Event Structures Model of Relaxed Memory", LMCS 15(1), 2019; checked here under sMRD.
 x := 0;
 y := 0;
 z := 0;
@@ -11,4 +12,4 @@ z := 0;
   x := r2
 }
 %%
-forbid (r1 != 0) [JR]
+forbid (r1 != 0) [sMRD]

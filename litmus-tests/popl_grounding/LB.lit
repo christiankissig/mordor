@@ -1,3 +1,4 @@
+// Expected verdict from S. Chakraborty and V. Vafeiadis, "Grounding Thin-Air Reads with Event Structures", POPL 2019; checked here under IMM.
 x := 0;
 y := 0;
 {
@@ -10,4 +11,4 @@ y := 0;
   }
 }
 %%
-allow (r1 = 1 && r2 = 1) [Grounding]
+allow (r1 = 1 && r2 = 1) [IMM]

@@ -1,3 +1,4 @@
+// Expected verdict from J. Ševčík, "Program Transformations in Weak Memory Models", PhD thesis, University of Edinburgh, 2008; checked here under sMRD.
 // Load buffering with each location under its own monitor: x under m1, y under
 // m2.
 //
@@ -19,4 +20,4 @@ x := 0; y := 0;
   lock m1; x := 1; unlock m1;
 }
 %%
-forbid (r1 = 1 && r2 = 1) [Sevcik]
+forbid (r1 = 1 && r2 = 1) [sMRD]

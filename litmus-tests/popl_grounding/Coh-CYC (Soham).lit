@@ -1,3 +1,4 @@
+// Expected verdict from S. Chakraborty and V. Vafeiadis, "Grounding Thin-Air Reads with Event Structures", POPL 2019, §2.3 and Fig. 3: forbidden by weakestmo, allowed by weakest and by promising semantics (Example 2); checked here under sMRD.
 x := 0;
 y := 0;
 {
@@ -15,4 +16,4 @@ y := 0;
   }
 }
 %%
-forbid (r1 = 3 && r2 = 2 && r3 = 1) [Soham] "Edge case."
+forbid (r1 = 3 && r2 = 2 && r3 = 1) [sMRD] "Edge case."

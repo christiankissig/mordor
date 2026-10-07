@@ -102,9 +102,7 @@ fragment of programs (`mrd`, `orc11`, `rar`, `crc`, `drfx`, `denovosync`,
 that is. Only sMRD and MRD, and promising semantics, give locks a semantics:
 every other model refuses a program with `lock` or `unlock` the same way.
 
-Some annotations name a source rather than a model, and map onto one of the
-above: `Power`, `Bridging` and `Grounding` run under `imm`; `Sevcik`, `Problem`,
-`JR`, `Bubbly`, `Soham` and `_` run under the default. `UB11`, `RC11UB` and
+`Power` runs under `imm`, and `_` under the default. `UB11`, `RC11UB` and
 `IMMUB` are sMRD, `rc11` and `imm` with optimisations that exploit undefined
 behaviour. Any other name is an error unless `--allow-unknown-model` is given;
 `litmus-tests-jmm/` keeps tests for the Java Memory Model, which MoRDor does not

@@ -1,3 +1,4 @@
+// Expected verdict from J. Ševčík, "Program Transformations in Weak Memory Models", PhD thesis, University of Edinburgh, 2008; checked here under sMRD.
 // Roach motel semantics: the transformed program, with r1 := x moved into the
 // critical section.
 //
@@ -35,4 +36,4 @@ x := 0; y := 0; z := 0;
   z := r3
 }}
 %%
-forbid (r1 = 1 && r2 = 1 && r3 = 1) [Sevcik]
+forbid (r1 = 1 && r2 = 1 && r3 = 1) [sMRD]

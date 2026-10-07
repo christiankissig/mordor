@@ -1,3 +1,4 @@
+// Expected verdict from A. Podkopaev, O. Lahav and V. Vafeiadis, "Bridging the Gap between Programming Languages and Hardware Weak Memory Models", POPL 2019; checked here under IMM.
 x := 0;
 y := 0;
 {
@@ -8,4 +9,4 @@ y := 0;
   x := r2
 }
 %%
-allow (r1 = 1 && r2 = 1) [Bridging]
+allow (r1 = 1 && r2 = 1) [IMM]

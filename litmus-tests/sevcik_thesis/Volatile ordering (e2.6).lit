@@ -1,3 +1,4 @@
+// Expected verdict from J. Ševčík, "Program Transformations in Weak Memory Models", PhD thesis, University of Edinburgh, 2008; checked here under sMRD.
 // Synchronisation through volatile flags, with the data in a normal location.
 //
 // Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
@@ -25,4 +26,4 @@ x := 0; u := 0; v := 0;
   }
 }
 %%
-forbid (r1 = 1 && r2 = 1) [Sevcik]
+forbid (r1 = 1 && r2 = 1) [sMRD]

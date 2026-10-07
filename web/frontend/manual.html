@@ -567,7 +567,7 @@
                     <tbody>
                         <tr><td>Predicates</td><td>The execution's predicates: the branch conditions it takes and the value equalities its <code>rf</code> edges impose. <code>⊤</code> for the event structure.</td></tr>
                         <tr><td>Final registers</td><td>The value each register ends with. A register stays symbolic where the execution does not pin its value.</td></tr>
-                        <tr><td>Also allowed by</td><td>The compared memory models that also admit this execution. Only shown when models are compared and at least one admits it (see <a href="#ui-settings">Settings</a>).</td></tr>
+                        <tr><td>Also allowed by</td><td>The compared memory models that also admit this execution, or <em>none</em> when only the primary model admits it. Only shown when models are compared (see <a href="#ui-settings">Settings</a>). The filter button beside it, a funnel, restricts the carousel to the executions the primary model admits and no compared model does; press it again to see all of them. While it is on, the label at the top counts them, as in <em>Execution 3 of 25 · 4 only sMRD</em>.</td></tr>
                         <tr><td>Justifications</td><td>How many justifications the execution was built from. Press the button to list them.</td></tr>
                         <tr><td>Use-after-free</td><td>The use-after-free pairs in this execution, or <em>No</em></td></tr>
                         <tr><td>Unbounded Deref</td><td>Whether the execution has an unbounded pointer dereference (see <a href="#concepts-uaf">Use-after-free</a>)</td></tr>
@@ -609,7 +609,7 @@
                 <h4>Memory Model</h4>
                 <ul>
                     <li><strong>Primary model</strong> is the model executions are shown for, and the model the assertion is checked under. <em>Default</em> is the model the test's assertion names, or sMRD if it names none. Choosing any other model replaces the test's own model, for every assertion the test has.</li>
-                    <li><strong>Also compute executions under</strong> checks every execution against further models, any of those in the table above except IMM and RC11c. The log reports how many executions each model admits. The information box lists, for the execution on screen, the compared models that also admit it.</li>
+                    <li><strong>Also compute executions under</strong> checks every execution against further models, any of those in the table above except RC11c. The primary model is greyed out here, as there is nothing to compare it with; under <em>Default</em> that is the model the test's first assertion names, or sMRD. The log reports how many executions each model admits. The information box lists, for the execution on screen, the compared models that also admit it.</li>
                     <li><strong>PS1.0</strong> and <strong>PS2.0</strong>, under <em>Promising (operational)</em>, compute the executions under promising semantics instead of sMRD's. As the primary model, each execution's graph shows its events with their <code>rf</code> and <code>co</code> edges; there are no justifications to show. Symbolic loops are unavailable while either is the primary or a compared model.</li>
                 </ul>
                 <div class="note">
@@ -650,7 +650,7 @@
                 </ol>
 
                 <h3>Which models allow an execution?</h3>
-                <p>In <strong>Settings</strong>, choose a primary model and tick the models to compare. Executions of the primary model the others also admit say so under <strong>Also allowed by</strong>. An execution that lists no other model is one only the primary admits: on load buffering with sMRD as primary and RC11 compared, those are exactly the load-buffering witnesses RC11 rules out.</p>
+                <p>In <strong>Settings</strong>, choose a primary model and tick the models to compare. Executions of the primary model the others also admit say so under <strong>Also allowed by</strong>. An execution that lists no other model is one only the primary admits: on load buffering with sMRD as primary and RC11 compared, those are exactly the load-buffering witnesses RC11 rules out. To step through just those, press the funnel button beside <strong>Also allowed by</strong>.</p>
 
                 <h3>Is a loop episodic?</h3>
                 <p>Choose the <strong>Episodicity</strong> action, or run <strong>Visualize</strong>, and open <strong>Episodicity</strong>. A failed condition lists its violations with source positions. Hover over the loop to find it in the editor.</p>
