@@ -1,0 +1,20 @@
+// @A is the co-maximal write to A, with co pinned by a message rather than by
+// po (#124).
+//
+// MoRDor's own test. Under SC, r1 = 1 forces A.store(2) < b := 1 < r1 :=
+// b < A.store(1), so A ends at 1. rhb leaves the two stores unordered, and @A
+// used to be whichever came last in it, so MoRDor allowed @A = 2 && r1 = 1.
+// Under RC11 the read of b races and no order is forced, so it is allowed.
+A := 0; b := 0;
+{
+  r1 := b;
+  A.store(1, sc)
+} ||| {
+  A.store(2, sc);
+  b := 1
+}
+%%
+forbid (@A = 2 && r1 = 1) [SC, OCaml]
+allow (@A = 2 && r1 = 1) [RC11]
+allow (@A = 1 && r1 = 1) [SC]
+allow (@A = 2 && r1 = 0) [SC]

@@ -1,0 +1,20 @@
+// @x is the co-maximal write to x, not the last write in rhb order (#124).
+//
+// MoRDor's own test. r1 = 1 has thread 2 read x := 1 after its own x := 2, so
+// x := 1 is co-after x := 2 and x ends at 1. With r1 = 1, @x = 2 is impossible
+// under SC, and under every model with CoWR (r1 fr x := 2 closes hb;fr). rhb
+// leaves the two writes unordered, and @x used to be whichever came last in
+// it, so MoRDor allowed @x = 2 && r1 = 1. The allows are the outcomes some
+// admitted co does end with.
+x := 0;
+{
+  x := 1
+} ||| {
+  x := 2;
+  r1 := x
+}
+%%
+forbid (@x = 2 && r1 = 1) [SC, RC11, OCaml, sMRD]
+allow (@x = 1 && r1 = 1) [SC]
+allow (@x = 1 && r1 = 2) [SC]
+allow (@x = 2 && r1 = 2) [SC]
