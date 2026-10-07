@@ -338,6 +338,17 @@ val rejects_partial_executions : string -> bool
 val data_races :
   symbolic_event_structure -> symbolic_execution -> string -> (int * int) uset
 
+(** [admitted_order_where structure execution name holds] is a coherence order
+    under which model [name] admits [execution] and of which [holds] holds, or
+    [None] if there is none. A model with no coherence order constrains none:
+    every po-respecting order is asked. *)
+val admitted_order_where :
+  symbolic_event_structure ->
+  symbolic_execution ->
+  string ->
+  ((int * int) uset -> bool) ->
+  (int * int) uset option
+
 (** [check_model_program structure name] fails, with the model's reason, when
     the coherence model [name] cannot answer for the program [structure] is the
     event structure of. Unknown names are left to {!check_for_coherence}. *)

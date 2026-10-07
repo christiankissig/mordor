@@ -3852,6 +3852,41 @@ let data_races structure execution name =
           )
       )
 
+(** [admitted_order_where structure execution name holds] is a coherence order
+    under which model [name] admits [execution] and of which [holds] holds, or
+    [None] if there is none.
+
+    What an execution ends with depends on its coherence order: the final value
+    of a location is its co-maximal write. Coherence only asks that some order
+    admit the execution, so a property of the final state is asked of every
+    admitting order rather than of the one {!check_for_coherence} kept (github
+    #124). A model with no coherence order ([uses_co] false) constrains none, so
+    every po-respecting order admits the execution. *)
+let admitted_order_where structure execution name holds =
+  match ModelRegistry.lookup name with
+  | None -> None
+  | Some model ->
+      let module M = (val model : MEMORY_MODEL) in
+      let eqlocs = location_equality structure execution in
+      let cache =
+        M.build_cache execution structure
+          (build_location_restriction structure execution eqlocs)
+      in
+        if
+          not
+            (elisions_admitted model structure execution
+            && thin_air_admitted model execution
+            && M.check_thin_air cache execution
+            )
+        then None
+        else
+          (* [holds] is about the whole order, so a partial one says nothing
+             and S6's pruning stays off. *)
+          try_all_coherence_orders ~orders_allocations:M.orders_allocations
+            ~prune:false cache structure execution
+            (fun cache co -> M.check_coherence cache co && holds co)
+            eqlocs
+
 (** [check_model_program structure name] fails, with the model's reason, when
     the coherence model [name] cannot answer for the program [structure] is the
     event structure of: a program with locks under a model that does not order

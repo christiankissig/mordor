@@ -666,11 +666,14 @@ module ConditionChecker = struct
       Evaluates condition by substituting final register values and checking
       satisfiability with RF constraints.
 
+      @param coherent
+        The coherence model the execution was admitted under, whose coherence
+        orders decide the final values of locations po leaves unordered.
       @param cond_expr The condition expression.
       @param rf_conditions RF equality constraints.
       @param execution The execution.
       @return Promise of [true] if satisfiable. *)
-  let check_with_solver cond_expr rf_conditions structure execution =
+  let check_with_solver ?coherent cond_expr rf_conditions structure execution =
     Logs_safe.debug (fun m ->
         m "Checking condition with solver: %s\n%s" (show_expr cond_expr)
           (show_symbolic_execution execution)
@@ -707,22 +710,22 @@ module ConditionChecker = struct
       |> List.sort_uniq String.compare
     in
 
-    (* The memory state this execution ends in, for the locations asked about.
+    (* The writes to each location asked about, with the value each has in
+       this execution, in rhb order.
 
-       [writes] is in rhb order, so replacing as we go leaves the last write to
-       each location.  A write counts for a location when its own location
-       expression *must* equal it under the execution's path predicates --
-       [Solver.exeq], not [expoteq].  That is what carries aliasing: a write
-       through a pointer has a symbolic location, and it lands on [x] exactly in
-       those executions whose predicates pin the pointer to [x].  An execution
-       that leaves the aliasing open is genuinely both cases and contributes
-       nothing, which is the conservative answer.
+       A write counts for a location when its own location expression *must*
+       equal it under the execution's path predicates -- [Solver.exeq], not
+       [expoteq].  That is what carries aliasing: a write through a pointer has
+       a symbolic location, and it lands on [x] exactly in those executions
+       whose predicates pin the pointer to [x].  An execution that leaves the
+       aliasing open is genuinely both cases and contributes nothing, which is
+       the conservative answer.
 
        Before this, the match was [Some (EVar var)] and everything else was
        dropped, so a region reached through a pointer had no entry at all
        (github #5). *)
-    let last_writes_to_variables = Hashtbl.create (List.length writes) in
-      List.iter
+    let writes_to =
+      List.concat_map
         (fun w ->
           let event = Hashtbl.find structure.events w in
           (* The value the write has in this execution, which a UB assumption
@@ -733,47 +736,99 @@ module ConditionChecker = struct
             | None -> event.wval
           in
             match (event.loc, wval) with
-            | Some (EVar var), Some wval ->
-                Hashtbl.replace last_writes_to_variables var wval
+            | Some (EVar var), Some wval -> [ (var, (w, wval)) ]
             | Some loc, Some wval ->
-                List.iter
+                List.filter_map
                   (fun var ->
                     if Solver.exeq ~state:execution.ex_p loc (EVar var) then
-                      Hashtbl.replace last_writes_to_variables var wval
+                      Some (var, (w, wval))
+                    else None
                   )
                   asked_locations
-            | _ -> ()
+            | _ -> []
         )
-        writes;
+        writes
+    in
+
+    (* The memory state the execution ends in under [before], an order on its
+       writes: each location's last write, one no other write to it follows.
+       Taken in rhb order, a write replaces the one held unless it comes
+       [before] it, which leaves the maximum of a total order on the location
+       whichever order the writes come in. *)
+    let final_memory before =
+      let final = Hashtbl.create 8 in
+        List.iter
+          (fun (var, (w, wval)) ->
+            match Hashtbl.find_opt final var with
+            | Some (held, _) when USet.mem before (w, held) -> ()
+            | _ -> Hashtbl.replace final var (w, wval)
+          )
+          writes_to;
+        fun v -> Option.map snd (Hashtbl.find_opt final v)
+    in
+
+    (* The condition, with the final memory [memory], holds alongside the
+       execution's own path predicates.  Asking the solver about the condition
+       and the rf equalities alone leaves every register the rf edges do not
+       pin free, so a condition the execution's values contradict still comes
+       back sat. *)
+    let holds memory =
       (* One pass, so a register's value is not itself looked up as a
          location. *)
       let inst_cond_expr =
         List.map
           (Expr.evaluate ~env:(fun v ->
                if is_register v then Hashtbl.find_opt execution.final_env v
-               else Hashtbl.find_opt last_writes_to_variables v
+               else memory v
            )
           )
           cond_expr
       in
-      (* The execution's own path predicates have to hold alongside the
-         condition.  Asking the solver about the condition and the rf equalities
-         alone leaves every register the rf edges do not pin free, so a
-         condition the execution's values contradict still comes back sat. *)
       let query = inst_cond_expr @ rf_conditions @ execution.ex_p in
       let is_sat = Solver.is_sat query in
         Logs_safe.debug (fun m -> m "Solver result: %b" is_sat);
         is_sat
+    in
+
+    (* Writes to one location that po leaves unordered are ordered by co, and
+       the final value is the co-maximal write. Coherence only asks that some
+       order admit the execution, so the condition holds when it holds under
+       some order the model [coherent] admits the execution under. rhb order
+       was used before, and need not be one of them: [x := 1 ||| x := 2; r1 :=
+       x] with [r1 = 1] ended in [x = 2] (github #124). *)
+    let po = structure.po in
+    let unordered =
+      List.exists
+        (fun (var, (w, _)) ->
+          List.exists
+            (fun (var', (w', _)) ->
+              var = var'
+              && w <> w'
+              && not (USet.mem po (w, w') || USet.mem po (w', w))
+            )
+            writes_to
+        )
+        writes_to
+    in
+      match coherent with
+      | Some name when unordered ->
+          Option.is_some
+            (Coherence.admitted_order_where structure execution name (fun co ->
+                 holds (final_memory co)
+             )
+            )
+      | _ -> holds (final_memory po)
 
   (** [check_condition cond_expr structure execution] checks if condition holds.
 
       Dispatches to appropriate checker based on expression type.
 
+      @param coherent The coherence model the execution was admitted under.
       @param cond_expr The condition to check.
       @param structure The event structure.
       @param execution The execution.
       @return Promise of [true] if condition is satisfied. *)
-  let check_condition cond_expr structure execution =
+  let check_condition ?coherent cond_expr structure execution =
     let rf_conditions =
       ExecutionAnalysis.build_rf_conditions structure execution
     in
@@ -781,7 +836,7 @@ module ConditionChecker = struct
       check_with_set_operations cond_expr rf_conditions structure execution
     in
     let solver_valid =
-      check_with_solver cond_expr rf_conditions structure execution
+      check_with_solver ?coherent cond_expr rf_conditions structure execution
     in
       set_valid && solver_valid
 end
@@ -1369,7 +1424,8 @@ module PerExecutionChecker = struct
         | None -> failwith "Unexpected missing condition expression"
         | Some cond_expr ->
             let conds_satisfied =
-              ConditionChecker.check_condition cond_expr structure execution
+              ConditionChecker.check_condition ?coherent cond_expr structure
+                execution
             in
             (* Check extended assertions (currently always true) *)
             let extended_ok = true in
