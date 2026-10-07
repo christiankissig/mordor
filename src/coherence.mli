@@ -94,6 +94,13 @@ module type MEMORY_MODEL = sig
       as RC11z makes them. *)
   val orders_allocations : bool
 
+  (** Whether the model orders critical sections: a lock order joins its
+      [hb]. A model that does not refuses a program with locks
+      ({!check_model_program}) rather than read [lock] and [unlock] as no-ops,
+      which let SC see a write inside another thread's critical section
+      (github #125). *)
+  val orders_locks : bool
+
   (** [Error reason] when the model cannot answer for this program at all. It is
       asked once, before any execution is, and the pipeline fails with the
       reason rather than returning a verdict that is not the model's. *)

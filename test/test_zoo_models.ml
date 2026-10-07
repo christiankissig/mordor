@@ -392,6 +392,39 @@ let test_unwritten_location_read () =
         ("another thread", "x := 3;\n{ y := 1 } ||| { r1 := z }");
       ]
 
+(** A model with no lock order refuses a program with locks, naming the lock,
+    rather than read lock and unlock as no-ops: SC used to let a thread see a
+    write inside another thread's critical section (github #125). sMRD and MRD
+    order critical sections and forbid it. *)
+let test_locks_need_a_lock_order () =
+  let program model =
+    Printf.sprintf
+      "x := 0;\n\
+       { lock m; x := 1; x := 0; unlock m } ||| { lock m; r1 := x; unlock m }\n\
+       %%%%\n\
+       forbid (r1 = 1) [%s]"
+      model
+  in
+    List.iter
+      (fun model ->
+        match check_source (program model) with
+        | _ -> fail (Printf.sprintf "%s answered for a program with locks" model)
+        | exception Failure msg ->
+            check bool
+              (Printf.sprintf "%s says it has no lock order" model)
+              true
+              (contains msg (String.uppercase_ascii model)
+              && contains msg "lock order"
+              )
+      )
+      [ "SC"; "TSO"; "RC11"; "IMM"; "C11"; "RA"; "Coherence"; "PRAM" ];
+    List.iter
+      (fun model ->
+        let valid, _ = check_source (program model) in
+          check bool (model ^ " keeps the critical section") true valid
+      )
+      [ "sMRD"; "MRD" ]
+
 let test_conjunction_checks_each_model () =
   let valid, verdicts =
     check_source
@@ -569,6 +602,7 @@ let suite =
       test_case "elision follows release sequences" `Quick
         test_elision_follows_release_sequences;
       test_case "thin air per model" `Quick test_thin_air_per_model;
+      test_case "locks need a lock order" `Quick test_locks_need_a_lock_order;
       test_case "a read of an unwritten location" `Quick
         test_unwritten_location_read;
     ]

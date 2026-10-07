@@ -108,6 +108,13 @@ module type MEMORY_MODEL = sig
       as RC11z makes them. *)
   val orders_allocations : bool
 
+  (** Whether the model orders critical sections: a lock order joins its
+      [hb]. A model that does not refuses a program with locks
+      ({!check_model_program}) rather than read [lock] and [unlock] as no-ops,
+      which let SC see a write inside another thread's critical section
+      (github #125). *)
+  val orders_locks : bool
+
   (** [Error reason] when the model cannot answer for this program at all. It is
       asked once, before any execution is, and the pipeline fails with the
       reason rather than returning a verdict that is not the model's. *)
@@ -701,6 +708,7 @@ module IMM : MEMORY_MODEL = struct
   let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
+  let orders_locks = false
   let check_program _ = Ok ()
 
   (** IMM dependency calculation *)
@@ -1273,6 +1281,7 @@ end) : MEMORY_MODEL = struct
   let allows_thin_air = Config.config.no_thin_air = `None
   let uses_co = true
   let orders_allocations = Config.config.allocations_are_writes
+  let orders_locks = false
 
   (* A model over a fragment refuses a program with an event outside it. *)
   let check_program (structure : symbolic_event_structure) =
@@ -1395,6 +1404,8 @@ module SMRD : MEMORY_MODEL = struct
   let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
+  (* hb = (ppo ∪ dp ∪ sw ∪ [Unlock];lo;[Lock])⁺, for each lock order. *)
+  let orders_locks = true
   let check_program _ = Ok ()
   let compute_dependencies _ _ _ _ _ = USet.create ()
 end
@@ -1439,6 +1450,7 @@ module Undefined : MEMORY_MODEL = struct
   let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
+  let orders_locks = false
   let check_program _ = Ok ()
   let compute_dependencies _ _ _ _ _ = USet.create ()
 end
@@ -1708,6 +1720,7 @@ end) : MEMORY_MODEL = struct
   let allows_thin_air = A.allows_thin_air
   let uses_co = A.uses_co
   let orders_allocations = false
+  let orders_locks = false
   let check_program = A.check_program
   let compute_dependencies _ _ _ _ _ = USet.create ()
 end
@@ -3841,13 +3854,25 @@ let data_races structure execution name =
 
 (** [check_model_program structure name] fails, with the model's reason, when
     the coherence model [name] cannot answer for the program [structure] is the
-    event structure of. Unknown names are left to {!check_for_coherence}. *)
+    event structure of: a program with locks under a model that does not order
+    them ([orders_locks]), or one outside the fragment it is defined on. Unknown
+    names are left to {!check_for_coherence}. *)
 let check_model_program structure name =
   match ModelRegistry.lookup name with
   | None -> ()
   | Some model -> (
       let module M = (val model : MEMORY_MODEL) in
-      match M.check_program structure with
-      | Ok () -> ()
-      | Error reason -> failwith reason
+      let locks =
+        if M.orders_locks then Ok ()
+        else
+          refuse_outside
+            ~name:(String.uppercase_ascii name)
+            ~description:
+              "programs without locks: it has no lock order, which only sMRD, \
+               MRD and promising semantics have"
+            no_locks structure
+      in
+        match Result.bind locks (fun () -> M.check_program structure) with
+        | Ok () -> ()
+        | Error reason -> failwith reason
     )

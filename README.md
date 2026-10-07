@@ -99,7 +99,8 @@ here but `rc11c` is one of the
 [Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org). A model defined on a
 fragment of programs (`mrd`, `orc11`, `rar`, `crc`, `drfx`, `denovosync`,
 `bmm`, `jam`, `wasm`, `ocaml`) refuses a program outside it, naming the event
-that is.
+that is. Only sMRD and MRD, and promising semantics, give locks a semantics:
+every other model refuses a program with `lock` or `unlock` the same way.
 
 Some annotations name a source rather than a model, and map onto one of the
 above: `Power`, `Bridging` and `Grounding` run under `imm`; `Sevcik`, `Problem`,
