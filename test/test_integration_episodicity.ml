@@ -728,6 +728,48 @@ let test_specifications =
         ];
       description = "RCU increment loop - episodic, starting at the fadd";
     };
+    (* Treiber stack: push and pop, each a read of top and a CAS on it. Both
+       loops are episodic: neither iteration writes anything a later one
+       reads, the push's write of its node's next pointer included, as the
+       loop reads only top. *)
+    {
+      filepath = "programs/episodicity/treiber-1.lit";
+      loop_expectations =
+        [
+          {
+            loop_id = 1;
+            expected_episodic = true;
+            expected_failing_conditions = [];
+            expected_bisection_left_lines = None;
+          };
+          {
+            loop_id = 2;
+            expected_episodic = true;
+            expected_failing_conditions = [];
+            expected_bisection_left_lines = None;
+          };
+        ];
+      description = "Treiber stack - push and pop loops episodic";
+    };
+    (* Michael-Scott queue, one operation per file: the two together, enqueue
+       then dequeue in one program, do not finish in 12 minutes, while each
+       alone takes seconds. Both fail on the helping CAS that swings a
+       lagging tail. In both the next iteration reads tail from it, failing the
+       write condition. In the dequeue it also fails the events condition: the
+       CAS is a release write to tail, the next iteration's first event an
+       acquire read of head, and nothing orders the two across the boundary.
+       In the enqueue the next event reads tail itself, which orders them.
+       With the helping CAS left out, each loop is episodic. *)
+    single_failing "programs/episodicity/msqueue-enqueue-1.lit" [ 2 ]
+      "Michael-Scott queue enqueue - the helping CAS on tail fails the write \
+       condition";
+    single_failing "programs/episodicity/msqueue-dequeue-1.lit" [ 2; 4 ]
+      "Michael-Scott queue dequeue - the helping CAS on tail fails the write \
+       and events conditions";
+    single_episodic "programs/episodicity/msqueue_without_helping/enqueue.lit"
+      "Michael-Scott queue enqueue without helping - episodic";
+    single_episodic "programs/episodicity/msqueue_without_helping/dequeue.lit"
+      "Michael-Scott queue dequeue without helping - episodic";
   ]
 
 (* Nothing skipped.

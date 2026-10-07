@@ -1,0 +1,28 @@
+name=treiber 1
+%%
+// Treiber stack (Treiber, "Systems Programming: Coping with Parallelism",
+// IBM RJ 5118, 1986), with the C11 orderings of the usual lock-free stack: a
+// node is published by a release CAS on top, and a pop reads top with an
+// acquire load before following its next pointer. A node is [value, next];
+// 0 is the null pointer. Popped nodes are not reclaimed.
+
+rtop := malloc 1;
+*rtop := 0;
+
+// --- push(1) ---
+rn := malloc 2;
+*rn := 1;
+do {
+  rt :acq= *rtop;
+  *(rn + 1) := rt;                          // n->next = top
+  rpushed := cas(acquire, release, rtop, rt, rn);
+} while (rpushed = 0);
+
+// --- pop ---
+// The stack holds the node just pushed, so the empty case is not taken.
+do {
+  rh :acq= *rtop;
+  rnext := *(rh + 1);                       // h->next
+  rpopped := cas(acquire, release, rtop, rh, rnext);
+} while (rpopped = 0);
+rval := *rh;
