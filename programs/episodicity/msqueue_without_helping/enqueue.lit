@@ -1,0 +1,45 @@
+name=msqueue enqueue without helping
+%%
+// Michael-Scott queue (Michael and Scott, "Simple, Fast, and Practical
+// Non-Blocking and Blocking Concurrent Queue Algorithms", PODC 1996, Fig. 1),
+// enqueue, with the C11 orderings of its usual ports: a node is published by
+// a release CAS on the last node's next pointer, and every load of tail or
+// next that is followed is an acquire. A node is [value, next]; 0 is the null
+// pointer. The queue starts with a dummy node that head and tail point to.
+// Nodes are not reclaimed, so the paper's modification counters, which guard
+// its free list against ABA, are left out.
+//
+// msqueue-enqueue-1.lit without the helping CAS of E13: an enqueue that finds
+// tail lagging retries until the enqueue that linked the node swings it. No
+// longer lock-free, but episodic, which shows E13 is what fails the write
+// condition there.
+
+rdummy := malloc 2;
+*rdummy := 0;
+*(rdummy + 1) := 0;
+
+rhead := malloc 1;
+*rhead := rdummy;
+rtail := malloc 1;
+*rtail := rdummy;
+
+// --- enqueue(1) ---
+// E1-E3
+rn := malloc 2;
+*rn := 1;
+*(rn + 1) := 0;
+do {
+  rdone := 0;
+  rt :acq= *rtail;                          // E5
+  rtnext := rt + 1;
+  rnext :acq= *rtnext;                      // E6
+  rt2 :acq= *rtail;                         // E7
+  if (rt = rt2) {
+    if (rnext = 0) {
+      // E9: link the node at the end of the list
+      rdone := cas(acquire, release, rtnext, 0, rn);
+    }
+  }
+} while (rdone = 0);
+// E17: swing tail to the inserted node
+rswung := cas(acquire, release, rtail, rt, rn);

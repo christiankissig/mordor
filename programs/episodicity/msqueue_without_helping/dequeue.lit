@@ -1,0 +1,44 @@
+name=msqueue dequeue without helping
+%%
+// Michael-Scott queue (Michael and Scott, "Simple, Fast, and Practical
+// Non-Blocking and Blocking Concurrent Queue Algorithms", PODC 1996, Fig. 1),
+// dequeue, with the C11 orderings of its usual ports: every load of head,
+// tail or next that is followed is an acquire, and head and tail move by
+// release CASes. A node is [value, next]; 0 is the null pointer. The queue
+// holds one node behind the dummy, so the empty case is not taken. Nodes are
+// not reclaimed, so the paper's modification counters, which guard its free
+// list against ABA, are left out.
+//
+// msqueue-dequeue-1.lit without the helping CAS of D10: a dequeue that finds
+// tail lagging retries until the enqueue swings it. No longer lock-free, but
+// episodic, which shows D10 is what fails the write condition there.
+
+rdummy := malloc 2;
+*rdummy := 0;
+rn := malloc 2;
+*rn := 1;
+*(rn + 1) := 0;
+*(rdummy + 1) := rn;
+
+rhead := malloc 1;
+*rhead := rdummy;
+rtail := malloc 1;
+*rtail := rn;
+
+// --- dequeue ---
+do {
+  rdone := 0;
+  rh :acq= *rhead;                          // D2
+  rt :acq= *rtail;                          // D3
+  rnext :acq= *(rh + 1);                    // D4
+  rh2 :acq= *rhead;                         // D5
+  if (rh = rh2) {
+    if (rh = rt) {
+      rwait := 1;                           // D10 left out: retry until the enqueue swings tail
+    } else {
+      // D11-D12: read the value before the CAS, then swing head
+      rval := *rnext;
+      rdone := cas(acquire, release, rhead, rh, rnext);
+    }
+  }
+} while (rdone = 0);
