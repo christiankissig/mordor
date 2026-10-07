@@ -184,6 +184,11 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
     border-color: var(--border-strong);
 }
 .btn-xs:hover:not(:disabled) { background: var(--control-hover); }
+/* An icon-only button that stays down while its filter is on. */
+.btn-toggle { width: 22px; padding: 0; margin-left: 0.4rem; vertical-align: middle; }
+.btn-toggle .icon { width: 12px; height: 12px; }
+.btn-toggle[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn-toggle[aria-pressed="true"]:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn-ghost.btn-xs { background: transparent; border-color: transparent; color: var(--text-muted); }
 .btn-ghost.btn-xs:hover { background: var(--bg-hover); color: var(--text-strong); }
 
@@ -1392,6 +1397,10 @@ pre.line-numbers > code {
 .setting-item .select { flex: 1; max-width: 280px; }
 .setting-options { display: flex; flex-wrap: wrap; gap: 0.3rem 1.25rem; margin: 0.5rem 0 0 1.6rem; }
 .setting-options-group { margin: 0.6rem 0 0 1.6rem; font-size: 11px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-muted); }
+/* A compared model that is already the primary one: there is nothing to
+   compare it with, so it is greyed out and cannot be ticked. */
+.setting-options label:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+.setting-options input:disabled { cursor: not-allowed; }
 .setting-note { margin: 0.5rem 0 0 1.6rem; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
 
 .modal-footer {
@@ -1416,3 +1425,16 @@ pre.line-numbers > code {
 
 .assertion-verdicts { list-style: none; margin: 0.5rem 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
 .assertion-verdicts code { font-size: 12px; }
+
+/* Text for screen readers only, as on an icon-only button. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

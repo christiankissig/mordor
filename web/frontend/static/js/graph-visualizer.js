@@ -120,6 +120,12 @@ class GraphVisualizer {
         this.currentAction = 'visualize'; // Default action
         this.visibleRelations = null; // null means all visible
         this.availableRelations = new Set(); // track which relation types exist
+        // The run's primary model and the models it was compared with, from
+        // its model_counts message; null when nothing was compared.
+        this.comparison = null;
+        // Whether the carousel steps only through executions the primary model
+        // allows and no compared model does.
+        this.onlyPrimary = false;
 
         // Settings
         this.settings = {
@@ -946,7 +952,8 @@ class GraphVisualizer {
         this.settings.compareModels = Array.from(
             document.querySelectorAll('#compare-models input[type="checkbox"]:checked'),
             box => box.value
-        ).filter(model => model !== this.settings.memoryModel);
+        ).filter(model => model !== this.settings.memoryModel && !(
+            this.settings.memoryModel === 'default' && model === this.defaultPrimaryModel()));
         
         this.closeSettingsModal();
         this.renderSettingsSummary();
@@ -969,12 +976,16 @@ class GraphVisualizer {
     // be unravelled: while it is the primary model or a compared one, symbolic
     // loops are not on offer. Its own version is no model to compare with.
     updatePromisingState() {
-        const primary = document.getElementById('memory-model').value;
+        const choice = document.getElementById('memory-model').value;
+        const primary = choice === 'default' ? this.defaultPrimaryModel() : choice;
         const primaryPromising = GraphVisualizer.isPromising(primary);
         document.getElementById('promising-note').hidden = !primaryPromising;
         const boxes = document.querySelectorAll('#compare-models input[type="checkbox"]');
         boxes.forEach(box => {
             box.disabled = box.value === primary;
+            box.parentElement.title = !box.disabled ? ''
+                : choice === 'default' ? `Already the primary model: Default is ${GraphVisualizer.modelLabel(primary)} for this test`
+                : 'Already the primary model';
         });
         const promising = primaryPromising || Array.from(boxes).some(
             box => box.checked && GraphVisualizer.isPromising(box.value));
@@ -984,6 +995,28 @@ class GraphVisualizer {
             document.getElementById('step-counter-semantics').checked = true;
             this.updateStepCounterState();
         }
+    }
+
+    // The model Default stands for: the one the test's first assertion names,
+    // as the server reads it (Context.set_assertions), or sMRD when it names
+    // none or the assertion is a refinement chain. Names map onto the settings'
+    // values as Context.model_options_table maps them onto coherence models.
+    defaultPrimaryModel() {
+        const source = document.getElementById('litmus-input').value || '';
+        const at = source.indexOf('%%');
+        if (at < 0) return 'smrd';
+        const line = source.slice(at + 2).split('\n')
+            .map(l => l.replace(/\/\/.*$/, '').trim())
+            .find(l => l.length > 0);
+        if (!line || !/^(allow|forbid)\b/.test(line)) return 'smrd';
+        const brackets = line.match(/\[([^\[\]]*)\]\s*(?:"[^"]*")?\s*$/);
+        if (!brackets) return 'smrd';
+        const name = brackets[1].split(',')[0].split('=')[0].trim().toLowerCase();
+        const aliases = {
+            '': 'smrd', '_': 'smrd', ub11: 'smrd', power: 'imm', rc11ub: 'rc11', immub: 'imm',
+            cpp11: 'c11', cpp17: 'c17', cpp20: 'c20',
+        };
+        return name in aliases ? aliases[name] : name;
     }
 
     updateStepCounterState() {
@@ -1191,7 +1224,8 @@ class GraphVisualizer {
                 loops: this.loops,
                 episodicityResults: this.episodicityResults,
                 assertionResults: this.assertionResults,
-                uafResults: this.uafResults
+                uafResults: this.uafResults,
+                comparison: this.comparison
             };
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             const link = document.createElement('a');
@@ -1260,6 +1294,7 @@ class GraphVisualizer {
                     if (payload.uafResults) {
                         this.uafResults = payload.uafResults;
                     }
+                    this.comparison = payload.comparison || null;
 
                     // Re-render analysis panels with restored results
                     this.renderLoops();
@@ -1290,11 +1325,15 @@ class GraphVisualizer {
 
         // Carousel controls
         document.getElementById('prev-btn').addEventListener('click', () => {
-            this.navigateTo(this.currentIndex - 1);
+            this.navigateTo(this.neighbourIndex(-1));
         });
 
         document.getElementById('next-btn').addEventListener('click', () => {
-            this.navigateTo(this.currentIndex + 1);
+            this.navigateTo(this.neighbourIndex(1));
+        });
+
+        document.getElementById('only-primary-btn').addEventListener('click', () => {
+            this.toggleOnlyPrimary();
         });
         
         // Settings modal
@@ -1914,9 +1953,69 @@ class GraphVisualizer {
         const row = document.getElementById('other-models-row');
         if (!row) return;
         const list = Array.isArray(models) ? models : [];
-        row.hidden = list.length === 0;
+        // Shown whenever models were compared, so the filter stays in reach
+        // on an execution no compared model allows, and on the event
+        // structure, which has no models of its own.
+        row.hidden = !this.isComparing();
         document.getElementById('other-models').textContent =
-            list.map(GraphVisualizer.modelLabel).join(', ');
+            models === null ? '—'
+                : list.length > 0 ? list.map(GraphVisualizer.modelLabel).join(', ')
+                : 'none';
+        const button = document.getElementById('only-primary-btn');
+        const primary = this.comparison ? GraphVisualizer.modelLabel(this.comparison.primary) : 'the primary model';
+        button.setAttribute('aria-pressed', String(this.onlyPrimary));
+        button.title = this.onlyPrimary
+            ? 'Showing only executions no compared model allows. Click to show all.'
+            : `Show only executions ${primary} allows and no compared model does`;
+    }
+
+    isComparing() {
+        return !!(this.comparison && this.comparison.compared.length > 0);
+    }
+
+    // Whether the carousel shows the graph at [index]. The event structure
+    // always; an execution unless the filter is on and a compared model
+    // allows it too.
+    isShown(index) {
+        if (index === 0 || !this.onlyPrimary || !this.isComparing()) return true;
+        const models = this.data[index] && this.data[index].other_models;
+        return !Array.isArray(models) || models.length === 0;
+    }
+
+    // The nearest shown graph before ([step] = -1) or after (+1) the current
+    // one, or -1 when there is none.
+    neighbourIndex(step) {
+        for (let i = this.currentIndex + step; i >= 0 && i < this.graphs.length; i += step) {
+            if (this.isShown(i)) return i;
+        }
+        return -1;
+    }
+
+    shownExecutionCount() {
+        let n = 0;
+        for (let i = 1; i < this.data.length; i++) if (this.isShown(i)) n++;
+        return n;
+    }
+
+    toggleOnlyPrimary() {
+        this.onlyPrimary = !this.onlyPrimary;
+        const primary = this.comparison ? GraphVisualizer.modelLabel(this.comparison.primary) : 'the primary model';
+        if (this.onlyPrimary && !this.isShown(this.currentIndex)) {
+            const next = this.neighbourIndex(1) >= 0 ? this.neighbourIndex(1) : this.neighbourIndex(-1);
+            this.navigateTo(next >= 0 ? next : 0);
+        } else {
+            this.renderOtherModels(this.currentIndex === 0 ? null : (this.data[this.currentIndex] || {}).other_models);
+            this.updateCarouselUI();
+        }
+        if (this.onlyPrimary) {
+            const n = this.shownExecutionCount();
+            this.log(n === 0
+                ? `No execution is allowed by ${primary} alone; every one is allowed by a compared model too.`
+                : `Showing the ${n} execution${n === 1 ? '' : 's'} only ${primary} allows.`,
+                n === 0 ? 'error' : 'info');
+        } else {
+            this.log('Showing all executions.');
+        }
     }
 
     updateExecutionInfo(data) {
@@ -1950,7 +2049,9 @@ class GraphVisualizer {
                 ? env.map(([reg, value]) => `${reg} = ${value}`).join(', ')
                 : (Array.isArray(env) ? '∅' : 'N/A');
 
-        this.renderOtherModels(data.other_models);
+        // The event structure is no execution, so no model allows it.
+        this.renderOtherModels(data.type === 'event_structure' || this.currentIndex === 0
+            ? null : data.other_models);
 
         // undefined_behaviour is an array, so we need to access the first element
         if (data.undefined_behaviour !== undefined && data.undefined_behaviour.length > 0) {
@@ -2041,13 +2142,16 @@ class GraphVisualizer {
         const nextBtn = document.getElementById('next-btn');
         const indicator = document.getElementById('carousel-indicator');
 
-        prevBtn.disabled = this.currentIndex === 0;
-        nextBtn.disabled = this.currentIndex === this.graphs.length - 1;
+        prevBtn.disabled = this.neighbourIndex(-1) < 0;
+        nextBtn.disabled = this.neighbourIndex(1) < 0;
 
+        const filtered = this.onlyPrimary && this.isComparing()
+            ? ` · ${this.shownExecutionCount()} only ${GraphVisualizer.modelLabel(this.comparison.primary)}`
+            : '';
         if (this.currentIndex === 0) {
-            indicator.textContent = 'Event Structure';
+            indicator.textContent = 'Event Structure' + filtered;
         } else {
-            indicator.textContent = `Execution ${this.currentIndex} of ${this.executionCount}`;
+            indicator.textContent = `Execution ${this.currentIndex} of ${this.executionCount}` + filtered;
         }
         
         document.getElementById('carousel-container').classList.add('active');
@@ -2072,6 +2176,7 @@ class GraphVisualizer {
         this.uafResults = [];
         this.visibleRelations = null; // reset to show all
         this.availableRelations = new Set();
+        this.comparison = null;
         document.getElementById('relations-checkboxes').innerHTML = '';
         document.getElementById('loops-content').innerHTML = '<p>Episodicity results will appear here.</p>';
         document.getElementById('assertions-content').innerHTML = '<p>Assertion results will appear here.</p>';
@@ -2167,6 +2272,10 @@ class GraphVisualizer {
                     .map(c => `${GraphVisualizer.modelLabel(c.model)}${c.model === data.primary ? ' (shown)' : ''}: ${c.executions}`)
                     .join(', ');
                 this.log('Executions per model: ' + counts);
+                this.comparison = {
+                    primary: data.primary,
+                    compared: (data.counts || []).map(c => c.model).filter(m => m !== data.primary),
+                };
             } else if (data.type === 'event_structure') {
                 this.log('Received event structure');
                 this.graphs.push(data.graph);
@@ -2195,6 +2304,8 @@ class GraphVisualizer {
             } else if (data.type === 'complete') {
                 this.executionCount = data.total_executions;
                 document.getElementById('execution-count').textContent = this.executionCount;
+                this.renderOtherModels(this.currentIndex === 0 ? null
+                    : (this.data[this.currentIndex] || {}).other_models);
                 this.log(this.currentAction.charAt(0).toUpperCase() + this.currentAction.slice(1) + ' complete: ' + this.executionCount + ' executions', 'success');
                 this.updateCarouselUI();
                 this.setStatus('Complete', 'success');
