@@ -13,7 +13,7 @@ strong coherence (SCOH); these are the programs it reasons about.
 | `CohRR+rlx.lit` | (3) | — | relaxed: RA, SRA, WRA allow; SC, TSO, Coherence, RC11 forbid |
 | `MP.lit` | 3 | forbids | Coherence allows |
 | `MP+rlx.lit` | 3 | — | relaxed: RC11 allows, as the paper states |
-| `MP-repeat.lit` | 3 | forbids | the paper's spin loop; PS1/PS2 not asserted (#133) |
+| `MP-repeat.lit` | 3 | forbids | the paper's spin loop; SC, RA, RC11, PS1, PS2 forbid |
 | `MP-par-MP.lit` | 3 | forbids | Coherence allows |
 | `Coh.lit` | 3 | forbids | WRA allows |
 | `Coh+rlx.lit` | (3) | — | WRA allows; RC11 and Coherence forbid, contrary to the paper |
