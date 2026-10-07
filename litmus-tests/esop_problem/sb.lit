@@ -1,3 +1,4 @@
+// Expected verdict from M. Batty, K. Memarian, K. Nienhuis, J. Pichon-Pharabod and P. Sewell, "The Problem of Programming Language Concurrency Semantics", ESOP 2015; checked here under sMRD.
 x := 0;
 y := 0;
 {
@@ -8,4 +9,4 @@ y := 0;
   r2 := x
 }
 %%
-allow (r1 = 0 && r2 = 0) [Problem]
+allow (r1 = 0 && r2 = 0) [sMRD]

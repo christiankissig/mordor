@@ -24,11 +24,10 @@ remain. The seven `jctc/` ones have moved to `litmus-tests-jmm/`;
 their files returned to `litmus-tests/`.
 
 The issues split two ways, and the split decides what is actionable. Only `smrd` and `rc11` are supported
-models. No test here is checked under sMRD any more, so none is a defect as it stands: the two that were,
-`own/FWD-STRENGTHEN-LIFT.lit` #90 and `symmrd/LB+UB+data+z.lit` #65, are fixed. The rest name a model that is
-not supported —
-`[Problem]` has a `model_options_table` entry with `coherent = None` and so falls through
-to the `smrd` default, while `[Bridging]` and `[Power]` map to `imm`. Those are labelled `smrd-unsupported` and
+models. No test here records an sMRD verdict any more, so none is a defect as it stands: the two that did,
+`own/FWD-STRENGTHEN-LIFT.lit` #90 and `symmrd/LB+UB+data+z.lit` #65, are fixed. The rest take their expected
+verdict from a publication whose model MoRDor does not implement, and are checked under sMRD or IMM instead —
+each file's comment names the publication, and `[Power]` maps to `imm`. Those are labelled `smrd-unsupported` and
 carry no `bug` label: they compare one model's expectation against another model's verdict, and the two are
 not claimed to agree, so a divergence there may be entirely correct. Each needs triaging as "does sMRD agree
 with the reference on this shape?" before it is treated as a defect.
@@ -134,7 +133,7 @@ still synchronises with nothing. Fence ordering in the checker is what is left.
 
 | Test | Assertion | Model |
 |---|---|---|
-| [`esop_problem/RRE.lit`](esop_problem/RRE.lit) #46 | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[Problem]` → sMRD |
+| [`esop_problem/RRE.lit`](esop_problem/RRE.lit) #46 | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[sMRD]` |
 
 `own/FWD-STRENGTHEN-LIFT.lit` #90 has left this table, and is back in
 `litmus-tests/own/`. Unlike the rest it was not a divergence from the

@@ -1,3 +1,4 @@
+// Expected verdict from J. Ševčík, "Program Transformations in Weak Memory Models", PhD thesis, University of Edinburgh, 2008; checked here under sMRD.
 // Load buffering with control dependencies.
 //
 // Source: Ševčík, "Program Transformations in Weak Memory Models" (PhD thesis,
@@ -20,4 +21,4 @@ x := 0; y := 0;
   }
 }
 %%
-forbid (r1 = 1) [Sevcik]
+forbid (r1 = 1) [sMRD]

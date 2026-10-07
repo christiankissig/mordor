@@ -8,4 +8,6 @@ y := 0;
   r2 := x
 }
 %%
-forbid (r1 = 1 && r2 = 0) [Power=allow]
+// Noted with this test, source not recorded: Power allows this outcome. That holds for MP without
+// barriers; with release/acquire mapped to lwsync and ctrl+isync, Power forbids it.
+forbid (r1 = 1 && r2 = 0) [Power]

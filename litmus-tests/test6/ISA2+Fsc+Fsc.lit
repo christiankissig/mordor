@@ -15,4 +15,6 @@ z := 0;
   r3 := x
 }
 %%
-forbid (r1 = 1 && r2 = 1 && r3 = 0) [Power=allow]
+// Noted with this test, source not recorded: Power allows this outcome. With fence(sc) mapped to sync,
+// Power forbids it (ISA2+sync+sync).
+forbid (r1 = 1 && r2 = 1 && r3 = 0) [Power]

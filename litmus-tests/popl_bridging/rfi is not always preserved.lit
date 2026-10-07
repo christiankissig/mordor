@@ -1,3 +1,4 @@
+// Expected verdict from A. Podkopaev, O. Lahav and V. Vafeiadis, "Bridging the Gap between Programming Languages and Hardware Weak Memory Models", POPL 2019; checked here under IMM.
 // Section 3.3: Global Ordering Constraint
 x := 0;
 y := 0;
@@ -12,4 +13,4 @@ z := 0;
   x := r3
 }
 %%
-allow (r1 = 1 && r2 = 1 && r3 = 1) [Bridging]
+allow (r1 = 1 && r2 = 1 && r3 = 1) [IMM]
