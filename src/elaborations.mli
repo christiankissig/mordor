@@ -27,6 +27,14 @@ module OpTrace : sig
   val create : int -> 'a t
 end
 
+(** Each justification's predecessor function, computed once. *)
+module PredCache : sig
+  type t
+
+  (** [create n] is an empty cache with initial capacity [n]. *)
+  val create : int -> t
+end
+
 (** Elaboration context: the event structure being elaborated and the state
     shared across elaboration rounds. *)
 type context = {
@@ -37,6 +45,8 @@ type context = {
   op_trace : op OpTrace.t;
       (** Operations already performed on justifications, to avoid redundancy.
       *)
+  pred_cache : PredCache.t;
+      (** Each justification's predecessor function, for lifting. *)
 }
 
 (** [pred elab_ctx ctx p ?ppo ()] is the predecessor function: it maps each

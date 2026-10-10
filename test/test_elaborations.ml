@@ -71,7 +71,7 @@ module TestData = struct
     let fj = USet.create () in
     let op_trace = OpTrace.create 0 in
     let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
-      { fwd_es_ctx; structure; fj; op_trace }
+      { fwd_es_ctx; structure; fj; op_trace; pred_cache = PredCache.create 0 }
 
   (* Mock justification builder *)
   let make_justification ?(predicates = []) ?(fwd = USet.create ())
@@ -560,7 +560,7 @@ module LiftElabTests = struct
       let fj = USet.create () in
       let op_trace = OpTrace.create 0 in
       let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
-        { fwd_es_ctx; structure; fj; op_trace }
+        { fwd_es_ctx; structure; fj; op_trace; pred_cache = PredCache.create 0 }
 
     (* Predicate test cases *)
     type predicate_test_case = {

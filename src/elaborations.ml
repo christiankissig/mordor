@@ -64,6 +64,29 @@ module OpTrace = struct
     Mutex.protect t.mutex (fun () -> OpTraceTable.find_opt t.tbl key)
 end
 
+(** Each justification's [pred], computed once. Lifting tries every pair of
+    conflicting justifications and needs both sides' [pred], whose transitive
+    reduction of [ppo] dominates its cost; recomputing it per pair made
+    programs/episodicity/hp-1.lit spend nine tenths of its time there once
+    forwarding's substitution multiplied the justifications (#46). Elaborators
+    run on several domains, hence the mutex. *)
+module PredCache = struct
+  type t = { tbl : (int -> int USet.t) JustificationCache.t; mutex : Mutex.t }
+
+  let create n = { tbl = JustificationCache.create n; mutex = Mutex.create () }
+
+  (** [find_or_add t just f] is [just]'s cached value, or [f ()] recorded. Two
+      domains may both compute a missing entry; either result is the same. *)
+  let find_or_add t just f =
+    match Mutex.protect t.mutex (fun () -> JustificationCache.find_opt t.tbl just)
+    with
+    | Some v -> v
+    | None ->
+        let v = f () in
+          Mutex.protect t.mutex (fun () -> JustificationCache.replace t.tbl just v);
+          v
+end
+
 (** Elaboration context containing the symbolic event structure and caches.
 
     Bundles together all the state needed during elaboration including the event
@@ -76,6 +99,7 @@ type context = {
   op_trace : op OpTrace.t;
       (** Cache of operations performed on justifications to avoid redundancy.
       *)
+  pred_cache : PredCache.t;  (** Each justification's [pred]. *)
 }
 
 let pred_landmark = Landmark_safe.register "Elaborations.pred"
@@ -1128,8 +1152,16 @@ end = struct
           );
 
           (* Get pred function *)
-          let pred_1 = pred elab_ctx None None ~ppo:ppo_1 () in
-          let pred_2 = pred elab_ctx None None ~ppo:ppo_2 () in
+          let pred_1 =
+            PredCache.find_or_add elab_ctx.pred_cache just_1 (fun () ->
+                pred elab_ctx None None ~ppo:ppo_1 ()
+            )
+          in
+          let pred_2 =
+            PredCache.find_or_add elab_ctx.pred_cache just_2 (fun () ->
+                pred elab_ctx None None ~ppo:ppo_2 ()
+            )
+          in
 
           (* Generate candidate relabelings for the pair of justifications *)
           let relabs =
@@ -1903,7 +1935,8 @@ let generate_justifications ?(num_threads = 1) ?(collapse_forwarding = false)
 
   (* Build context for elaborations *)
   let op_trace = OpTrace.create 0 in
-  let elab_ctx : context = { fwd_es_ctx; structure; fj; op_trace } in
+  let pred_cache = PredCache.create 0 in
+  let elab_ctx : context = { fwd_es_ctx; structure; fj; op_trace; pred_cache } in
 
   Logs_safe.debug (fun m -> m "Starting elaborations...");
 
