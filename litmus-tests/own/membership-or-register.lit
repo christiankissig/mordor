@@ -1,0 +1,18 @@
+// A relation membership and a register condition under || (#143).
+//
+// The two used to be decided apart and the answers conjoined: the membership
+// checker read r1 = 1 as true, and the solver saw r1 = 1 alone. Neither is the
+// value of the disjunction.
+//
+// r1 is 0 in every execution. Event 9 does not exist, and a membership naming
+// an event the execution does not contain is false, so (2,9) ∈ .dp || r1 = 1
+// holds in none of them, and (2,9) ∉ .dp || r1 = 0 in all.
+x := 0;
+r1 := x;
+if (r1 = 0) {
+  y := 1
+}
+%%
+forbid ((2,9) ∈ .dp || r1 = 1) []
+allow ((2,9) ∉ .dp || r1 = 0) []
+allow ((2,4) ∉ .dp || r1 = 1) []

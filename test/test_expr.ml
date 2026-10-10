@@ -533,6 +533,24 @@ let test_evaluate_unop () =
         | _ -> false
         )
 
+(* Negating a binary operator with no complement keeps the negation: it used
+   to put the operator itself in the [!]'s place, so [!(a && b)] became a unary
+   [&&] and [!((1,2) in .dp)] a unary [in], which the solver rejects (#143). *)
+let test_evaluate_negation_without_complement () =
+  let check_negated description inner =
+    Alcotest.(check bool)
+      description true
+      (match Expr.evaluate (Expr.unop "!" inner) with
+      | EUnOp ("!", e) -> Expr.equal e inner
+      | _ -> false)
+  in
+    check_negated "!(a && b) keeps the negation"
+      (e_binop (e_var "a") "&&" (e_var "b"));
+    check_negated "!(a || b) keeps the negation"
+      (e_binop (e_var "a") "||" (e_var "b"));
+    check_negated "!((1,2) in .dp) keeps the negation"
+      (e_binop (e_binop (e_num 1) "," (e_num 2)) "in" (e_var ".dp"))
+
 let test_evaluate_partial () =
   (* When operands can't be fully evaluated, return binop with evaluated operands *)
   let expr = e_binop (e_var "x") "+" (e_num 5) in
@@ -635,6 +653,8 @@ let suite =
       Alcotest.test_case "Evaluate nested expressions" `Quick
         test_evaluate_nested_expressions;
       Alcotest.test_case "Evaluate unary operations" `Quick test_evaluate_unop;
+      Alcotest.test_case "Evaluate negation without complement" `Quick
+        test_evaluate_negation_without_complement;
       Alcotest.test_case "Evaluate partial evaluation" `Quick
         test_evaluate_partial;
       Alcotest.test_case "Evaluate complex with environment" `Quick
