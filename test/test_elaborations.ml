@@ -71,7 +71,7 @@ module TestData = struct
     let fj = USet.create () in
     let op_trace = OpTrace.create 0 in
     let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
-      { fwd_es_ctx; structure; fj; op_trace }
+      { fwd_es_ctx; structure; fj; op_trace; pred_cache = PredCache.create 0 }
 
   (* Mock justification builder *)
   let make_justification ?(predicates = []) ?(fwd = USet.create ())
@@ -560,7 +560,7 @@ module LiftElabTests = struct
       let fj = USet.create () in
       let op_trace = OpTrace.create 0 in
       let fwd_es_ctx = Forwarding.EventStructureContext.create structure in
-        { fwd_es_ctx; structure; fj; op_trace }
+        { fwd_es_ctx; structure; fj; op_trace; pred_cache = PredCache.create 0 }
 
     (* Predicate test cases *)
     type predicate_test_case = {
@@ -690,7 +690,9 @@ module LiftElabTests = struct
             };
           expected_lifting_count = 1;
           expected_predicates = [ EBinOp (ESymbol "γ", "!=", ENum Z.zero) ];
-          expected_dependencies = [ "γ" ];
+          (* Lifting keeps just_2's D, as sMRD's Lifting does; it used to be
+             the remaining predicate's symbols, {γ} (#46). *)
+          expected_dependencies = [ "α"; "γ" ];
           expected_write_label = 5;
         };
       ]

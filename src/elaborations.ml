@@ -64,6 +64,29 @@ module OpTrace = struct
     Mutex.protect t.mutex (fun () -> OpTraceTable.find_opt t.tbl key)
 end
 
+(** Each justification's [pred], computed once. Lifting tries every pair of
+    conflicting justifications and needs both sides' [pred], whose transitive
+    reduction of [ppo] dominates its cost; recomputing it per pair made
+    programs/episodicity/hp-1.lit spend nine tenths of its time there once
+    forwarding's substitution multiplied the justifications (#46). Elaborators
+    run on several domains, hence the mutex. *)
+module PredCache = struct
+  type t = { tbl : (int -> int USet.t) JustificationCache.t; mutex : Mutex.t }
+
+  let create n = { tbl = JustificationCache.create n; mutex = Mutex.create () }
+
+  (** [find_or_add t just f] is [just]'s cached value, or [f ()] recorded. Two
+      domains may both compute a missing entry; either result is the same. *)
+  let find_or_add t just f =
+    match Mutex.protect t.mutex (fun () -> JustificationCache.find_opt t.tbl just)
+    with
+    | Some v -> v
+    | None ->
+        let v = f () in
+          Mutex.protect t.mutex (fun () -> JustificationCache.replace t.tbl just v);
+          v
+end
+
 (** Elaboration context containing the symbolic event structure and caches.
 
     Bundles together all the state needed during elaboration including the event
@@ -76,6 +99,7 @@ type context = {
   op_trace : op OpTrace.t;
       (** Cache of operations performed on justifications to avoid redundancy.
       *)
+  pred_cache : PredCache.t;  (** Each justification's [pred]. *)
 }
 
 let pred_landmark = Landmark_safe.register "Elaborations.pred"
@@ -417,6 +441,54 @@ module ForwardElab = struct
         w_cross_w
       |> URelation.inverse
 
+  (** [substitute elab_ctx just] applies sMRD's forwarding environment
+      [g = [val(e2) ↦ val(e1)]] (def:elab-fwd in the appendix) for each edge of [just.fwd]
+      whose forwarded event is a read, to the predicate and to the justified
+      write's location and value, and recomputes [d] from the write as
+      ValueAssignElab does. A predicate the substitution makes [false] is
+      dropped by the caller, as the rule asks for [P ∧ Ω] to be satisfiable.
+
+      Adding the edge alone left the forwarded read's symbol in the predicate,
+      and freeze_dp takes dp from the predicate's symbols, so the dependency
+      forwarding exists to remove stayed. In esop_problem/RRE.lit, load
+      forwarding [r1 := x] onto [r2 := x] makes the guard [α = β] of [y := 42]
+      [α = α], which is ⊤, and the write independent of both reads (#46).
+
+      A forwarded value may itself mention a forwarded read's symbol, so the
+      environment is applied until nothing changes; edges follow [po], so at
+      most once per edge. Store-store forwarding rewrites a written value, not
+      a symbol, and is left as it was. *)
+  let substitute elab_ctx (just : justification) =
+    let val_fn = elab_ctx.fwd_es_ctx.val_fn in
+    let bindings =
+      USet.values just.fwd
+      |> List.filter_map (fun (e1, e2) ->
+          match (val_fn e1, val_fn e2) with
+          | Some v1, Some (ESymbol s) -> Some (s, v1)
+          | _ -> None
+      )
+    in
+      if bindings = [] then just
+      else
+        let env s = List.assoc_opt s bindings in
+        let rec close n e =
+          let e' = Expr.evaluate ~env e in
+            if n = 0 || Expr.equal e e' then e' else close (n - 1) e'
+        in
+        let sub = close (List.length bindings) in
+        let p = List.map sub just.p |> Expr.evaluate_conjunction in
+          if just.w.typ <> Write then { just with p }
+          else
+            let loc = Option.map sub just.w.loc in
+            let wval = Option.map sub just.w.wval in
+            let d =
+              [ loc; Option.map Expr.of_value just.w.rval; wval ]
+              |> List.filter_map Fun.id
+              |> List.concat_map Expr.get_symbols
+              |> USet.of_list
+            in
+              { just with p; d; w = { just.w with loc; wval } }
+
   (** [elab elab_ctx just] performs forwarding elaboration on a justification.
 
       For the given justification, computes all valid forwarding and
@@ -539,9 +611,11 @@ module ForwardElab = struct
                   ForwardingContext.create elab_ctx.fwd_es_ctx ~fwd:new_fwd
                     ~we:new_we ()
                 in
-                  ForwardingContext.remap_just con just
+                  ForwardingContext.remap_just con just |> substitute elab_ctx
               )
               filtered_fwd
+            |> List.filter (fun (j : justification) ->
+                not (List.exists (Expr.equal (EBoolean false)) j.p))
           in
 
           let we_justs =
@@ -1078,8 +1152,16 @@ end = struct
           );
 
           (* Get pred function *)
-          let pred_1 = pred elab_ctx None None ~ppo:ppo_1 () in
-          let pred_2 = pred elab_ctx None None ~ppo:ppo_2 () in
+          let pred_1 =
+            PredCache.find_or_add elab_ctx.pred_cache just_1 (fun () ->
+                pred elab_ctx None None ~ppo:ppo_1 ()
+            )
+          in
+          let pred_2 =
+            PredCache.find_or_add elab_ctx.pred_cache just_2 (fun () ->
+                pred elab_ctx None None ~ppo:ppo_2 ()
+            )
+          in
 
           (* Generate candidate relabelings for the pair of justifications *)
           let relabs =
@@ -1220,17 +1302,19 @@ end = struct
                                 None
                               )
                               else
-                                let new_p_d =
-                                  List.map Expr.get_symbols disjunction
-                                  |> List.flatten
-                                  |> USet.of_list
-                                in
-                                let new_w_d =
-                                  Option.map Expr.get_symbols just_2.w.wval
-                                  |> Option.value ~default:[]
-                                  |> USet.of_list
-                                in
-                                let d = USet.union new_p_d new_w_d in
+                                (* D is just_2's, as in sMRD's Lifting. It
+                                   used to be the symbols of the remaining
+                                   predicate and of the value, which put
+                                   control dependencies into D -- the mismatch
+                                   ValueAssignElab's note warns of. A lift of
+                                   value-assigned writes then carried D = {α}
+                                   from its predicate, and the next lift, against
+                                   an arm with D = {}, was refused: that lost
+                                   avoidoota/listing20.lit's witness once
+                                   forwarding substituted into predicates (#46).
+                                   freeze_dp takes the predicate's symbols on
+                                   its own, so no dependency is lost. *)
+                                let d = USet.clone just_2.d in
 
                                 Some
                                   {
@@ -1851,7 +1935,8 @@ let generate_justifications ?(num_threads = 1) ?(collapse_forwarding = false)
 
   (* Build context for elaborations *)
   let op_trace = OpTrace.create 0 in
-  let elab_ctx : context = { fwd_es_ctx; structure; fj; op_trace } in
+  let pred_cache = PredCache.create 0 in
+  let elab_ctx : context = { fwd_es_ctx; structure; fj; op_trace; pred_cache } in
 
   Logs_safe.debug (fun m -> m "Starting elaborations...");
 
