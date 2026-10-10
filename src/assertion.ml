@@ -151,6 +151,35 @@ module SetOperations = struct
         || eval_set_expr e2 structure execution
     | EUnOp ("!", e) -> not (eval_set_expr e structure execution)
     | _ -> true
+
+  (** [decide_memberships expr structure execution] is [expr] with each set
+      membership replaced by its value on [execution], as [eval_set_expr]
+      decides it, and everything else left as it is.
+
+      What remains is a formula the solver can decide, whatever connectives the
+      memberships sit under. Deciding the memberships and the rest separately
+      and conjoining the answers is only right when the condition is a
+      conjunction of them (#143).
+
+      @param expr The condition.
+      @param structure The event structure.
+      @param execution The execution.
+      @return [expr] without set memberships.
+      @raise Failure if a membership's tuple is not a pair of event ids. *)
+  let rec decide_memberships expr structure execution =
+    if is_set_operation expr then
+      EBoolean (eval_set_expr expr structure execution)
+    else
+      match expr with
+      | EBinOp (e1, op, e2) ->
+          EBinOp
+            ( decide_memberships e1 structure execution,
+              op,
+              decide_memberships e2 structure execution )
+      | EUnOp (op, e) -> EUnOp (op, decide_memberships e structure execution)
+      | EOr es ->
+          EOr (List.map (fun e -> decide_memberships e structure execution) es)
+      | _ -> expr
 end
 
 (** {1 Assertion Instance Tracking} *)
@@ -633,34 +662,9 @@ end
 
 (** Condition evaluation for assertions.
 
-    Handles both set membership expressions and regular boolean conditions,
-    using appropriate evaluation strategies for each. *)
+    Set memberships are decided on the execution, and the solver decides the
+    rest. *)
 module ConditionChecker = struct
-  (** [check_with_set_operations cond_expr rf_conditions structure execution]
-      evaluates set membership conditions.
-
-      Directly evaluates expressions like [(w,r) in .rf] by checking relation
-      membership, then validates RF constraints with solver.
-
-      @param cond_expr The condition expression.
-      @param rf_conditions RF equality constraints.
-      @param structure The event structure.
-      @param execution The execution.
-      @return Promise of [true] if condition holds. *)
-  let check_with_set_operations cond_expr rf_conditions structure execution =
-    try
-      let set_result =
-        SetOperations.eval_set_expr cond_expr structure execution
-      in
-        (* Still check rf_conditions with solver if needed *)
-        if List.length rf_conditions > 0 then
-          let rf_ok = Solver.is_sat rf_conditions in
-            set_result && rf_ok
-        else set_result
-    with Failure msg ->
-      Logs_safe.err (fun m -> m "Error evaluating set expression: %s" msg);
-      false
-
   (** [check_with_solver cond_expr rf_conditions execution] uses SMT solver.
 
       Evaluates condition by substituting final register values and checking
@@ -679,12 +683,7 @@ module ConditionChecker = struct
           (show_symbolic_execution execution)
     );
 
-    let cond_expr =
-      Expr.evaluate_conjunction [ cond_expr ]
-      |> List.filter (fun conjunct ->
-          not (SetOperations.is_set_operation conjunct)
-      )
-    in
+    let cond_expr = Expr.evaluate_conjunction [ cond_expr ] in
 
     let writes = Execution.get_writes_in_rhb_order structure execution in
 
@@ -821,7 +820,11 @@ module ConditionChecker = struct
 
   (** [check_condition cond_expr structure execution] checks if condition holds.
 
-      Dispatches to appropriate checker based on expression type.
+      The set memberships are decided on the execution first
+      ([SetOperations.decide_memberships]), and the solver decides the formula
+      that leaves, so memberships compose with [&&], [||] and [!] like any other
+      atom. A membership whose tuple is not a pair of event ids fails the
+      condition.
 
       @param coherent The coherence model the execution was admitted under.
       @param cond_expr The condition to check.
@@ -832,13 +835,13 @@ module ConditionChecker = struct
     let rf_conditions =
       ExecutionAnalysis.build_rf_conditions structure execution
     in
-    let set_valid =
-      check_with_set_operations cond_expr rf_conditions structure execution
-    in
-    let solver_valid =
-      check_with_solver ?coherent cond_expr rf_conditions structure execution
-    in
-      set_valid && solver_valid
+      match SetOperations.decide_memberships cond_expr structure execution with
+      | cond_expr ->
+          check_with_solver ?coherent cond_expr rf_conditions structure
+            execution
+      | exception Failure msg ->
+          Logs_safe.err (fun m -> m "Error evaluating set expression: %s" msg);
+          false
 end
 
 (** [admits_outcome structure execution outcome] holds when [execution] can

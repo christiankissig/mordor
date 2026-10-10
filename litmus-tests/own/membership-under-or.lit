@@ -1,0 +1,14 @@
+// A relation membership under || is decided like any other atom (#143).
+//
+// r1 := x is either forwarded from x := 0, and then y := 1 does not depend on
+// it, or reads x := 0, and then it does: (2,4) is in .dp in one execution and
+// not in the other, and the disjunction holds in both. An assertion with a
+// membership under || used to stop with "Unsupported operator: ,".
+x := 0;
+r1 := x;
+if (r1 = 0) {
+  y := 1
+}
+%%
+allow ((2,4) ∈ .dp || (2,4) ∉ .dp) []
+forbid (!((2,4) ∈ .dp || (2,4) ∉ .dp)) []

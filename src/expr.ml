@@ -398,7 +398,7 @@ end = struct
               | ">" -> EBinOp (l, "<=", r)
               | "<=" -> EBinOp (l, ">", r)
               | ">=" -> EBinOp (l, "<", r)
-              | _ -> EUnOp (op, r_val)
+              | _ -> EUnOp ("!", r_val)
             )
           | _ -> EUnOp ("!", r_val)
       )
