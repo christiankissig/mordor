@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 414
+Total tests: 415
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-06
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -64,6 +64,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-06
 - esop_problem/lb+datas.lit
 - esop_problem/lb.lit
 - esop_problem/mp.lit
+- esop_problem/RRE.lit
 - esop_problem/sb.lit
 - fowm2024/load intro - no aliasing.lit
 - fowm2024/load intro - potential aliasing.lit

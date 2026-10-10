@@ -95,8 +95,6 @@ Measured with `--allow-unknown-model`:
 
 | Test | Issue | Pugh | sMRD fallback | Note |
 |---|---|---|---|---|
-| `JCTC2` | #50 | allow | forbids | Pugh: "redundant read elimination" |
-| `JCTC3` | #52 | allow | forbids | same reasoning as test 2 |
 | `JCTC6` | #36 | allow | forbids | needs the fact that `B` only ever holds 0 or 1 |
 | `JCTC8` | — | allow | forbids | hidden: the file asserts `forbid` |
 | `JCTC9`, `JCTC9b` | #53 | allow | forbids | JCTC9's `forbid` hides it; JCTC9b's `allow` shows it |
@@ -153,8 +151,8 @@ The last column is what sMRD decides about the outcome in the assertion, run wit
 | Test | File asserts | Pugh (JMM) | P2850R0 draft (C++ `sdep`) | sMRD fallback decides the outcome |
 |---|---|---|---|---|
 | `JCTC1` | allow | allow | allow | allows |
-| `JCTC2` | allow | allow | allow | forbids |
-| `JCTC3` | allow | allow | allow | forbids |
+| `JCTC2` | allow | allow | allow | allows |
+| `JCTC3` | allow | allow | allow | allows |
 | `JCTC4` | forbid | forbid | forbid | forbids |
 | `JCTC5` | forbid | forbid | forbid | forbids |
 | `JCTC6` | allow | allow | allow | forbids |
@@ -165,7 +163,7 @@ The last column is what sMRD decides about the outcome in the assertion, run wit
 | `JCTC9b` | allow | allow (as JCTC9) | allow (as JCTC9) | forbids |
 | `JCTC10` | forbid | forbid | forbid | forbids |
 | `JCTC11` | allow | allow | allow | allows |
-| `JCTC12` | forbid | forbid | forbid | allows |
+| `JCTC12` | forbid | forbid | forbid | forbids |
 | `JCTC13` | forbid | forbid | forbid | forbids |
 | `JCTC14` | forbid | forbid | skipped (loops) | forbids |
 | `JCTC15` | forbid | forbid | skipped (Java coherence) | forbids |

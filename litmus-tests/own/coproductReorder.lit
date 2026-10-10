@@ -1,3 +1,17 @@
+// Thread 1 writes z := 1 on every path: y is never written after its
+// initialiser, so r2 = 1 and the then-arm's inner branch is always taken.
+// sMRD allows r1 = 1.
+//
+// The initialiser y := 1 is ordered before both threads, and nothing on y
+// comes between it and r2 := y in thread 1, so store forwarding rewrites
+// r2 = 1 to true. The then-arm's z := 1 is then justified under r1 = 1
+// alone, lifting it with the else-arm's under r1 != 1 leaves z := 1
+// depending on nothing, and the cycle through x closes. The usual compiler
+// transformation does the same: hoist z := 1 above the read of x.
+//
+// This asserted forbid until forwarding substituted into predicates (#46):
+// before that, forwarding y := 1 into r2 left r2 = 1 in the predicate and the
+// dependency on the read of x in place.
 x := 0; y := 1; z := 0;
 {
   r1 := x;
@@ -17,4 +31,4 @@ x := 0; y := 1; z := 0;
   }
 }
 %%
-forbid (r1 = 1) []
+allow (r1 = 1) []

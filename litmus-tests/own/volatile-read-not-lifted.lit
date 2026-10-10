@@ -9,9 +9,16 @@
 //
 // The writes are relaxed: this is the read side alone. A read before the
 // branch, shared by both arms, would not be lifted, volatile or not.
+//
+// The read of x is volatile so that it cannot be forwarded from x := 0. A
+// forwarded read drops its dependency too, and the assertion counts a
+// forwarded read as executed, so forwarding would remove (3,7) from .dp
+// without any lifting and the assertion could not tell the two apart. A
+// volatile read before the branch does not stop lifting: the control
+// relaxed-read-lifted.lit shows the dependency removed with the same read.
 x := 0;
 y := 0;
-r1 := x;
+r1 :v= x;
 if (r1 = 0) {
   r2 :v= y;
   if (r2 = 0) {

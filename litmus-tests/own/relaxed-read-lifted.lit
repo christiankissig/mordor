@@ -2,9 +2,15 @@
 // on the same inner condition, so lifting pairs the two reads and the two
 // writes and hoists the lot out of the outer branch. The write then depends
 // on its own arm's read of y, and no longer on the read of x.
+//
+// The read of x is volatile so that it cannot be forwarded from x := 0. A
+// forwarded read drops its dependency too, and the assertion counts a
+// forwarded read as executed, so forwarding would remove (3,7) from .dp
+// without any lifting and the assertion would pass without showing that
+// lifting works. A volatile read before the branch does not stop lifting.
 x := 0;
 y := 0;
-r1 := x;
+r1 :v= x;
 if (r1 = 0) {
   r2 := y;
   if (r2 = 0) {

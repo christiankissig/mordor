@@ -690,7 +690,9 @@ module LiftElabTests = struct
             };
           expected_lifting_count = 1;
           expected_predicates = [ EBinOp (ESymbol "γ", "!=", ENum Z.zero) ];
-          expected_dependencies = [ "γ" ];
+          (* Lifting keeps just_2's D, as sMRD's Lifting does; it used to be
+             the remaining predicate's symbols, {γ} (#46). *)
+          expected_dependencies = [ "α"; "γ" ];
           expected_write_label = 5;
         };
       ]

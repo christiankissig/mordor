@@ -4,9 +4,15 @@
 //
 // Without it, volatile-write-not-lifted.lit alone would also pass if lifting
 // were disabled for everything rather than for volatile accesses.
+//
+// The read of x is volatile so that it cannot be forwarded from x := 0. A
+// forwarded read drops its dependency too, and the assertion counts a
+// forwarded read as executed, so forwarding would remove (3,5) from .dp
+// without any lifting and the assertion would pass without showing that
+// lifting works. A volatile read before the branch does not stop lifting.
 x := 0;
 y := 0;
-r1 := x;
+r1 :v= x;
 if (r1 = 0) {
   y := 1;
 } else {

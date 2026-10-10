@@ -18,8 +18,8 @@ the one the literature records.
 Directory layout mirrors `litmus-tests/`, so a file's origin is its path.
 
 Every file here has an issue in the #46-#62 range. Each records the symptom, the model actually in
-effect, where the test comes from and what to look at next. Three files
-remain. The seven `jctc/` ones have moved to `litmus-tests-jmm/`;
+effect, where the test comes from and what to look at next. One file
+remains. The seven `jctc/` ones have moved to `litmus-tests-jmm/`;
 `avoidoota/listing16.lit` returned to the suite with #43 fixed; #41, #42, #44, #45, #47, #55, #56, #57, #59, #60, #61, #62, #65 and #90 have been fixed and
 their files returned to `litmus-tests/`.
 
@@ -131,9 +131,7 @@ still synchronises with nothing. Fence ordering in the checker is what is left.
 
 ### MoRDor is too restrictive — an `allow` it finds no witness for
 
-| Test | Assertion | Model |
-|---|---|---|
-| [`esop_problem/RRE.lit`](esop_problem/RRE.lit) #46 | allow `r1=42 ∧ r2=42 ∧ r3=42` | `[sMRD]` |
+None at present.
 
 `own/FWD-STRENGTHEN-LIFT.lit` #90 has left this table, and is back in
 `litmus-tests/own/`. Unlike the rest it was not a divergence from the
@@ -156,13 +154,6 @@ store forwarding elided the read of a read-modify-write, leaving it without an
 `rf` edge; an update's read and write are no longer elidable (`3e9d35b`), and
 both now verify. Their assertions were rewritten when `FADD` came to return the
 sum it writes (`bcea62d`), which changes no execution.
-
-`esop_problem/RRE.lit` generates executions, but none whose path predicates
-admit the asserted values. Before the path predicates were part of the query the
-outcome was reported satisfiable against an execution that does not produce it,
-which is why it was invisible. Check the step counter first — it defaults to 2
-and is shared by every loop in a program — before concluding the justification
-is not derivable.
 
 ## Getting one back into the suite
 
