@@ -201,10 +201,39 @@ Run unit tests with
 dune test
 ```
 
-Run integration tests (core pipelines and litmus test suite) with
+Run all integration tests (litmus tests, episodicity and the remaining
+integration tests) with
 
 ```bash
 dune exec test/test_integration.exe
+```
+
+The integration tests come in three suites, which can be run alone by name:
+
+```bash
+# Litmus tests: every .lit file under litmus-tests/, each assertion checked strictly
+dune exec test/test_integration.exe -- test "Integration Tests - Litmus Tests Strict"
+
+# Episodicity tests: the programs under programs/episodicity/ and their expectations
+dune exec test/test_integration.exe -- test "Integration Tests - Episodicity"
+
+# The remaining integration tests: --threads runs must agree with sequential ones
+dune exec test/test_integration.exe -- test "Integration Tests - Parallel"
+```
+
+Each episodicity program gets 300 s before the suite gives up on it; set
+`MORDOR_EPISODICITY_TIMEOUT` (in seconds) to change that. To run one test of a
+suite, add its index, as in `... test "Integration Tests - Episodicity" 3`, and
+`dune exec test/test_integration.exe -- list` lists the tests with their
+indices.
+
+The golden tests compare each litmus test's verdict and executions against a
+recorded golden under `test/goldens/`:
+
+```bash
+dune build test/golden/golden_diff.exe
+_build/default/test/golden/golden_diff.exe check    # compare
+_build/default/test/golden/golden_diff.exe update   # re-record after an intended change
 ```
 
 ## Command Line Interface
@@ -297,7 +326,7 @@ dune exec mordor -- run --all-litmus-tests ./litmus-tests
 dune exec mordor -- run --all-litmus-tests ./litmus-tests -r --threads 4
 
 # Run a litmus test under promising semantics 2.0
-dune exec mordor -- run --single litmus-tests-promising/LB.lit --semantics ps2
+dune exec mordor -- run --single litmus-tests/promising/LB.lit --semantics ps2
 ```
 
 #### Visualizing Event Structures

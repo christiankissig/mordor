@@ -3,9 +3,9 @@
 open Lwt.Syntax
 
 (* Configuration *)
-(* [litmus-tests-promising/] is annotated [PS1], which selects promising
+(* [litmus-tests/promising/] is annotated [PS1], which selects promising
    semantics, so its tests run as they are, without --semantics. *)
-let litmus_dirs = [ "litmus-tests"; "litmus-tests-promising" ]
+let litmus_dirs = [ "litmus-tests" ]
 let cli_executable = "_build/default/cli/main.exe"
 
 (* Read all .lit files from directory *)

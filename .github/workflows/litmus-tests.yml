@@ -1,4 +1,4 @@
-# Every litmus test under litmus-tests/ and litmus-tests-promising/, each assertion checked strictly.
+# Every litmus test under litmus-tests/, each assertion checked strictly.
 name: Litmus Tests
 on:
   push:

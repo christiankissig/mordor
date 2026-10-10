@@ -277,7 +277,7 @@ Zoo witnesses that cannot be ported to MoRDor's input language as they stand:
   (`properties/atomicity-mca/`), which as the table above shows is not for free.
 - The Promising-specific witnesses (`Promising-vs-CSRA`, `Promising-vs-Weakestmo`)
   — MoRDor does not implement promising semantics; see
-  `litmus-tests-promising/README.md` for how the existing suite handles that.
+  `litmus-tests/promising/README.md` for how the existing suite handles that.
 
 ## Running
 

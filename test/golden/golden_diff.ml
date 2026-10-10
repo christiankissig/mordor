@@ -25,7 +25,6 @@
 let default_dirs =
   [
     "litmus-tests";
-    "litmus-tests-promising";
     (* litmus-tests-refinement/ is gone: with refinement chains decided (#85,
        #87) all six of its files are in litmus-tests/. *)
     "litmus-tests-review";
@@ -69,8 +68,7 @@ let golden_path lit_file = Filename.concat goldens_root (lit_file ^ ".golden")
    summary: verdict + canonicalized execution set. A fresh context per call
    (the steps mutate it). *)
 let render (program : string) : string =
-  (* [litmus-tests-promising/] is one of the corpora below and every file in it
-     names [Promising], which MoRDor does not implement. Since #86 that is fatal
+  (* A test may name a model MoRDor does not implement. Since #86 that is fatal
      unless the caller opts in; a golden is a record of what the pipeline does
      today, so opt in and let the fallback verdict be recorded as before. *)
   let options =

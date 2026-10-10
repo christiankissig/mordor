@@ -12,7 +12,7 @@ MoRDor computes promising semantics 1.0 (POPL 2017) and 2.0 (Lee et al., PLDI
 version the way `[IMM]` selects a coherence model, so these run as they are:
 
 ```
-dune exec mordor -- run --single "litmus-tests-promising/LB.lit"
+dune exec mordor -- run --single "litmus-tests/promising/LB.lit"
 ```
 
 `--semantics ps1` or `--semantics ps2` chooses a version for a whole run, and
@@ -24,7 +24,7 @@ Promising is an *operational* model: a thread may *promise* a future write,
 other threads may read from it, and the promise is only legal if the promising
 thread can be *certified* to fulfil it by running thread-locally.
 
-The integration suite scans this directory alongside `litmus-tests/`, and
+The integration suite scans this directory as part of `litmus-tests/`, and
 `test/test_promising.ml` checks the papers' verdicts for most of these tests
 under both versions. All of them hold under both.
 
@@ -39,8 +39,8 @@ Two files were left behind in `litmus-tests/popl_grounding/` when the rest moved
 ## Runnable approximations
 
 Copies of these tests reannotated to `[IMM]` live in
-`litmus-tests/popl_promising/` and *are* exercised by the integration suite,
-except `Coh-CYC (Promising).lit`, which has none. `Page 7 Column 1b.lit`'s copy
+`litmus-tests/popl_promising/` and are exercised by the integration suite too,
+all except `Coh-CYC (Promising).lit`, which has none. `Page 7 Column 1b.lit`'s copy
 was parked in `litmus-tests-review/` (#61) until IMM stopped letting sMRD elide
 the release store its own thread overwrites. IMM
 was chosen because it is the closest model MoRDor implements and was the model the
@@ -81,7 +81,7 @@ record of the intended promising outcome.
 4.1) allows the outcome: "In the second variant (LBa), we allow the promise of
 y := 1 and thus the a = 1 outcome", so that optimizations eliminating an
 acquire read remain sound. It now asserts `allow`, which both versions confirm.
-The IMM copy in `litmus-tests/popl_promising/` still asserts `forbid`, as IMM
+The IMM copy in `popl_promising/` still asserts `forbid`, as IMM
 should.
 
 **Coh-CYC.** The annotation says promising allows the outcome; both versions

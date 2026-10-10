@@ -9,9 +9,9 @@ validate, so a test that records a known divergence cannot live there. Parking i
 here keeps the file, its assertion and its provenance intact while the suite
 stays a statement about what MoRDor does today.
 
-This is the same idea as `litmus-tests-promising/` and `litmus-tests-jmm/`, but
-for a different reason: those name a memory model MoRDor has no implementation
-of, so their assertions cannot be checked at all. Every
+This is the same idea as `litmus-tests-jmm/`, but for a different reason:
+that names a memory model MoRDor has no implementation of, so its assertions
+cannot be checked at all. Every
 test here names a model MoRDor *does* implement, and gets a different answer from
 the one the literature records.
 

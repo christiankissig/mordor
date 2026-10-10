@@ -1,14 +1,15 @@
 # Litmus Tests Index
 
-Total tests: 415
-Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-06
+Total tests: 435
+Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
 > memory model MoRDor does not implement live outside `litmus-tests/` and are not
-> scanned: `litmus-tests-promising/` (`[Promising]`) and `litmus-tests-jmm/`
-> (`[JMM]`, the JSR-133 Java Causality Test Cases). Each has
-> a README with the reference verdicts. Tests whose assertion MoRDor does not
-> validate are parked in `litmus-tests-review/`, also unscanned.
+> scanned: `litmus-tests-jmm/` (`[JMM]`, the JSR-133 Java Causality Test Cases)
+> has a README with the reference verdicts. The promising-semantics tests in
+> `promising/` are annotated `[PS1]`, which MoRDor implements, and are scanned.
+> Tests whose assertion MoRDor does not validate are parked in
+> `litmus-tests-review/`, also unscanned.
 
 ## Test Files
 
@@ -177,6 +178,26 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-06
 - popl_promising/SB+fences.lit
 - popl_promising/SB.lit
 - popl_promising/Upd-Stuck.lit
+- promising/2+2W.lit
+- promising/ARM-weak.lit
+- promising/COH.lit
+- promising/CYC.lit
+- promising/Coh-CYC (Promising).lit
+- promising/LB.lit
+- promising/LBa'.lit
+- promising/LBa.lit
+- promising/LBaa/LBa'0.lit
+- promising/LBaa/LBa'1.lit
+- promising/LBd.lit
+- promising/LBfd.lit
+- promising/LBr.lit
+- promising/MP+fences.lit
+- promising/Page 7 Column 1.lit
+- promising/Page 7 Column 1b.lit
+- promising/Par-Inc.lit
+- promising/SB+fences.lit
+- promising/SB.lit
+- promising/Upd-Stuck.lit
 - requests/0nONvMSw7 (MP).lit
 - requests/1MR_opBNP (2+2W with obs thread).lit
 - requests/2zm8LRQsJ (LB).lit
