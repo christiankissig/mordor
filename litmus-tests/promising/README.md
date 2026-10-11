@@ -75,7 +75,7 @@ record of the intended promising outcome.
 | `Upd-Stuck.lit`        | allow  `r1=1 ∧ r2=1` | allow | allow |
 | `Page 7 Column 1.lit`  | forbid `r1=1 ∧ r2=0 ∧ r3=1 ∧ r4=0` | forbid | forbid |
 | `Page 7 Column 1b.lit` | forbid `r2=3 ∧ r3=0` (release sequence) | forbid | forbid |
-| `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, annotated `[PS1=allow]` — **see below** | forbid | forbid |
+| `Coh-CYC (Promising).lit` | forbid `r1=3 ∧ r2=2 ∧ r3=1`, see below | forbid | forbid |
 
 **LBa.** The file used to assert `forbid`, but the POPL 2017 paper (section
 4.1) allows the outcome: "In the second variant (LBa), we allow the promise of
@@ -84,10 +84,15 @@ acquire read remain sound. It now asserts `allow`, which both versions confirm.
 The IMM copy in `popl_promising/` still asserts `forbid`, as IMM
 should.
 
-**Coh-CYC.** The annotation says promising allows the outcome; both versions
-here forbid it. Neither paper discusses this program. The outcome needs T2 to
-promise `x := 3` before reading `y = 1` and T1 to promise `y := 1` before
-reading `x = 3`; certifying either promise needs the other to be in memory
-already, since certification writes `x := 2` after every existing message
-(behind the cap) and reads nothing but its own write. Treat this row as open
-until checked against another implementation.
+**Coh-CYC.** Both versions forbid the outcome, as PS1.0 and PS2.0 themselves do
+(#138). Chakraborty and Vafeiadis (POPL 2019, Example 2 and Fig. 5a) give a
+promise execution reaching it, but they give it under the simplified
+presentation of PS in their section 2.4, which has single timestamps and
+certifies against the current memory only. In it T1 promises `y := 1` and
+certifies the promise by writing `x := 2` in the gap below T2's `x := 1`, then
+reading `x = 1`. PS1.0 certifies against every future memory (POPL 2017,
+section 3), and one with a message filling that gap leaves T1's write nowhere
+to go but after every existing message, where it reads nothing but itself.
+That is the argument the same paper uses to show PS forbids FADD. PS2.0's
+capped memory reserves the gap and forbids it likewise. Without the gap, each
+thread's promise needs the other's to be in memory first.

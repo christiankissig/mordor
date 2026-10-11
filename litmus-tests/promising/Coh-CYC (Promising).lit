@@ -15,7 +15,9 @@ y := 0;
   }
 }
 %%
-// Promising semantics 1.0 allows this outcome according to S. Chakraborty and V. Vafeiadis, "Grounding
-// Thin-Air Reads with Event Structures", POPL 2019, Example 2 and Fig. 5a, which give a promise execution
-// reaching it (the program is their Fig. 3). MoRDor's PS1 and PS2 forbid it (#138), and the assertion checks that.
+// S. Chakraborty and V. Vafeiadis, "Grounding Thin-Air Reads with Event Structures", POPL 2019, Example 2
+// and Fig. 5a, reach this outcome (the program is their Fig. 3), but under their simplified presentation of
+// PS, which certifies promises against the current memory only. Their witness certifies T1's promise of
+// y := 1 by writing x := 2 into the gap below T2's x := 1. PS1.0 certifies against every future memory, and
+// one that fills the gap blocks this; PS2.0's capped memory reserves the gap. Both forbid the outcome (#138).
 forbid (r1 = 3 && r2 = 2 && r3 = 1) [PS1] "Edge case."
