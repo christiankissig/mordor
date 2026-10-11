@@ -141,10 +141,25 @@ let calculate_executions ?track ~after_justifications lwt_ctx =
   let primary_run ctx =
     match ctx.options.semantics with
     | Smrd ->
-        Lwt.return ctx
-        |> Elaborations.step_generate_justifications
-        |> after_justifications
-        |> Executions.step_calculate_dependencies
+        let query =
+          if not ctx.options.by_query then None
+          else
+            match Assertion.query ctx with
+            | Some query when ctx.compare_models = [] -> Some query
+            | _ ->
+                Logs_safe.warn (fun m ->
+                    m
+                      "%s: not a question one execution can answer -- several \
+                       assertions, a model or refinement assertion, or \
+                       compared models -- so the executions are enumerated"
+                      ctx.litmus_name
+                );
+                None
+        in
+          Lwt.return ctx
+          |> Elaborations.step_generate_justifications
+          |> after_justifications
+          |> Executions.step_calculate_dependencies ?query
     | Promising1 | Promising2 ->
         Promising.step_calculate_executions ?track (Lwt.return ctx)
   in

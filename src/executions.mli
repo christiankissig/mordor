@@ -266,15 +266,20 @@ module Freeze : sig
     (int * int) uset ->
     bool
 
-  (** [witness ~model ~coherence_models ~admits ~reject structure prepared] is a
-      result {!enumerate} would return for the combination that [admits] holds
-      of and [reject] does not, or that there is none. Where the model has a
-      symbolic form ({!Coherence.ModelRegistry.lookup_symbolic}, smrd today) a
-      solver query decides it, checking each read-from it proposes exactly (S19,
-      #96); where it has none, and where the solver is undecided after
-      {!witness_rounds}, a search does, most constrained read first, pruned by
-      [coherence_models], within {!witness_seconds}. *)
+  (** [witness ?goal ~model ~coherence_models ~admits ~reject structure
+       prepared] is a result {!enumerate} would return for the combination that
+      [admits] holds of and [reject] does not, or that there is none. Where the
+      model has a symbolic form ({!Coherence.ModelRegistry.lookup_symbolic},
+      smrd today) a solver query decides it, checking each read-from it proposes
+      exactly (S19, #96); where it has none, and where the solver is undecided
+      after {!witness_rounds}, a search does, most constrained read first,
+      pruned by [coherence_models], within {!witness_seconds}.
+
+      [goal] is a necessary condition on the result sought, over the
+      structure's symbols, which the solver is asked alongside the model's
+      constraints, so that it can show there is none. *)
   val witness :
+    ?goal:expr list ->
     model:string ->
     coherence_models:string list ->
     admits:(FreezeResult.t -> bool) ->
@@ -415,6 +420,32 @@ end
 
 (** {2 Main Execution Generation} *)
 
+(** [final_env_of structure e] is the final register environment of an
+    execution with events [e]: the register environments at its terminal events
+    merged. It depends on the events alone, so every execution of a combination
+    has the same. *)
+val final_env_of :
+  symbolic_event_structure -> int uset -> (string, expr) Hashtbl.t
+
+(** {2 Assertions by query (R16)} *)
+
+(** An existential question about the executions -- does one satisfy an
+    assertion's condition, does one have undefined behaviour -- asked per kind
+    of justification combination instead of by enumerating the executions.
+    {!generate_executions} given one returns the first witness it finds, or
+    none, and tells [report] how the question was answered. *)
+type query = {
+  holds : symbolic_event_structure -> symbolic_execution -> bool;
+      (** Whether an admitted execution, with the coherence order that admitted
+          it, answers the question. Exact. *)
+  goal :
+    symbolic_event_structure -> (string, expr) Hashtbl.t -> expr list option;
+      (** A necessary condition for [holds], over the structure's symbols, given
+          the combination's final registers ({!final_env_of}); [None] where
+          there is none to state. *)
+  report : query_report -> unit;  (** Told how the question was answered. *)
+}
+
 (** [generate_executions ?include_rf structure context final_justs statex
      ~restrictions] generates all valid executions for the given symbolic event
     structure.
@@ -456,6 +487,7 @@ val generate_executions :
   ?include_rf:bool ->
   ?compute:compute_fn ->
   ?witnesses:bool ->
+  ?query:query ->
   ?compare_models:string list ->
   ?admissions:(int, string list) Hashtbl.t ->
   ?model_executions:(string, symbolic_execution list) Hashtbl.t ->
@@ -496,6 +528,7 @@ val calculate_dependencies :
   ?include_rf:bool ->
   ?num_threads:int ->
   ?witnesses:bool ->
+  ?query:query ->
   ?compare_models:string list ->
   ?admissions:(int, string list) Hashtbl.t ->
   ?model_executions:(string, symbolic_execution list) Hashtbl.t ->
@@ -521,4 +554,5 @@ val calculate_dependencies :
       Lwt promise of a Mordor context containing partial execution state
     @return
       Lwt promise of an updated Mordor context with advanced dependency state *)
-val step_calculate_dependencies : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
+val step_calculate_dependencies :
+  ?query:query -> mordor_ctx Lwt.t -> mordor_ctx Lwt.t

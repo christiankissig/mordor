@@ -1844,6 +1844,92 @@ let describe_assertion : Context.ir_assertion -> string = function
   | Ir.Model { model } -> Printf.sprintf "[%s]" model
   | Ir.Chained { model; _ } -> Printf.sprintf "~~> [%s]" model
 
+(** {1 Assertions by Query (R16)} *)
+
+(** The coherence model whose data races are undefined behaviour, for an
+    assertion under [model]: none under promising semantics, which computes
+    final states only, with no relations to race over. *)
+let race_model model =
+  match semantics_of_model_name model with
+  | None -> Some model
+  | Some _ -> None
+
+(** [query ctx] is the question [ctx]'s assertion asks, as {!Executions.query}
+    asks it of each kind of justification combination, or [None] where it
+    cannot be asked that way.
+
+    The question is existential: is there an execution satisfying the
+    condition -- [allow] holds and [forbid] fails exactly when there is -- or,
+    for [ub] and for a test without assertions, an execution with undefined
+    behaviour. An execution answers it as {!PerExecutionChecker} would find:
+    the same condition check, the same undefined-behaviour checks.
+
+    The condition is also stated as a constraint, so the solver can show a
+    combination has no such execution, when it asks about registers only: their
+    final values are the combination's ({!Executions.final_env_of}), the same
+    whatever the read-from, which is not so of memory, and a relation
+    membership is decided on the read-from. Undefined behaviour is never stated
+    that way; without a constraint, a combination is shown to have no witness
+    only by trying its read-froms.
+
+    Only one outcome assertion, or none, is asked: a conjunction asks several
+    questions under several models, a model or refinement assertion asks none
+    this can answer, and an assertion under promising semantics has
+    executions of its own. *)
+let query (ctx : mordor_ctx) : Executions.query option =
+  let report r = ctx.query_report <- Some r in
+  let ub_query model =
+    let coherent = race_model model in
+      Some
+        {
+          Executions.holds =
+            (fun structure execution ->
+              AssertionChecker.run_ub_validation_on_execution ?coherent
+                structure execution
+              <> []
+            );
+          goal = (fun _ _ -> None);
+          report;
+        }
+  in
+    if ctx.options.semantics <> Smrd then None
+    else
+      match ctx.assertions with
+      | [] -> ub_query ctx.options.coherent
+      | [ Outcome { condition = Ir.CondUB; _ } ]
+        when race_model ctx.options.coherent <> None ->
+          ub_query ctx.options.coherent
+      | [ Outcome { condition = Ir.CondExpr cond; _ } ]
+        when race_model ctx.options.coherent <> None ->
+          let coherent = race_model ctx.options.coherent in
+          let goal _structure final_env =
+            let is_register v =
+              Hashtbl.mem final_env v || (String.length v > 1 && v.[0] = 'r')
+            in
+              if
+                SetOperations.has_set_operation cond
+                || not (List.for_all is_register (Expr.extract_variables cond))
+              then None
+              else
+                Some
+                  (List.map
+                     (Expr.evaluate ~env:(Hashtbl.find_opt final_env))
+                     (Expr.evaluate_conjunction [ cond ])
+                  )
+          in
+            Some
+              {
+                Executions.holds =
+                  (fun structure execution ->
+                    PerExecutionChecker.has_final_state execution
+                    && ConditionChecker.check_condition ?coherent cond structure
+                         execution
+                  );
+                goal;
+                report;
+              }
+      | _ -> None
+
 (** [step_check_assertions ctx] checks assertions in verification context.
 
     Pipeline step that validates assertions against generated executions. Always
@@ -1941,6 +2027,33 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
             ctx.undefined_behaviour <- Some assertion_result.ub;
             ctx.checked_executions <- assertion_result.checked_executions;
             ctx.assertion_instances <- assertion_result.assertion_instances;
+            ( match ctx.query_report with
+            | None -> ()
+            | Some report ->
+                (* Asked by query, the executions are the witness or none.
+                   Without a witness the verdict stands only if every kind of
+                   combination was shown to have none. *)
+                let asks_ub =
+                  match ctx.assertions with
+                  | [] | [ Outcome { condition = Ir.CondUB; _ } ] -> true
+                  | _ -> false
+                in
+                  if (not report.witnessed) && report.undecided > 0 then begin
+                    Logs_safe.warn (fun m ->
+                        m
+                          "No witness, and %d of %d kinds of combination \
+                           undecided within the budgets \
+                           (MORDOR_WITNESS_ROUNDS, MORDOR_WITNESS_SECS): the \
+                           assertion is undecided"
+                          report.undecided report.kinds
+                    );
+                    if ctx.assertions <> [] then ctx.valid <- None;
+                    if asks_ub then ctx.undefined_behaviour <- None
+                  end;
+                  (* Undefined behaviour is only asked about when it is the
+                     question; the witness of a condition says nothing of it. *)
+                  if not asks_ub then ctx.undefined_behaviour <- None
+            );
             Lwt.return ctx
     | _ ->
         Logs_safe.err (fun m ->

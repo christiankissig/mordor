@@ -178,6 +178,11 @@ type options = {
   mutable semantics : semantics;
       (** Which semantics computes the executions: sMRD, or one of the two
           promising semantics. *)
+  mutable by_query : bool;
+      (** Answer the assertion by asking, per justification combination, for
+          one execution that decides it, rather than enumerating every
+          execution (R16): [run --by-query]. The executions the pipeline then
+          returns are the witness, if one was found. *)
 }
 [@@deriving show]
 
@@ -203,6 +208,7 @@ let default_options =
     allow_unknown_model = false;
     futures_by_witness = false;
     semantics = Smrd;
+    by_query = false;
   }
 
 (** {1 Types for Checked Executions} *)
@@ -428,6 +434,20 @@ type loop_episodicity_result_summary = {
 
     Each stage reads from and writes to this context, creating a pipeline of
     transformations. *)
+(** How an assertion asked by query ({!options.by_query}) was answered: over
+    how many kinds of justification combination, how many were shown to have no
+    witness, how many neither shown to have one nor to have none within the
+    budgets, and whether a witness was found. A witness settles the question
+    whatever the rest; without one, the answer is a proof of absence only if
+    no kind was left undecided. *)
+type query_report = {
+  kinds : int;
+  absent : int;
+  undecided : int;
+  witnessed : bool;
+}
+[@@deriving show]
+
 type mordor_ctx = {
   (* Pipeline configuration *)
   options : options;  (** Analysis configuration *)
@@ -506,6 +526,8 @@ type mordor_ctx = {
       (** Detailed execution checking results *)
   mutable assertion_instances : assertion_instance list option;
       (** Detailed assertion instance tracking *)
+  mutable query_report : query_report option;
+      (** How the assertion was answered, when asked by query. *)
   (* Episodicity results *)
   mutable is_episodic : (int, bool) Hashtbl.t option;
       (** Per-loop episodicity determination *)
@@ -556,6 +578,7 @@ let make_context options ?(output_mode = Json) ?(output_file = "stdout")
     undefined_behaviour = None;
     checked_executions = None;
     assertion_instances = None;
+    query_report = None;
     is_episodic = None;
     episodicity_results = None;
     num_threads;
