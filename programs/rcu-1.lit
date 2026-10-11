@@ -5,8 +5,13 @@ rN := 1;
 rrcu := malloc rN;
 *(rrcu + 0) := 0;
 
-rC := malloc 1;
-*rC := 0;
+// The counter C is a global holding a pointer to the current node, which
+// starts out as a node holding 0. fadd and cas act on C itself, through
+// its address.
+rinit := malloc 1;
+*rinit := 0;
+C := rinit;
+rC := &C;
 
 rdet := malloc rN;
 
