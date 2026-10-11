@@ -3380,11 +3380,10 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
           ((restrictions : Coherence.restrictions).coherent :: compare_models)
       in
       (* The distinct kinds of combination among [prepared], their frames, and
-         the test each kind's results must fail: a result is removed when a
-         combination with the same events and smaller [dp] and [ppo] has one
-         with the same read-from. A dominating combination's results are what
-         {!enumerate} gives it, so its read-froms are tested as it would find
-         them, with the models it prunes by. *)
+         the test each kind's results must fail: what minimality would remove
+         of them. A related combination's results are what {!enumerate} gives
+         it, so its read-froms are tested as it would find them, with the
+         models it prunes by. *)
       let digest x = Digest.string (Marshal.to_string x [ Marshal.No_sharing ]) in
       let sorted s = USet.values s |> List.sort compare in
       let kinds_of prepared =
@@ -3433,25 +3432,13 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                 (Hashtbl.find by_events (digest (sorted e)))
           in
           let dominators i = related i in
-          let reject i =
-            let valid_in =
-              List.map
-                (fun j ->
-                  Freeze.valid_rf ~coherence_models structure (snd kinds.(j))
-                )
-                (dominators i)
-            in
-              fun (fr : FreezeResult.t) ->
-                List.exists (fun valid -> valid fr.rf) valid_in
-          in
           (* Exactly what the two minimality passes remove, for a result of
              kind [i]: one with the same read-from and write values in a kind
              below it whose predicates its own entail
              ([keep_minimal_freeze_results]), or one in a kind above it which
              itself survives that pass ([keep_minimal_executions]). Executions
              with the same events read at the same reads, so a read-from
-             contains another's only when the two are equal. [reject] leaves
-             the predicates out, which the futures do not turn on. *)
+             contains another's only when the two are equal. *)
           let result j =
             Freeze.result_with_rf ~coherence_models structure (snd kinds.(j))
           in
@@ -3468,7 +3455,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
           in
           (* Set up once per kind, by the partial application, and not shared
              between kinds: they are decided in parallel. *)
-          let reject_exact i =
+          let reject i =
             let below = List.map result (dominators i) in
             let above =
               List.map
@@ -3488,7 +3475,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                      )
                      above
           in
-            (kinds, frames, reject, reject_exact)
+            (kinds, frames, reject)
       in
       (* The results of [found], a witness per kind's key, for each combination
          of that kind, carrying the combination's own forwarding context. *)
@@ -3516,13 +3503,14 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
       (* R13 (#99): instead of every result of every combination, one
          witness per future. Each combination has one future (S14, #91), so
          the futures need, per future, one combination with a result the
-         model admits -- and one minimality would not remove: a result is
-         removed when a combination with the same events and smaller [dp] and
-         [ppo] has one with the same read-from, so a witness must not have a
-         read-from valid for a combination that dominates its own. That rule
-         gives the enumerated futures exactly (S14). *)
+         model admits -- and one minimality would not remove. S14's rule, a
+         witness must not have a read-from valid for a combination that
+         dominates its own, left out what the minimality passes also ask of
+         the predicates, and V1 (#97) found futures it got wrong where they
+         differ: own/paper112F, symmrd/LB+UB+data+z and five more. The test
+         is now exactly the passes' ([kinds_of]). *)
       let witness_stage prepared =
-        let kinds, frames, reject, _ = kinds_of prepared in
+        let kinds, frames, reject = kinds_of prepared in
           (* Kinds with the same future, in order: the first with a witness
              stands for all of them. *)
           let groups =
@@ -3614,7 +3602,7 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
          the futures -- and that answers the question; the first found stops
          the rest. *)
       let query_stage (query : query) prepared =
-        let kinds, frames, _, reject = kinds_of prepared in
+        let kinds, frames, reject = kinds_of prepared in
         (* A kind's results carry the forwarding contexts of all its
            combinations, as deduplication would give them: the question can
            turn on them, as a relation membership naming a forwarded read
