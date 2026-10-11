@@ -178,6 +178,12 @@ type options = {
   mutable semantics : semantics;
       (** Which semantics computes the executions: sMRD, or one of the two
           promising semantics. *)
+  mutable disjoint_regions : bool;
+      (** No address based on one allocation, or on a global, is an address
+          based on another, whatever the offsets: [a + n] and [b + m] differ
+          (R17), unless one may be freed before the other is allocated. On by
+          default; [--overlapping-regions] keeps only the bases apart. A
+          stand-in until memory regions are modelled. *)
   mutable by_query : bool;
       (** Answer the assertion by asking, per justification combination, for
           one execution that decides it, rather than enumerating every
@@ -208,6 +214,7 @@ let default_options =
     allow_unknown_model = false;
     futures_by_witness = false;
     semantics = Smrd;
+    disjoint_regions = true;
     by_query = false;
   }
 

@@ -986,7 +986,8 @@ let make_generic_terminal_structure ~add_event env phi events =
     knew nothing of an allocation in the next thread -- and the structure's list
     was the concatenation of them all. The last terminal had seen everything, so
     the union is this list, with duplicates. *)
-let distinctness globals (structure : symbolic_event_structure) =
+let distinctness ?(regions = false) globals
+    (structure : symbolic_event_structure) =
   let global_constraints =
     URelation.cross globals globals
     |> (fun rel -> USet.set_minus rel (URelation.identity globals))
@@ -1039,7 +1040,75 @@ let distinctness globals (structure : symbolic_event_structure) =
         locations
       @ distinct_pairs locations
   in
-    global_constraints @ allocation_constraints
+  (* With [regions] (R17), what is not stated otherwise: no address based on
+     one allocation, or on a global, is an address based on another, whatever
+     the offsets -- [a + n] and [b + m] differ for all [n] and [m]. Without it
+     a pointer into one allocation, [rrcu + 1], may equal the base of another,
+     and every access through an index aliases every other allocation.
+
+     It is a stand-in until memory regions are modelled: C says an allocation
+     is disjoint from every other object (C11 7.22.3p1), and that an access
+     outside one is undefined, and stating that needs each region's extent.
+     Until then an access out of bounds is taken to stay within its own
+     allocation. Bases that may share an address, one allocated after the
+     other was freed ({!Eventstructures.may_reuse}), are reused whole or not
+     at all: an allocator hands a released region back out as it was, so
+     their addresses differ unless the bases are equal. Whether they may be
+     equal in an execution is decided there, by whether the free comes first
+     ({!Executions}). Two locations on one base, whose equality depends on
+     the offsets, are left alone, and so are two bases, related above
+     already. *)
+  let region_constraints =
+    if not regions then []
+    else
+      let bases =
+        Hashtbl.fold
+          (fun _ (event : event) acc ->
+            match (event.typ, event.loc) with
+            | Malloc, Some loc -> loc :: acc
+            | _ -> acc
+          )
+          structure.events []
+        @ List.map (fun g -> EVar g) (USet.values globals)
+      in
+      let rec base = function
+        | EBinOp (b, ("+" | "-"), _) -> base b
+        | b -> b
+      in
+      let located =
+        Hashtbl.fold
+          (fun _ (event : event) acc ->
+            match event.loc with
+            | Some loc when event.typ <> Malloc -> loc :: acc
+            | _ -> acc
+          )
+          structure.events []
+        |> List.sort_uniq Expr.compare
+        |> List.filter_map (fun loc ->
+            let b = base loc in
+              if List.exists (Expr.equal b) bases then Some (loc, b) else None
+        )
+      in
+      let rec pairs = function
+        | [] -> []
+        | (loc, b) :: rest ->
+            List.filter_map
+              (fun (loc', b') ->
+                if Expr.equal b b' || (Expr.equal loc b && Expr.equal loc' b')
+                then None
+                else if may_reuse b b' then
+                  Some
+                    (Expr.binop (Expr.binop b "=" b') "||"
+                       (Expr.binop loc "!=" loc')
+                    )
+                else Some (Expr.binop loc "!=" loc')
+              )
+              rest
+            @ pairs rest
+      in
+        pairs located
+  in
+    global_constraints @ allocation_constraints @ region_constraints
 
 (** {1 Basic Interpretation} *)
 
@@ -1069,8 +1138,8 @@ let rec interpret_statements stmts env phi events =
     @return
       A tuple of (symbolic event structure, events table, source spans table).
 *)
-let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
-    stmts =
+let interpret_generic ?(ubopt = false) ?(regions = false) ~stmt_semantics
+    ~defacto ~constraints stmts =
   (* Events context *)
   let events = create_events ~ubopt defacto in
   (* Register environment *)
@@ -1109,7 +1178,7 @@ let interpret_generic ?(ubopt = false) ~stmt_semantics ~defacto ~constraints
       structure with
       loop_conditions = events.loop_conditions;
       loop_guards = events.loop_guards;
-      constraints = distinctness events.globals structure;
+      constraints = distinctness ~regions events.globals structure;
     }
   in
 
@@ -1146,7 +1215,8 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
         let defacto = ctx.litmus_defacto |> Option.value ~default:[] in
         let constraints = ctx.litmus_constraints |> Option.value ~default:[] in
         let structure, source_spans, loop_iters =
-          interpret_generic ~ubopt:ctx.options.ubopt ~stmt_semantics ~defacto
+          interpret_generic ~ubopt:ctx.options.ubopt
+            ~regions:ctx.options.disjoint_regions ~stmt_semantics ~defacto
             ~constraints stmts
         in
           Logs_safe.debug (fun m ->

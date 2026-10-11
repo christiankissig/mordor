@@ -236,6 +236,14 @@ _build/default/test/golden/golden_diff.exe check    # compare
 _build/default/test/golden/golden_diff.exe update   # re-record after an intended change
 ```
 
+`check-regions` renders every test with allocations kept apart by their bases
+only and by their addresses (`--overlapping-regions` against the default), and
+lists every test whose verdict or executions differ:
+
+```bash
+_build/default/test/golden/golden_diff.exe check-regions litmus-tests litmus-tests-review litmus-tests-jmm
+```
+
 `check-query` decides every test's assertion twice, by enumeration and by
 query (`run --by-query`, below), and fails if the verdicts differ. A test the
 query cannot ask about is counted, not compared:
@@ -292,6 +300,12 @@ MoRDor supports several commands for analyzing litmus tests and generating outpu
   sMRD (default), or promising semantics 1.0 or 2.0. A test annotated `[PS1]`
   or `[PS2]` selects its version without the option; the option takes
   precedence. Supported by `run` only.
+- `--disjoint-regions` (default) / `--overlapping-regions`: whether addresses
+  based on distinct allocations, or on globals, differ whatever the offsets
+  (`a + n` and `b + m` for any `n` and `m`), or only the base addresses do.
+  This stands in for modelling memory regions; an access outside an allocation
+  is taken to stay within it. Two allocations share an address only if a free
+  of one happens before the other, and then share it whole.
 - `--by-query`: `run` answers the assertion by query instead of enumerating
   every execution; see [Answering an assertion by query](#answering-an-assertion-by-query).
 

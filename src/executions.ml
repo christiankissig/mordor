@@ -616,11 +616,51 @@ module ReadFromValidation = struct
       )
       rf
 
-  (** [adjacent_same_location_allocation_events structure path rhb p] finds
-      adjacent allocations at same location.
+  (** [init_rf structure ~writes rf] is what a read of the initial value,
+      event 0, needs of its location: that it is none of [writes] -- each write
+      or free of the execution the read is not program-order before. The
+      initial value is what a location holds that nothing writes; a location
+      the program writes has its initial store among the writes, and one a
+      concurrent write may reach is read from that write. Where the read's
+      location is fixed this rules out what the candidates already did; where
+      it is computed, [*(ra + r1)], it holds the offset to one no write
+      covers.
 
-      Computes pairs of allocation events at the same location without
-      intermediate free events. Used to generate atomicity constraints.
+      @param structure The event structure.
+      @param writes The writes and frees of the execution.
+      @param rf Read-from relation.
+      @return Location disequalities for its edges from event 0. *)
+  let init_rf structure ~writes rf =
+    USet.values rf
+    |> List.concat_map (fun (w, r) ->
+        if w <> 0 then []
+        else
+          match get_loc structure r with
+          | None -> []
+          | Some r_loc ->
+              USet.values writes
+              |> List.filter_map (fun w' ->
+                  if w' = 0 || USet.mem structure.po (r, w') then None
+                  else
+                    Option.map
+                      (fun w_loc ->
+                        Expr.evaluate (Expr.binop w_loc "!=" r_loc)
+                      )
+                      (get_loc structure w')
+              )
+    )
+    |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))
+
+  (** [adjacent_same_location_allocation_events structure path rhb p] finds
+      the pairs of allocations that must have distinct addresses.
+
+      An allocator hands a released region back out only once it is released:
+      the malloc that reuses an address happens after the free that released
+      it. So two allocations are apart unless a free of one is [rhb]-between it
+      and the other. This used to be asked only of allocations in program
+      order, one way round; allocations in different threads, which no
+      program order relates, could share an address with no free between them
+      at all (R17).
 
       @param structure The event structure.
       @param path Current path information.
@@ -633,30 +673,26 @@ module ReadFromValidation = struct
     let free_events = USet.intersection structure.free_events e_set in
     (* Only compute pairs from malloc events, not reads *)
     let allocation_events = malloc_events in
-    let allocation_events_in_po =
+    let allocation_pairs =
       URelation.cross allocation_events allocation_events
-      |> USet.intersection structure.po
+      |> USet.filter (fun (e_1, e_2) -> e_1 < e_2)
     in
-
-    USet.filter
-      (fun (e_1, e_2) ->
-        (* Check if there's no intermediate FREE event between e_1 and e_2 *)
-        let has_intermediate =
-          USet.exists
-            (fun ep ->
-              if not (USet.mem rhb (e_1, ep) && USet.mem rhb (ep, e_2)) then
-                false
-              else
-                (* Check if loc(e_1) = loc(ep) under env_rf using semeq *)
-                match (get_loc structure e_1, get_loc structure ep) with
-                | None, _ | _, None -> false
-                | Some loc_e1, Some loc_ep -> Solver.exeq ~state:p loc_e1 loc_ep
-            )
-            free_events
-        in
-          not has_intermediate
-      )
-      allocation_events_in_po
+    (* A free of [e_1] between [e_1] and [e_2]. *)
+    let freed_between e_1 e_2 =
+      USet.exists
+        (fun ep ->
+          if not (USet.mem rhb (e_1, ep) && USet.mem rhb (ep, e_2)) then false
+          else
+            (* Check if loc(e_1) = loc(ep) under env_rf using semeq *)
+            match (get_loc structure e_1, get_loc structure ep) with
+            | None, _ | _, None -> false
+            | Some loc_e1, Some loc_ep -> Solver.exeq ~state:p loc_e1 loc_ep
+        )
+        free_events
+    in
+      USet.filter
+        (fun (e_1, e_2) -> not (freed_between e_1 e_2 || freed_between e_2 e_1))
+        allocation_pairs
 end
 
 (** {1 Justification Validation} *)
@@ -1392,6 +1428,91 @@ module Freeze = struct
 
       let all_rf_inv_map = URelation.adjacency_list_map all_rf_inv in
 
+      (* A read takes the initial value, event 0, only at a location nothing
+         writes: a location the program writes has its initial store among
+         the writes. So 0 is dropped where the read has another candidate --
+         unless the read is into a known object, an allocation or a global, at
+         an offset that can differ from every other candidate's location. A
+         read at a computed offset, [*(ra + r1)], may land where no write is,
+         and without 0 it would have no value to read and its execution would
+         vanish (R17). An execution that takes 0 states that the location is
+         none of the writes' ({!ReadFromValidation.init_rf}).
+
+         A read through a pointer loaded from memory keeps the old rule: an
+         address nothing writes there is one that may point at no object at
+         all, and reading it is a matter for null and dangling pointers, not
+         for regions. *)
+      Hashtbl.filter_map_inplace
+        (fun r ws ->
+          if (not (List.mem 0 ws)) || List.length ws = 1 then Some ws
+          else
+            let others = List.filter (fun w -> w <> 0) ws in
+            let rec base = function
+              | EBinOp (b, ("+" | "-"), _) -> base b
+              | b -> b
+            in
+            let into_an_object loc =
+              match base loc with
+              | EVar _ -> true
+              | ESymbol sym -> (
+                  match Hashtbl.find_opt structure.origin sym with
+                  | Some origin -> USet.mem structure.malloc_events origin
+                  | None -> false
+                )
+              | _ -> false
+            in
+            let uncovered =
+              match get_loc structure r with
+              | Some loc_r when into_an_object loc_r ->
+                  List.for_all
+                    (fun w -> Option.is_some (get_loc structure w))
+                    others
+                  && Solver.is_sat
+                       (List.map
+                          (fun w ->
+                            Expr.binop
+                              (Option.get (get_loc structure w))
+                              "!=" loc_r
+                          )
+                          others
+                       @ preds
+                       )
+              | _ -> false
+            in
+              Some (if uncovered then ws else others)
+        )
+        all_rf_inv_map;
+
+      (* R17 (#103): the read-from choice product of the combination, as
+         log10, when [MORDOR_RF_PRODUCT] is set. Keyed by the reads' candidate
+         lists, since one combination's search may be set up more than once. *)
+      if Option.is_some (Sys.getenv_opt "MORDOR_RF_PRODUCT") then begin
+        let candidates =
+          USet.values read_events
+          |> List.sort compare
+          |> List.map (fun r ->
+              ( r,
+                List.sort compare
+                  (try Hashtbl.find all_rf_inv_map r with Not_found -> [])
+              )
+          )
+        in
+          S10.print "rf-product key=%s reads=%d log10=%.2f"
+            (Digest.to_hex
+               (Digest.string
+                  (Marshal.to_string
+                     (List.sort compare (USet.values path.path), candidates)
+                     [ Marshal.No_sharing ]
+                  )
+               )
+            )
+            (List.length candidates)
+            (List.fold_left
+               (fun a (_, ws) -> a +. log10 (float_of_int (max 1 (List.length ws))))
+               0. candidates
+            )
+      end;
+
       (* The immediate cycles are excluded above; a longer one, through other
          reads' writes, used to be found only once every read had its write, by
          instantiate_execution. Checked on each edge as it is added, it prunes
@@ -1460,14 +1581,7 @@ module Freeze = struct
           if !steps > S10.budget then raise S10.Over_budget
         );
         let r, w = pair in
-          (* discard the combination if we have alternatives to reading
-                 from init *)
           if
-            w = 0
-            && Option.map (fun alts -> List.length alts > 1) alternatives
-               |> Option.value ~default:false
-          then false
-          else if
             !rf_prune_rhb
             && (not thin_air)
             && Validation.rf_closes_rhb_cycle ~succ:rhb_succ ~rf:combo (w, r)
@@ -1480,8 +1594,12 @@ module Freeze = struct
             let check_rf =
               ReadFromValidation.check_rf structure new_combo_inv
             in
+            let init_rf =
+              ReadFromValidation.init_rf structure ~writes:write_events
+                new_combo_inv
+            in
             let combined_preds =
-              USet.of_list p_combined
+              USet.of_list (init_rf @ p_combined)
               |> USet.union env_rf
               |> USet.union check_rf
               |> USet.values
@@ -1753,6 +1871,7 @@ module Freeze = struct
            (USet.create ()) j_list
         )
     in
+
       fun rf ->
         Logs_safe.debug (fun m ->
             m
@@ -1867,6 +1986,14 @@ module Freeze = struct
                 (* Create environment from RF *)
                 let env_rf = ReadFromValidation.env_rf structure rf in
                 let check_rf = ReadFromValidation.check_rf structure rf in
+                let init_rf =
+                  ReadFromValidation.init_rf structure
+                    ~writes:
+                      (USet.union structure.write_events structure.free_events
+                      |> USet.intersection e
+                      )
+                    rf
+                in
 
                 (* atomicity constraint *)
                 let af =
@@ -1935,7 +2062,7 @@ module Freeze = struct
                 in
 
                 let execution_predicates =
-                  USet.of_list p_combined
+                  USet.of_list (init_rf @ p_combined)
                   |> USet.union env_rf
                   |> USet.union check_rf
                   |> USet.union disj
@@ -2668,8 +2795,8 @@ module Freeze = struct
       blocking those that fail, up to {!witness_rounds} times.
 
       The constraints are a necessary condition for such a result (S19, #96): a
-      selector per read ranges over its candidate writes (Init only where it is
-      the only one); the chosen edge implies the read's value and location equal
+      selector per read ranges over its candidate writes (Init only where the
+      read's location may be one no other candidate writes); the chosen edge implies the read's value and location equal
       the write's; the combination's predicates hold; [rhb] is acyclic, by
       ranks; each write has a place in the coherence order at its location,
       distinct from the others there, and a read has its write's. The model adds
@@ -2723,7 +2850,7 @@ module Freeze = struct
         in
         let alts r =
           let ws = try Hashtbl.find alternatives r with Not_found -> [] in
-            if List.length ws > 1 then List.filter (fun w -> w <> 0) ws else ws
+            ws
         in
         let chosen r w = eq (sel r) (num w) in
         let writes =
