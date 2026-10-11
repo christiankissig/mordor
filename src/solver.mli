@@ -300,6 +300,17 @@ val solve : solver -> (string, value_type) Hashtbl.t option
     @return [Some bindings] if satisfiable, [None] otherwise *)
 val quick_solve : expr list -> (string, value_type) Hashtbl.t option
 
+(** What {!quick_solve_outcome} found. *)
+type outcome =
+  | Model of (string, value_type) Hashtbl.t  (** Satisfiable, with a model. *)
+  | Unsat
+  | Unknown  (** Z3 gave up, or the model could not be read back. *)
+
+(** [quick_solve_outcome exprs] is {!quick_solve} keeping apart what
+    {!quick_solve} folds together: unsatisfiable, which proves something, and
+    unknown, which does not. *)
+val quick_solve_outcome : expr list -> outcome
+
 (** Extract a concrete value for a variable from a model.
 
     @param bindings The model bindings from {!solve}

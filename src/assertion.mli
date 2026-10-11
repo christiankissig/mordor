@@ -82,6 +82,15 @@ val ub_reasons_to_yojson : ub_reason list -> Yojson.Safe.t
 
 (** {1 Pipeline Steps} *)
 
+(** [query ctx] is the question [ctx]'s single outcome assertion asks -- an
+    execution satisfying its condition, or with undefined behaviour for [ub] or
+    a test without assertions -- for {!Executions.step_calculate_dependencies}
+    to ask per kind of justification combination (R16). [None] where it cannot
+    be asked so: several assertions, a model or refinement assertion, or
+    promising semantics. The answer goes into [ctx.query_report], which
+    {!step_check_assertions} reads. *)
+val query : mordor_ctx -> Executions.query option
+
 (** [step_check_assertions ctx] validates the context's assertions against its
     generated executions. Always runs UB detection, even without explicit
     assertions. *)

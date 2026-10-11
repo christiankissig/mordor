@@ -244,6 +244,14 @@ lists every test whose verdict or executions differ:
 _build/default/test/golden/golden_diff.exe check-regions litmus-tests litmus-tests-review litmus-tests-jmm
 ```
 
+`check-query` decides every test's assertion twice, by enumeration and by
+query (`run --by-query`, below), and fails if the verdicts differ. A test the
+query cannot ask about is counted, not compared:
+
+```bash
+_build/default/test/golden/golden_diff.exe check-query litmus-tests litmus-tests-review litmus-tests-jmm
+```
+
 ## Command Line Interface
 
 MoRDor supports several commands for analyzing litmus tests and generating outputs.
@@ -298,6 +306,8 @@ MoRDor supports several commands for analyzing litmus tests and generating outpu
   This stands in for modelling memory regions; an access outside an allocation
   is taken to stay within it. Two allocations share an address only if a free
   of one happens before the other, and then share it whole.
+- `--by-query`: `run` answers the assertion by query instead of enumerating
+  every execution; see [Answering an assertion by query](#answering-an-assertion-by-query).
 
 #### Logging
 - `--debug` / `--info` / `--warning` / `--error`: Log verbosity level
@@ -342,6 +352,47 @@ dune exec mordor -- run --all-litmus-tests ./litmus-tests -r --threads 4
 # Run a litmus test under promising semantics 2.0
 dune exec mordor -- run --single litmus-tests/promising/LB.lit --semantics ps2
 ```
+
+#### Answering an assertion by query
+
+The questions `run` answers are existential. `allow` holds, and `forbid`
+fails, exactly when some execution satisfies the condition. Undefined
+behaviour, asked by `allow (ub)`, `forbid (ub)` or a test with no assertion,
+is there when some execution has it. One witness settles such a question.
+Without one, every execution has to be ruled out, and enumerating them can
+take longer than any run will wait (`programs/rcu-2.lit`).
+
+`run --by-query` asks each kind of justification combination for one
+execution that answers the question. For sMRD it asks a solver
+(`Coherence.SYMBOLIC_MODEL`); for any other model, and where the solver gives
+up, it runs a search. Either way each candidate is checked exactly: the model
+must admit it, minimality must keep it, and it must satisfy the condition or
+have the undefined behaviour. The first witness found stops the rest.
+
+```bash
+dune exec mordor -- run --single programs/uaf-bug.lit --by-query --threads 8
+```
+
+The output says how the question was answered: over how many kinds, how many
+were shown to have no witness, and how many were left undecided within the
+budgets (`MORDOR_WITNESS_ROUNDS`, 50 solver rounds, and `MORDOR_WITNESS_SECS`,
+60 s of search, per kind). A witness is reported as the run's only execution,
+with its undefined behaviour named. Without a witness, the verdict is given
+only if every kind was shown to have none; otherwise it is `undecided`.
+
+What the query can and cannot answer:
+
+| Question | By query |
+|---|---|
+| `allow (c)`, `forbid (c)`, `c` over registers only | yes; the solver can show a combination has no witness |
+| `c` naming a location or a relation (`.rf`, `.dp`, ...) | yes; the condition is checked exactly, but only trying the combination's read-froms shows it has no witness |
+| `allow (ub)`, `forbid (ub)`, no assertion | yes, as above: undefined behaviour is not stated as a constraint |
+| several assertions, `[Model]`-only assertions, refinement chains | no; enumerated as usual, with a warning |
+| compared models, promising semantics | no; enumerated as usual |
+
+Asked about a condition, the run says nothing about undefined behaviour,
+which the query never looked for. With `--threads`, which witness comes back
+can vary from run to run; the verdict cannot.
 
 #### Visualizing Event Structures
 

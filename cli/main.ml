@@ -248,9 +248,21 @@ module Display = struct
       | Some executions ->
           Printf.printf "Executions: %d\n" (USet.size executions)
       );
-      ( match ctx.valid with
+      ( match ctx.query_report with
       | None -> ()
-      | Some valid -> Printf.printf "Valid: %b\n" valid
+      | Some r ->
+          Printf.printf
+            "By query: %d kinds of combination, %s, %d shown to have none, %d \
+             undecided\n"
+            r.kinds
+            (if r.witnessed then "witness found" else "no witness")
+            r.absent r.undecided
+      );
+      ( match (ctx.valid, ctx.query_report) with
+      | Some valid, _ -> Printf.printf "Valid: %b\n" valid
+      | None, Some _ when ctx.assertions <> [] ->
+          Printf.printf "Valid: undecided\n"
+      | None, _ -> ()
       );
       List.iter
         (fun (assertion, holds) ->
@@ -265,9 +277,37 @@ module Display = struct
           Printf.printf "Assertion Instances: %s\n"
             (String.concat "\n\t" (List.map show_assertion_instance instances))
       );
-      ( match ctx.undefined_behaviour with
-      | None -> ()
-      | Some ub -> Printf.printf "Undefined Behavior: %b\n" ub
+      ( match (ctx.undefined_behaviour, ctx.query_report) with
+      | Some ub, _ -> Printf.printf "Undefined Behavior: %b\n" ub
+      | None, Some _
+        when match ctx.assertions with
+             | [] | [ Ir.Outcome { condition = Ir.CondUB; _ } ] -> true
+             | _ -> false ->
+          Printf.printf "Undefined Behavior: undecided\n"
+      | None, _ -> ()
+      );
+      (* Asked by query, the one execution is the witness: say what its
+         undefined behaviour is. *)
+      ( match (ctx.query_report, ctx.checked_executions) with
+      | Some _, Some checked ->
+          List.iter
+            (fun (info : execution_info) ->
+              List.iter
+                (fun reason ->
+                  let what =
+                    match reason with
+                    | UAF _ -> "use after free"
+                    | UPD _ -> "unbounded pointer dereference"
+                    | Race _ -> "data race"
+                    | Aborted _ -> "aborted"
+                  in
+                    Printf.printf "  witness %d: %s %s\n" info.exec_id what
+                      (show_ub_reason reason)
+                )
+                info.ub_reasons
+            )
+            checked
+      | _ -> ()
       );
       Printf.printf "===========================\n";
       flush stdout;
@@ -789,6 +829,8 @@ module CLI = struct
     mutable semantics : semantics;  (** sMRD, PS1.0 or PS2.0 *)
     mutable disjoint_regions : bool;
         (** Addresses on distinct allocations differ, not just the bases *)
+    mutable by_query : bool;
+        (** [run]: answer the assertion by query, not by enumeration *)
   }
 
   (** Create initial parse state with defaults. *)
@@ -808,6 +850,7 @@ module CLI = struct
       all_executions = false;
       semantics = Smrd;
       disjoint_regions = default_options.disjoint_regions;
+      by_query = false;
     }
 
   (** Convert parse state to immutable configuration.
@@ -839,6 +882,7 @@ module CLI = struct
               command = Config.Futures && not state.all_executions;
             semantics = state.semantics;
             disjoint_regions = state.disjoint_regions;
+            by_query = state.by_query;
           }
         in
           {
@@ -995,6 +1039,16 @@ module CLI = struct
         Arg.Unit (fun () -> state.disjoint_regions <- false),
         " Keep allocations apart by their base addresses only: an address \
          past the start of one allocation may be another's"
+      );
+      ( "--by-query",
+        Arg.Unit (fun () -> state.by_query <- true),
+        " run: answer the assertion by asking each kind of justification \
+         combination for one execution that decides it -- satisfying the \
+         condition, or with undefined behaviour for ub and for a test without \
+         assertions -- instead of enumerating every execution. Reports the \
+         witness, if any, as the only execution; a verdict without one is \
+         given only if every combination was shown to have none. One \
+         assertion under sMRD; anything else is enumerated as usual"
       );
       ( "--semantics",
         Arg.String

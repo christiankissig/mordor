@@ -13,9 +13,11 @@
     (default) golden_diff update [DIR ...] (re)generate goldens golden_diff
     verify [DIR ...] run each test twice, assert determinism golden_diff
     check-order [DIR ...] render each test with sets iterated both ways, assert
-    the pipeline does not depend on the order golden_diff check-regions [DIR
-    ...] render each test with allocations kept apart by their bases and by
-    their regions (R17), list every test whose verdict or executions differ
+    the pipeline does not depend on the order golden_diff check-query [DIR ...]
+    decide each test's assertion by enumeration and by query (R16), assert the
+    verdicts agree golden_diff check-regions [DIR ...] render each test with
+    allocations kept apart by their bases and by their regions (R17), list
+    every test whose verdict or executions differ
 
     DIR defaults to the litmus corpora in [default_dirs]. Goldens live under
     [test/goldens/<litmus-path>.golden]. `check` exits non-zero on any mismatch
@@ -123,6 +125,97 @@ let render ?(regions = Context.default_options.disjoint_regions)
       Printf.sprintf "verdict: %s\n%sexecutions: %d\n%s\n" verdict verdicts
         (List.length execs)
         (Canonicalize.set_signature ~with_predicates:true canon)
+
+(* The verdict of [program]'s assertions -- valid, and undefined behaviour --
+   by enumeration, or asked by query (R16), with how the query was answered and
+   the seconds it took. *)
+let verdict ~by_query (program : string) =
+  let options =
+    {
+      Context.default_options with
+      dependencies = true;
+      allow_unknown_model = true;
+      by_query;
+    }
+  in
+  let ctx = Context.make_context_with_model options () in
+    ctx.litmus_name <- "golden";
+    ctx.litmus <- Some program;
+    let t0 = Unix.gettimeofday () in
+    let ctx =
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Semantics.step_calculate_executions
+        |> Assertion.step_check_assertions
+        )
+    in
+    let show = function
+      | Some b -> string_of_bool b
+      | None -> "undecided"
+    in
+      ( Printf.sprintf "valid=%s ub=%s" (show ctx.valid)
+          (show ctx.undefined_behaviour),
+        ctx.query_report,
+        ctx.valid,
+        ctx.undefined_behaviour,
+        Unix.gettimeofday () -. t0 )
+
+(* Query gate (R16, V1): every test's verdict asked by query is the verdict
+   enumeration gives. Undefined behaviour is compared where the query asks
+   about it -- a [ub] assertion, or none -- and the condition's verdict where
+   there is a condition. An undecided query is reported, not counted as a
+   difference: it gives no verdict to disagree with. A test the query cannot
+   ask about falls back to enumeration and is counted apart. *)
+let run_check_query files =
+  let agree = ref 0
+  and differ = ref []
+  and undecided = ref []
+  and enumerated = ref 0
+  and errs = ref []
+  and t_enum = ref 0.
+  and t_query = ref 0. in
+    List.iter
+      (fun lit ->
+        match
+          let program = read_file lit in
+          let enum, _, ev, eub, te = verdict ~by_query:false program in
+          let query, report, qv, qub, tq = verdict ~by_query:true program in
+            t_enum := !t_enum +. te;
+            t_query := !t_query +. tq;
+            (lit, enum, ev, eub, query, report, qv, qub, te, tq)
+        with
+        | _, _, _, _, _, None, _, _, _, _ -> incr enumerated
+        | lit, enum, ev, eub, query, Some r, qv, qub, te, tq ->
+            Printf.printf "%-70s %6.2fs %6.2fs %s\n%!" lit te tq
+              (Context.show_query_report r);
+            let same a b = a = None || b = None || a = b in
+              if qv = None && qub = None then undecided := lit :: !undecided
+              else if same ev qv && same eub qub then incr agree
+              else
+                differ :=
+                  Printf.sprintf "%s: enumeration %s, query %s" lit enum query
+                  :: !differ
+        | exception e -> errs := (lit, Printexc.to_string e) :: !errs
+      )
+      files;
+    Printf.printf "\n===== query check =====\n";
+    Printf.printf "agree       : %d\n" !agree;
+    Printf.printf "DIFFER      : %d\n" (List.length !differ);
+    Printf.printf "undecided   : %d\n" (List.length !undecided);
+    Printf.printf "enumerated  : %d (not a question for a query)\n" !enumerated;
+    Printf.printf "errors      : %d\n" (List.length !errs);
+    Printf.printf "time        : enumeration %.1fs, query %.1fs\n" !t_enum
+      !t_query;
+    List.iter (fun d -> Printf.printf "  differs %s\n" d) (List.rev !differ);
+    List.iter
+      (fun f -> Printf.printf "  undecided %s\n" f)
+      (List.rev !undecided);
+    List.iter
+      (fun (f, m) -> Printf.printf "  error %s: %s\n" f m)
+      (List.rev !errs);
+    if !differ <> [] || !errs <> [] then exit 1
 
 (* Region gate (R17): what stating that allocations occupy disjoint regions
    changes. A verdict that changes is a difference in what the tool says the
@@ -329,9 +422,11 @@ let () =
     | "update" -> run_update files
     | "verify" -> run_verify files
     | "check-order" -> run_check_order files
+    | "check-query" -> run_check_query files
     | "check-regions" -> run_check_regions files
     | m ->
         Printf.eprintf
-          "unknown mode %S (use check|update|verify|check-order|check-regions)\n"
+          "unknown mode %S (use \
+           check|update|verify|check-order|check-query|check-regions)\n"
           m;
         exit 2
