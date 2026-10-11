@@ -787,6 +787,8 @@ module CLI = struct
     mutable all_executions : bool;
         (** [futures]: from every execution, not one witness per future *)
     mutable semantics : semantics;  (** sMRD, PS1.0 or PS2.0 *)
+    mutable disjoint_regions : bool;
+        (** Addresses on distinct allocations differ, not just the bases *)
   }
 
   (** Create initial parse state with defaults. *)
@@ -805,6 +807,7 @@ module CLI = struct
       allow_unknown_model = false;
       all_executions = false;
       semantics = Smrd;
+      disjoint_regions = default_options.disjoint_regions;
     }
 
   (** Convert parse state to immutable configuration.
@@ -835,6 +838,7 @@ module CLI = struct
             futures_by_witness =
               command = Config.Futures && not state.all_executions;
             semantics = state.semantics;
+            disjoint_regions = state.disjoint_regions;
           }
         in
           {
@@ -981,6 +985,16 @@ module CLI = struct
         " futures: compute them from every execution, as the other commands \
          enumerate them, instead of from one witness per future (the default; \
          the same futures, and far fewer executions)"
+      );
+      ( "--disjoint-regions",
+        Arg.Unit (fun () -> state.disjoint_regions <- true),
+        " No address based on one allocation or global is an address based on \
+         another, whatever the offsets (the default)"
+      );
+      ( "--overlapping-regions",
+        Arg.Unit (fun () -> state.disjoint_regions <- false),
+        " Keep allocations apart by their base addresses only: an address \
+         past the start of one allocation may be another's"
       );
       ( "--semantics",
         Arg.String

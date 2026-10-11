@@ -1,0 +1,16 @@
+// The same allocations, with the free happening before the second malloc
+// through a release/acquire flag: the region may be handed back out
+// (R17, #103).
+x := 0;
+{
+  rp := malloc 1;
+  free(rp);
+  x.store(1, rel);
+} ||| {
+  r2 := x.load(acq);
+  if (r2 = 1) {
+    rq := malloc 1;
+  }
+}
+%%
+allow (r2 = 1 && rp = rq) []

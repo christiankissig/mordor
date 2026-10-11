@@ -1,0 +1,12 @@
+// Two allocations in different threads, which no program order relates, share
+// an address only if a free of one happens before the other (R17, #103).
+// Nothing orders thread 1's free before thread 2's malloc here, so rq cannot
+// be rp's region handed back out.
+{
+  rp := malloc 1;
+  free(rp);
+} ||| {
+  rq := malloc 1;
+}
+%%
+forbid (rp = rq) []

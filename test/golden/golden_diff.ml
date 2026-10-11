@@ -13,7 +13,9 @@
     (default) golden_diff update [DIR ...] (re)generate goldens golden_diff
     verify [DIR ...] run each test twice, assert determinism golden_diff
     check-order [DIR ...] render each test with sets iterated both ways, assert
-    the pipeline does not depend on the order
+    the pipeline does not depend on the order golden_diff check-regions [DIR
+    ...] render each test with allocations kept apart by their bases and by
+    their regions (R17), list every test whose verdict or executions differ
 
     DIR defaults to the litmus corpora in [default_dirs]. Goldens live under
     [test/goldens/<litmus-path>.golden]. `check` exits non-zero on any mismatch
@@ -67,7 +69,8 @@ let golden_path lit_file = Filename.concat goldens_root (lit_file ^ ".golden")
 (* Run the pipeline through assertion checking and render the canonical
    summary: verdict + canonicalized execution set. A fresh context per call
    (the steps mutate it). *)
-let render (program : string) : string =
+let render ?(regions = Context.default_options.disjoint_regions)
+    (program : string) : string =
   (* A test may name a model MoRDor does not implement. Since #86 that is fatal
      unless the caller opts in; a golden is a record of what the pipeline does
      today, so opt in and let the fallback verdict be recorded as before. *)
@@ -76,6 +79,7 @@ let render (program : string) : string =
       Context.default_options with
       dependencies = true;
       allow_unknown_model = true;
+      disjoint_regions = regions;
     }
   in
   let ctx = Context.make_context_with_model options () in
@@ -119,6 +123,81 @@ let render (program : string) : string =
       Printf.sprintf "verdict: %s\n%sexecutions: %d\n%s\n" verdict verdicts
         (List.length execs)
         (Canonicalize.set_signature ~with_predicates:true canon)
+
+(* Region gate (R17): what stating that allocations occupy disjoint regions
+   changes. A verdict that changes is a difference in what the tool says the
+   program means, and is listed apart from a change in the executions alone.
+   Reports; fails only on errors. *)
+let run_check_regions files =
+  let same = ref 0
+  and verdicts = ref []
+  and executions = ref []
+  and errs = ref [] in
+  let verdict_lines r =
+    String.split_on_char '\n' r
+    |> List.filter (fun l ->
+        String.starts_with ~prefix:"verdict:" l
+        || String.starts_with ~prefix:"  holds" l
+        || String.starts_with ~prefix:"  fails" l
+    )
+  in
+  let count r =
+    List.find_map
+      (fun l ->
+        if String.starts_with ~prefix:"executions: " l then
+          Some (String.sub l 12 (String.length l - 12))
+        else None
+      )
+      (String.split_on_char '\n' r)
+    |> Option.value ~default:"?"
+  in
+    List.iter
+      (fun lit ->
+        match
+          let program = read_file lit in
+            (render ~regions:false program, render ~regions:true program)
+        with
+        | bases, regions ->
+            if String.equal bases regions then incr same
+            else if verdict_lines bases <> verdict_lines regions then
+              verdicts :=
+                Printf.sprintf "%s: %s -> %s" lit
+                  (String.concat "; " (verdict_lines bases))
+                  (String.concat "; " (verdict_lines regions))
+                :: !verdicts
+            else
+              (* The first line that differs, to say what did. *)
+              let rec first = function
+                | a :: x, b :: y -> if a = b then first (x, y) else (a, b)
+                | a :: _, [] -> (a, "")
+                | [], b :: _ -> ("", b)
+                | [], [] -> ("", "")
+              in
+              let a, b =
+                first
+                  ( String.split_on_char '\n' bases,
+                    String.split_on_char '\n' regions )
+              in
+                executions :=
+                  Printf.sprintf "%s: %s -> %s executions\n      - %s\n      + %s"
+                    lit (count bases) (count regions) a b
+                  :: !executions
+        | exception e -> errs := (lit, Printexc.to_string e) :: !errs
+      )
+      files;
+    Printf.printf "\n===== region check =====\n";
+    Printf.printf "unchanged          : %d\n" !same;
+    Printf.printf "VERDICT CHANGED    : %d\n" (List.length !verdicts);
+    Printf.printf "executions changed : %d\n" (List.length !executions);
+    Printf.printf "errors             : %d\n" (List.length !errs);
+    List.iter (fun d -> Printf.printf "  verdict %s\n" d) (List.rev !verdicts);
+    List.iter
+      (fun d -> Printf.printf "  executions %s\n" d)
+      (List.rev !executions);
+    List.iter
+      (fun (f, m) -> Printf.printf "  error %s: %s\n" f m)
+      (List.rev !errs);
+    if !errs <> [] then exit 1
 
 let run_check files =
   let pass = ref 0
@@ -250,7 +329,9 @@ let () =
     | "update" -> run_update files
     | "verify" -> run_verify files
     | "check-order" -> run_check_order files
+    | "check-regions" -> run_check_regions files
     | m ->
-        Printf.eprintf "unknown mode %S (use check|update|verify|check-order)\n"
+        Printf.eprintf
+          "unknown mode %S (use check|update|verify|check-order|check-regions)\n"
           m;
         exit 2

@@ -1,0 +1,12 @@
+// A read at a computed offset that no write covers reads the initial value
+// (R17, #103). The only candidate store, *ra := 0, is at offset 0, and r1 = 1
+// puts the read past it. A read of the initial value used to be dropped
+// whenever the read had another candidate, so this execution had nothing to
+// read and did not exist.
+x := 1;
+ra := malloc 1;
+*ra := 0;
+r1 := x;
+rr := *(ra + r1)
+%%
+allow (r1 = 1) []

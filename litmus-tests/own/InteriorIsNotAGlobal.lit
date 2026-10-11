@@ -1,0 +1,9 @@
+// An address past the start of an allocation is not a global's (R17, #103):
+// addresses based on distinct allocations or globals differ, whatever the
+// offsets. Without that, rp + 1 may be x, and r2 reads the 1 stored there.
+x := 0;
+rp := malloc 2;
+*(rp + 1) := 1;
+r2 := x
+%%
+forbid (r2 = 1) []
