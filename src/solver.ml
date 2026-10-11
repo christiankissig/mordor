@@ -538,6 +538,27 @@ let solve_advanced solver =
 
     Functions for extracting satisfying assignments and concrete values. *)
 
+(* The model of a solver [check] found satisfiable, as bindings. *)
+let model_bindings solver =
+  match Z3.Solver.get_model solver.context.solver with
+  | Some m ->
+      let bindings = Hashtbl.create 16 in
+        Hashtbl.iter
+          (fun name var ->
+            match Z3.Model.eval m var true with
+            | Some value -> (
+                let str = Z3.Expr.to_string value in
+                  try
+                    let n = Z.of_string str in
+                      Hashtbl.add bindings name (VNumber n)
+                  with _ -> Hashtbl.add bindings name (VVar str)
+              )
+            | None -> ()
+          )
+          solver.context.vars;
+        Some bindings
+  | None -> None
+
 (** Solve and extract a satisfying model.
 
     If satisfiable, returns variable bindings from the model.
@@ -545,31 +566,9 @@ let solve_advanced solver =
     @param solver The solver to solve
     @return [Some bindings] if SAT, [None] if UNSAT/UNKNOWN *)
 let solve solver =
-  let result = check solver in
-    match result with
-    | Some true -> (
-        let model = Z3.Solver.get_model solver.context.solver in
-          match model with
-          | Some m ->
-              let bindings = Hashtbl.create 16 in
-                Hashtbl.iter
-                  (fun name var ->
-                    match Z3.Model.eval m var true with
-                    | Some value -> (
-                        let str = Z3.Expr.to_string value in
-                          try
-                            let n = Z.of_string str in
-                              Hashtbl.add bindings name (VNumber n)
-                          with _ -> Hashtbl.add bindings name (VVar str)
-                      )
-                    | None -> ()
-                  )
-                  solver.context.vars;
-                Some bindings
-          | None -> None
-      )
-    | Some false -> None
-    | None -> None
+  match check solver with
+  | Some true -> model_bindings solver
+  | Some false | None -> None
 
 (** Quick solve and model extraction.
 
@@ -578,6 +577,19 @@ let solve solver =
 let quick_solve exprs =
   let solver = create exprs in
     solve solver
+
+type outcome = Model of (string, value_type) Hashtbl.t | Unsat | Unknown
+
+let quick_solve_outcome exprs =
+  let solver = create exprs in
+    match check solver with
+    | Some false -> Unsat
+    | None -> Unknown
+    | Some true -> (
+        match model_bindings solver with
+        | Some bindings -> Model bindings
+        | None -> Unknown
+      )
 
 (** Get concrete value from model bindings.
 

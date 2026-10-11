@@ -482,6 +482,77 @@ let test_futures_from_witnesses () =
     )
     witness_programs
 
+(** {1 Assertions by query (R16)} *)
+
+(* The verdict on [litmus] -- valid, undefined behaviour -- with how a query
+   answered it and how many executions came back, asked by query or not. *)
+let verdict ~by_query litmus =
+  let ctx =
+    Context.make_context
+      { Context.default_options with allow_unknown_model = true; by_query }
+      ()
+  in
+    ctx.litmus <- Some litmus;
+    let ctx =
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Semantics.step_calculate_executions
+        |> Assertion.step_check_assertions
+        )
+    in
+      ( ctx.valid,
+        ctx.undefined_behaviour,
+        ctx.query_report,
+        USet.size (Option.get ctx.executions) )
+
+let uaf_program ~release =
+  Printf.sprintf
+    "rC := malloc(1); *rC := 0; rcu := malloc(1); *rcu := 1; fence(relacq); { \
+     rtemp := *rcu; if (rtemp = 0) { free(rC); } } ||| { rv := *rC; *rcu %s= \
+     0; }%s"
+    (if release then ":rel" else ":")
+    (if release then " %% forbid (ub) [smrd]" else "")
+
+(* The condition stated as a constraint (registers), not stated (a location),
+   and undefined behaviour with and without a witness. MP's forbid needs every
+   combination shown to have no witness. *)
+let query_programs =
+  [
+    ("SB", List.assoc "SB" witness_programs, `Witness);
+    ("MP+rel+acq", List.assoc "MP+rel+acq" witness_programs, `Absent);
+    ( "final x",
+      "x := 0; { x := 1 } ||| { x := 2 } %% allow (x = 1) []",
+      `Witness );
+    ("uaf", uaf_program ~release:false, `Witness);
+    ("uaf fixed", uaf_program ~release:true, `Absent);
+  ]
+
+let test_assertions_by_query () =
+  List.iter
+    (fun (name, litmus, expected) ->
+      let valid, ub, report, _ = verdict ~by_query:false litmus in
+      let valid', ub', report', executions = verdict ~by_query:true litmus in
+        check bool (name ^ ": enumeration asks no query") true (report = None);
+        check (option bool) (name ^ ": the same verdict") valid valid';
+        ( match report' with
+        | None -> fail (name ^ ": not asked by query")
+        | Some r ->
+            check bool (name ^ ": decided") true (r.undecided = 0);
+            check bool
+              (name ^ ": witnessed as expected")
+              (expected = `Witness) r.witnessed;
+            if expected = `Absent then
+              check int (name ^ ": every kind shown to have none") r.kinds
+                r.absent
+        );
+        check bool (name ^ ": at most the witness") true (executions <= 1);
+        if ub' <> None then
+          check (option bool) (name ^ ": the same undefined behaviour") ub ub'
+    )
+    query_programs
+
 let suite =
   [
     (* Parameterized origin tests *)
@@ -512,6 +583,7 @@ let suite =
       ("rf closes an rhb cycle", `Quick, test_rf_closes_rhb_cycle);
       ("validation deltas", `Quick, test_validation_deltas);
       ("futures from witnesses", `Quick, test_futures_from_witnesses);
+      ("assertions by query", `Quick, test_assertions_by_query);
     ];
   ]
   |> List.flatten
