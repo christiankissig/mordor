@@ -2154,6 +2154,22 @@ module TestPipeline = struct
       "no read of the CAS loop has a source in the loop" true
       (write_condition_of cas_increment_loop 1).satisfied
 
+  (* The same loop with the counter a global holding a pointer to a node, as
+     the RCU programs have it. The address the fetch-and-add reads can have come
+     from [C := rinit], which stores an allocation's symbol. Taken for a value
+     loaded from memory and traced back, that symbol found no read to follow and
+     was answered "anything", so [rv := *rs] aliased [*rn] of the previous
+     iteration. It is an address, and distinct from [rn]. *)
+  let cas_increment_loop_from_a_node =
+    "rinit := malloc 1; *rinit := 0; C := rinit; rC := &C; rsucc := 0; rn := \
+     malloc 1; do { rs := fadd(acquire,release,rC,0); rv := *rs; *rn := rv + \
+     1; rsucc := cas(acquire,release,rC,rs,rn); } while (rsucc = 0)"
+
+  let test_write_condition_resolves_a_counter_holding_a_node () =
+    Alcotest.(check bool)
+      "no read of the CAS loop has a source in the loop" true
+      (write_condition_of cas_increment_loop_from_a_node 1).satisfied
+
   let suite =
     [
       test_case "self-incrementing loop is not episodic in any spelling" `Quick
@@ -2164,6 +2180,8 @@ module TestPipeline = struct
         test_write_condition_sees_aliasing_through_memory;
       test_case "write condition resolves the CAS increment loop" `Quick
         test_write_condition_resolves_the_cas_increment_loop;
+      test_case "write condition resolves a counter holding a node" `Quick
+        test_write_condition_resolves_a_counter_holding_a_node;
       test_case "register violation names its read and write" `Quick
         test_register_violation_spans;
       test_case "register read in a condition is the condition" `Quick

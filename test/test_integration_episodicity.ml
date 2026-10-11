@@ -711,7 +711,7 @@ let test_specifications =
 
        Episodic at one boundary only, the one the paper's ex:episodic-rcu
        draws: the iteration starts at the fetch-and-add, with the rcu marker
-       writes of lines 16-17 moved to its end. The fetch-and-add's release
+       writes of lines 21-22 moved to its end. The fetch-and-add's release
        write orders them before the next iteration, and the cross-iteration
        ppo_rmw carries that to its acquire read. Every other boundary fails the
        events condition or the register condition. *)
@@ -723,7 +723,7 @@ let test_specifications =
             loop_id = 1;
             expected_episodic = true;
             expected_failing_conditions = [];
-            expected_bisection_left_lines = Some [ 16; 17 ];
+            expected_bisection_left_lines = Some [ 21; 22 ];
           };
         ];
       description = "RCU increment loop - episodic, starting at the fadd";

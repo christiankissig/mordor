@@ -788,7 +788,15 @@ module WriteCondition = struct
       | _ -> true
     and value_can_be visited value =
       match value with
-      | ESymbol symbol when Hashtbl.mem structure.origin symbol ->
+      (* A value loaded from memory is traced back to the writes it could
+         have come from. An allocation's symbol is not: it is an address, which
+         the solver can compare under the distinctness of allocations. Traced
+         back, it found no read to follow and answered "anything", so a pointer
+         initialised to a node -- [C := rinit] -- aliased every allocation. *)
+      | ESymbol symbol
+        when match Hashtbl.find_opt structure.origin symbol with
+             | Some origin -> USet.mem structure.read_events origin
+             | None -> false ->
           symbol_can_be visited symbol
       | _ -> Solver.expoteq ~state value wloc
     in
