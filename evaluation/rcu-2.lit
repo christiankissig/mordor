@@ -1,0 +1,113 @@
+name=rcu 2
+%%
+rN := 2;
+
+rrcu := malloc rN;
+*(rrcu + 0) := 0;
+*(rrcu + 1) := 0;
+
+// The counter C is a global holding a pointer to the current node, which
+// starts out as a node holding 0. fadd and cas act on C itself, through
+// its address.
+rinit := malloc 1;
+*rinit := 0;
+C := rinit;
+rC := &C;
+
+rdet := malloc rN;
+
+{
+  // inc
+  rtid := 0;
+  rn := malloc 1;
+  *(rrcu+rtid) :v= 1;
+  do {
+    *(rrcu+rtid) :vrel= 0;
+    *(rrcu+rtid) :v= 1;
+    rs := fadd(acquire,release,rC,0);
+    rv := *rs;
+    *rn := rv+1;
+    rsucc := cas(acquire,release,rC,rs,rn);
+  } while (rsucc = 0);
+  *(rrcu+rtid) :v= 0;
+
+  // reclaim
+  *(rdet + rtid) := rs;
+
+  // sync
+  rr := malloc (rN+1);
+  rtemp := *(rrcu + 0);*(rr + 0) := rtemp;
+  rtemp := *(rrcu + 1);*(rr + 1) := rtemp;
+
+  rtemp := *(rr + 0);
+  if (rtemp = 1)
+  {
+    do
+    {
+      rtemp := *(rrcu + 0);
+    }
+    while (rtemp = 1);
+  };
+
+  rtemp := *(rr + 1);
+  if (rtemp = 1)
+  {
+    do
+    {
+      rtemp := *(rrcu + 1);
+    }
+    while (rtemp = 1);
+  };
+
+  // reclaim
+  rtemp := *(rdet + rtid);
+  free(rtemp);
+}
+|||
+{
+  // inc
+  rtid := 1;
+  rn := malloc 1;
+  *(rrcu+rtid) :v= 1;
+  do {
+    *(rrcu+rtid) :vrel= 0;
+    *(rrcu+rtid) :v= 1;
+    rs := fadd(acquire,release,rC,0);
+    rv := *rs;
+    *rn := rv+1;
+    rsucc := cas(acquire,release,rC,rs,rn);
+  } while (rsucc = 0);
+  *(rrcu+rtid) :v= 0;
+
+  // reclaim
+  *(rdet + rtid) := rs;
+
+  // sync
+  rr := malloc (rN+1);
+  rtemp := *(rrcu + 0);*(rr + 0) := rtemp;
+  rtemp := *(rrcu + 1);*(rr + 1) := rtemp;
+
+  rtemp := *(rr + 0);
+  if (rtemp = 1)
+  {
+    do
+    {
+      rtemp := *(rrcu + 0);
+    }
+    while (rtemp = 1);
+  };
+
+  rtemp := *(rr + 1);
+  if (rtemp = 1)
+  {
+    do
+    {
+      rtemp := *(rrcu + 1);
+    }
+    while (rtemp = 1);
+  };
+
+  // reclaim
+  rtemp := *(rdet + rtid);
+  free(rtemp);
+}
