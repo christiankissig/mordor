@@ -1,0 +1,24 @@
+// IMM's release sequence is [W];po|loc?;[W];(rf;rmw)* (Podkopaev, Lahav and
+// Vafeiadis, POPL 2019): one same-location po step at the head, then RMWs only
+// (#150). Thread 2's store y := 5 follows an RMW of the release's sequence,
+// but does not continue it, so the RMW of thread 3 that reads it is not in the
+// sequence either, and the acquire reading 6 does not synchronise with the
+// release. RC11 agrees.
+x := 0;
+y := 0;
+{
+  x.store(1, rlx);
+  y.store(1, rel)
+} ||| {
+  rpy := &y;
+  ra := FADD(rlx, rlx, rpy, 1);
+  y.store(5, rlx)
+} ||| {
+  rpy := &y;
+  rb := FADD(rlx, rlx, rpy, 1)
+} ||| {
+  r1 := y.load(acq);
+  r2 := x.load(rlx)
+}
+%%
+allow (ra = 2 && rb = 6 && r1 = 6 && r2 = 0) [IMM, RC11]
