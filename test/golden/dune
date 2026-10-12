@@ -12,3 +12,15 @@
  (libraries mordor_lib lwt lwt.unix z3 zarith core str unix)
  (preprocess
   (pps lwt_ppx)))
+
+; V1 (#97) equivalence harness: the enumeration against each bounded path.
+;   dune exec test/golden/equivalence.exe -- [--flags-off] [DIR|FILE ...]
+
+(executable
+ (name equivalence)
+ (modules equivalence)
+ (flags
+  (:standard -g -w -33-26))
+ (libraries mordor_lib lwt lwt.unix z3 zarith unix)
+ (preprocess
+  (pps lwt_ppx)))

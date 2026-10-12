@@ -236,6 +236,23 @@ _build/default/test/golden/golden_diff.exe check    # compare
 _build/default/test/golden/golden_diff.exe update   # re-record after an intended change
 ```
 
+`test/golden/equivalence.exe` is the equivalence harness for the bounded
+paths (V1, #97). It runs every program under the enumeration and under each
+bounded path -- futures from one witness per future, assertions by query -- and
+diffs what is reported: the futures, each verdict and the witness the query
+reports, and every execution a bounded path returns, which must be one the
+enumeration returns. Executions are compared in canonical form, and where their
+predicates differ as text the solver decides whether they are equivalent; the
+count of syntactic, semantic and divergent matches is reported. `--flags-off`
+compares the enumeration with itself, which must find nothing. Each program
+runs in its own process, given 300 s (`--timeout`):
+
+```bash
+dune build test/golden/equivalence.exe
+_build/default/test/golden/equivalence.exe                # the four corpora
+_build/default/test/golden/equivalence.exe --flags-off    # the harness against itself
+```
+
 `check-regions` renders every test with allocations kept apart by their bases
 only and by their addresses (`--overlapping-regions` against the default), and
 lists every test whose verdict or executions differ:
