@@ -1,0 +1,20 @@
+// The control for ABA-CAS-Reuse: thread 2 does not free rA, so rq cannot reuse
+// its address, and thread 1's CAS, expecting rA, cannot succeed after thread 2
+// has swung C away from it. If thread 1's CAS goes first instead, thread 2's
+// first CAS finds rn, not rA, and fails.
+rA := malloc 1;
+*rA := 0;
+C := rA;
+rC := &C;
+{
+  ra := C;
+  rn := malloc 1;
+  rok := cas(acquire, release, rC, ra, rn)
+} ||| {
+  rb := malloc 1;
+  r1 := cas(acquire, release, rC, rA, rb);
+  rq := malloc 1;
+  r2 := cas(acquire, release, rC, rb, rq)
+}
+%%
+forbid (ra = rA && r1 = 1 && r2 = 1 && rok = 1) [sMRD]

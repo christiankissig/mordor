@@ -445,20 +445,21 @@ module IMM : MEMORY_MODEL = struct
 
     let w = ModelUtils.match_events events e Write None None None in
 
-    (* rs = [W];(po ∩ loc);[W] ∪ [W];([po ∩ loc]?;rf;rmw)⁺? *)
+    (* rs = [W];[po ∩ loc]?;[W];(rf;rmw)*
+
+       The same-location po step is taken once, at the head. It was taken
+       before every RMW of the chain, [W];([po ∩ loc]?;rf;rmw)*, so a store
+       po-after an RMW of the sequence continued it, and an acquire reading
+       an RMW that read that store synchronised with the release (#150). *)
     let rs =
-      let part1 = URelation.compose [ w; loc_restrict po; w ] in
-      let inner =
-        URelation.compose
-          [ URelation.reflexive_closure e (loc_restrict po); rf; rmw ]
+      let head =
+        URelation.compose [ w; URelation.reflexive_closure e (loc_restrict po); w ]
       in
-      let part2 =
-        URelation.compose
-          [
-            w; URelation.reflexive_closure e (URelation.transitive_closure inner);
-          ]
+      let chain =
+        URelation.reflexive_closure e
+          (URelation.transitive_closure (URelation.compose [ rf; rmw ]))
       in
-        USet.inplace_union ~into:part1 part2
+        URelation.compose [ head; chain ]
     in
 
     (* release = ([W_rel] ∪ [F_rel];po);rs

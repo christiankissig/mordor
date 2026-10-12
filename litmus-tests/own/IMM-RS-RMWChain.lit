@@ -1,0 +1,21 @@
+// The control for IMM-RS-StoreBetweenRMWs (#150): without the store between
+// them, the two RMWs form a chain rf;rmw;rf;rmw from the release, the acquire
+// reading its end synchronises with the release, and the stale read of x is
+// forbidden. RC11 agrees.
+x := 0;
+y := 0;
+{
+  x.store(1, rlx);
+  y.store(1, rel)
+} ||| {
+  rpy := &y;
+  ra := FADD(rlx, rlx, rpy, 1)
+} ||| {
+  rpy := &y;
+  rb := FADD(rlx, rlx, rpy, 1)
+} ||| {
+  r1 := y.load(acq);
+  r2 := x.load(rlx)
+}
+%%
+forbid (ra = 2 && rb = 3 && r1 = 3 && r2 = 0) [IMM, RC11]

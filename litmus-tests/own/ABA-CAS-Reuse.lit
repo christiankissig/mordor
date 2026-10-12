@@ -1,0 +1,24 @@
+// ABA through a plain CAS. C holds a pointer to the node rA. Thread 1 reads
+// rA from C, and later swings C from rA to its own node. Meanwhile thread 2
+// swings C from rA to rb, frees rA, allocates rq, which may reuse rA's address
+// since the malloc follows the free (R17, #103), and swings C from rb to rq.
+// Thread 1's CAS compares addresses only, so it succeeds against rq: it has
+// missed two steps of thread 2, and C goes back to an address it saw before.
+// The outcome needs the reuse, rq = rA; ABA-CAS-NoReuse is the control.
+rA := malloc 1;
+*rA := 0;
+C := rA;
+rC := &C;
+{
+  ra := C;
+  rn := malloc 1;
+  rok := cas(acquire, release, rC, ra, rn)
+} ||| {
+  rb := malloc 1;
+  r1 := cas(acquire, release, rC, rA, rb);
+  free(rA);
+  rq := malloc 1;
+  r2 := cas(acquire, release, rC, rb, rq)
+}
+%%
+allow (ra = rA && r1 = 1 && r2 = 1 && rok = 1 && rq = rA) [sMRD]
