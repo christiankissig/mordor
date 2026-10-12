@@ -3793,6 +3793,15 @@ let check_for_coherence structure execution restrictions =
             );
           result
 
+(** [has_race_clause name] is whether model [name] has a race clause, so that
+    {!data_races} can find races under it. *)
+let has_race_clause name =
+  match ModelRegistry.lookup name with
+  | None -> false
+  | Some model ->
+      let module M = (val model : MEMORY_MODEL) in
+      Option.is_some M.data_races
+
 (** [data_races structure execution name] is the data races of [execution] under
     model [name], in the first coherence order the model admits it under that
     has any; empty if the model has no race clause or no admitting order has a

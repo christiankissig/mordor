@@ -2769,7 +2769,8 @@ module Freeze = struct
     let steps = ref 0 in
     let check_partial combo ?alternatives pair =
       incr steps;
-      if !steps land 1023 = 0 && Unix.gettimeofday () > deadline then
+      if (!steps = 1 || !steps land 1023 = 0) && Unix.gettimeofday () > deadline
+      then
         raise Out_of_time;
       check_partial combo ?alternatives pair
     in
@@ -2788,6 +2789,177 @@ module Freeze = struct
       with
       | Found result -> Witness result
       | Out_of_time -> Undecided
+
+  (** [ub_constraint structure ~e ~reads ~alts ~chosen ~static ~reaches] is a
+      necessary condition, over the read-from selectors, for a result of the
+      combination with events [e] to have undefined behaviour as
+      {!Assertion.UBValidation} finds it. A read reads from a free; or there are
+      a source [s] and a target [t] on the same allocation, with [t] not
+      reachable from [s] in [rhb = (ppo ∪ fj ∪ dp ∪ rf)⁺]: a write and a free
+      (use after free), or an allocation and an access (a pointer used before
+      it is allocated). This is the episodic loops paper's use-after-free
+      (Definition [def:uaf]), with [rhb] its no-thin-air order.
+
+      {b The allocation.} The checks compare the location of each event by its
+      symbol, once the read symbols in it are replaced by the values their
+      reads read: the allocation, or global, it is based on. Here that is a
+      term [base], an integer per symbol, [0] where the location has no symbol
+      and so matches nothing: a constant for an allocation's symbol, and for
+      the symbol of a read the selectors decide, a variable the chosen edge
+      sets to the base of the value the write gives the read. A location or
+      value with more than one symbol is left unconstrained.
+
+      {b Non-reachability.} [t] unreachable from [s] is stated by a set closed
+      under the edges and holding [s], but not [t]: [reach x = 1] for [s],
+      [reach x = 1] for [y] whenever it holds for [x] and [(x, y)] is an edge
+      -- [static], the combination's [dp ∪ ppo], and [fj], always; a candidate
+      read-from edge when its selector chooses it -- and [reach t <> 1]. Such a
+      set exists exactly when [t] is unreachable, taking the reachable set
+      itself. Only edges every result has are stated, so it is a necessary
+      condition: [t] unreachable in a result is unreachable here. One source
+      and one target, chosen by [witness_ub_src] and [witness_ub_tgt], serve
+      every pair. *)
+  let ub_constraint structure ~e ~reads ~alts ~chosen ~static ~reaches =
+    let var fmt = Printf.ksprintf (fun s -> ESymbol s) fmt in
+    let num n = ENum (Z.of_int n) in
+    let eq a b = EBinOp (a, "=", b)
+    and imp a b = EBinOp (a, "=>", b)
+    and neg a = EUnOp ("!", a) in
+    let conj = function
+      | [] -> EBoolean true
+      | x :: xs -> List.fold_left (fun a b -> EBinOp (a, "&&", b)) x xs
+    in
+    let events = USet.values e |> List.filter (fun x -> x <> 0) in
+    let of_set set = List.filter (fun x -> USet.mem set x) events in
+    let frees = of_set structure.free_events
+    and mallocs = of_set structure.malloc_events
+    and writes = of_set structure.write_events in
+    let accesses =
+      List.filter
+        (fun x ->
+          Option.is_some (get_loc structure x)
+          && not (USet.mem structure.malloc_events x)
+        )
+        events
+    in
+    (* The read whose value a symbol is: those the selectors decide, and all
+       the structure's, so that a read the combination leaves undecided is
+       known as one. *)
+    let symbol_of r =
+      match Hashtbl.find_opt structure.events r with
+      | Some { rval = Some v; _ } -> (
+          match Expr.get_symbols (Expr.of_value v) with
+          | [ s ] -> Some s
+          | _ -> None
+        )
+      | _ -> None
+    in
+    let decided = Hashtbl.create 16 and read_symbols = Hashtbl.create 16 in
+      List.iter
+        (fun r -> Option.iter (fun s -> Hashtbl.replace decided s r) (symbol_of r))
+        reads;
+      USet.iter
+        (fun r ->
+          Option.iter (fun s -> Hashtbl.replace read_symbols s ()) (symbol_of r)
+        )
+        structure.read_events;
+      let ids = Hashtbl.create 16 in
+      let id s =
+        match Hashtbl.find_opt ids s with
+        | Some i -> i
+        | None ->
+            let i = Hashtbl.length ids + 1 in
+              Hashtbl.add ids s i;
+              i
+      in
+      let read_base r = var "witness_base%d" r in
+      let base_of ex =
+        match Expr.get_symbols ex with
+        | [] -> Some (num 0)
+        | [ s ] -> (
+            match Hashtbl.find_opt decided s with
+            | Some r -> Some (read_base r)
+            | None when Hashtbl.mem read_symbols s -> None
+            | None -> Some (num (id s))
+          )
+        | _ -> None
+      in
+      let loc_base x =
+        match get_loc structure x with
+        | None -> Some (num 0)
+        | Some l -> base_of l
+      in
+      let bases =
+        List.concat_map
+          (fun r ->
+            List.filter_map
+              (fun w ->
+                Option.map
+                  (fun b -> imp (chosen r w) (eq (read_base r) b))
+                  (base_of (vale structure w r))
+              )
+              (alts r)
+          )
+          reads
+      in
+      let zero = function
+        | ENum n -> Z.equal n Z.zero
+        | _ -> false
+      in
+      (* [s] and [t] on one allocation, [None] where they cannot be. *)
+      let same s t =
+        match (loc_base s, loc_base t) with
+        | Some (ENum a), Some (ENum b) ->
+            if Z.equal a b && not (Z.equal a Z.zero) then Some (EBoolean true)
+            else None
+        | Some b, Some b' ->
+            if zero b || zero b' then None
+            else Some (conj [ eq b b'; neg (eq b (num 0)) ])
+        | Some b, None | None, Some b ->
+            if zero b then None else Some (neg (eq b (num 0)))
+        | None, None -> Some (EBoolean true)
+      in
+      let src = var "witness_ub_src" and tgt = var "witness_ub_tgt" in
+      let pair s t =
+        if s = t || reaches s t then None
+        else
+          Option.map
+            (fun same -> conj [ eq src (num s); eq tgt (num t); same ])
+            (same s t)
+      in
+      let read_free =
+        List.concat_map
+          (fun r ->
+            List.filter_map
+              (fun w -> if List.mem w frees then Some (chosen r w) else None)
+              (alts r)
+          )
+          reads
+      in
+      let written = List.concat_map (fun d -> List.filter_map (fun w -> pair w d) writes) frees
+      and unallocated =
+        List.concat_map (fun m -> List.filter_map (fun a -> pair m a) accesses) mallocs
+      in
+        match read_free @ written @ unallocated with
+        | [] -> [ EBoolean false ]
+        | cases ->
+            let reach x = eq (var "witness_reach%d" x) (num 1) in
+            let fixed =
+              USet.union static (URelation.restrict e structure.fj)
+              |> USet.values
+            in
+              EOr cases
+              :: bases
+              @ List.map (fun x -> imp (eq src (num x)) (reach x)) events
+              @ List.map (fun (a, b) -> imp (reach a) (reach b)) fixed
+              @ List.concat_map
+                  (fun r ->
+                    List.map
+                      (fun w -> imp (conj [ chosen r w; reach w ]) (reach r))
+                      (alts r)
+                  )
+                  reads
+              @ List.map (fun x -> imp (eq tgt (num x)) (neg (reach x))) events
 
   (** [solver_witness ~model ~check structure prep] asks the solver for a
       read-from relation of the combination that [model] could admit, and checks
@@ -2815,8 +2987,15 @@ module Freeze = struct
       constraints are satisfied under, so it is asked of a copy of the value
       constraints -- the predicates and what each chosen edge means for values
       and locations -- over symbols renamed apart, sharing only the selectors.
-      Unsatisfiable then means no result the model admits satisfies it. *)
-  let solver_witness ?goal ~model ~check structure prep =
+      Unsatisfiable then means no result the model admits satisfies it.
+
+      [ub], when set, states that the result has undefined behaviour as
+      {!Assertion}'s checks find it, which are the episodic loops paper's
+      use-after-free (Definition [def:uaf]) over the no-thin-air order [rhb]:
+      a read reads from a free; a write is not [rhb]-before a free of the
+      allocation it writes; or an access is not [rhb]-after the allocation of
+      the location it accesses. See {!ub_constraint}. *)
+  let solver_witness ?goal ?(ub = false) ~model ~check structure prep =
     match Coherence.ModelRegistry.lookup_symbolic model with
     | None -> Undecided
     | Some symbolic ->
@@ -2941,6 +3120,13 @@ module Freeze = struct
               reads
         in
         let common =
+          if ub then
+            common
+            @ ub_constraint structure ~e ~reads ~alts ~chosen ~static
+                ~reaches:(fun a b -> USet.mem closure (a, b))
+          else common
+        in
+        let common =
           match goal with
           | None -> common
           | Some goal ->
@@ -3005,7 +3191,8 @@ module Freeze = struct
       smrd the solver is asked first ({!solver_witness}); for any other model,
       and where the solver is undecided, the search is ({!search_witness}),
       pruning by [coherence_models]. *)
-  let witness ?goal ~model ~coherence_models ~admits ~reject structure prep =
+  let witness ?goal ?ub ~model ~coherence_models ~admits ~reject structure prep
+      =
     (* As in {!enumerate}: the search reads the execution's values, and the
        result carries them, before [admits] and [reject] see it. *)
     let structure = with_write_values structure prep.prep_write_values in
@@ -3013,7 +3200,7 @@ module Freeze = struct
       { fr with write_values = prep.prep_write_values }
     in
     let check result = admits (valued result) && not (reject (valued result)) in
-    let from_solver = solver_witness ?goal ~model ~check structure prep in
+    let from_solver = solver_witness ?goal ?ub ~model ~check structure prep in
       match from_solver with
       | Undecided -> (
           match search_witness ~coherence_models ~check structure prep with
@@ -3181,6 +3368,10 @@ type query = {
       (** A necessary condition for [holds], over the structure's symbols, given
           the combination's final registers ({!final_env_of}); [None] where
           there is none to state. *)
+  ub : bool;
+      (** Whether [holds] is undefined behaviour that {!Freeze.ub_constraint}
+          states a necessary condition for: use after free, or a pointer used
+          before its allocation, and no other -- no data race. *)
   report : query_report -> unit;  (** Told how the question was answered. *)
 }
 
@@ -3642,7 +3833,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             in
             let goal = query.goal structure (final_env_of structure e) in
               match
-                Freeze.witness ?goal ~model ~coherence_models:[ model ] ~admits
+                Freeze.witness ?goal ~ub:query.ub ~model
+                  ~coherence_models:[ model ] ~admits
                   ~reject:(reject i) structure p
               with
               | Freeze.Witness fr ->

@@ -277,9 +277,12 @@ module Freeze : sig
 
       [goal] is a necessary condition on the result sought, over the
       structure's symbols, which the solver is asked alongside the model's
-      constraints, so that it can show there is none. *)
+      constraints, so that it can show there is none. [ub] states that the
+      result has undefined behaviour, use after free or a pointer used before
+      its allocation, as a necessary condition the solver is asked too. *)
   val witness :
     ?goal:expr list ->
+    ?ub:bool ->
     model:string ->
     coherence_models:string list ->
     admits:(FreezeResult.t -> bool) ->
@@ -443,6 +446,10 @@ type query = {
       (** A necessary condition for [holds], over the structure's symbols, given
           the combination's final registers ({!final_env_of}); [None] where
           there is none to state. *)
+  ub : bool;
+      (** Whether [holds] is undefined behaviour the solver can state a
+          necessary condition for: use after free, or a pointer used before
+          its allocation, and no data race. *)
   report : query_report -> unit;  (** Told how the question was answered. *)
 }
 

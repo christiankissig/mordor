@@ -553,6 +553,49 @@ let test_assertions_by_query () =
     )
     query_programs
 
+(* [uaf_program] with reads of x that multiply each combination's read-froms
+   past what the solver can block one proposal at a time. *)
+let wide_uaf_program ~release =
+  Printf.sprintf
+    "x := 0; rC := malloc(1); *rC := 0; rcu := malloc(1); *rcu := 1; \
+     fence(relacq); { x := 1; x := 2; rtemp := *rcu; if (rtemp = 0) { \
+     free(rC); } } ||| { ra := x; rb := x; rc := x; rv := *rC; *rcu %s= 0; }"
+    (if release then ":rel" else ":")
+
+(* With the search given no time and the solver one proposal per level, only a
+   constraint the solver is asked can show a combination has no use after free:
+   without it, five of these combinations are left undecided. *)
+let test_ub_by_constraint () =
+  let seconds = !Executions.Freeze.witness_seconds
+  and rounds = !Executions.Freeze.witness_rounds in
+    Executions.Freeze.witness_seconds := 0.;
+    Executions.Freeze.witness_rounds := 1;
+    Fun.protect
+      ~finally:(fun () ->
+        Executions.Freeze.witness_seconds := seconds;
+        Executions.Freeze.witness_rounds := rounds
+      )
+      (fun () ->
+        List.iter
+          (fun (name, release, expected) ->
+            let _, ub, report, _ =
+              verdict ~by_query:true (wide_uaf_program ~release)
+            in
+              match report with
+              | None -> fail (name ^ ": not asked by query")
+              | Some r ->
+                  check int (name ^ ": decided by the solver") 0 r.undecided;
+                  check bool (name ^ ": witnessed as expected")
+                    (expected = `Witness) r.witnessed;
+                  if expected = `Absent then
+                    check int (name ^ ": every kind shown to have none") r.kinds
+                      r.absent;
+                  check (option bool) (name ^ ": undefined behaviour")
+                    (Some (expected = `Witness)) ub
+          )
+          [ ("uaf", false, `Witness); ("uaf fixed", true, `Absent) ]
+      )
+
 let suite =
   [
     (* Parameterized origin tests *)
@@ -584,6 +627,7 @@ let suite =
       ("validation deltas", `Quick, test_validation_deltas);
       ("futures from witnesses", `Quick, test_futures_from_witnesses);
       ("assertions by query", `Quick, test_assertions_by_query);
+      ("undefined behaviour by constraint", `Quick, test_ub_by_constraint);
     ];
   ]
   |> List.flatten

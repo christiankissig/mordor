@@ -331,6 +331,10 @@ val location_equality :
     every registered model but od-lso and c11 (S6). *)
 val rejects_partial_executions : string -> bool
 
+(** [has_race_clause name] is whether model [name] has a race clause, so that
+    {!data_races} can find races under it. *)
+val has_race_clause : string -> bool
+
 (** [data_races structure execution name] is the data races of [execution] under
     model [name], in the first coherence order the model admits it under that
     has any; empty if the model has no race clause or no admitting order has a

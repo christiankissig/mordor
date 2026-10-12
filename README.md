@@ -403,9 +403,20 @@ What the query can and cannot answer:
 |---|---|
 | `allow (c)`, `forbid (c)`, `c` over registers only | yes; the solver can show a combination has no witness |
 | `c` naming a location or a relation (`.rf`, `.dp`, ...) | yes; the condition is checked exactly, but only trying the combination's read-froms shows it has no witness |
-| `allow (ub)`, `forbid (ub)`, no assertion | yes, as above: undefined behaviour is not stated as a constraint |
+| `allow (ub)`, `forbid (ub)`, no assertion, under a model with no race clause (sMRD among them) | yes; the solver can show a combination has no witness |
+| the same under a model with a race clause (RC11, C11, ...) | yes, but data races are not stated as a constraint, so only trying the read-froms shows there is none |
 | several assertions, `[Model]`-only assertions, refinement chains | no; enumerated as usual, with a warning |
 | compared models, promising semantics | no; enumerated as usual |
+
+Undefined behaviour is stated the way the episodic loops paper defines
+use-after-free (Definition `def:uaf`): an access and a free of the same
+allocation that the no-thin-air order `rhb = (ppo ∪ fj ∪ dp ∪ rf)⁺` leaves
+unordered. A read of a free, a write not `rhb`-before a free of its
+allocation, and an access not `rhb`-after the allocation of its location are
+what the checks report. The solver follows each pointer through the
+read-froms it chooses to the allocation it is based on, and states that the
+second event of such a pair is not reachable from the first
+(`Executions.Freeze.ub_constraint`).
 
 Asked about a condition, the run says nothing about undefined behaviour,
 which the query never looked for. With `--threads`, which witness comes back
