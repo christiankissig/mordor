@@ -1868,9 +1868,15 @@ let race_model model =
     combination has no such execution, when it asks about registers only: their
     final values are the combination's ({!Executions.final_env_of}), the same
     whatever the read-from, which is not so of memory, and a relation
-    membership is decided on the read-from. Undefined behaviour is never stated
-    that way; without a constraint, a combination is shown to have no witness
-    only by trying its read-froms.
+    membership is decided on the read-from.
+
+    Undefined behaviour is stated as a constraint too, under a model with no
+    race clause: use after free and a pointer used before its allocation are
+    each a pair of events [rhb] leaves unordered, the episodic loops paper's
+    use-after-free over its no-thin-air order ({!Executions.Freeze.ub_constraint}).
+    A data race is not stated, so under a model with a race clause a
+    combination is shown to have no undefined behaviour only by trying its
+    read-froms.
 
     Only one outcome assertion, or none, is asked: a conjunction asks several
     questions under several models, a model or refinement assertion asks none
@@ -1889,6 +1895,10 @@ let query (ctx : mordor_ctx) : Executions.query option =
               <> []
             );
           goal = (fun _ _ -> None);
+          ub =
+            (match coherent with
+            | Some name -> not (Coherence.has_race_clause name)
+            | None -> true);
           report;
         }
   in
@@ -1926,6 +1936,7 @@ let query (ctx : mordor_ctx) : Executions.query option =
                          execution
                   );
                 goal;
+                ub = false;
                 report;
               }
       | _ -> None
