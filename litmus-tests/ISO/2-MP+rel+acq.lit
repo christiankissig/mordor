@@ -10,4 +10,5 @@ y.store(0, nonatomic);
   }
 }
 %%
-forbid (r1 = 1 && r2 = 0) [Power]
+// Was [Power], which was mapped to IMM before
+forbid (r1 = 1 && r2 = 0) [IMM]

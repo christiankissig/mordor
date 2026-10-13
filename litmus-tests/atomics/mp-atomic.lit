@@ -8,4 +8,5 @@ y := 0;
   r2 := x.load(rlx)
 }
 %%
-forbid (r1 = 1 && r2 = 0) [Power] "relaxed MP execution"
+// Was [Power], which was mapped to IMM before
+forbid (r1 = 1 && r2 = 0) [IMM] "relaxed MP execution"

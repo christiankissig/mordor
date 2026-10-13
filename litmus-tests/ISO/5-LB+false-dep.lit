@@ -12,4 +12,11 @@ y.store(0, nonatomic);
   }
 }
 %%
-allow (r1 = 1 && r2 = 1) [Power]
+// Was [Power], which was mapped to IMM before
+//
+// The allow is a source-level verdict, not Power's. Compiled branch for branch,
+// thread 2's store to x is control dependent on r2, Power keeps ctrl to a write
+// in ppo, and the outcome is forbidden (LB+data+ctrl). It is allowed here
+// because MoRDor's IMM orders by sMRD's semantic dependencies: both branches
+// store 1 to x, so the store depends on nothing and a compiler may hoist it.
+allow (r1 = 1 && r2 = 1) [IMM]

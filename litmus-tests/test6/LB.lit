@@ -8,4 +8,5 @@ y := 0;
   x := 1
 }
 %%
-allow (r1 = 1 && r2 = 1) [Power]
+// Was [Power], which was mapped to IMM before
+allow (r1 = 1 && r2 = 1) [IMM]

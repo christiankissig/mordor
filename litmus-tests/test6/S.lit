@@ -8,4 +8,5 @@ y := 0;
   x := 1
 }
 %%
-allow (r1 = 1) [Power] "We cannot observe co"
+// Was [Power], which was mapped to IMM before
+allow (r1 = 1) [IMM] "We cannot observe co"

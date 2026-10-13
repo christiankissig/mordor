@@ -15,4 +15,5 @@ z := 0;
   } else { skip }
 }
 %%
-allow (r1 = 1 && r2 = 1 && r3 = 0) [Power]
+// Was [Power], which was mapped to IMM before
+allow (r1 = 1 && r2 = 1 && r3 = 0) [IMM]

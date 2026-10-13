@@ -8,4 +8,5 @@ y := 0;
   r2 := x.load(rlx)
 }
 %%
-allow (r1 = 0 && r2 = 0) [Power] "'normal' MP execution"
+// Was [Power], which was mapped to IMM before
+allow (r1 = 0 && r2 = 0) [IMM] "'normal' MP execution"

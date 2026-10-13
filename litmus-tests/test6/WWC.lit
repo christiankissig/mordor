@@ -10,4 +10,5 @@ y := 0;
   x := 1
 }
 %%
-allow (r1 = 2 && r2 = 1) [Power] "We are not filtering for the co"
+// Was [Power], which was mapped to IMM before
+allow (r1 = 2 && r2 = 1) [IMM] "We are not filtering for the co"
