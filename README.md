@@ -258,7 +258,7 @@ only and by their addresses (`--overlapping-regions` against the default), and
 lists every test whose verdict or executions differ:
 
 ```bash
-_build/default/test/golden/golden_diff.exe check-regions litmus-tests litmus-tests-review litmus-tests-jmm
+_build/default/test/golden/golden_diff.exe check-regions litmus-tests litmus-tests-jmm
 ```
 
 `check-query` decides every test's assertion twice, by enumeration and by
@@ -266,7 +266,7 @@ query (`run --by-query`, below), and fails if the verdicts differ. A test the
 query cannot ask about is counted, not compared:
 
 ```bash
-_build/default/test/golden/golden_diff.exe check-query litmus-tests litmus-tests-review litmus-tests-jmm
+_build/default/test/golden/golden_diff.exe check-query litmus-tests litmus-tests-jmm
 ```
 
 ## Command Line Interface

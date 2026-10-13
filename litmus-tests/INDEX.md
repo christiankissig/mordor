@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 446
+Total tests: 447
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -8,8 +8,6 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 > scanned: `litmus-tests-jmm/` (`[JMM]`, the JSR-133 Java Causality Test Cases)
 > has a README with the reference verdicts. The promising-semantics tests in
 > `promising/` are annotated `[PS1]`, which MoRDor implements, and are scanned.
-> Tests whose assertion MoRDor does not validate are parked in
-> `litmus-tests-review/`, also unscanned.
 
 ## Test Files
 
@@ -431,6 +429,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - rmm-zoo/properties/atomicity-mca/IRIW+ctrls.lit
 - rmm-zoo/properties/atomicity-mca/IRIW+rlx.lit
 - rmm-zoo/properties/atomicity-mca/ISA2+data+addrs.lit
+- rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit
 - rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit
 - rmm-zoo/properties/atomicity-mca/WRC+data+addr.lit
 - rmm-zoo/properties/atomicity-mca/WRC+rel+acq.lit

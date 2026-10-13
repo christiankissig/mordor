@@ -22,4 +22,5 @@ z := 0;
   r6 := z
 }
 %%
-allow (r1 = 2 && r2 = 1 && r3 = 2 && r4 = 1 && r5 = 2 && r6 = 1) [Power] "Observation threads for co"
+// Was [Power], which was mapped to IMM before
+allow (r1 = 2 && r2 = 1 && r3 = 2 && r4 = 1 && r5 = 2 && r6 = 1) [IMM] "Observation threads for co"

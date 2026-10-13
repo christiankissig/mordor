@@ -8,4 +8,5 @@ y.store(0, nonatomic);
   x.store(r2, relaxed)
 }
 %%
-forbid (r1 = 1 && r2 = 1) [Power]
+// Was [Power], which was mapped to IMM before
+forbid (r1 = 1 && r2 = 1) [IMM]

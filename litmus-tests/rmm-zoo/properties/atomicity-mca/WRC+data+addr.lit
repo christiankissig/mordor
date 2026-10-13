@@ -26,4 +26,5 @@ y := 0;
   r3 := *(rq + (r2 - r2))
 }
 %%
-allow (r1 = 1 && r2 = 1 && r3 = 0) [Power]
+// Was [Power], which was mapped to IMM before
+allow (r1 = 1 && r2 = 1 && r3 = 0) [IMM]
