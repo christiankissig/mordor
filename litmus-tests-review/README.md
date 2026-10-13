@@ -82,9 +82,7 @@ written to disagree.
 
 ### MoRDor is too permissive — a `forbid` it finds a witness for
 
-| Test | Assertion | Model |
-|---|---|---|
-| [`rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit`](rmm-zoo/properties/atomicity-mca/MP+fence+addr.lit) #63 | forbid `r1=1 ∧ r2=0` | `[Power]` → IMM |
+None at present.
 
 **Eight have left this table.** `popl_promising/Page 7 Column 1b.lit` #61 was
 not out of thin air either. Its release store `y.store(1, rel)` is overwritten by
@@ -118,16 +116,6 @@ longer held the read the value came from. MoRDor allowed `LB+deps` under sMRD,
 MRD's headline no-thin-air example, on exactly that. Conjuncts that constrain the
 write's own value are now retained. What remains in this table did not move, so
 whatever those need, it is not this.
-
-`MP+fence+addr.lit` is different in kind and is the sharpest single case:
-message passing with a fence on the writer and an address dependency on the
-reader. Every model with fence ordering forbids it — the zoo carries it as a
-*positive control*, the shape only a bare coherence checker allows — and MoRDor
-allows it under IMM. The two release-acquire controls with the same character,
-`MP+rel+acq` and `WRC+rel+acq` (#67, #68), have since been fixed and are back in
-`litmus-tests/rmm-zoo/`: sMRD's `hb` gained `sw = [W_rel];rf;[R_acq]`. That fix
-does *not* reach this file, because a relaxed write po-after a release fence
-still synchronises with nothing. Fence ordering in the checker is what is left.
 
 ### MoRDor is too restrictive — an `allow` it finds no witness for
 

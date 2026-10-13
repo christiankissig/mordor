@@ -106,7 +106,7 @@ own model is characterised by.
 
 | Key | Column | MoRDor coverage |
 |---|---|---|
-| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (9 tests here, `IRIW+rel+acq.lit` under `[SRA]` among them; `IRIW+scfences.lit` separates C11 and C++17 from C++20; `MP+fence+addr.lit` is parked in `litmus-tests-review/`) |
+| `mca` | Multicopy atomic | **new** `properties/atomicity-mca/` (11 tests here, `IRIW+rel+acq.lit` under `[SRA]` among them; `IRIW+scfences.lit` separates C11 and C++17 from C++20) |
 
 This was the gap. The zoo has an `mca` cell for 63 models (31 true, 32 false) and
 **none for MRD or sMRD**.
@@ -133,10 +133,10 @@ single write is left as an explanation.
 | `RWC+addr+fence.lit` | POWER/ARMv7 allow; SC/x86-TSO forbid | allows |
 | `ISA2+data+addrs.lit` | POWER/ARMv7/ARMv8 allow (P0 unfenced); SC forbids | allows |
 | `WRC+rel+acq.lit` | WRA/RA/SRA/C11/RC11/SC forbid (negative control) | forbids ✓ |
-| `MP+fence+addr.lit` (now in `litmus-tests-review/`) | POWER/ARM/ARMv8/SC forbid; bare Coherence allows (positive control) | **allows ✗** |
+| `MP+fence+addr.lit` | POWER/ARM/ARMv8/SC forbid; IMM/RC11/C11 and bare Coherence allow | allows, as IMM |
 
 Reading the table: **sMRD as MoRDor implements it is not multicopy atomic**, and
-it allows every shape in the family — the controls included.
+it allows every shape in the family but `WRC+rel+acq`.
 
 Part of that is sMRD working as intended. It allows `IRIW+addrs` and
 `WRC+data+addr` because the address dependencies there are *syntactic and
@@ -147,11 +147,15 @@ C-level analogues of the ARM/POWER `mca` witnesses do not transfer: on hardware
 those dependencies are preserved *because* they are syntactic. Recording that is
 the point of keeping `IRIW+rlx` and `IRIW+addrs` side by side.
 
-The controls are a different matter. `MP+fence+addr` is a *positive* control —
-every model with fence ordering forbids it, and only a bare coherence checker
-allows it — and MoRDor allows it under `[Power]`, i.e. under IMM. That points at
-fence ordering in the checker rather than at multicopy atomicity, and is still
-open as #63.
+`MP+fence+addr` is the zoo's positive control for *hardware* dependency
+ordering, and it does not transfer to the language level either. It ran under
+`[Power]`, which MoRDor maps to IMM, and was parked as a `forbid` it found a
+witness for (#63). But IMM allows it: IMM's ppo, `[R];(deps ∪ rfi)⁺;[W]`, ends at
+a write, so no dependency orders the reader's two loads, and `fr` is not in `ar`.
+RC11 and C11 allow it too, since the relaxed reader synchronises with nothing.
+The `forbid` was POWER's verdict, which MoRDor has no model to check; the test now
+asserts IMM's `allow`. Syntactic dependencies would not change that, because of
+the ppo.
 
 The two release-acquire controls used to behave the same way, and no longer do.
 sMRD's `hb` was `(ppo ∪ dp)⁺`, with no `rf` in it, so a release write read by an
@@ -161,7 +165,7 @@ invisible to the coherence axiom (#67, #68). `hb` is now `(ppo ∪ dp ∪ sw)⁺
 one execution RC11 and IMM already ruled out. `WRC+rel+acq.lit` is back in the
 table above and `MP+rel+acq.lit` in `models/ra-sra-wra/`, both reannotated
 `[SMRD]`. Note this is *not* fence ordering: a relaxed write po-after a release
-fence still does not synchronise, which is why `MP+fence+addr` has not moved.
+fence still does not synchronise.
 
 An earlier revision of this table recorded `MP+fence+addr` and `WRC+rel+acq` as
 `forbids ✓`. Those readings came from a build in which `forbid` assertions

@@ -1,0 +1,38 @@
+// MP with a fenced writer and an address-dependent reader.
+//
+// rmm-zoo property: mca (Atomicity) -- positive control for dependency ordering.
+// Source: rmm-zoo litmus/strictly-weaker/POWER-vs-Coherence/MP+sync+addr and
+//         litmus/strictly-weaker/ARM-vs-Coherence/MP+dmb+addr;
+//         Alglave et al., "Herding Cats" (TOPLAS 2014).
+//
+// This is the shape the zoo uses to separate real hardware models from bare
+// Coherence: the writer is fenced and the reader's two loads are ordered by an
+// address dependency, so both POWER and ARM forbid the stale read, while a model
+// that ignores dependencies allows it.
+//
+// Reference verdicts: POWER, ARM, ARMv8, SC FORBID. Bare Coherence ALLOWS.
+// IMM, RC11 and C11 ALLOW.
+//
+// IMM allows it for two reasons. Its ppo, [R];(deps ∪ rfi)⁺;[W], ends at a
+// write, so no dependency orders one read before another; and fr is not in ar,
+// so the cycle W(x) -fence-> W(y) -rfe-> R(y) -addr-> R(x) -fre-> W(x) is not
+// one IMM rules out. Nor is there hb between the threads: the reads are relaxed
+// and the reader has no fence. The dependency is also syntactic and
+// semantically dead -- `r1 - r1` is 0 whatever r1 is -- so sMRD's semantic dp
+// drops it as well; tracking syntactic dependencies would not change IMM's
+// verdict, because of the ppo. The forbid is a hardware verdict, which MoRDor,
+// having no POWER or ARM model, does not check (#63).
+x := 0;
+y := 0;
+{
+  x := 1;
+  fence(sc);
+  y := 1
+} ||| {
+  r1 := y;
+  rq := &x;
+  r2 := *(rq + (r1 - r1))
+}
+%%
+// Was forbid [Power], which was mapped to IMM before
+allow (r1 = 1 && r2 = 0) [IMM]
