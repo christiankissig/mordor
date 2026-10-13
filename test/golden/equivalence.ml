@@ -34,7 +34,7 @@
 open Types
 
 let default_dirs =
-  [ "litmus-tests"; "litmus-tests-review"; "litmus-tests-jmm"; "programs" ]
+  [ "litmus-tests"; "litmus-tests-jmm"; "programs" ]
 
 let rec lit_files path =
   if not (Sys.file_exists path) then []
