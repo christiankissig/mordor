@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 451
+Total tests: 453
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -299,6 +299,8 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/sync/writeElision.lit
 - own/sync/writeElisionRel.lit
 - own/SB+sc.lit
+- own/SB+sc+rlx.lit
+- own/SB+fence-sc+rlx.lit
 - own/MP+sc+sc.lit
 - own/MP+rel+sc.lit
 - own/MP+sc+acq.lit

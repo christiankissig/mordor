@@ -402,6 +402,75 @@ module CoherenceChecks = struct
       (* Coherence: hb;eco ∪ hb is irreflexive *)
       URelation.is_irreflexive
         (USet.inplace_union ~into:(URelation.compose [ hb; eco ]) hb)
+
+  (** RC11's SC axiom: [psc = psc_base ∪ psc_F] is acyclic, with
+
+      - [scb = sb ∪ sb|≠loc;hb;sb|≠loc ∪ hb|loc ∪ co ∪ rb]
+      - [psc_base = ([E_sc] ∪ [F_sc];hb?);scb;([E_sc] ∪ hb?;[F_sc])]
+      - [psc_F = [F_sc];(hb ∪ hb;eco;hb);[F_sc]]
+
+      as in herd's [rc11.cat]. [rb] is [rf⁻¹;co] and [eco] [(rf ∪ co ∪ rb)⁺]. *)
+  let psc_acyclic ~events ~e ~sb ~hb ~co ~rb ~eco ~loc_restrict () =
+    let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
+    (* scb = sb ∪ sbl;hb;sbl ∪ hbl ∪ co ∪ rb, with sbl = sb \ loc and
+       hbl = hb ∩ loc, as in herd's rc11.cat.
+
+       The middle term was sbl;hb, which contains sbl;hb;sbl and more: it
+       let an event reach any hb-later one at another location, where RC11
+       asks for an sb step at another location on both sides. At a fence end
+       of psc_base the hb? there absorbs the difference; at an SC access it
+       does not, and those ends were missing until the fix below. *)
+    let scb =
+      USet.union sb (URelation.compose [ sb_non_loc; hb; sb_non_loc ])
+      |> USet.union (loc_restrict hb)
+      |> USet.union co
+      |> USet.union rb
+    in
+
+    (* E_sc, every access in mode sc: RC11's [SC], of any event type.
+
+       This asked for [Init] events in mode sc, which never exist, so E_sc
+       was empty and psc_base reduced to its fence terms. Store buffering
+       over sc stores and loads came out allowed: psc is the only axiom that
+       forbids it, and without the accesses it had nothing to order. *)
+    let sc_events =
+      USet.union
+        (ModelUtils.match_events events e Read (Some SC) None None)
+        (ModelUtils.match_events events e Write (Some SC) None None)
+      |> USet.union (ModelUtils.match_events events e Fence (Some SC) None None)
+    in
+    let f_sc = ModelUtils.match_events events e Fence (Some SC) None None in
+
+    (* psc_base = [E_sc U (F_sc;hb?)] ; scb ; [E_sc U (hb?;F_sc)]
+
+       Both unions have to copy. [USet.inplace_union] mutates [~into], so
+       building these two with it left sc_events holding
+       E_sc U (F_sc;hb?) U (hb?;F_sc) and both ends of the composition
+       pointing at that one set -- each end carrying the other's term. Which
+       of the two got there first was not even determined: OCaml does not
+       specify the evaluation order of list elements. *)
+    let psc_base =
+      URelation.compose
+        [
+          USet.union sc_events
+            (URelation.compose [ f_sc; URelation.reflexive_closure e hb ]);
+          scb;
+          USet.union sc_events
+            (URelation.compose [ URelation.reflexive_closure e hb; f_sc ]);
+        ]
+    in
+
+    let psc_f =
+      URelation.compose
+        [
+          f_sc;
+          USet.inplace_union ~into:(URelation.compose [ hb; eco; hb ]) hb;
+          f_sc;
+        ]
+    in
+
+    let psc = USet.union psc_base psc_f in
+      URelation.acyclic psc
 end
 
 (** [holds axioms c] is whether every one of [axioms] holds of [c], asked in
@@ -1105,68 +1174,8 @@ end) : MEMORY_MODEL = struct
       which has passed atomicity and coherence pays for it. *)
   let sc_consistent x =
     let { sb; e; events; loc_restrict; _ } = x.cache in
-    let co = x.co and hb = Lazy.force x.hb in
-    let rb = Lazy.force x.rb and eco = Lazy.force x.eco in
-    let sb_non_loc = USet.set_minus sb (loc_restrict sb) in
-    (* scb = sb ∪ sbl;hb;sbl ∪ hbl ∪ co ∪ rb, with sbl = sb \ loc and
-       hbl = hb ∩ loc, as in herd's rc11.cat.
-
-       The middle term was sbl;hb, which contains sbl;hb;sbl and more: it
-       let an event reach any hb-later one at another location, where RC11
-       asks for an sb step at another location on both sides. At a fence end
-       of psc_base the hb? there absorbs the difference; at an SC access it
-       does not, and those ends were missing until the fix below. *)
-    let scb =
-      USet.union sb (URelation.compose [ sb_non_loc; hb; sb_non_loc ])
-      |> USet.union (loc_restrict hb)
-      |> USet.union co
-      |> USet.union rb
-    in
-
-    (* E_sc, every access in mode sc: RC11's [SC], of any event type.
-
-       This asked for [Init] events in mode sc, which never exist, so E_sc
-       was empty and psc_base reduced to its fence terms. Store buffering
-       over sc stores and loads came out allowed: psc is the only axiom that
-       forbids it, and without the accesses it had nothing to order. *)
-    let sc_events =
-      USet.union
-        (ModelUtils.match_events events e Read (Some SC) None None)
-        (ModelUtils.match_events events e Write (Some SC) None None)
-      |> USet.union (ModelUtils.match_events events e Fence (Some SC) None None)
-    in
-    let f_sc = ModelUtils.match_events events e Fence (Some SC) None None in
-
-    (* psc_base = [E_sc U (F_sc;hb?)] ; scb ; [E_sc U (hb?;F_sc)]
-
-       Both unions have to copy. [USet.inplace_union] mutates [~into], so
-       building these two with it left sc_events holding
-       E_sc U (F_sc;hb?) U (hb?;F_sc) and both ends of the composition
-       pointing at that one set -- each end carrying the other's term. Which
-       of the two got there first was not even determined: OCaml does not
-       specify the evaluation order of list elements. *)
-    let psc_base =
-      URelation.compose
-        [
-          USet.union sc_events
-            (URelation.compose [ f_sc; URelation.reflexive_closure e hb ]);
-          scb;
-          USet.union sc_events
-            (URelation.compose [ URelation.reflexive_closure e hb; f_sc ]);
-        ]
-    in
-
-    let psc_f =
-      URelation.compose
-        [
-          f_sc;
-          USet.inplace_union ~into:(URelation.compose [ hb; eco; hb ]) hb;
-          f_sc;
-        ]
-    in
-
-    let psc = USet.union psc_base psc_f in
-      URelation.acyclic psc
+      CoherenceChecks.psc_acyclic ~events ~e ~sb ~hb:(Lazy.force x.hb) ~co:x.co
+        ~rb:(Lazy.force x.rb) ~eco:(Lazy.force x.eco) ~loc_restrict ()
 
   (** C11's SC: the conditions S1--S7 of the standard on a total order [S] of
       the SC events, as herd's [c11_partialSC.cat] states them for a partial
@@ -1317,6 +1326,16 @@ module SMRD : MEMORY_MODEL = struct
         (** [hb] under each lock order the execution admits; none when it admits
             none. *)
     rmw : (int * int) uset;
+    sc : psc option;
+        (** What [psc] asks of the execution; [None] when it has no SC event,
+            and [psc] holds of it trivially. *)
+  }
+
+  and psc = {
+    events : (int, event) Hashtbl.t;
+    e : int uset;
+    po : (int * int) uset;
+    loc_restrict : (int * int) uset -> (int * int) uset;
   }
 
   type config = unit
@@ -1400,23 +1419,65 @@ module SMRD : MEMORY_MODEL = struct
         (ModelUtils.lock_orders structure execution.e)
     in
 
-    { rf; rfi; hbs; rmw }
+    let sc =
+      let has_sc =
+        USet.exists
+          (fun id ->
+            match Hashtbl.find_opt structure.events id with
+            | Some { typ = Read; rmod = SC; _ }
+            | Some { typ = Write; wmod = SC; _ }
+            | Some { typ = Fence; fmod = SC; _ } ->
+                true
+            | _ -> false
+          )
+          execution.e
+      in
+        if has_sc then
+          Some { events = structure.events; e = execution.e; po; loc_restrict }
+        else None
+    in
+
+    { rf; rfi; hbs; rmw; sc }
 
   type candidate = cache * (int * int) uset
 
   let candidate cache co = (cache, co)
 
+  (* sMRD is RC11's coherence without its no-thin-air axiom (Richards et al.,
+     OOPSLA 2025, §4.6), so SC accesses and SC fences are ordered by RC11's
+     psc (#126). Its [sb] is [po]: [hb] is over [ppo], which does not order an
+     SC store before a later SC load, and with [ppo] store buffering over SC
+     accesses would stay allowed. Coherence and psc are asked of one [hb], so
+     of one lock order. *)
   let axioms =
     [
       ( "rmw ∩ (rb;co) = ∅",
         fun ({ rf; rfi; rmw; _ }, co) ->
           CoherenceChecks.rmw_atomicity ~rf ~rfi ~rmw ~co ()
       );
-      ( "hb;eco ∪ hb is irreflexive, for some lock order",
-        fun ({ rf; rfi; hbs; _ }, co) ->
-          List.exists
-            (fun hb -> CoherenceChecks.coherence_axiom ~rf ~rfi ~co ~hb ())
-            hbs
+      ( "hb;eco ∪ hb is irreflexive and psc is acyclic, for some lock order",
+        fun ({ rf; rfi; hbs; sc; _ }, co) ->
+          let rb = lazy (URelation.compose [ rfi; co ]) in
+          let eco =
+            lazy
+              (URelation.transitive_closure
+                 (USet.union rf co |> USet.union (Lazy.force rb))
+              )
+          in
+          let psc hb =
+            match sc with
+            | None -> true
+            | Some { events; e; po; loc_restrict } ->
+                CoherenceChecks.psc_acyclic ~events ~e ~sb:po ~hb ~co
+                  ~rb:(Lazy.force rb) ~eco:(Lazy.force eco) ~loc_restrict ()
+          in
+            List.exists
+              (fun hb ->
+                CoherenceChecks.coherence_axiom ~eco:(Lazy.force eco) ~rf ~rfi
+                  ~co ~hb ()
+                && psc hb
+              )
+              hbs
       );
     ]
 
