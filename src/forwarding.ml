@@ -926,9 +926,10 @@ module ForwardingContext = struct
 
   (** [ppo_loc ctx predicates] computes location-based PPO.
 
-      Computes PPO restricted to events accessing the same concrete location.
-      More precise than standard PPO as it requires exact location equality
-      under the given predicates.
+      Computes PPO restricted to events whose locations may be equal under the
+      given predicates (the paper's [<=_alias]). Unlike {!ppo}, it is not cut
+      to a justification's po-down-set, so it orders events after a thread's
+      last justified write.
 
       @param ctx The forwarding context.
       @param predicates The predicate constraints.
@@ -957,14 +958,19 @@ module ForwardingContext = struct
                 )
               | None -> ppo ctx predicates
           in
-          (* Filter for exact location equality using the predicates P *)
+          (* Keep pairs whose locations may be equal under P: <=_alias is
+             satisfiability, not validity. An equality such as alpha = G can
+             come from the execution's read-from and not from P; see #142. *)
           let filtered =
             USet.filter
               (fun (e1, e2) ->
                 let loc1 = Events.get_loc es_ctx.structure e1 in
                 let loc2 = Events.get_loc es_ctx.structure e2 in
                   match (loc1, loc2) with
-                  | Some l1, Some l2 -> Solver.exeq ~state:p l1 l2
+                  | Some l1, Some l2 ->
+                      Solver.expoteq
+                        ~state:(p @ es_ctx.structure.constraints)
+                        l1 l2
                   | _ -> false
               )
               ppo_alias

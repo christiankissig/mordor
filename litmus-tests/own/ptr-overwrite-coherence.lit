@@ -9,6 +9,11 @@
 // `*rp := 7`, whose location is the symbol read from A, never shared a location
 // with `G := 0`. co never ordered the two, and the read of the overwritten 0
 // was coherent.
+//
+// Under sMRD the read of G was not ordered after `*rp := 7`: ppo_loc kept a pair
+// only if the two locations were necessarily equal under the justifications'
+// predicates, and α = G comes from the execution's read-from. ppo_loc now keeps
+// pairs whose locations may be equal, as ≤_alias says (github #142).
 G := 0;
 {
   rq := &G;
@@ -19,4 +24,4 @@ G := 0;
   r1 := G
 }
 %%
-forbid (r1 = 0) [RC11]
+forbid (r1 = 0) [RC11, sMRD]
