@@ -1333,30 +1333,58 @@ module SMRD : MEMORY_MODEL = struct
     let dp = USet.clone execution.dp in
     let ppo = USet.clone execution.ppo in
 
-    (* sw = [W_rel];rf;[R_acq]
+    (* sw = [W_rel⁺ ∪ F_rel⁺];([F];po)?;[W_rlx⁺];rfe;[R_rlx⁺];(po;[F])?;[R_acq⁺ ∪ F_acq⁺]
 
-       Synchronizes-with. Without it [hb] carries no cross-thread edge at all,
-       so a release/acquire pair is invisible to the coherence axiom and MP over
-       release/acquire comes out allowed. The two po legs of the message-passing
-       shape are already in [ppo]: [Forwarding.compute_ppo_sync] orders every
-       event into a release write and out of an acquire read, so composing this
-       relation with [ppo] under the closure below yields the ordering from the
-       release write's po-predecessors to the acquire read's po-successors.
+       Synchronizes-with, RC11's with its fence forms but without release
+       sequences: a release write or a release fence po-before a write, read by
+       an acquire read or by a read po-before an acquire fence. sMRD is RC11's
+       coherence (Richards et al., OOPSLA 2025, §4.6), so its fences
+       synchronise as RC11's do (#126). Without [sw], [hb] carries no
+       cross-thread edge at all, so message passing comes out allowed.
+
+       The outer po legs are already in [ppo]: [Forwarding.compute_ppo_sync]
+       orders every event into a release write or fence and out of an acquire
+       read or fence, so composing this relation with [ppo] under the closure
+       below orders the release's po-predecessors before the acquire's
+       po-successors. The inner legs, from a release fence to the write after
+       it and from the read to the acquire fence after it, are not in [ppo]:
+       a release fence does not hold back later writes, and an acquire fence
+       does not hold back earlier reads. They are [po] here, as [sb] is in
+       RC11's [sw].
+
+       Over [rfe] only. Within a thread RC11's [sw] adds nothing to [sb], but
+       here it would add the inner legs to [ppo], which leaves them out: with a
+       release fence, an internal read and a write elided into a later one, a
+       remapped [ppo] edge into the fence closes a cycle through them, and
+       the executions with that elision would be lost.
 
        [rf] is deliberately *not* unioned in wholesale: that would order relaxed
-       accesses too, which sMRD does not. Only the release-to-acquire edges join
-       [hb]. Fences are not covered here -- a relaxed write po-after a release
-       fence does not yet synchronize (see issue #63). *)
+       accesses too, which sMRD does not. Only the edges above join [hb]. *)
     let sw =
       let events = structure.events in
       let e = execution.e in
-      let w_rel =
-        ModelUtils.match_events events e Write (Some Release) (Some ">") None
+      let matching typ mode =
+        ModelUtils.match_events events e typ (Some mode) (Some ">") None
       in
-      let r_acq =
-        ModelUtils.match_events events e Read (Some Acquire) (Some ">") None
+      let fences = ModelUtils.match_events events e Fence None None None in
+      let rel = USet.union (matching Write Release) (matching Fence Release) in
+      let acq = USet.union (matching Read Acquire) (matching Fence Acquire) in
+      let fence_po =
+        URelation.reflexive_closure e (URelation.compose [ fences; po ])
       in
-        URelation.compose [ w_rel; rf; r_acq ]
+      let po_fence =
+        URelation.reflexive_closure e (URelation.compose [ po; fences ])
+      in
+        URelation.compose
+          [
+            rel;
+            fence_po;
+            matching Write Relaxed;
+            ModelUtils.thread_external_of structure.thread_index rf;
+            matching Read Relaxed;
+            po_fence;
+            acq;
+          ]
     in
 
     (* hb = (ppo ∪ dp ∪ sw ∪ [Unlock];lo;[Lock])⁺, for each lock order [lo].
@@ -1400,7 +1428,7 @@ module SMRD : MEMORY_MODEL = struct
 
   let data_races = None
 
-  (* [sw = [W_rel];rf;[R_acq]], with no release sequence to break. *)
+  (* [sw] has no release sequence to break. *)
   let elidable = ModelUtils.elidable_always
   let allows_thin_air = false
   let uses_co = true
@@ -3001,7 +3029,7 @@ end
     [eco (x, y)] is [pos x < pos y], or [x] the write [y] reads.
 
     Two levels. The first takes [hb] as [(dp ∪ ppo)⁺]; the second adds
-    [sw = [W_rel];rf;[R_acq]], whose edges the read-from decides, as
+    [sw], fence forms included, whose edges the read-from decides, as
     reachability between the candidate edges. The first is a subset of smrd's
     [hb], so both are necessary; the second decides the combinations whose
     coherence turns on a release/acquire pair (S19, #96). *)
@@ -3058,27 +3086,54 @@ module SymbolicSMRD : SYMBOLIC_MODEL = struct
       )
       (USet.values enc.enc_rmw)
 
-  (* The candidate [sw] edges: an acquire read and a release write it may read
-     from. *)
+  (* The candidate [sw] edges, as [(source, w, r, target)]: [r] may read from
+     [w] of another thread, and [source] is [w] if it releases or a release fence po-before it,
+     [target] [r] if it acquires or an acquire fence po-after it. The edge is
+     [sw] when [r] takes [w]; see {!SMRD}'s [sw]. *)
   let sw_edges enc =
+    let structure = enc.enc_structure in
+    let events = USet.of_list enc.enc_events in
     let matching typ mode =
       URelation.pi_1
-        (ModelUtils.match_events enc.enc_structure.events
-           (USet.of_list enc.enc_events)
-           typ (Some mode) (Some ">") None
+        (ModelUtils.match_events structure.events events typ (Some mode)
+           (Some ">") None
         )
     in
-    let releases = matching Write Release
-    and acquires = matching Read Acquire in
+    let w_rel = matching Write Release
+    and w_rlx = matching Write Relaxed
+    and r_acq = matching Read Acquire
+    and r_rlx = matching Read Relaxed
+    and f_rel = USet.values (matching Fence Release)
+    and f_acq = USet.values (matching Fence Acquire) in
+    let po a b = USet.mem structure.po (a, b) in
+    let sources w =
+      (if USet.mem w_rel w then [ w ] else [])
+      @ List.filter (fun f -> po f w) f_rel
+    in
+    let targets r =
+      (if USet.mem r_acq r then [ r ] else [])
+      @ List.filter (fun f -> po r f) f_acq
+    in
       List.concat_map
         (fun r ->
-          if not (USet.mem acquires r) then []
+          if not (USet.mem r_rlx r) then []
           else
-            List.filter_map
-              (fun w ->
-                if w <> 0 && USet.mem releases w then Some (w, r) else None
-              )
-              (enc.enc_candidates r)
+            let targets = targets r in
+              List.concat_map
+                (fun w ->
+                  if
+                    w = 0
+                    || (not (USet.mem w_rlx w))
+                    || ModelUtils.same_thread structure.thread_index w r
+                  then []
+                  else
+                    List.concat_map
+                      (fun source ->
+                        List.map (fun target -> (source, w, r, target)) targets
+                      )
+                      (sources w)
+                )
+                (enc.enc_candidates r)
         )
         enc.enc_reads
       |> Array.of_list
@@ -3093,65 +3148,67 @@ module SymbolicSMRD : SYMBOLIC_MODEL = struct
       else
         let edges = sw_edges enc in
         let indices = List.init (Array.length edges) Fun.id in
+        let source i =
+          let s, _, _, _ = edges.(i) in
+            s
+        and target i =
+          let _, _, _, t = edges.(i) in
+            t
+        in
         let active i =
-          let w, r = edges.(i) in
+          let _, w, r, _ = edges.(i) in
             enc.enc_chosen r w
         in
         let z i j = enc.enc_fresh (Printf.sprintf "sw%d_%d" i j) in
         let chains =
           List.concat_map
             (fun i ->
-              let _, ri = edges.(i) in
-                List.concat_map
-                  (fun j ->
-                    let wj, _ = edges.(j) in
-                      if not (enc.enc_reaches ri wj) then []
-                      else
-                        imp (active j) (eq (z i j) (num 1))
-                        :: List.filter_map
-                             (fun k ->
-                               let wk, _ = edges.(k) in
-                               let _, rj = edges.(j) in
-                                 if k = j || not (enc.enc_reaches rj wk) then
-                                   None
-                                 else
-                                   Some
-                                     (imp
-                                        (conj [ eq (z i j) (num 1); active k ])
-                                        (eq (z i k) (num 1))
-                                     )
-                             )
-                             indices
-                  )
-                  indices
+              List.concat_map
+                (fun j ->
+                  if not (enc.enc_reaches (target i) (source j)) then []
+                  else
+                    imp (active j) (eq (z i j) (num 1))
+                    :: List.filter_map
+                         (fun k ->
+                           if
+                             k = j
+                             || not (enc.enc_reaches (target j) (source k))
+                           then None
+                           else
+                             Some
+                               (imp
+                                  (conj [ eq (z i j) (num 1); active k ])
+                                  (eq (z i k) (num 1))
+                               )
+                         )
+                         indices
+                )
+                indices
             )
             indices
         in
         let reach_from i b =
-          let _, ri = edges.(i) in
-            if enc.enc_reaches ri b then Some (EBoolean true)
-            else
-              match
-                List.filter_map
-                  (fun j ->
-                    let _, rj = edges.(j) in
-                      if j = i || not (enc.enc_reaches rj b) then None
-                      else Some (eq (z i j) (num 1))
-                  )
-                  indices
-              with
-              | [] -> None
-              | l -> Some (disj l)
+          if enc.enc_reaches (target i) b then Some (EBoolean true)
+          else
+            match
+              List.filter_map
+                (fun j ->
+                  if j = i || not (enc.enc_reaches (target j) b) then None
+                  else Some (eq (z i j) (num 1))
+                )
+                indices
+            with
+            | [] -> None
+            | l -> Some (disj l)
         in
         let through a b =
           List.filter_map
             (fun i ->
-              let wi, _ = edges.(i) in
-                if not (enc.enc_reaches a wi) then None
-                else
-                  Option.map
-                    (fun reach -> conj [ active i; reach ])
-                    (reach_from i b)
+              if not (enc.enc_reaches a (source i)) then None
+              else
+                Option.map
+                  (fun reach -> conj [ active i; reach ])
+                  (reach_from i b)
             )
             indices
         in

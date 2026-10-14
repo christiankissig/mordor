@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 447
+Total tests: 451
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -302,6 +302,10 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/MP+sc+sc.lit
 - own/MP+rel+sc.lit
 - own/MP+sc+acq.lit
+- own/MP+fence-rel+fence-acq.lit
+- own/MP+rel+fence-acq.lit
+- own/MP+fence-rel+acq.lit
+- own/MP+fences-misplaced.lit
 - own/nonatomic-store-no-sync-relaxed.lit
 - own/nonatomic-store-no-sync.lit
 - own/NoReuseAcrossThreadsUnallocated.lit

@@ -1,0 +1,20 @@
+// MP+fences-misplaced -- message passing with the fences on the wrong sides.
+//
+// MoRDor's own test, for github #126; the control for MP+fence-rel+fence-acq.
+// The release fence follows the flag write and the acquire fence precedes the
+// flag read, so neither is between the accesses it would have to order: there
+// is no sw, and the data read may miss the data write.
+x := 0;
+y := 0;
+{
+  x.store(1, rlx);
+  y.store(1, rlx);
+  fence(rel)
+} ||| {
+  fence(acq);
+  r1 := y.load(rlx);
+  r2 := x.load(rlx)
+}
+%%
+allow (r1 = 1 && r2 = 0) [smrd]
+allow (r1 = 1 && r2 = 0) [rc11]
