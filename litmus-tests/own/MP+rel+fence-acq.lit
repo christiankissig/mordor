@@ -1,0 +1,20 @@
+// MP+rel+fence-acq -- message passing through a release store and an acquire
+// fence.
+//
+// MoRDor's own test, for github #126: the mixed form of RC11's sw,
+// [W_rel];rf;[R];po;[F_acq]. The relaxed flag read is po-before an acquire
+// fence, which synchronises with the release store it reads from, so the data
+// read must see the data write.
+x := 0;
+y := 0;
+{
+  x.store(1, rlx);
+  y.store(1, rel)
+} ||| {
+  r1 := y.load(rlx);
+  fence(acq);
+  r2 := x.load(rlx)
+}
+%%
+forbid (r1 = 1 && r2 = 0) [smrd]
+forbid (r1 = 1 && r2 = 0) [rc11]
