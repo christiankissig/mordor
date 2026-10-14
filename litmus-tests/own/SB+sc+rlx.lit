@@ -1,0 +1,16 @@
+// SB+sc+rlx -- store buffering with one load relaxed.
+//
+// MoRDor's own test, for github #126; the control for SB+sc. Thread 2's load
+// of x is relaxed, so it is not in psc, and the psc cycle of SB+sc is broken:
+// both loads may read 0.
+x := 0; y := 0;
+{
+  x.store(1, sc);
+  r1 := y.load(sc)
+} ||| {
+  y.store(1, sc);
+  r2 := x.load(rlx)
+}
+%%
+allow (r1 = 0 && r2 = 0) [smrd]
+allow (r1 = 0 && r2 = 0) [rc11]
