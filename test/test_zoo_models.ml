@@ -521,9 +521,9 @@ forbid (r1 = 1 && r2 = 0 && r3 = 1 && r4 = 0) [C20, RC11]|}
       (List.map snd verdicts)
 
 (** A relaxed store continuing a release store's release sequence keeps sMRD
-    from eliding the release store under RC11's, C++11's and IMM's release
-    sequences, and not under C++17's or sMRD's, where it carries no release. A
-    release store may still elide it. *)
+    from eliding the release store under RC11's, C++11's, IMM's and sMRD's
+    release sequences (#168), and not under C++17's, where it carries no
+    release. A release store may still elide it. *)
 let test_elision_follows_release_sequences () =
   let release_then flag verdicts =
     Printf.sprintf
@@ -537,12 +537,12 @@ let test_elision_follows_release_sequences () =
   let valid, verdicts =
     check_source
       (release_then "rlx"
-         "forbid (r1 = 2 && r2 = 0) [RC11, C11, IMM]\n\
-          allow (r1 = 2 && r2 = 0) [C17, C20, smrd]"
+         "forbid (r1 = 2 && r2 = 0) [RC11, C11, IMM, smrd]\n\
+          allow (r1 = 2 && r2 = 0) [C17, C20]"
       )
   in
-    check bool "a relaxed store may not elide it under RC11, C11 and IMM" true
-      valid;
+    check bool "a relaxed store may not elide it under RC11, C11, IMM and smrd"
+      true valid;
     check (list bool) "every assertion holds"
       [ true; true; true; true; true; true ]
       (List.map snd verdicts);
