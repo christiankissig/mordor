@@ -68,7 +68,7 @@ under sMRD.
 
 | Annotation | Model |
 |---|---|
-| `smrd` | Symbolic MRD (Richards et al., OOPSLA 2025): dependencies, preserved program order, release/acquire synchronisation (fences included, release sequences not), RC11's SC order (psc) and lock order. The default. |
+| `smrd` | Symbolic MRD (Richards et al., OOPSLA 2025): dependencies, preserved program order, release/acquire synchronisation (fences and release sequences included), RC11's SC order (psc) and lock order. The default. |
 | `mrd` | Modular Relaxed Dependencies: sMRD's axioms, on programs that access only named globals and allocate nothing; others are refused. |
 | `rc11`, `rc11c` | Repaired C11 (Lahav et al., PLDI 2017), and RC11 with consume, which for now answers as RC11: consume has no semantics of its own yet. |
 | `rc17` | RC11 with C++17's release sequences. |

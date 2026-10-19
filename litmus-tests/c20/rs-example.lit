@@ -11,4 +11,9 @@ y.store(0, na);
   r2 := y.load(rlx)
 }
 %%
-allow (r1=3 && r2 =0) []
+// C++20's release sequence (P0982) is the release store and the RMWs reading
+// along it, so x.store(3, rlx) does not continue it and the acquire does not
+// synchronise. RC11's, and sMRD's (#168), continue through later stores of the
+// writer's thread, so the acquire synchronises and r2 = 0 is forbidden.
+allow (r1=3 && r2=0) [C20]
+forbid (r1=3 && r2=0) [RC11, sMRD]

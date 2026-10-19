@@ -2,10 +2,10 @@
 // continues the release sequence in RC11 (Lahav et al., PLDI 2017, §3.2:
 // rs ≜ [W]; sb|loc?; [W^⊒rlx]; (rf; rmw)*). The acquire reading it
 // synchronises with the release, x := 1 happens-before r2, and the stale read
-// of x is forbidden. sMRD synchronises only rf ∩ (W_rel × R_acq), with no
-// release sequence beyond the releasing write, so its coherence allows the
-// outcome. The witnessing execution elides no write and forwards nothing; the
-// difference is the release sequence alone. Same shape as
+// of x is forbidden. sMRD takes RC11's coherence, release sequences included
+// (#168), and forbids it too. The execution that had witnessed the outcome
+// under sMRD elided no write and forwarded nothing; the difference was the
+// release sequence alone. Same shape as
 // rmm-zoo/models/cpp-release-sequences/mp-rs.lit, with relaxed data.
 x := 0;
 y := 0;
@@ -19,4 +19,4 @@ y := 0;
 }
 %%
 forbid (r1 = 2 && r2 = 0) [RC11]
-allow (r1 = 2 && r2 = 0) [sMRD]
+forbid (r1 = 2 && r2 = 0) [sMRD]

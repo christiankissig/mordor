@@ -1318,6 +1318,11 @@ end) : MEMORY_MODEL = struct
   let compute_dependencies _ _ _ _ _ = USet.create ()
 end
 
+(** sMRD's coherence: RC11's without its no-thin-air axiom (Richards et al.,
+    OOPSLA 2025, §4.6), with one intended relaxation. RC11's [hb = (sb ∪ sw)⁺]
+    is over all of [sb]; sMRD's is over [ppo ∪ dp], which keeps the outer [sb]
+    legs of [sw] ({!Forwarding.compute_ppo_sync}) but drops the [sb] order [ppo]
+    does not preserve. [sw] is RC11's, release sequences and fences included. *)
 module SMRD : MEMORY_MODEL = struct
   type cache = {
     rf : (int * int) uset;
@@ -1352,14 +1357,17 @@ module SMRD : MEMORY_MODEL = struct
     let dp = USet.clone execution.dp in
     let ppo = USet.clone execution.ppo in
 
-    (* sw = [W_rel⁺ ∪ F_rel⁺];([F];po)?;[W_rlx⁺];rfe;[R_rlx⁺];(po;[F])?;[R_acq⁺ ∪ F_acq⁺]
+    (* rs = [W];(po ∩ loc)?;[W_rlx⁺];(rf;rmw)*
+       sw = [W_rel⁺ ∪ F_rel⁺];([F];po)?;rs;rfe;[R_rlx⁺];(po;[F])?;[R_acq⁺ ∪ F_acq⁺]
 
-       Synchronizes-with, RC11's with its fence forms but without release
-       sequences: a release write or a release fence po-before a write, read by
-       an acquire read or by a read po-before an acquire fence. sMRD is RC11's
-       coherence (Richards et al., OOPSLA 2025, §4.6), so its fences
-       synchronise as RC11's do (#126). Without [sw], [hb] carries no
-       cross-thread edge at all, so message passing comes out allowed.
+       Synchronizes-with, RC11's: a release write or a release fence po-before
+       a write, through its release sequence, read by an acquire read or by a
+       read po-before an acquire fence. sMRD is RC11's coherence (Richards et
+       al., OOPSLA 2025, §4.6), so its fences synchronise as RC11's do (#126),
+       and an acquire reading a later relaxed store of the releasing thread to
+       the location, or an RMW reading along the release sequence, synchronises
+       with the release (#168). Without [sw], [hb] carries no cross-thread edge
+       at all, so message passing comes out allowed.
 
        The outer po legs are already in [ppo]: [Forwarding.compute_ppo_sync]
        orders every event into a release write or fence and out of an acquire
@@ -1394,11 +1402,21 @@ module SMRD : MEMORY_MODEL = struct
       let po_fence =
         URelation.reflexive_closure e (URelation.compose [ po; fences ])
       in
+      let rs =
+        URelation.compose
+          [
+            ModelUtils.match_events events e Write None None None;
+            URelation.reflexive_closure e (loc_restrict po);
+            matching Write Relaxed;
+            URelation.reflexive_closure e
+              (URelation.transitive_closure (URelation.compose [ rf; rmw ]));
+          ]
+      in
         URelation.compose
           [
             rel;
             fence_po;
-            matching Write Relaxed;
+            rs;
             ModelUtils.thread_external_of structure.thread_index rf;
             matching Read Relaxed;
             po_fence;
@@ -1489,8 +1507,9 @@ module SMRD : MEMORY_MODEL = struct
 
   let data_races = None
 
-  (* [sw] has no release sequence to break. *)
-  let elidable = ModelUtils.elidable_always
+  (* [sw]'s release sequence continues through later relaxed stores of the
+     writer's thread, as RC11's does. *)
+  let elidable = ModelUtils.release_elidable_by_release
   let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
@@ -3089,11 +3108,11 @@ end
     each write's position in [co], with [eco] in its positional form --
     [eco (x, y)] is [pos x < pos y], or [x] the write [y] reads.
 
-    Two levels. The first takes [hb] as [(dp ∪ ppo)⁺]; the second adds
-    [sw], fence forms included, whose edges the read-from decides, as
-    reachability between the candidate edges. The first is a subset of smrd's
-    [hb], so both are necessary; the second decides the combinations whose
-    coherence turns on a release/acquire pair (S19, #96). *)
+    Two levels. The first takes [hb] as [(dp ∪ ppo)⁺]; the second adds [sw],
+    fence forms and same-thread release sequences included, whose edges the
+    read-from decides, as reachability between the candidate edges. The first is
+    a subset of smrd's [hb], so both are necessary; the second decides the
+    combinations whose coherence turns on a release/acquire pair (S19, #96). *)
 module SymbolicSMRD : SYMBOLIC_MODEL = struct
   let name = "smrd"
   let num n = ENum (Z.of_int n)
@@ -3147,10 +3166,14 @@ module SymbolicSMRD : SYMBOLIC_MODEL = struct
       )
       (USet.values enc.enc_rmw)
 
-  (* The candidate [sw] edges, as [(source, w, r, target)]: [r] may read from
-     [w] of another thread, and [source] is [w] if it releases or a release fence po-before it,
-     [target] [r] if it acquires or an acquire fence po-after it. The edge is
-     [sw] when [r] takes [w]; see {!SMRD}'s [sw]. *)
+  (* The candidate [sw] edges, as [(source, w, r, target, same)]: [r] may read
+     from [w] of another thread; [source] is [w] if it releases, a release
+     write po-before [w] whose release sequence [w] continues when [same], the
+     two being at one location, or a release fence po-before [w]; [target] is
+     [r] if it acquires or an acquire fence po-after it. The edge is [sw] when
+     [r] takes [w] and [same] holds; see {!SMRD}'s [sw]. The release sequence's
+     [(rf;rmw)*] is left out: the edges kept are a subset of [sw], so the
+     constraints stay necessary. *)
   let sw_edges enc =
     let structure = enc.enc_structure in
     let events = USet.of_list enc.enc_events in
@@ -3168,8 +3191,17 @@ module SymbolicSMRD : SYMBOLIC_MODEL = struct
     and f_acq = USet.values (matching Fence Acquire) in
     let po a b = USet.mem structure.po (a, b) in
     let sources w =
-      (if USet.mem w_rel w then [ w ] else [])
-      @ List.filter (fun f -> po f w) f_rel
+      (if USet.mem w_rel w then [ (w, EBoolean true) ] else [])
+      @ List.filter_map
+          (fun h ->
+            if po h w then
+              Option.map (fun same -> (h, same)) (enc.enc_sameloc h w)
+            else None
+          )
+          (USet.values w_rel)
+      @ List.filter_map
+          (fun f -> if po f w then Some (f, EBoolean true) else None)
+          f_rel
     in
     let targets r =
       (if USet.mem r_acq r then [ r ] else [])
@@ -3189,8 +3221,10 @@ module SymbolicSMRD : SYMBOLIC_MODEL = struct
                   then []
                   else
                     List.concat_map
-                      (fun source ->
-                        List.map (fun target -> (source, w, r, target)) targets
+                      (fun (source, same) ->
+                        List.map
+                          (fun target -> (source, w, r, target, same))
+                          targets
                       )
                       (sources w)
                 )
@@ -3210,15 +3244,17 @@ module SymbolicSMRD : SYMBOLIC_MODEL = struct
         let edges = sw_edges enc in
         let indices = List.init (Array.length edges) Fun.id in
         let source i =
-          let s, _, _, _ = edges.(i) in
+          let s, _, _, _, _ = edges.(i) in
             s
         and target i =
-          let _, _, _, t = edges.(i) in
+          let _, _, _, t, _ = edges.(i) in
             t
         in
         let active i =
-          let _, w, r, _ = edges.(i) in
-            enc.enc_chosen r w
+          let _, w, r, _, same = edges.(i) in
+            match same with
+            | EBoolean true -> enc.enc_chosen r w
+            | same -> conj [ enc.enc_chosen r w; same ]
         in
         let z i j = enc.enc_fresh (Printf.sprintf "sw%d_%d" i j) in
         let chains =

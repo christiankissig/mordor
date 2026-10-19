@@ -270,8 +270,9 @@ module type SYMBOLIC_MODEL = sig
   val levels : (encoding -> expr list) list
 end
 
-(** smrd as constraints, in two levels: [hb] as [(dp ∪ ppo)⁺], then with
-    [sw = [W_rel];rf;[R_acq]] whose edges the read-from decides. *)
+(** smrd as constraints, in two levels: [hb] as [(dp ∪ ppo)⁺], then with smrd's
+    [sw], fences and same-thread release sequences included, whose edges the
+    read-from decides. *)
 module SymbolicSMRD : SYMBOLIC_MODEL
 
 (** Registry of the memory models, by name. *)
