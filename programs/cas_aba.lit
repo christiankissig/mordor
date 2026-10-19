@@ -1,5 +1,12 @@
+// A counter behind a pointer C to its current node, incremented by CAS on C:
+// thread 1 once, thread 2 twice. Thread 2 frees its first node and allocates
+// its second, which may reuse the address. If thread 1 read the first node and
+// CASes after thread 2's second CAS, its CAS sees the same address and
+// succeeds (ABA): an increment is lost and the counter ends at 2, not 3.
+rinit := malloc 1;
+*rinit := 0;
 rC := malloc 1;
-*rC := 0;
+*rC := rinit;
 {
   rsucc := 0;
   rn := malloc 1;
@@ -35,6 +42,7 @@ rC := malloc 1;
   }
   while (rsucc = 0);
 };
-rv := *rC;
+rh := *rC;
+rv := *rh;
 %%
 allow (rv = 2) [smrd]
