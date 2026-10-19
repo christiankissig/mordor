@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 453
+Total tests: 455
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -120,6 +120,8 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/ABA-CAS-Reuse.lit
 - own/IMM-RS-RMWChain.lit
 - own/IMM-RS-StoreBetweenRMWs.lit
+- own/RC11-RS-SameThreadRlx.lit
+- own/CoRR-ReaderNoWrites.lit
 - own/InteriorIsNotAGlobal.lit
 - own/join-continuation.lit
 - own/membership-or-register.lit
