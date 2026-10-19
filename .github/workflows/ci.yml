@@ -25,12 +25,28 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Set up OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@v2
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           dune-cache: true
-          opam-depext: true
-          opam-depext-flags: --with-test
+
+      # setup-ocaml caches the compiler but not the project's dependencies, and
+      # building z3 from source alone takes over ten minutes. This caches the
+      # switch with them. ci.yml and integration-suite.yml share the cache, so
+      # their "Install dependencies" steps must install the same packages. The
+      # key rolls over weekly, so the dependencies do not stay frozen at the
+      # versions of the first build.
+      - name: Get cache week
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache opam dependencies
+        uses: actions/cache@v4
+        with:
+          path: _opam
+          key: opam-deps-v1-${{ matrix.os }}-${{ matrix.ocaml-compiler }}-${{ steps.week.outputs.week }}-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-deps-v1-${{ matrix.os }}-${{ matrix.ocaml-compiler }}-${{ steps.week.outputs.week }}-
       
       - name: Install system dependencies
         run: |
@@ -47,15 +63,12 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get install -y libev-dev
-          opam update
-          opam depext -y mordor
           # Pin z3: 4.16.0+ requires a C++20 <format> implementation (GCC 13+),
           # which ubuntu-22.04 (GCC 11) lacks. 4.15.2 is the last version that
           # builds on this runner and is what the project uses.
           opam install z3.4.15.2
           opam install . --deps-only --with-test
-          opam install ocamlformat.0.29.0
-          opam install logs fmt
+          opam install menhir ocamlformat.0.29.0 logs fmt
 
       - name: Fix Landmarks stubs library
         run: |
