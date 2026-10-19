@@ -1,0 +1,23 @@
+// A free happens before a malloc in another thread through a chain of
+// synchronisation: thread 1 frees and releases x, thread 2 acquires x and
+// releases y, thread 3 acquires y and allocates. The region may be reused;
+// the free is rhb-before the malloc only transitively.
+x := 0;
+y := 0;
+rp := malloc 1;
+{
+  free(rp);
+  x.store(1, rel);
+} ||| {
+  r2 := x.load(acq);
+  if (r2 = 1) {
+    y.store(1, rel);
+  }
+} ||| {
+  r3 := y.load(acq);
+  if (r3 = 1) {
+    rq := malloc 1;
+  }
+}
+%%
+allow (r2 = 1 && r3 = 1 && rp = rq) []

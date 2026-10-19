@@ -664,7 +664,7 @@ module ReadFromValidation = struct
 
       @param structure The event structure.
       @param path Current path information.
-      @param rhb The "reads-happen-before" relation (dp ∪ ppo ∪ rf).
+      @param rhb The transitive closure of reads-happen-before (dp ∪ ppo ∪ rf).
       @param p Predicates for semantic equality checking.
       @return Promise of allocation event pairs requiring disjointness. *)
   let adjacent_same_location_allocation_events structure path rhb p =
@@ -1995,10 +1995,14 @@ module Freeze = struct
                     rf
                 in
 
-                (* atomicity constraint *)
+                (* atomicity constraint; a free happens before a malloc in
+                   another thread only through a chain of rhb edges, so the
+                   check takes the closure *)
                 let af =
                   ReadFromValidation.adjacent_same_location_allocation_events
-                    structure path rhb (USet.values env_rf)
+                    structure path
+                    (URelation.transitive_closure rhb)
+                    (USet.values env_rf)
                 in
 
                 (* Create disjointness predicates *)
