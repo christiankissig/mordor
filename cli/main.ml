@@ -507,10 +507,15 @@ module Pipeline = struct
   let interpret_single name program config =
     Logs.info (fun m -> m "Interpreting program %s." name);
     let context = make_program_context name program config in
-      Lwt.return context
-      |> Parse.step_parse_litmus
-      |> Interpret.step_interpret
-      |> Display.print_results
+    let interpreted =
+      Lwt.return context |> Parse.step_parse_litmus |> Interpret.step_interpret
+    in
+      match config.Config.output_mode with
+      | Some Json ->
+          let* ctx = interpreted in
+            Es_export.emit ctx;
+            Lwt.return_unit
+      | _ -> interpreted |> Display.print_results
 
   (** Interpret multiple programs.
 

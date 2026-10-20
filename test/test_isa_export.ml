@@ -151,6 +151,46 @@ let test_valid_json () =
           ]
     | _ -> fail "expected JSON object at top level"
 
+(** A thread that is itself a parallel block is split into its threads. *)
+let test_nested_threads_flattened () =
+  let d =
+    doc_of_src {|x := 0;
+{ r1 := x } ||| { { r2 := x } ||| { x := 1 } }|}
+  in
+    check int "three threads" 3 (field "threads" d |> as_list |> List.length)
+
+(** A parallel block inside a thread, after other statements, is a Par command
+    holding its threads' bodies rather than being dropped. *)
+let test_nested_par () =
+  let d =
+    doc_of_src
+      {|x := 0;
+{ r1 := x } ||| { r3 := x; { r2 := x } ||| { x := 1 } }|}
+  in
+  let t1 = field "threads" d |> as_list |> fun l -> List.nth l 1 in
+  let body = field "body" t1 |> as_list in
+    check (list string) "t1 ops" [ "ReadVar"; "Par" ] (List.map op_of body);
+    let threads =
+      field "command" (List.nth body 1) |> field "threads" |> as_list
+    in
+      check
+        (list (list string))
+        "Par bodies"
+        [ [ "ReadVar" ]; [ "WriteVar" ] ]
+        (List.map (fun t -> as_list t |> List.map op_of) threads)
+
+(** Loads and stores carry their volatile flag. *)
+let test_volatile () =
+  let d = doc_of_src {|x := 0;
+{ r1 :v= x; x := 1 } ||| { skip }|} in
+  let body =
+    field "threads" d |> as_list |> List.hd |> field "body" |> as_list
+  in
+  let vol i =
+    field "command" i |> field "volatile" |> Yojson.Safe.Util.to_bool
+  in
+    check (list bool) "volatile" [ true; false ] (List.map vol body)
+
 let suite =
   ( "IsaExport",
     [
@@ -165,5 +205,8 @@ let suite =
       ("order_string", `Quick, test_order_string);
       ("expr_json", `Quick, test_expr_json);
       ("valid json", `Quick, test_valid_json);
+      ("nested threads flattened", `Quick, test_nested_threads_flattened);
+      ("nested Par", `Quick, test_nested_par);
+      ("volatile", `Quick, test_volatile);
     ]
   )
