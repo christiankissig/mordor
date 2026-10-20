@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 455
+Total tests: 456
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -92,6 +92,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - oopsla26_rgsep/MP.lit
 - oopsla26_rgsep/OT.lit
 - opts/store-forward.lit
+- opts/we-fence-remap.lit
 - own/DOMAIN.lit
 - own/FWD-STRENGTHEN-LIFT.lit
 - own/FreeRace.lit

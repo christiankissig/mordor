@@ -1,0 +1,31 @@
+// Write elision across a release fence, remapped against po.
+//
+// x := 2 elides x := 1 (write elision), as nothing is ppo-between them: the
+// fence orders x := 1 before y := 1, the acquire read orders r1 before x := 2,
+// and y := 1 is ordered before r1 by location, but ppo is not transitive.
+// Remapping ppo along the elision (sMRD's forwarding context) sends the elided
+// x := 1 onto x := 2, so its fence edge becomes x := 2 -> y := 1, closing the
+// ppo cycle x := 2 -> y := 1 -> r1 -> x := 2: the elaborations do not keep ppo
+// acyclic, the no-thin-air axiom does, and rejects every execution using this
+// elision.
+//
+// MoRDor elides x := 1 here too, but keeps executions with the elision
+// consistent: it drops the elided event from the execution and orders a
+// release fence by edges into the fence rather than across it, so no cycle
+// arises. The golden records that.
+//
+// The elision changes no outcome, the execution without it remains: r2 may
+// still read 1.
+x := 0;
+y := 0;
+{
+  x := 1;
+  fence(rel);
+  y := 1;
+  r1 :acq= y;
+  x := 2
+} ||| {
+  r2 := x
+}
+%%
+allow (r2 = 1) [sMRD]
