@@ -16,6 +16,7 @@ let () =
       Test_executions_export.suite;
       Test_canonicalize.suite;
       Test_isa_export.suite;
+      Test_es_export.suite;
       Test_forwarding.suite;
       Test_interpret.suite;
       Test_parse.suite;

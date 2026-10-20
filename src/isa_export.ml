@@ -112,6 +112,7 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("order", order_json load.mode);
                 ("dst", `String register);
                 ("var", `String global);
+                ("volatile", `Bool load.volatile);
               ],
             [ (0, "R") ]
           )
@@ -122,6 +123,7 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("order", order_json assign.mode);
                 ("var", `String global);
                 ("val", expr_json expr);
+                ("volatile", `Bool assign.volatile);
               ],
             [ (0, "W") ]
           )
@@ -132,6 +134,7 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("order", order_json load.mode);
                 ("dst", `String register);
                 ("ptr", expr_json address);
+                ("volatile", `Bool load.volatile);
               ],
             [ (0, "R") ]
           )
@@ -142,6 +145,7 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("order", order_json assign.mode);
                 ("ptr", expr_json address);
                 ("val", expr_json expr);
+                ("volatile", `Bool assign.volatile);
               ],
             [ (0, "W") ]
           )
@@ -269,6 +273,23 @@ let rec emit_node ~prefix ~(seq : int ref) ~tbl (node : ir_node_ann ir_node) :
     match node.stmt with
     | Labeled { stmt = inner; _ } -> emit_node ~prefix ~seq ~tbl inner
     | Skip | Blocked _ -> []
+    | Threads { threads } ->
+        (* A parallel block inside a thread: the top-level threads are split
+           out by [emit_program], a nested block is a command of its own. *)
+        let label = next_label () in
+        let loops = loops_of ann in
+          record tbl ann label [] loops;
+          let threads_j =
+            List.map
+              (fun body ->
+                `List (List.concat_map (emit_node ~prefix ~seq ~tbl) body)
+              )
+              threads
+          in
+          let command =
+            `Assoc [ ("op", `String "Par"); ("threads", `List threads_j) ]
+          in
+            [ instr_obj label ann loops command [] ]
     | If { condition; then_body; else_body } ->
         let label = next_label () in
         let loops = loops_of ann in
@@ -344,6 +365,22 @@ let rec emit_node ~prefix ~(seq : int ref) ~tbl (node : ir_node_ann ir_node) :
               [ instr_obj label ann loops command events ]
       )
 
+(** A thread whose body is itself a parallel composition,
+    [{A} ||| {{B} ||| {C}}], is the threads of that composition: the document
+    has one level of threads, and a nested [Threads] node would otherwise be
+    dropped by [emit_node]. *)
+let rec flatten (threads : ir_node_ann ir_node list list) :
+    ir_node_ann ir_node list list =
+  List.concat_map
+    (fun (body : ir_node_ann ir_node list) ->
+      match
+        List.filter (fun (n : ir_node_ann ir_node) -> n.stmt <> Skip) body
+      with
+      | [ { stmt = Threads { threads = inner }; _ } ] -> flatten inner
+      | _ -> [ body ]
+    )
+    threads
+
 (** Split the top-level program into [init] setup nodes and the thread blocks,
     emitting both. Top-level non-[Threads] nodes are init; the [Threads] node's
     thread bodies become [threads] (tid = list index). *)
@@ -355,7 +392,8 @@ let emit_program ~tbl (program : ir_node_ann ir_node list) :
     List.iter
       (fun (node : ir_node_ann ir_node) ->
         match node.stmt with
-        | Threads { threads } -> thread_blocks := !thread_blocks @ threads
+        | Threads { threads } ->
+            thread_blocks := !thread_blocks @ flatten threads
         | _ ->
             init_acc :=
               !init_acc @ emit_node ~prefix:"g" ~seq:init_seq ~tbl node
