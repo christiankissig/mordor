@@ -373,6 +373,21 @@ end = struct
     | ENum _ -> true
     | _ -> false
 
+  (** Whether [e] denotes a truth value: a boolean, a comparison, a connective
+      or a negation. *)
+  let is_truth_valued = function
+    | EBoolean _ | EUnOp ("!", _) | EOr _ -> true
+    | EBinOp (_, ("=" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" | "=>"), _)
+      ->
+        true
+    | _ -> false
+
+  (** [!!e]: [e] itself when [e] is a truth value, otherwise [e != 0]. On a
+      number, [!n] is [1] if [n = 0] and [0] otherwise, so [!!n] is [n != 0],
+      not [n]. *)
+  let double_negation e =
+    if is_truth_valued e then e else EBinOp (e, "!=", ENum Z.zero)
+
   (** Evaluate expression with environment for variables *)
   let rec evaluate ?(env = fun _ -> None) expr =
     match expr with
@@ -387,9 +402,9 @@ end = struct
         let r_val = evaluate ~env rhs in
           match r_val with
           | EBoolean b -> EBoolean (not b)
-          | EUnOp ("!", r_val) -> r_val
-          (* NOTE debatable, but fits litmus tests *)
-          | ENum n when n = Z.zero -> ENum Z.one
+          | EUnOp ("!", r_val) -> double_negation r_val
+          (* [!n] is [1] if [n = 0] and [0] otherwise *)
+          | ENum n -> if Z.equal n Z.zero then ENum Z.one else ENum Z.zero
           | EBinOp (l, op, r) -> (
               match op with
               | "=" -> EBinOp (l, "!=", r)
@@ -610,7 +625,7 @@ end = struct
   (** Remove double negations from an expression *)
   let rec remove_double_negation expr =
     match expr with
-    | EUnOp ("!", EUnOp ("!", e)) -> remove_double_negation e
+    | EUnOp ("!", EUnOp ("!", e)) -> double_negation (remove_double_negation e)
     | EUnOp ("!", e) -> EUnOp ("!", remove_double_negation e)
     | EBinOp (lhs, op, rhs) ->
         EBinOp (remove_double_negation lhs, op, remove_double_negation rhs)
