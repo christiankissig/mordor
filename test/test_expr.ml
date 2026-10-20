@@ -317,6 +317,21 @@ let test_evaluate_literals () =
       )
       cases
 
+(* [!n] is [1] if [n = 0] and [0] otherwise, so [!!n] is [n != 0], not [n]. *)
+let test_evaluate_double_negation () =
+  let not_ e = EUnOp ("!", e) in
+  let a = e_sym "α" in
+  let check name expected e =
+    Alcotest.(check bool) name true (Expr.equal (Expr.evaluate e) expected)
+  in
+    check "!!α is α != 0" (EBinOp (a, "!=", e_num 0)) (not_ (not_ a));
+    check "!!(α = 1) is α = 1"
+      (EBinOp (a, "=", e_num 1))
+      (not_ (not_ (EBinOp (a, "=", e_num 1))));
+    check "!0 is 1" (e_num 1) (not_ (e_num 0));
+    check "!5 is 0" (e_num 0) (not_ (e_num 5));
+    check "!!5 is 1" (e_num 1) (not_ (not_ (e_num 5)))
+
 let test_evaluate_var_lookup () =
   (* Variable with value in environment *)
   let env_with_x v = if v = "x" then Some (e_num 10) else None in
@@ -527,9 +542,9 @@ let test_evaluate_unop () =
     let unop_var = Expr.unop "!" (e_var "x") in
     let result_var = Expr.evaluate ~env:env_x unop_var in
       Alcotest.(check bool)
-        "unop with var substitution" true
+        "unop with var substitution folds !10 to 0" true
         ( match result_var with
-        | EUnOp ("!", ENum n) -> Z.equal n (Z.of_int 10)
+        | ENum n -> Z.equal n Z.zero
         | _ -> false
         )
 
@@ -612,6 +627,8 @@ let suite =
     [
       (* Value tests *)
       Alcotest.test_case "Value equality" `Quick test_value_equality;
+      Alcotest.test_case "Evaluate double negation" `Quick
+        test_evaluate_double_negation;
       Alcotest.test_case "Value to_string" `Quick test_value_to_string;
       Alcotest.test_case "Value get_symbols" `Quick test_value_get_symbols;
       Alcotest.test_case "Value substitution" `Quick test_value_subst;
