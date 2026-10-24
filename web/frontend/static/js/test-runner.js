@@ -135,19 +135,12 @@ class TestRunner {
         testList.innerHTML = '<div class="test-loading">Loading tests...</div>';
 
         try {
-            const [litmusResp, episodicityResp, programResp] = await Promise.all([
-                fetch('/api/tests/list'),
-                fetch('/api/episodicity/list'),
-                fetch('/api/program/list')
+            // From the server, or the static build's data (transport.js)
+            const [litmusData, episodicityData, programData] = await Promise.all([
+                MordorTransport.getJSON('/api/tests/list'),
+                MordorTransport.getJSON('/api/episodicity/list'),
+                MordorTransport.getJSON('/api/program/list')
             ]);
-
-            if (!litmusResp.ok) throw new Error('Failed to load litmus test list');
-            if (!episodicityResp.ok) throw new Error('Failed to load episodicity test list');
-            if (!programResp.ok) throw new Error('Failed to load program list');
-
-            const litmusData = await litmusResp.json();
-            const episodicityData = await episodicityResp.json();
-            const programData = await programResp.json();
 
             this.litmusTests = litmusData.tests || [];
             this.episodicityTests = episodicityData.tests || [];
@@ -448,23 +441,11 @@ class TestRunner {
     }
 
     async _runLitmus(testPath) {
-        const response = await fetch('/api/tests/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ test: testPath })
-        });
-        if (!response.ok) throw new Error('Test execution failed');
-        return await response.json();
+        return MordorTransport.runTest('litmus', testPath);
     }
 
     async _runEpisodicity(testPath) {
-        const response = await fetch('/api/episodicity/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ test: testPath })
-        });
-        if (!response.ok) throw new Error('Episodicity execution failed');
-        return await response.json();
+        return MordorTransport.runTest('episodicity', testPath);
     }
 
     // Sync the main action button when an episodicity test is selected
@@ -521,13 +502,8 @@ class TestRunner {
             : `/api/tests/source?test=${encodeURIComponent(testPath)}`;
 
         try {
-            const response = await fetch(sourceEndpoint);
-            if (response.ok) {
-                const data = await response.json();
-                document.getElementById('test-source').textContent = data.source;
-            } else {
-                document.getElementById('test-source').textContent = 'Failed to load source';
-            }
+            const data = await MordorTransport.getJSON(sourceEndpoint);
+            document.getElementById('test-source').textContent = data.source;
         } catch (error) {
             document.getElementById('test-source').textContent = `Error: ${error.message}`;
         }
@@ -683,10 +659,7 @@ class TestRunner {
             : `/api/tests/source?test=${encodeURIComponent(testPath)}`;
 
         try {
-            const response = await fetch(sourceEndpoint);
-            if (!response.ok) throw new Error('Failed to load test source');
-
-            const data = await response.json();
+            const data = await MordorTransport.getJSON(sourceEndpoint);
             const editor = document.getElementById('litmus-input');
             if (editor) {
                 editor.value = data.source;

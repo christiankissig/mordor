@@ -1,14 +1,28 @@
+; The web server's pieces that the static build (W5, #181) also needs: the
+; example library and the test runner's lists.
+
+(library
+ (name mordor_web)
+ (wrapped false)
+ (modules examples test_runner_api episodicity_runner_api)
+ (flags
+  (:standard -g -w -32-33 -w -26))
+ (libraries dream yojson lwt unix logs)
+ (preprocess
+  (pps lwt_ppx)))
+
 (executable
  (name server) ; Internal name: server.ml
  (public_name mordor-web) ; CLI command name: "mordor-web"
  (package mordor-web) ; Package name
- (modules server test_runner_api episodicity_runner_api)
+ (modules server)
  (flags
   (:standard -g -w -32-33 -w -26))
  ; Debug symbols enabled, disable unused warnings
  (libraries
   mordor_lib ; Your existing Mordor library
   mordor_native ; Its native platform: Z3, domain pools, landmarks
+  mordor_web
   dream ; Web framework
   yojson ; JSON handling
   landmarks
@@ -19,3 +33,11 @@
   (pps ppx_deriving_yojson lwt_ppx landmarks-ppx --auto)))
 
 ; Lwt syntax sugar (let*, let+, etc.)
+
+; The static build's data (W5, #181): examples.json, and tests.json with the
+; test runner's lists and every listed file's source.
+
+(executable
+ (name export_static)
+ (modules export_static)
+ (libraries mordor_web yojson))

@@ -80,7 +80,26 @@ cancel one, terminate the worker and start another.
 Under node, `node wasm/node_run.js WORK/out _build-js/default/wasm/node_main.bc.js PIPELINE < request.json`
 loads Z3 and prints the answer as SSE frames.
 
-## Testing
+## The static playground
+
+The web UI (`web/frontend/`) runs on the worker as well as on `mordor-web`
+(W5, #181). `static/js/transport.js` sends a run to the server or to the
+worker, as `static/js/config.js` says: the server's, in the repository; the
+worker's, in the static build:
+
+```bash
+dune build ./web/export_static.exe
+wasm/static.sh WORK/out SITE        # after building worker.bc.js, as above
+python3 -m http.server -d SITE      # any static file server
+```
+
+`SITE` gets the UI, the worker's files in `mordor/`, and in `data/` what the
+server's GET endpoints would serve: the example library and the test runner's
+lists, with every listed file's source (`web/export_static.exe`). The test
+runner runs a test through the worker's `assertions` or `episodicity`
+pipeline instead of the CLI, and reports the verdict and execution count. A
+run can be cancelled: the worker is terminated and a new one started.
+
 
 ```bash
 dune build ./wasm/test/session_native.exe ./wasm/test/hashes_native.exe ./cli/main.exe
@@ -90,6 +109,9 @@ python3 -I wasm/test/compare.py _build/default/wasm/test/session_native.exe \
 # verdicts against the CLI's, and timing: the samples and wasm/test/litmus_subset.txt
 python3 -I wasm/test/verdicts.py _build/default/cli/main.exe \
   _build/default/wasm/test/session_native.exe _build-js/default/wasm/node_main.bc.js WORK/out
+# the web UI in Chromium and Firefox, on the static build and on mordor-web
+python3 -I wasm/test/ui_test.py _build/default/wasm/test/session_native.exe \
+  --static SITE --server _build/default/web/server.exe
 # the W1 corpus (evaluation/w1_smt_corpus/) through Z3 in wasm
 python3 -I wasm/test/corpus.py CORPUS WORK/out \
   "$PWD/_build-js/default/wasm/test/corpus_run.bc.js" OUT_DIR 3
@@ -109,6 +131,10 @@ python3 -I wasm/test/corpus.py CORPUS WORK/out \
   the time each took.
 - `size.sh DIST` reports each file's size, raw and gzipped, and fails if what
   a page loads is over a budget (6.5 MB gzipped; W4 measured 5.3 MB).
+- `ui_test.py` drives the UI in Chromium (Playwright) and Firefox
+  (geckodriver), on the static build and on `mordor-web`: parse, visualize and
+  assertions of SB, MP and LB, the example library and the test runner, the
+  page's timers during a long run in the worker, and cancelling a run.
 - `corpus.py` solves every distinct query of a W1 corpus with Z3 in wasm and
   compares each answer with native Z3's.
 
