@@ -1,7 +1,11 @@
 ; The browser platform (W3, #179): mordor_lib's slots for a build that runs
-; in a Web Worker. No SMT solver yet (W4, #180), one domain, no profiling.
+; in a Web Worker. Z3 compiled to wasm as the SMT solver (W4, #180), through
+; wasm/z3/z3_shim.js; one domain, no profiling. It needs js_of_ocaml, so it is
+; built only in the browser profile, as the executables that link it are.
 
 (library
  (name mordor_browser)
+ (enabled_if
+  (= %{profile} browser))
  (implements mordor_lib)
- (libraries lwt))
+ (libraries lwt zarith js_of_ocaml))

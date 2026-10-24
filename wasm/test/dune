@@ -26,3 +26,13 @@
   (= %{profile} browser))
  (modules hashes)
  (libraries hash_probe mordor_browser zarith_stubs_js))
+
+; The W1 corpus through the browser build's Z3 (W4, #180), for corpus.py.
+
+(executable
+ (name corpus_run)
+ (modes js)
+ (enabled_if
+  (= %{profile} browser))
+ (modules corpus_run)
+ (libraries js_of_ocaml))

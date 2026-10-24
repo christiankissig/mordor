@@ -1,0 +1,68 @@
+# W4 (#180): the litmus tests wasm/test/verdicts.py runs, every 7th of
+# litmus-tests/**/*.lit in sorted order (66 tests, natively 18 s in all).
+litmus-tests/3.2W.lit
+litmus-tests/MP/MP.lit
+litmus-tests/avoidoota/listing10.lit
+litmus-tests/avoidoota/listing17.lit
+litmus-tests/avoidoota/listing24.lit
+litmus-tests/avoidoota/listing3.lit
+litmus-tests/basic/par-comp.lit
+litmus-tests/esop_problem/lb+ctrldata+po.lit
+litmus-tests/fowm2024/nullptr - no use.lit
+litmus-tests/fwd/rlx/lift_F1wr.lit
+litmus-tests/on_thin_air_reads19/P4.lit
+litmus-tests/oopsla26_rgsep/Coh+rlx.lit
+litmus-tests/oopsla26_rgsep/MP-repeat.lit
+litmus-tests/own/CoRR-ReaderNoWrites.lit
+litmus-tests/own/InteriorIsNotAGlobal.lit
+litmus-tests/own/MP+fences-misplaced.lit
+litmus-tests/own/NoReuseUnescaped.lit
+litmus-tests/own/ReuseAcrossThreadsSynchronised.lit
+litmus-tests/own/SB+sc.lit
+litmus-tests/own/atloc-noalias.lit
+litmus-tests/own/ctrl_subsumed_by_data.lit
+litmus-tests/own/nonatomic-store-no-sync-relaxed.lit
+litmus-tests/own/paper112F.lit
+litmus-tests/own/speculative_optimisation.lit
+litmus-tests/own/sync/writeElisionRel.lit
+litmus-tests/pldi_repairing/RWC+syncs.lit
+litmus-tests/popl_bridging/Load buffering with release writes.lit
+litmus-tests/popl_bubbly/LB+false-deps.lit
+litmus-tests/popl_grounding/LBfd.lit
+litmus-tests/popl_promising/LB.lit
+litmus-tests/popl_promising/LBr.lit
+litmus-tests/popl_promising/Upd-Stuck.lit
+litmus-tests/promising/LBa'.lit
+litmus-tests/promising/MP+fences.lit
+litmus-tests/requests/0nONvMSw7 (MP).lit
+litmus-tests/requests/leb0OUCUM (LB).lit
+litmus-tests/rmm-zoo/models/cpp-release-sequences/RS+cpp20.lit
+litmus-tests/rmm-zoo/models/cpp-release-sequences/mp-rs-est.lit
+litmus-tests/rmm-zoo/models/cpp-thin-air/LB+datas.lit
+litmus-tests/rmm-zoo/models/drf/SB+na.lit
+litmus-tests/rmm-zoo/models/jam/LB+opq.lit
+litmus-tests/rmm-zoo/models/jam/SB+ra.lit
+litmus-tests/rmm-zoo/models/ocaml/LB+ctrl+data.lit
+litmus-tests/rmm-zoo/models/ocaml/SB+atomic.lit
+litmus-tests/rmm-zoo/models/ra-sra-wra/WW.lit
+litmus-tests/rmm-zoo/models/rc11-rc17/uaf-bug.lit
+litmus-tests/rmm-zoo/models/sessions/Monotonic-read.lit
+litmus-tests/rmm-zoo/models/steinke-nutt/Writer-reversed.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/IRIW+addrs.lit
+litmus-tests/rmm-zoo/properties/atomicity-mca/RWC+addr+fence.lit
+litmus-tests/rmm-zoo/properties/elimination/store-store/src.lit
+litmus-tests/rmm-zoo/properties/local-transformations/inverse-roach-motel/opt.lit
+litmus-tests/rmm-zoo/properties/reordering/load-store/src.lit
+litmus-tests/sevcik_thesis/Irrelevant Read Elimination/IREB.lit
+litmus-tests/sevcik_thesis/LB+monitors (f1.1B).lit
+litmus-tests/sevcik_thesis/Redundant Read Elimination (f1.4)/RREWA.lit
+litmus-tests/sevcik_thesis/Roach Motel Semantics.lit
+litmus-tests/sevcik_thesis/Volatile ordering (e2.6).lit
+litmus-tests/single-thread-lift-tests/lock-test.lit
+litmus-tests/symmrd/LB+UB+data+arr.lit
+litmus-tests/symmrd/no-alignment.lit
+litmus-tests/test6/3.LB.lit
+litmus-tests/test6/IRRWIW.lit
+litmus-tests/test6/R.lit
+litmus-tests/test6/WRC.lit
+litmus-tests/test6/Z6.2.lit

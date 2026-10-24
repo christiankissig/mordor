@@ -1,0 +1,16 @@
+diff --git a/src/util/rlimit.cpp b/src/util/rlimit.cpp
+index 3a3cdbc..dd43000 100644
+--- a/src/util/rlimit.cpp
++++ b/src/util/rlimit.cpp
+@@ -159,6 +159,11 @@ void reslimit::inc_cancel(unsigned k) {
+ 
+ void reslimit::auto_cancel() {
+     --m_num_timers;
++    // The deadline of a timer that has ended must not outlive it: left set,
++    // it cancels whatever this limit's next check is, once that much time
++    // has passed since the timer started.
++    if (m_num_timers == 0)
++        pop_timeout();
+     dec_cancel();
+ }
+ 
