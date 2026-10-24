@@ -258,6 +258,11 @@ module Freeze : sig
       witness such a run gives no verdict. *)
   val query_only_file : string option ref
 
+  (** Where a query appends each kind as it is decided: its key in hex, a tab,
+      and [absent], [witness] or [undecided], flushed at once:
+      [MORDOR_QUERY_DECIDED], none by default. *)
+  val query_decided_file : string option ref
+
   (** [frame_of structure prepared] is the combination's events, [dp] and [ppo]:
       what its future, and minimality, compare it by. *)
   val frame_of :

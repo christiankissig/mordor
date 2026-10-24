@@ -2668,6 +2668,13 @@ module Freeze = struct
       witness such a run gives no verdict. *)
   let query_only_file = ref (Sys.getenv_opt "MORDOR_QUERY_ONLY")
 
+  (** Where a query appends each kind of combination as it is decided, one line
+      per kind -- its key in hex, a tab, and [absent], [witness] or [undecided]
+      -- flushed at once: [MORDOR_QUERY_DECIDED], none by default. So a run
+      stopped before it ends still says which kinds it settled, and the next one
+      need not ask them again. *)
+  let query_decided_file = ref (Sys.getenv_opt "MORDOR_QUERY_DECIDED")
+
   let instantiator ?thin_air structure prep =
     instantiate_execution ?thin_air structure prep.prep_path prep.prep_dp
       prep.prep_ppo prep.prep_justs prep.prep_path.p prep.prep_p_combined
@@ -3837,6 +3844,22 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
               )
               !Freeze.query_only_file
           in
+          let decided_log =
+            Option.map
+              (fun path ->
+                open_out_gen [ Open_append; Open_creat; Open_text ] 0o644 path
+              )
+              !Freeze.query_decided_file
+          and decided_mutex = Mutex.create () in
+          let record key outcome =
+            Option.iter
+              (fun oc ->
+                Mutex.protect decided_mutex (fun () ->
+                    Printf.fprintf oc "%s\t%s\n%!" (Digest.to_hex key) outcome
+                )
+              )
+              decided_log
+          in
           let decide i =
             let key, p = kinds.(i) in
               if Atomic.get found then `Skipped
@@ -3867,67 +3890,75 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                   with
                   | Freeze.Witness fr ->
                       Atomic.set found true;
+                      record key "witness";
                       `Witness (key, fr)
-                  | Freeze.No_witness -> `Absent
-                  | Freeze.Undecided -> `Undecided key
+                  | Freeze.No_witness ->
+                      record key "absent";
+                      `Absent
+                  | Freeze.Undecided ->
+                      record key "undecided";
+                      `Undecided key
           in
             let* decided =
               compute.run ~stage:("queries", "kinds") decide
                 (List.init (Array.length kinds) Fun.id)
             in
-            let undecided =
-              List.filter_map
-                (function
-                  | `Undecided key -> Some key
-                  | _ -> None
-                  )
-                decided
-            in
-              Option.iter
-                (fun path ->
-                  Out_channel.with_open_text path (fun oc ->
-                      List.iter
-                        (fun key -> output_string oc (Digest.to_hex key ^ "\n"))
-                        undecided
-                  )
-                )
-                !Freeze.query_undecided_file;
-              let count v = List.length (List.filter (( = ) v) decided) in
-              (* The witness of the earliest kind that has one among those asked.
-             Sequentially that is the first; in parallel, which kinds were
-             asked before one found a witness depends on timing. *)
-              let witness =
-                List.find_map
+              Option.iter close_out decided_log;
+              let undecided =
+                List.filter_map
                   (function
-                    | `Witness w -> Some w
+                    | `Undecided key -> Some key
                     | _ -> None
                     )
                   decided
               in
-              let report =
-                {
-                  kinds = Array.length kinds;
-                  absent = count `Absent;
-                  undecided = List.length undecided;
-                  unasked = count `Unasked;
-                  witnessed = Option.is_some witness;
-                }
-              in
-                Logs_safe.info (fun m ->
-                    m
-                      "By query: %d kinds of combination; %s, %d shown to have \
-                       none, %d undecided, %d not asked"
-                      report.kinds
-                      (if report.witnessed then "witnessed" else "no witness")
-                      report.absent report.undecided
-                      (count `Skipped + report.unasked)
-                );
-                query.report report;
-                let found = Hashtbl.create 1 in
-                  Option.iter
-                    (fun (key, fr) -> Hashtbl.replace found key fr)
-                    witness;
-                  attach found prepared |> Lwt.return
+                Option.iter
+                  (fun path ->
+                    Out_channel.with_open_text path (fun oc ->
+                        List.iter
+                          (fun key ->
+                            output_string oc (Digest.to_hex key ^ "\n")
+                          )
+                          undecided
+                    )
+                  )
+                  !Freeze.query_undecided_file;
+                let count v = List.length (List.filter (( = ) v) decided) in
+                (* The witness of the earliest kind that has one among those asked.
+             Sequentially that is the first; in parallel, which kinds were
+             asked before one found a witness depends on timing. *)
+                let witness =
+                  List.find_map
+                    (function
+                      | `Witness w -> Some w
+                      | _ -> None
+                      )
+                    decided
+                in
+                let report =
+                  {
+                    kinds = Array.length kinds;
+                    absent = count `Absent;
+                    undecided = List.length undecided;
+                    unasked = count `Unasked;
+                    witnessed = Option.is_some witness;
+                  }
+                in
+                  Logs_safe.info (fun m ->
+                      m
+                        "By query: %d kinds of combination; %s, %d shown to \
+                         have none, %d undecided, %d not asked"
+                        report.kinds
+                        (if report.witnessed then "witnessed" else "no witness")
+                        report.absent report.undecided
+                        (count `Skipped + report.unasked)
+                  );
+                  query.report report;
+                  let found = Hashtbl.create 1 in
+                    Option.iter
+                      (fun (key, fr) -> Hashtbl.replace found key fr)
+                      witness;
+                    attach found prepared |> Lwt.return
       in
       let prepare_combo (path, just_combo) =
         let fwd =

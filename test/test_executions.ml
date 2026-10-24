@@ -613,14 +613,17 @@ let test_ask_only_undecided () =
   let program = wide_uaf_program ~release:true ^ " %% forbid (x = 3) [smrd]" in
   let seconds = !Executions.Freeze.witness_seconds
   and rounds = !Executions.Freeze.witness_rounds
-  and undecided_file = Filename.temp_file "undecided" ".keys" in
+  and undecided_file = Filename.temp_file "undecided" ".keys"
+  and decided_file = Filename.temp_file "decided" ".tsv" in
     Fun.protect
       ~finally:(fun () ->
         Executions.Freeze.witness_seconds := seconds;
         Executions.Freeze.witness_rounds := rounds;
         Executions.Freeze.query_undecided_file := None;
         Executions.Freeze.query_only_file := None;
-        Sys.remove undecided_file
+        Executions.Freeze.query_decided_file := None;
+        Sys.remove undecided_file;
+        Sys.remove decided_file
       )
       (fun () ->
         Executions.Freeze.witness_seconds := 0.;
@@ -642,6 +645,7 @@ let test_ask_only_undecided () =
             Executions.Freeze.witness_rounds := rounds;
             Executions.Freeze.query_undecided_file := None;
             Executions.Freeze.query_only_file := Some undecided_file;
+            Executions.Freeze.query_decided_file := Some decided_file;
             let valid, _, report, _ = verdict ~by_query:true program in
             let again = Option.get report in
               check int "the same kinds" first.kinds again.kinds;
@@ -651,7 +655,17 @@ let test_ask_only_undecided () =
               check int "the rest not asked"
                 (first.kinds - List.length asked)
                 again.unasked;
-              check (option bool) "no verdict without the rest" None valid
+              check (option bool) "no verdict without the rest" None valid;
+              (* Each kind asked is logged as it is decided, the rest not. *)
+              check (list string) "each listed kind logged as absent"
+                (List.sort compare
+                   (List.map (fun key -> key ^ "\tabsent") asked)
+                )
+                (List.sort compare
+                   (In_channel.with_open_text decided_file
+                      In_channel.input_lines
+                   )
+                )
       )
 
 let suite =

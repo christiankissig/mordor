@@ -413,8 +413,9 @@ only those, with larger budgets:
 ```bash
 MORDOR_QUERY_UNDECIDED=undecided.keys mordor run --single evaluation/rcu-2.lit \
   --by-query --step-counter-per-loop 2 --threads 16
-MORDOR_QUERY_ONLY=undecided.keys MORDOR_WITNESS_SECS=600 MORDOR_WITNESS_ROUNDS=500 \
-  mordor run --single evaluation/rcu-2.lit --by-query --step-counter-per-loop 2 --threads 16
+MORDOR_QUERY_ONLY=undecided.keys MORDOR_QUERY_DECIDED=decided.tsv \
+  MORDOR_WITNESS_SECS=600 MORDOR_WITNESS_ROUNDS=500 \
+  mordor run --single evaluation/rcu-2.lit --by-query --step-counter-per-loop 2 --threads 4
 ```
 
 `MORDOR_QUERY_UNDECIDED` writes one key per undecided kind, a digest of the
@@ -422,6 +423,12 @@ combination that is the same from run to run. Under `MORDOR_QUERY_ONLY` the
 kinds not listed are not asked, so the second run gives no verdict without a
 witness: it shows that the listed kinds have none, and the first run showed
 the rest.
+
+`MORDOR_QUERY_DECIDED` appends each kind as it is decided -- its key, a tab,
+and `absent`, `witness` or `undecided` -- so a run stopped before it ends
+still says which kinds it settled. Larger budgets cost memory per kind being
+searched: on rcu-2, sixteen kinds searched at once with these budgets passed
+36 GB, so the second run uses fewer threads.
 
 What the query can and cannot answer:
 
