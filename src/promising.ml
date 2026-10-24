@@ -1912,8 +1912,6 @@ let loops_of_options (options : options) step_counter =
         "symbolic loop semantics; promising semantics needs a step counter \
          (--step-counter or --step-counter-per-loop)"
 
-(** [calculate_executions ~version ctx] fills [ctx.executions] with the
-    outcomes of the program under [version], one execution per outcome. *)
 (** The relations promising semantics can answer for: [.rf] and [.co], which it
     defines, [.rmw], and [.po], the event structure's own. [.dp] and [.ppo] are
     sMRD's, and have no counterpart. *)
@@ -1939,6 +1937,8 @@ let own_assertions (ctx : mordor_ctx) =
       |> List.filter (fun (_, m) -> m = model)
       |> List.map fst
 
+(** [calculate_executions ~version ctx] fills [ctx.executions] with the
+    outcomes of the program under [version], one execution per outcome. *)
 let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
   match ctx.program_stmts with
   | None ->

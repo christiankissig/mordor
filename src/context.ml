@@ -430,17 +430,6 @@ type loop_episodicity_result_summary = {
 
 (** {1 Pipeline Context} *)
 
-(** Main context that flows through the verification pipeline.
-
-    This record accumulates results from each stage of analysis:
-    + {b Parsing}: Converts litmus test to IR
-    + {b Interpretation}: Generates symbolic event structure
-    + {b Dependencies}: Computes dependency relations
-    + {b Verification}: Checks assertions and undefined behavior
-    + {b Episodicity}: Analyzes loop properties (optional)
-
-    Each stage reads from and writes to this context, creating a pipeline of
-    transformations. *)
 (** How an assertion asked by query ({!options.by_query}) was answered: over
     how many kinds of justification combination, how many were shown to have no
     witness, how many neither shown to have one nor to have none within the
@@ -456,6 +445,18 @@ type query_report = {
   witnessed : bool;
 }
 [@@deriving show]
+
+(** Main context that flows through the verification pipeline.
+
+    This record accumulates results from each stage of analysis:
+    + {b Parsing}: Converts litmus test to IR
+    + {b Interpretation}: Generates symbolic event structure
+    + {b Dependencies}: Computes dependency relations
+    + {b Verification}: Checks assertions and undefined behavior
+    + {b Episodicity}: Analyzes loop properties (optional)
+
+    Each stage reads from and writes to this context, creating a pipeline of
+    transformations. *)
 
 type mordor_ctx = {
   (* Pipeline configuration *)
