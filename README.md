@@ -120,6 +120,7 @@ mordor/
 ├── src/          # Core library (mordor_lib) — see src/README.md
 ├── cli/          # CLI entry point (mordor) — see cli/README.md
 ├── web/          # Web server (mordor-web) — see web/README.md
+├── wasm/         # The browser build: MoRDor in a Web Worker — see wasm/README.md
 ├── test/         # Unit and integration tests
 ├── litmus-tests/ # Litmus test suite
 └── programs/     # Sample concurrent programs
@@ -128,6 +129,7 @@ mordor/
 - `src/`: Core analysis library shared by CLI and web server. See [src/README.md](src/README.md).
 - `cli/`: `mordor` executable — argument parsing, pipeline orchestration. See [cli/README.md](cli/README.md).
 - `web/`: `mordor-web` Dream server — SSE streaming, REST API, browser UI. See [web/README.md](web/README.md).
+- `wasm/`: MoRDor compiled to JavaScript, with Z3 compiled to wasm, in a Web Worker; the static playground. See [wasm/README.md](wasm/README.md).
 - `test/`: Alcotest unit tests (`dune test`) and integration tests (`dune exec test/test_integration.exe`).
 - `litmus-tests/`: Litmus test suite run by CI.
 - `programs/`: Hand-written sample programs including episodicity examples.
@@ -142,6 +144,30 @@ make build # build the Docker container image
 make run   # run the Docker container
 make stop  # stop the Docker container
 make clean # clean up
+```
+
+## MoRDor in the Browser
+
+MoRDor also runs entirely in the browser, without a server: the
+[playground](https://christiankissig.github.io/mordor/playground/), published
+from each release, is the web UI with MoRDor compiled to JavaScript
+(js_of_ocaml) and Z3 compiled to wasm, in a Web Worker. Its answers are the
+server's, message for message.
+
+It differs from the native build in that it runs on one thread; it is slower,
+a few times over on small tests, mostly in starting, and 1.2 to 1.5 times on a
+program like seqlock-1; Z3's memory is capped at 4 GB; and it writes no files
+and has no command line.
+
+To build and run it locally (see [wasm/README.md](wasm/README.md)):
+
+```bash
+wasm/z3/build.sh WORK                 # Z3 for wasm, once: about 20 minutes, 3.5 GB in WORK
+opam install js_of_ocaml-compiler js_of_ocaml zarith_stubs_js
+dune build ./web/export_static.exe
+dune build --profile browser --build-dir _build-js ./wasm/worker.bc.js
+wasm/static.sh WORK/out SITE
+python3 -m http.server -d SITE        # then open http://localhost:8000/
 ```
 
 ## Building the Executables
