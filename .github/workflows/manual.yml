@@ -34,13 +34,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # The manual is served at /manual/ next to the web UI, and its header
-      # links back to the UI at "/". There is no UI on Pages, so that link
+      # The manual is served as manual.html next to the web UI, and its header
+      # links back to the UI at "./". There is no UI on Pages, so that link
       # points at the repository instead.
       - name: Assemble site
         run: |
           mkdir _site
-          sed 's|<a href="/">Open MoRDor</a>|<a href="https://github.com/christiankissig/mordor">Open MoRDor</a>|' \
+          sed 's|<a href="./">Open MoRDor</a>|<a href="https://github.com/christiankissig/mordor">Open MoRDor</a>|' \
             web/frontend/manual.html > _site/index.html
           grep -q 'href="https://github.com/christiankissig/mordor">Open MoRDor' _site/index.html
 

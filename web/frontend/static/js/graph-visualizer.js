@@ -1070,6 +1070,8 @@ class GraphVisualizer {
         const splitButton = document.querySelector('.split-button');
         const dropdownItems = document.querySelectorAll('.dropdown-content button');
         
+        document.getElementById('cancel-btn').addEventListener('click', () => this.cancelRun());
+
         // Main action button - executes the current action
         actionBtn.addEventListener('click', () => {
             // Sent as it stands, not trimmed, so the line and column of a
@@ -1838,9 +1840,7 @@ class GraphVisualizer {
     async loadExampleLibrary() {
         const select = document.getElementById('examples');
         try {
-            const response = await fetch('/api/examples');
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const entries = await response.json();
+            const entries = await MordorTransport.getJSON('/api/examples');
             const groups = new Map();
             for (const entry of entries) {
                 EXAMPLES[entry.path] = entry.source;
@@ -2157,6 +2157,25 @@ class GraphVisualizer {
         document.getElementById('carousel-container').classList.add('active');
     }
     
+    // While a run goes: the run button off, and Cancel showing.
+    setRunning(running) {
+        document.getElementById('action-btn').disabled = running;
+        document.getElementById('cancel-btn').hidden = !running;
+    }
+
+    // Cancel the run in progress: the server's connection is closed, or the
+    // browser build's worker terminated and started afresh (transport.js).
+    cancelRun() {
+        if (!this.abortRun) return;
+        this.abortRun();
+        this.abortRun = null;
+        this.episodicityPending = false;
+        this.renderLoops();
+        this.setRunning(false);
+        this.setStatus('Cancelled', 'error');
+        this.log('Run cancelled', 'error');
+    }
+
     async visualize(program) {
         this.log('Starting ' + this.currentAction + ' with ' + this.settings.loopSemantics + ' semantics...');
 
@@ -2184,7 +2203,7 @@ class GraphVisualizer {
 
         // Update UI
         this.setStatus('Processing...', 'running');
-        document.getElementById('action-btn').disabled = true;
+        this.setRunning(true);
         document.getElementById('empty-state').style.display = 'none';
         document.getElementById('carousel-container').style.display = 'none';
         document.getElementById('graph-controls').style.display = 'none';
@@ -2205,7 +2224,7 @@ class GraphVisualizer {
         document.getElementById('edge-count').textContent = '0';
         document.getElementById('execution-count').textContent = '0';
 
-        document.getElementById('action-btn').disabled = true;
+        this.setRunning(true);
 
         this.log('Sending request to backend...');
 
@@ -2231,7 +2250,7 @@ class GraphVisualizer {
                 // dropped and only the status said anything had gone wrong.
                 this.reportError(data.message || data.error || 'Unknown error');
                 abortController.abort();
-                document.getElementById('action-btn').disabled = false;
+                this.setRunning(false);
             } else if (data.status === 'interpreting') {
                 this.log('Interpreting program...');
             } else if (data.status === 'visualizing') {
@@ -2317,53 +2336,28 @@ class GraphVisualizer {
                     document.getElementById('uaf-content').innerHTML = '<p style="padding: 1rem; color: var(--green);">&#10003; No use-after-free found.</p>';
                 }
                 abortController.abort();
-                document.getElementById('action-btn').disabled = false;
+                this.setRunning(false);
             }
         };
 
-        fetch(this.currentEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(params),
-            signal: abortController.signal,
-        }).then(async (response) => {
-            if (!response.ok) {
-                throw new Error('Server error: ' + response.status);
+        // To the server, or to the browser build's worker (transport.js).
+        // Each message is handled on its own, so one that fails to render does
+        // not end the run.
+        const onMessage = (data) => {
+            try {
+                handleMessage(data);
+            } catch (e) {
+                console.error('Failed to handle message:', e);
+                this.log('Parse error: ' + e.message, 'error');
             }
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-
-                // SSE messages are separated by double newlines
-                const parts = buffer.split('\n\n');
-                buffer = parts.pop(); // keep incomplete trailing chunk
-
-                for (const part of parts) {
-                    for (const line of part.split('\n')) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.slice(6));
-                                handleMessage(data);
-                            } catch (e) {
-                                console.error('Failed to parse SSE message:', e);
-                                this.log('Parse error: ' + e.message, 'error');
-                            }
-                        }
-                    }
-                }
-            }
-
+        };
+        this.abortRun = () => abortController.abort();
+        MordorTransport.stream(this.currentEndpoint, params, onMessage, abortController.signal).then(() => {
             // Re-enable button if the stream ended without a 'complete' event
             // (e.g. the server closed the connection after a pipeline/parse error)
             this.episodicityPending = false;
             this.renderLoops();
-            document.getElementById('action-btn').disabled = false;
+            this.setRunning(false);
             if (document.getElementById('status').textContent === 'Processing...') {
                 this.setStatus('Error', 'error');
                 this.log('The run ended before it completed, without reporting an error. The server log may say why.', 'error');
@@ -2374,7 +2368,7 @@ class GraphVisualizer {
             this.setStatus('Error', 'error');
             this.episodicityPending = false;
             this.renderLoops();
-            document.getElementById('action-btn').disabled = false;
+            this.setRunning(false);
         });
     }
 
