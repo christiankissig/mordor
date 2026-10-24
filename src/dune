@@ -54,6 +54,7 @@
   smt_backend
   solver
   source_info
+  streaming
   types
   uset
   version)

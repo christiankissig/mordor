@@ -12,22 +12,6 @@ open Test_runner_api
 open Types
 open Uset
 
-(** Completion message sent at the end. *)
-
-type complete_message = {
-  type_ : string; [@key "type"]
-      (** type_ Message type (should be "complete") *)
-  total_executions : int;  (** Optional total number of executions *)
-}
-[@@deriving yojson]
-
-let send_complete ~send_data total_executions =
-  let complete_message = { type_ = "complete"; total_executions } in
-  let complete_json =
-    Yojson.Safe.to_string (complete_message_to_yojson complete_message)
-  in
-    send_data complete_json
-
 (** {2 Example Library} *)
 
 (** The examples the editor's dropdown offers, served from the corpus.
@@ -134,335 +118,27 @@ let examples_handler _request =
 
 (** {2 Model Selection} *)
 
-(** The models the settings dialog offers to compare, by the names the model
-    table uses, and ["ps1"] and ["ps2"]: promising semantics, which computes
-    executions of its own and is compared by outcome (see [Semantics]). *)
-let comparable_models =
-  ("smrd" :: "rc11" :: "imm" :: Context.implemented_zoo_models)
-  @ [ "ps1"; "ps2" ]
-
-(** The primary models it offers: those, or ["default"], the model the litmus
-    test states or sMRD, which can be one not offered here. *)
-let selectable_models = "default" :: comparable_models
-
-(** [step_executions ~send_data] computes the executions under the semantics the
-    model selection chose. sMRD's justifications are sent as they are found;
-    promising semantics has none, and tracks each execution's events and
-    relations so that its graph has something to show. *)
-let step_executions ~send_data =
-  Semantics.step_calculate_executions ~track:true
-    ~after_justifications:
-      (Eventstructureviz.step_send_justification_set ~send_data)
-
-(** A request's choice of models: the primary executions are enumerated under,
-    and the others each is checked against. *)
-type model_selection = { primary : string; others : string list }
-
-(** [model_selection_of_json json] reads [memory_model] and [compare_models].
-
-    No [memory_model] is ["default"], the model the litmus test states or sMRD.
-    A model the server does not offer is an error naming it, primary or
-    compared: running under another model and labelling the results with the one
-    asked for would answer a different question. [Failure] carries the message.
-*)
-let model_selection_of_json json =
-  let field key =
-    match json with
-    | `Assoc fields -> List.assoc_opt key fields
-    | _ -> None
-  in
-  let unknown = ref [] in
-  let known offered m =
-    let m = String.lowercase_ascii m in
-      if List.mem m offered then Some m
-      else (
-        unknown := m :: !unknown;
-        None
-      )
-  in
-  let primary =
-    match field "memory_model" with
-    | None | Some `Null -> "default"
-    | Some (`String m) -> known selectable_models m |> Option.value ~default:""
-    | Some other ->
-        unknown := Yojson.Basic.to_string other :: !unknown;
-        ""
-  in
-  let others =
-    match field "compare_models" with
-    | Some (`List ms) ->
-        List.filter_map
-          (function
-            | `String m -> known comparable_models m
-            | other ->
-                unknown := Yojson.Basic.to_string other :: !unknown;
-                None
-            )
-          ms
-    | _ -> []
-  in
-    match List.rev !unknown with
-    | [] -> { primary; others }
-    | names ->
-        failwith
-          (Printf.sprintf "Unknown memory model%s %s. The server offers %s."
-             (if List.length names > 1 then "s" else "")
-             (String.concat ", " (List.map (Printf.sprintf "%S") names))
-             (String.concat ", " selectable_models)
-          )
-
-(** [select_models selection] is {!Context.step_select_models} for a request. It
-    follows parsing, which is what resolves ["default"]. *)
-let select_models { primary; others } =
-  Context.step_select_models ~primary ~others
-
-(** {2 Visualization Functions} *)
-
-(** [visualize_to_stream program options step_counter stream] processes a litmus
-    test program through the analysis pipeline and streams results as JSON via
-    SSE.
-
-    @param program The litmus test program source code as a string
-    @param options Configuration options for the analysis
-    @param step_counter The maximum number of loop iterations to execute
-    @param stream The Dream SSE stream to write results to
-    @return
-      A promise that resolves to the final context after all analysis steps
-
-    The function performs the following pipeline:
-    - Parses the litmus test program
-    - Sends loop information
-    - Interprets the program
-    - Generates and sends event structure graphs
-    - Tests episodicity properties
-    - Calculates dependencies
-    - Checks assertions
-    - Sends execution graphs *)
-let visualize_to_stream program options step_counter ~models stream =
-  let context =
-    make_context_with_model options ~output_mode:Json ~step_counter ()
-  in
-    context.litmus <- Some program;
-
-    (* Create a function to send graph data through SSE *)
-    let send_data json_str =
-      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
-        Dream.flush stream
-    in
-
-    Logs.info (fun m ->
-        m "Visualize single program with options\n%s" (show_options options)
-    );
-
-    let* ctx =
-      Lwt.return context
-      |> Parse.step_parse_litmus
-      |> select_models models
-      |> LoopInformation.send_loop_information send_data
-      |> Interpret.step_interpret
-      |> Eventstructureviz.step_send_event_structure_graph ~send_data
-      |> Episodicity.step_test_episodicity
-           ~on_loop_result:(Episodicity.send_loop_episodicity_result send_data)
-      |> step_executions ~send_data
-      |> Eventstructureviz.step_send_model_counts ~send_data
-      |> Assertion.step_check_assertions
-      |> Assertion.step_send_assertion_results ~send_data
-      |> Eventstructureviz.step_send_execution_graphs ~send_data
-    in
-
-    let total_executions =
-      match ctx.executions with
-      | Some exs -> USet.size exs
-      | None ->
-          Logs.info (fun m -> m "no executions");
-          0
-    in
-      let* () = send_complete ~send_data total_executions in
-
-      Lwt.return ctx
-
-let visualize_parse_to_stream program options step_counter ~models stream =
-  let context =
-    make_context_with_model options ~output_mode:Json ~step_counter ()
-  in
-    context.litmus <- Some program;
-
-    (* Create a function to send graph data through SSE *)
-    let send_data json_str =
-      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
-        Dream.flush stream
-    in
-
-    let* ctx =
-      Lwt.return context
-      |> Parse.step_parse_litmus
-      |> select_models models
-      |> LoopInformation.send_loop_information send_data
-    in
-
-    let* () = send_complete ~send_data 0 in
-
-    Lwt.return ctx
-
-let visualize_interpret_to_stream program options step_counter ~models stream =
-  let context =
-    make_context_with_model options ~output_mode:Json ~step_counter ()
-  in
-    context.litmus <- Some program;
-
-    (* Create a function to send graph data through SSE *)
-    let send_data json_str =
-      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
-        Dream.flush stream
-    in
-
-    let* ctx =
-      Lwt.return context
-      |> Parse.step_parse_litmus
-      |> select_models models
-      |> LoopInformation.send_loop_information send_data
-      |> Interpret.step_interpret
-      |> Eventstructureviz.step_send_event_structure_graph ~send_data
-    in
-
-    let* () = send_complete ~send_data 0 in
-
-    Lwt.return ctx
-
-let visualize_test_episodicity_to_stream program options step_counter ~models
-    stream =
-  let context =
-    make_context_with_model options ~output_mode:Json ~step_counter ()
-  in
-    context.litmus <- Some program;
-
-    (* Create a function to send graph data through SSE *)
-    let send_data json_str =
-      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
-        Dream.flush stream
-    in
-
-    let* ctx =
-      Lwt.return context
-      |> Parse.step_parse_litmus
-      |> select_models models
-      |> LoopInformation.send_loop_information send_data
-      |> Interpret.step_interpret
-      |> Eventstructureviz.step_send_event_structure_graph ~send_data
-      |> Episodicity.step_test_episodicity
-           ~on_loop_result:(Episodicity.send_loop_episodicity_result send_data)
-    in
-
-    let* () = send_complete ~send_data 0 in
-
-    Lwt.return ctx
-
-let visualize_test_assertions_to_stream program options step_counter ~models
-    stream =
-  let context =
-    make_context_with_model options ~output_mode:Json ~step_counter ()
-  in
-    context.litmus <- Some program;
-
-    (* Create a function to send graph data through SSE *)
-    let send_data json_str =
-      let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
-        Dream.flush stream
-    in
-
-    let* ctx =
-      Lwt.return context
-      |> Parse.step_parse_litmus
-      |> select_models models
-      |> LoopInformation.send_loop_information send_data
-      |> Interpret.step_interpret
-      |> Eventstructureviz.step_send_event_structure_graph ~send_data
-      |> Episodicity.step_test_episodicity
-           ~on_loop_result:(Episodicity.send_loop_episodicity_result send_data)
-      |> step_executions ~send_data
-      |> Eventstructureviz.step_send_model_counts ~send_data
-      |> Assertion.step_check_assertions
-      |> Assertion.step_send_assertion_results ~send_data
-      |> Eventstructureviz.step_send_execution_graphs ~send_data
-    in
-
-    let total_executions =
-      match ctx.executions with
-      | Some exs -> USet.size exs
-      | None -> 0
-    in
-      let* () = send_complete ~send_data total_executions in
-
-      Lwt.return ctx
-
-(** [error_message exn] is the text to show for [exn]: a [Failure]'s own
-    message, which is how the pipeline reports what went wrong, rather than
-    [Failure("...")] around it. *)
-let error_message = function
-  | Failure msg -> msg
-  | exn -> Printexc.to_string exn
-
-(** [sse_data json_obj] formats a JSON object as an SSE data message.
-
-    @param json_obj The JSON object to format
-    @return A string in SSE format: "data: <json>\n\n" *)
-let sse_data json_obj =
-  let json_str = Yojson.Basic.to_string json_obj in
-    Printf.sprintf "data: %s\n\n" json_str
-
 (** {2 HTTP Request Handlers} *)
 
 (** [make_sse_handler pipeline_fn] creates an SSE handler for a specific
-    pipeline.
+    pipeline of {!Streaming}: each message the pipeline sends becomes an SSE
+    [data:] message.
 
-    @param pipeline_fn
-      The pipeline function to execute, with signature:
-      [string -> options -> int -> Dream.stream -> context Lwt.t]
+    @param pipeline_fn The pipeline to run, as {!Streaming.run} takes it
     @return An HTTP request handler that sets up SSE streaming for the pipeline
 *)
 let make_sse_handler pipeline_fn request =
   let* body = Dream.body request in
 
   let json = try Yojson.Basic.from_string body with _ -> `Assoc [] in
+  let request = Streaming.request_of_json json in
 
-  let get_field key =
-    match json with
-    | `Assoc fields -> (
-        match List.assoc_opt key fields with
-        | Some (`String s) -> s
-        | _ -> ""
-      )
-    | _ -> ""
-  in
-
-  let program = get_field "program" in
-
-  let loop_semantics =
-    match String.lowercase_ascii (get_field "loop_semantics") with
-    | "symbolic" -> Symbolic
-    | "step-counter" -> StepCounterPerLoop
-    | _ -> StepCounterPerLoop
-  in
-
-  let step_counter =
-    match loop_semantics with
-    | Generic | Symbolic -> 0
-    | StepCounterPerLoop | FiniteStepCounter -> (
-        let s = get_field "steps" in
-          try int_of_string s with Failure _ -> 2
-      )
-  in
-
-  (* An unknown model is reported on the stream, as any other error is. *)
-  let models =
-    try Ok (model_selection_of_json json) with Failure msg -> Error msg
-  in
-
-  ( match models with
+  ( match request.models with
   | Ok models ->
       Printf.printf
         "📥 SSE request: %d chars, %d steps, model: %s, compared: [%s]\n%!"
-        (String.length program) step_counter models.primary
+        (String.length request.program)
+        request.step_counter models.primary
         (String.concat ", " models.others)
   | Error msg -> Printf.printf "📥 SSE request refused: %s\n%!" msg
   );
@@ -476,85 +152,36 @@ let make_sse_handler pipeline_fn request =
         ("X-Accel-Buffering", "no");
       ]
     (fun stream ->
-      Lwt.catch
-        (fun () ->
-          let models =
-            match models with
-            | Ok models -> models
-            | Error msg -> failwith msg
-          in
-            let* () =
-              Dream.write stream
-                (sse_data (`Assoc [ ("status", `String "parsing") ]))
-            in
-              let* () = Dream.flush stream in
-
-              (* No model is applied before parsing: [select_models] needs
-               to see what the test itself states. *)
-              let options =
-                { default_options with loop_semantics; step_counter }
-              in
-
-              Logs.info (fun m ->
-                  m "Running single program with options\n%s"
-                    (show_options options)
-              );
-
-              let* () =
-                Dream.write stream
-                  (sse_data (`Assoc [ ("status", `String "interpreting") ]))
-              in
-                let* () = Dream.flush stream in
-
-                let* () =
-                  Dream.write stream
-                    (sse_data (`Assoc [ ("status", `String "visualizing") ]))
-                in
-                  let* () = Dream.flush stream in
-
-                  let* _ctx =
-                    pipeline_fn program options step_counter ~models stream
-                  in
-
-                  Lwt.return_unit
-        )
-        (fun exn ->
-          let error_msg = error_message exn in
-            Printf.printf "❌ Pipeline error: %s\n%!" error_msg;
-            let* () =
-              Dream.write stream
-                (sse_data
-                   (`Assoc
-                      [
-                        ("type", `String "error"); ("message", `String error_msg);
-                      ]
-                   )
-                )
-            in
-              Dream.flush stream
-        )
+      let send_data json_str =
+        let* () = Dream.write stream (Printf.sprintf "data: %s\n\n" json_str) in
+          Dream.flush stream
+      in
+        Streaming.run
+          ~on_error:(fun msg -> Printf.printf "❌ Pipeline error: %s\n%!" msg)
+          pipeline_fn request ~send_data
     )
 
 (** [visualize_sse_handler request] handles SSE requests for full program
     visualization using the complete pipeline. *)
-let visualize_sse_handler = make_sse_handler visualize_to_stream
+let visualize_sse_handler = make_sse_handler Streaming.visualize_to_stream
 
 (** [parse_sse_handler request] handles SSE requests for parsing only. *)
-let parse_sse_handler = make_sse_handler visualize_parse_to_stream
+let parse_sse_handler = make_sse_handler Streaming.visualize_parse_to_stream
 
 (** [interpret_sse_handler request] handles SSE requests for parsing and
     interpretation. *)
-let interpret_sse_handler = make_sse_handler visualize_interpret_to_stream
+let interpret_sse_handler =
+  make_sse_handler Streaming.visualize_interpret_to_stream
 
 (** [episodicity_sse_handler request] handles SSE requests for parsing,
     interpretation, and episodicity testing. *)
 let episodicity_sse_handler =
-  make_sse_handler visualize_test_episodicity_to_stream
+  make_sse_handler Streaming.visualize_test_episodicity_to_stream
 
 (** [assertions_sse_handler request] handles SSE requests for parsing,
     interpretation, episodicity testing, and assertion checking. *)
 let assertions_sse_handler =
-  make_sse_handler visualize_test_assertions_to_stream
+  make_sse_handler Streaming.visualize_test_assertions_to_stream
 
 (** [executions_export_handler request] returns all executions of the supplied
     program — with event details and the po, dp, ppo, rf, rmw relations — as a
@@ -605,11 +232,13 @@ let executions_export_handler request =
 
     Lwt.catch
       (fun () ->
-        let models = { (model_selection_of_json json) with others = [] } in
+        let models =
+          { (Streaming.model_selection_of_json json) with others = [] }
+        in
           let* ctx =
             Lwt.return context
             |> Parse.step_parse_litmus
-            |> select_models models
+            |> Streaming.select_models models
             |> Lwt.map (fun (ctx : mordor_ctx) ->
                 (* The export is of sMRD's executions, with their dependencies. *)
                 Semantics.require_smrd ~command:"executions export" ctx.options;
@@ -630,7 +259,7 @@ let executions_export_handler request =
                   {|{"error": "executions or event structure not available"}|}
       )
       (fun exn ->
-        let error_msg = error_message exn in
+        let error_msg = Streaming.error_message exn in
           Printf.printf "❌ Executions export error: %s\n%!" error_msg;
           let body =
             Yojson.Basic.to_string

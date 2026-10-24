@@ -21,6 +21,7 @@
 
 # Build directories
 _build/
+_build-js/
 _opam/
 
 # Binary files

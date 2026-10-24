@@ -1,0 +1,6 @@
+; The browser build's sessions on the native platform, for compare.py.
+
+(executable
+ (name session_native)
+ (modules session_native)
+ (libraries mordor_session mordor_native))
