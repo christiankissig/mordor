@@ -8,6 +8,7 @@
  ; Debug symbols enabled, disable unused warnings
  (libraries
   mordor_lib ; Your existing Mordor library
+  mordor_native ; Its native platform: Z3, domain pools, landmarks
   dream ; Web framework
   yojson ; JSON handling
   landmarks

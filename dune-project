@@ -16,9 +16,7 @@
  (depends
   (ocaml (>= 5.2.0))
   (dune (>= 3.7))
-  core
   (alcotest :with-test)
-  (containers (>= 3.0))
   (landmarks (>= 1.4))
   (landmarks-ppx (>= 1.4))
   (lwt (>= 5.6.0))

@@ -1,8 +1,8 @@
 (** {1 Constraint Solver Interface}
 
-    This module provides a constraint solver interface built on top of the Z3
-    SMT solver. It supports constraint satisfaction problems with integer,
-    boolean, and bitvector operations.
+    This module provides a constraint solver interface built on top of the
+    platform's SMT backend ({!Smt_backend}; Z3 natively). It supports constraint
+    satisfaction problems with integer, boolean, and bitvector operations.
 
     The solver can:
     - Check satisfiability of constraint expressions
@@ -18,83 +18,12 @@ open Types
 
 (** {1 Core Types} *)
 
-(** Solver context containing Z3 state and variable mappings.
-
-    This type encapsulates the Z3 context, solver instance, and a mapping from
-    variable names to Z3 expressions. Each context maintains its own namespace
-    of variables. *)
-type context = {
-  ctx : Z3.context;  (** The Z3 context for all operations *)
-  solver : Z3.Solver.solver;  (** The Z3 solver instance *)
-  vars : (string, Z3.Expr.expr) Hashtbl.t;
-      (** Mapping from variable names to Z3 expressions *)
-}
-
-(** Solver state containing context and constraint expressions.
-
-    This type packages together a Z3 context with the list of constraint
-    expressions that have been added to it. *)
+(** Solver state: the platform's solver ({!Smt_backend}) and the constraint
+    expressions {!check} asks it about. *)
 type solver = {
-  context : context;  (** The underlying Z3 context *)
+  context : Smt_backend.solver;  (** The backend's solver *)
   expressions : expr list;  (** The constraint expressions to solve *)
 }
-
-(** {1 Context Management}
-
-    Functions for creating and managing Z3 solver contexts. *)
-
-(** Create a new solver context.
-
-    The [Z3.context] is this domain's, shared by every query it runs: building
-    one per query cost megabytes of native memory that OCaml's GC has no reason
-    to reclaim. The Z3 solver and the variable table are fresh, so no constraint
-    and no variable carries over from an earlier query.
-
-    A context must not be used from more than one domain.
-
-    @return A new context ready for solving *)
-val create_context : unit -> context
-
-(** Get or create a Z3 variable by name.
-
-    If the variable already exists in the context, returns the existing Z3
-    expression. Otherwise, creates a new integer-typed Z3 constant and adds it
-    to the context's variable table.
-
-    @param context The solver context
-    @param name The variable name
-    @return The Z3 expression representing this variable *)
-val get_var : context -> string -> Z3.Expr.expr
-
-(** {1 Z3 Conversion}
-
-    Functions for converting between internal representations and Z3
-    expressions. *)
-
-(** Convert a value to its Z3 expression representation.
-
-    Handles conversion of numbers, symbols, variables, and booleans to their
-    corresponding Z3 representations.
-
-    @param context The solver context for creating Z3 expressions
-    @param value The value to convert
-    @return The Z3 expression representing the value *)
-val value_to_z3 : context -> value_type -> Z3.Expr.expr
-
-(** Convert an expression to its Z3 expression representation.
-
-    Recursively converts expression trees to Z3, handling:
-    - Numbers, variables, booleans, and symbols
-    - Binary operations (arithmetic, comparison, logical, bitwise)
-    - Unary operations (negation, logical not)
-    - Disjunctions (OR of multiple clauses)
-
-    Special handling for mixed integer/bitvector operations.
-
-    @param context The solver context for creating Z3 expressions
-    @param expr The expression to convert
-    @return The Z3 expression representing the input expression *)
-val expr_to_z3 : context -> expr -> Z3.Expr.expr
 
 (** {1 Solver Creation and Management}
 
@@ -102,8 +31,8 @@ val expr_to_z3 : context -> expr -> Z3.Expr.expr
 
 (** Create a new solver from a list of constraint expressions.
 
-    The constraints are not immediately added to the Z3 solver; they are stored
-    and will be added when checking satisfiability.
+    The constraints are not immediately added to the backend's solver; they are
+    stored and will be added when checking satisfiability.
 
     @param exprs The list of constraint expressions
     @return A new solver containing these constraints *)
@@ -111,9 +40,9 @@ val create : expr list -> solver
 
 (** Reset a solver by creating a fresh context.
 
-    This discards the Z3 solver's assertions and the variable mappings, keeping
-    the same constraint expressions. The underlying [Z3.context] is this
-    domain's and is not rebuilt.
+    This discards the backend solver's assertions and the variable mappings,
+    keeping the same constraint expressions. (Natively, the underlying
+    [Z3.context] is this domain's and is not rebuilt.)
 
     @param solver The solver to reset
     @return A new solver with fresh context and the same expressions *)
@@ -125,7 +54,7 @@ val reset : solver -> solver
     calling {!pop}.
 
     @param solver The solver to push
-    @return The same solver (mutates Z3 state) *)
+    @return The same solver (mutates the backend's state) *)
 val push : solver -> solver
 
 (** Pop the most recent scope from the solver stack.
@@ -133,12 +62,12 @@ val push : solver -> solver
     This undoes all assertions added since the last {!push}.
 
     @param solver The solver to pop
-    @return The same solver (mutates Z3 state) *)
+    @return The same solver (mutates the backend's state) *)
 val pop : solver -> solver
 
 (** Add new constraint expressions to an existing solver.
 
-    Converts the expressions to Z3 and immediately adds them to the Z3 solver.
+    Translates the expressions for the backend and immediately asserts them.
 
     @param solver The solver to extend
     @param exprs The expressions to add
@@ -168,9 +97,9 @@ val check : solver -> bool option
     tautologies, and [None] otherwise. *)
 val trivially : expr list -> bool option
 
-(** [check_asserted solver] asks Z3 about what has been asserted in [solver]'s
-    Z3 solver, by {!add_assertions} or earlier checks, and nothing else: no
-    syntactic shortcut and nothing added. *)
+(** [check_asserted solver] asks the backend about what has been asserted in
+    [solver]'s backend solver, by {!add_assertions} or earlier checks, and
+    nothing else: no syntactic shortcut and nothing added. *)
 val check_asserted : solver -> bool option
 
 (** {1 Scoped Solving} *)
@@ -182,9 +111,10 @@ val check_asserted : solver -> bool option
     solving at once do not share one. *)
 val scoped : (solver -> 'a) -> 'a
 
-(** Whether {!quick_check} builds a fresh Z3 solver per query instead of solving
-    in a scope of this domain's long-lived one. Off unless [MORDOR_FRESH_SOLVER]
-    is set. The answers are the same; the fresh solver is slower. *)
+(** Whether {!quick_check} builds a fresh backend solver per query instead of
+    solving in a scope of this domain's long-lived one. Off unless
+    [MORDOR_FRESH_SOLVER] is set. The answers are the same; the fresh solver is
+    slower. *)
 val fresh_solvers : bool ref
 
 (** Quick satisfiability check without caching.
@@ -379,7 +309,7 @@ val simplify_disjunction : expr list list -> expr list list option
 
     Functions for inspecting solver state and performance. *)
 
-(** Get statistics from the Z3 solver.
+(** Get statistics from the SMT backend.
 
     Returns information about the solver's performance, such as number of
     decisions, conflicts, and propagations.

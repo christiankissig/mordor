@@ -19,6 +19,8 @@
     global call graph could not have described several domains at once anyway;
     reporting per-domain would be a change to landmarks itself. *)
 
+type landmark = Landmark.landmark
+
 (** [register name] registers a landmark. It must be called from the main
     domain, which in practice means at module initialisation: registration
     writes to landmarks' global tables and cannot be made a no-op elsewhere, as

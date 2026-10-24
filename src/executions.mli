@@ -21,9 +21,9 @@ type compute_fn = {
 (** [sequential_compute] runs items sequentially with no parallelism. *)
 val sequential_compute : compute_fn
 
-(** [parallel_compute pool] dispatches items to [pool] via [Lwt_domain.detach].
+(** [parallel_compute pool] dispatches items to [pool] via [Domain_pool.detach].
 *)
-val parallel_compute : Lwt_domain.pool -> compute_fn
+val parallel_compute : Domain_pool.pool -> compute_fn
 
 (** {1 Execution Generation for Symbolic Memory Model Checking}
 

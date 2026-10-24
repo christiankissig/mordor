@@ -8,6 +8,7 @@ let () =
       Test_types.suite;
       Test_expr.suite;
       Test_solver.suite;
+      Test_z3_translate.suite;
       Test_events.suite;
       Test_eventstructure_algebra.suite;
       Test_coherence.suite;
