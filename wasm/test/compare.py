@@ -1,26 +1,21 @@
 #!/usr/bin/env python3
-"""W3 (#179): the browser build's answers against the native platform's.
+"""The browser build's answers against the native platform's (W3, #179; W4, #180).
 
-    python3 -I wasm/test/compare.py SESSION_NATIVE NODE_MAIN_JS [WORKER_JS]
+    python3 -I wasm/test/compare.py SESSION_NATIVE NODE_MAIN_JS Z3DIR [DIST]
 
-Every pipeline is asked about every program below, natively (Z3, through
-session_native.exe) and under node (the browser platform, through
-node_main.bc.js); both print the answer as the server's SSE stream frames it.
-Each pair is
-
-  identical  byte for byte;
-  stopped    the browser build's answer is the native one's up to a message,
-             and then the error saying it has no SMT solver;
-  FAIL       anything else.
-
-It exits non-zero on any FAIL, or if a pair the browser build must answer in
-full is not identical: parse for every program, interpret for the programs
-whose conditions are decided without a solver. With WORKER_JS, the Web Worker
-is driven through worker_test.mjs and must post exactly what node_main prints.
+Every pipeline is asked about every program below, natively (Z3 through its
+OCaml bindings, through session_native.exe) and under node (the browser
+platform, Z3 compiled to wasm from Z3DIR, through wasm/node_run.js and
+node_main.bc.js); both print the answer as the server's SSE stream frames it,
+and the two must be identical byte for byte. With DIST (wasm/dist.sh's
+directory), the Web Worker is driven through worker_test.mjs and must post
+exactly what node_main prints, for parse and interpret.
 
 First, hashes_native.exe (next to SESSION_NATIVE) and test/hashes.bc.js (next
 to NODE_MAIN_JS) must print the same report: MoRDor's hashes, and the orders
 they put sets in, must not depend on the width of int (#193).
+
+Exits non-zero on any difference.
 """
 import json
 import os
@@ -36,26 +31,13 @@ PROGRAMS = [
     'programs/seqlock-1.lit',
     'programs/uaf-bug.lit',
 ]
-# Interpreted without a solver: no condition the interpreter must ask about.
-BRANCH_FREE = PROGRAMS[:5]
 PIPELINES = ['parse', 'interpret', 'episodicity', 'assertions', 'visualize']
-NO_SOLVER = 'This build of MoRDor has no SMT solver yet'
 
 
 def answer(command, pipeline, body):
     r = subprocess.run(command + [pipeline], input=json.dumps(body),
                        capture_output=True, text=True, timeout=600)
     return r.stdout
-
-
-def classify(native, browser):
-    if native == browser:
-        return 'identical'
-    messages = [m for m in browser.split('\n\n') if m]
-    before = ''.join(m + '\n\n' for m in messages[:-1])
-    if messages and NO_SOLVER in messages[-1] and native.startswith(before):
-        return 'stopped'
-    return 'FAIL'
 
 
 def hashes(session_native, node_main):
@@ -70,8 +52,9 @@ def hashes(session_native, node_main):
     return [f'hashes: {d}' for d in differ]
 
 
-def main(session_native, node_main, worker=None):
+def main(session_native, node_main, z3dir, dist=None):
     repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    node = ['node', os.path.join(repo, 'wasm/node_run.js'), z3dir, node_main]
     failures = hashes(session_native, node_main)
     for program in PROGRAMS:
         with open(os.path.join(repo, program)) as f:
@@ -79,13 +62,12 @@ def main(session_native, node_main, worker=None):
         row = []
         for pipeline in PIPELINES:
             native = answer([session_native], pipeline, body)
-            browser = answer(['node', node_main], pipeline, body)
-            verdict = classify(native, browser)
-            must = pipeline == 'parse' or (pipeline == 'interpret' and program in BRANCH_FREE)
-            if verdict == 'FAIL' or (must and verdict != 'identical'):
-                failures.append(f'{pipeline} {program}: {verdict}')
-            if worker and pipeline in ('parse', 'interpret'):
-                posted = answer(['node', os.path.join(repo, 'wasm/test/worker_test.mjs'), worker],
+            browser = answer(node, pipeline, body)
+            verdict = 'identical' if native == browser else 'DIFFER'
+            if native != browser:
+                failures.append(f'{pipeline} {program}: differs from native')
+            if dist and pipeline in ('parse', 'interpret'):
+                posted = answer(['node', os.path.join(repo, 'wasm/test/worker_test.mjs'), dist],
                                 pipeline, body)
                 if posted != browser:
                     failures.append(f'{pipeline} {program}: the worker posts something else')

@@ -1204,7 +1204,7 @@ let step_send_execution_graphs (lwt_ctx : mordor_ctx Lwt.t)
               );
 
               (* Send each execution graph *)
-              Lwt_list.iteri_s
+              Monad.Lwt_loop.iteri_s
                 (send_single_execution_graph ~send_data ~build_exec_graph
                    ?admissions:ctx.model_admissions checked_executions
                 )
