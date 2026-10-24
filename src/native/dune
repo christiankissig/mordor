@@ -1,0 +1,10 @@
+; The native platform (W2, #178): Z3, Lwt_domain's domain pools, and
+; landmarks profiling, for the CLI, the web server and the tests.
+
+(library
+ (name mordor_native)
+ (public_name mordor.native)
+ (implements mordor_lib)
+ (flags
+  (:standard -g -w -26-27))
+ (libraries landmarks lwt lwt_domain unix z3 zarith))

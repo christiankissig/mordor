@@ -73,7 +73,7 @@ consisting of
   - `eventstructures.ml` — Event structure construction and manipulation
   - `context.ml` — Analysis context, configuration, and pipeline state
   - `expr.ml` — Symbolic expression evaluation
-  - `solver.ml` — Z3 SMT solver interface
+  - `solver.ml` — SMT solver interface, on the platform's `Smt_backend`
   - `uset.ml` — Symbolic set operations used throughout analysis
   - `algorithms.ml` — Combination/permutation utilities for constraint solving
   - `justifications.ml` — Justification set generation
@@ -87,3 +87,26 @@ consisting of
   - `logs_safe.ml` — Thread-safe logging wrapper (mutex-protected over `Logs`)
   - `lwt_utils.ml` — Lwt concurrency utilities
   - `landmark_lwt.ml` — Lwt profiling helpers for Landmarks (not compiled into the library)
+
+## Platform slots
+
+`mordor_lib` links no native-only library itself. Three of its modules are
+dune virtual modules, and an executable chooses their implementation when it
+is linked (W2, #178):
+
+| Slot | Interface | What it provides |
+|---|---|---|
+| SMT backend | `smt_backend.mli` | the solver `Solver` asks; it translates MoRDor's expressions |
+| Domain pool | `domain_pool.mli` | the pool `Parallel` dispatches onto |
+| Profiling | `landmark_safe.mli` | domain-safe profiling landmarks |
+
+`mordor.native` (`src/native/`, library `mordor_native`) implements them with
+Z3 (`z3_translate.ml`, `smt_backend.ml`, and W1's query dump `smt_dump.ml`),
+`Lwt_domain`, and `Landmarks`. The CLI, the web server, the tests and the
+golden harnesses link it next to `mordor_lib`:
+
+```
+(libraries mordor_lib mordor_native ...)
+```
+
+A browser build links its own implementation instead (W3, #179).

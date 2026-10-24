@@ -18,9 +18,11 @@
   algorithms
   assertion
   ast
+  call_site
   canonicalize
   coherence
   context
+  domain_pool
   elaborations
   episodicity
   es_export
@@ -49,23 +51,23 @@
   progress
   promising
   semantics
+  smt_backend
   solver
   source_info
   types
   uset
   version)
+ ; The platform slots (W2, #178): an executable links an implementation,
+ ; mordor.native (src/native/) for the CLI, the web server and the tests.
+ (virtual_modules domain_pool landmark_safe smt_backend)
  (flags
   (:standard -g -w -26-27))
  (libraries
-  core
   ocamlgraph
-  landmarks
   logs
   logs.fmt
   lwt
-  lwt.unix
-  lwt_domain
-  z3
+  unix
   zarith
   yojson
   ppx_deriving.runtime

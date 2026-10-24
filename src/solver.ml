@@ -1,229 +1,28 @@
 (** {1 Constraint Solver Implementation}
 
-    This module implements a constraint solver using the Z3 SMT solver. It
-    provides functionality for satisfiability checking, model extraction, and
-    semantic equality analysis.
+    This module implements a constraint solver on top of the platform's SMT
+    backend ({!Smt_backend}; Z3 natively). It provides functionality for
+    satisfiability checking, model extraction, and semantic equality analysis.
 
     The implementation is organized into several logical sections:
-    - Type definitions and context management
-    - Z3 conversion functions
+    - Type definitions
     - Solver creation and management
     - Satisfiability checking (with caching)
     - Model extraction and analysis
     - Semantic equality checking *)
 
 open Expr
-open Printf
 open Types
 open Uset
 
 (** {1 Type Definitions} *)
 
-(** Solver context encapsulating Z3 state.
-
-    Contains the Z3 context, solver instance, and variable mappings. *)
-type context = {
-  ctx : Z3.context;  (** Z3 context for all operations *)
-  solver : Z3.Solver.solver;  (** Z3 solver instance *)
-  vars : (string, Z3.Expr.expr) Hashtbl.t;
-      (** Variable name to Z3 expression mapping *)
-}
-
-(** Range type for interval-based solving. *)
-
-(** Solver state with context and constraints. *)
+(** Solver state: the platform's solver ({!Smt_backend}), and the constraint
+    expressions {!check} asks it about. *)
 type solver = {
-  context : context;  (** The Z3 context *)
+  context : Smt_backend.solver;  (** The backend's solver *)
   expressions : expr list;  (** Constraint expressions to solve *)
 }
-
-(** {1 Context Management}
-
-    Functions for creating and managing Z3 solver contexts. *)
-
-(** The Z3 context this domain solves in.
-
-    A [Z3.context] is the whole AST manager, and building one costs both time
-    and a few megabytes of memory that OCaml cannot see: the native allocation
-    hangs off a small wrapper, so nothing about it pressures the GC into
-    finalising it. Creating one per query -- which is what a fresh context in
-    {!create_context} amounted to -- left hundreds of them alive at once.
-    Analysing seqlock-1 peaked at 334MB RSS against an OCaml heap of 1.6MB, and
-    at [--threads 8], with each domain building its own, at 973MB.
-
-    So the context is per domain rather than per query. A Z3 context is not
-    thread-safe, and domain-local storage is exactly the scope that gives each
-    domain one of its own to itself. Reuse also lets Z3 hash-cons across
-    queries: the predicates asked about here repeat heavily, and repeated
-    subformulas now share nodes instead of being rebuilt per context.
-
-    What must not be shared is the state a query builds up. The [Z3.Solver]
-    instance holds the assertions, and {!solve} reports a binding for every
-    variable in [vars], so both stay per query in {!create_context} below --
-    otherwise a later query would inherit an earlier one's constraints, and
-    every model would name variables the caller never asked about. *)
-let z3_context_key = Domain.DLS.new_key (fun () -> Z3.mk_context [])
-
-(* Built here, on the main domain, so that Z3's one-time global initialisation
-   happens before any domain is spawned rather than in whichever workers first
-   reach for a solver together. *)
-let () = ignore (Domain.DLS.get z3_context_key)
-
-(** Create a new solver context.
-
-    Reuses this domain's Z3 context, and pairs it with a fresh Z3 solver and an
-    empty variable table so that no constraint or variable carries over from an
-    earlier query.
-
-    @return A new context ready for use *)
-let create_context () =
-  let ctx = Domain.DLS.get z3_context_key in
-  let solver = Z3.Solver.mk_solver ctx None in
-  let vars = Hashtbl.create 32 in
-    { ctx; solver; vars }
-
-(** Get or create a Z3 variable by name.
-
-    If the variable exists, returns it. Otherwise creates a new integer-typed Z3
-    constant and registers it in the context's variable table.
-
-    @param context The solver context
-    @param name Variable name
-    @return Z3 expression for this variable *)
-let get_var context name =
-  try Hashtbl.find context.vars name
-  with Not_found ->
-    let sort = Z3.Arithmetic.Integer.mk_sort context.ctx in
-    let var = Z3.Expr.mk_const_s context.ctx name sort in
-      Hashtbl.add context.vars name var;
-      var
-
-(** {1 Z3 Conversion Functions}
-
-    Functions for converting internal representations to Z3 expressions. *)
-
-(** Convert a bitvector-compatible expression to bitvector type.
-
-    Handles conversion of booleans and integers to bitvectors of specified
-    width.
-
-    @param context The solver context
-    @param expr Z3 expression to convert
-    @param bitwidth Target bitvector width
-    @return Z3 bitvector expression *)
-and to_bitvec context expr bitwidth =
-  if Z3.BitVector.is_bv expr then expr
-  else if Z3.Boolean.is_bool expr then
-    (* Convert boolean to bitvector: true -> 1, false -> 0 *)
-    let zero_bv = Z3.BitVector.mk_numeral context.ctx "0" bitwidth in
-    let one_bv = Z3.BitVector.mk_numeral context.ctx "1" bitwidth in
-      Z3.Boolean.mk_ite context.ctx expr one_bv zero_bv
-  else
-    (* Integer to bitvector *)
-    Z3.Arithmetic.Integer.mk_int2bv context.ctx bitwidth expr
-
-(** Convert a value to Z3 expression.
-
-    @param context The solver context
-    @param value The value to convert
-    @return Z3 expression representation *)
-let rec value_to_z3 context value =
-  match value with
-  | VNumber n -> Z3.Arithmetic.Integer.mk_numeral_s context.ctx (Z.to_string n)
-  | VSymbol s | VVar s -> get_var context s
-  | VBoolean b ->
-      if b then Z3.Boolean.mk_true context.ctx
-      else Z3.Boolean.mk_false context.ctx
-
-(** Convert an expression to Z3 representation.
-
-    Recursively converts expression trees, handling:
-    - Literals (numbers, booleans, variables, symbols)
-    - Binary operations (arithmetic, comparison, logical, bitwise)
-    - Unary operations (negation, logical not)
-    - Disjunctions
-
-    Special handling is provided for mixed integer/bitvector operations.
-
-    @param context The solver context
-    @param expr The expression to convert
-    @return Z3 expression *)
-and expr_to_z3 context expr =
-  match expr with
-  | ENum n -> Z3.Arithmetic.Integer.mk_numeral_s context.ctx (Z.to_string n)
-  | EVar v -> get_var context v
-  | EBoolean b ->
-      if b then Z3.Boolean.mk_true context.ctx
-      else Z3.Boolean.mk_false context.ctx
-  | ESymbol s -> get_var context s
-  | EBinOp (lhs, op, rhs) -> (
-      let l = expr_to_z3 context lhs in
-      let r = expr_to_z3 context rhs in
-        match op with
-        (* Comparison operators *)
-        | "=" ->
-            (* Handle mixed bitvector/integer comparisons *)
-            if Z3.BitVector.is_bv l && not (Z3.BitVector.is_bv r) then
-              let bitwidth = Z3.BitVector.get_size (Z3.Expr.get_sort l) in
-              let r_bv = to_bitvec context r bitwidth in
-                Z3.Boolean.mk_eq context.ctx l r_bv
-            else if Z3.BitVector.is_bv r && not (Z3.BitVector.is_bv l) then
-              let bitwidth = Z3.BitVector.get_size (Z3.Expr.get_sort r) in
-              let l_bv = to_bitvec context l bitwidth in
-                Z3.Boolean.mk_eq context.ctx l_bv r
-            else Z3.Boolean.mk_eq context.ctx l r
-        | "!=" ->
-            Z3.Boolean.mk_not context.ctx (Z3.Boolean.mk_eq context.ctx l r)
-        | "<" -> Z3.Arithmetic.mk_lt context.ctx l r
-        | ">" -> Z3.Arithmetic.mk_gt context.ctx l r
-        | "<=" -> Z3.Arithmetic.mk_le context.ctx l r
-        | ">=" -> Z3.Arithmetic.mk_ge context.ctx l r
-        (* Arithmetic operators *)
-        | "+" -> Z3.Arithmetic.mk_add context.ctx [ l; r ]
-        | "-" -> Z3.Arithmetic.mk_sub context.ctx [ l; r ]
-        | "*" -> Z3.Arithmetic.mk_mul context.ctx [ l; r ]
-        | "/" -> Z3.Arithmetic.mk_div context.ctx l r
-        (* Bitwise operators (via bitvector conversion) *)
-        | "&" ->
-            let bitwidth = 64 in
-            let l_bv = to_bitvec context l bitwidth in
-            let r_bv = to_bitvec context r bitwidth in
-            let result_bv = Z3.BitVector.mk_and context.ctx l_bv r_bv in
-              (* Convert back to integer *)
-              Z3.BitVector.mk_bv2int context.ctx result_bv false
-        | "|" ->
-            let bitwidth = 64 in
-            let l_bv = to_bitvec context l bitwidth in
-            let r_bv = to_bitvec context r bitwidth in
-            let result_bv = Z3.BitVector.mk_or context.ctx l_bv r_bv in
-              (* Convert back to integer *)
-              Z3.BitVector.mk_bv2int context.ctx result_bv false
-        | "^" ->
-            let bitwidth = 64 in
-            let l_bv = to_bitvec context l bitwidth in
-            let r_bv = to_bitvec context r bitwidth in
-            let result_bv = Z3.BitVector.mk_xor context.ctx l_bv r_bv in
-              (* Convert back to integer *)
-              Z3.BitVector.mk_bv2int context.ctx result_bv false
-        (* Logical operators *)
-        | "&&" -> Z3.Boolean.mk_and context.ctx [ l; r ]
-        | "||" -> Z3.Boolean.mk_or context.ctx [ l; r ]
-        | "=>" -> Z3.Boolean.mk_implies context.ctx l r
-        | _ -> failwith ("Unsupported operator: " ^ op)
-    )
-  | EUnOp ("!", rhs) ->
-      let r = expr_to_z3 context rhs in
-        if Z3.Boolean.is_bool r then Z3.Boolean.mk_not context.ctx r
-        else
-          (* Integer semantics: !x is true iff x = 0 *)
-          let zero = Z3.Arithmetic.Integer.mk_numeral_i context.ctx 0 in
-            Z3.Boolean.mk_eq context.ctx r zero
-  | EUnOp ("~", rhs) ->
-      let r = expr_to_z3 context rhs in
-        Z3.Arithmetic.mk_unary_minus context.ctx r
-  | EUnOp (op, _) -> failwith (sprintf "Unsupported unary operator %s" op)
-  | EOr clauses ->
-      List.map (expr_to_z3 context) clauses |> Z3.Boolean.mk_or context.ctx
 
 (** {1 Solver Creation and Management}
 
@@ -234,23 +33,23 @@ and expr_to_z3 context expr =
     @param exprs List of constraint expressions
     @return Fresh solver with these constraints *)
 let create exprs =
-  let context = create_context () in
+  let context = Smt_backend.create () in
     { context; expressions = exprs }
 
 (** Reset solver with fresh context.
 
-    Discards Z3 state while keeping the same expressions.
+    Discards the backend's state while keeping the same expressions.
 
     @param solver The solver to reset
     @return New solver with fresh context *)
-let reset solver = { solver with context = create_context () }
+let reset solver = { solver with context = Smt_backend.create () }
 
 (** Push a new scope for backtracking.
 
     @param solver The solver to push
     @return The same solver (mutates state) *)
 let push solver =
-  Z3.Solver.push solver.context.solver;
+  Smt_backend.push solver.context;
   solver
 
 (** Pop the most recent scope.
@@ -258,7 +57,7 @@ let push solver =
     @param solver The solver to pop
     @return The same solver (mutates state) *)
 let pop solver =
-  Z3.Solver.pop solver.context.solver 1;
+  Smt_backend.pop solver.context;
   solver
 
 (** Add assertions to existing solver.
@@ -267,9 +66,8 @@ let pop solver =
     @param exprs New expressions to add
     @return Modified solver *)
 let add_assertions solver exprs =
-  let z3_exprs = List.map (expr_to_z3 solver.context) exprs in
-    Z3.Solver.add solver.context.solver z3_exprs;
-    solver
+  Smt_backend.add solver.context exprs;
+  solver
 
 (** {1 Satisfiability Checking}
 
@@ -318,140 +116,23 @@ let trivially exprs =
       in
         if not all_constant_true then Some false else None
 
-(* The first caller in MoRDor's own code outside this file, by function name: a
-   closure passed to [Hashtbl.filteri] is reported as its caller. *)
-let caller_site () =
-  let slots =
-    Printexc.get_callstack 24
-    |> Printexc.backtrace_slots
-    |> Option.value ~default:[||]
-  in
-    Array.to_list slots
-    |> List.find_map (fun slot ->
-        match Printexc.Slot.location slot with
-        | Some loc
-          when String.starts_with ~prefix:"src/" loc.filename
-               && not (String.ends_with ~suffix:"solver.ml" loc.filename) ->
-            Some (Option.value (Printexc.Slot.name slot) ~default:loc.filename)
-        | _ -> None
-    )
-    |> Option.value ~default:"?"
-
-(** W1 (#175): with [MORDOR_SMT_DUMP] set to a directory, every query that
-    reaches Z3 is written there in SMT-LIB 2, so that other solvers can be
-    measured on the queries MoRDor actually asks. A query is its solver's
-    assertions, across every pushed scope, as asserted, printed as a standalone
-    benchmark with their declarations and [(check-sat)]: one file per distinct
-    query, named by its digest. Not [Z3.Solver.to_string], which on a solver
-    checked before prints its preprocessed assertions and the model converter's
-    state ([model-add], [model-del]), which is not SMT-LIB. [index.tsv] has a
-    line per query asked -- digest, caller, Z3's answer and seconds -- and
-    [calls.tsv], written at exit, counts the scope pushes and model reads by
-    caller. A model read counts whether or not Z3 was asked: {!solve} reads one
-    off a query {!trivially} answered too. *)
-module Dump = struct
-  let dir = Sys.getenv_opt "MORDOR_SMT_DUMP"
-  let enabled = Option.is_some dir
-  let mutex = Mutex.create ()
-  let calls = Hashtbl.create 16
-
-  let index =
-    Option.map
-      (fun dir ->
-        if not (Sys.file_exists dir) then Sys.mkdir dir 0o755;
-        let oc =
-          open_out_gen
-            [ Open_append; Open_creat; Open_text ]
-            0o644
-            (Filename.concat dir "index.tsv")
-        in
-          at_exit (fun () ->
-              close_out oc;
-              Out_channel.with_open_gen [ Open_append; Open_creat; Open_text ]
-                0o644 (Filename.concat dir "calls.tsv") (fun oc ->
-                  Hashtbl.iter
-                    (fun (what, site) n ->
-                      Printf.fprintf oc "%s\t%s\t%d\n" what site n
-                    )
-                    calls
-              )
-          );
-          (* A run cut short by [timeout] still writes what it asked. *)
-          Sys.set_signal Sys.sigterm (Sys.Signal_handle (fun _ -> exit 143));
-          oc
-      )
-      dir
-
-  (** Counts a scope push or a model evaluation, by its caller. *)
-  let call what =
-    if enabled then
-      let key = (what, caller_site ()) in
-        Mutex.protect mutex (fun () ->
-            Hashtbl.replace calls key
-              (1 + Option.value ~default:0 (Hashtbl.find_opt calls key))
-        )
-
-  let query ctx solver status seconds =
-    Option.iter
-      (fun dir ->
-        let text =
-          Z3.SMT.benchmark_to_smtstring ctx "mordor" "" "unknown" ""
-            (Z3.Solver.get_assertions solver)
-            (Z3.Boolean.mk_true ctx)
-        in
-        let digest = Digest.to_hex (Digest.string text) in
-        let answer =
-          match status with
-          | Z3.Solver.SATISFIABLE -> "sat"
-          | Z3.Solver.UNSATISFIABLE -> "unsat"
-          | Z3.Solver.UNKNOWN -> "unknown"
-        in
-        let site = caller_site () in
-          Mutex.protect mutex (fun () ->
-              let path = Filename.concat dir (digest ^ ".smt2") in
-                if not (Sys.file_exists path) then
-                  Out_channel.with_open_text path (fun oc ->
-                      output_string oc text
-                  );
-                Option.iter
-                  (fun oc ->
-                    Printf.fprintf oc "%s\t%s\t%s\t%.6f\n%!" digest site answer
-                      seconds
-                  )
-                  index
-          )
-      )
-      dir
-end
-
-let check_asserted solver =
-  let started = if Dump.enabled then Unix.gettimeofday () else 0. in
-  let status = Z3.Solver.check solver.context.solver [] in
-    if Dump.enabled then
-      Dump.query solver.context.ctx solver.context.solver status
-        (Unix.gettimeofday () -. started);
-    match status with
-    | Z3.Solver.SATISFIABLE -> Some true
-    | Z3.Solver.UNSATISFIABLE -> Some false
-    | Z3.Solver.UNKNOWN -> None
+let check_asserted solver = Smt_backend.check solver.context
 
 let check solver =
   match trivially solver.expressions with
   | Some answer -> Some answer
   | None -> (
-      (* Convert to Z3 and solve *)
-      let z3_exprs = List.map (expr_to_z3 solver.context) solver.expressions in
-
-      try
-        Z3.Solver.add solver.context.solver z3_exprs;
-        check_asserted solver
+      (* Translating raises on an unsupported operator, before the solver is
+         asked, as it did when the translation lived here. *)
+      Smt_backend.add solver.context solver.expressions;
+      try check_asserted solver
       with e ->
         Logs_safe.err (fun m ->
-            m "Error adding expressions to Z3 solver: %s\n %s"
+            m "Error checking expressions with the SMT solver: %s\n %s"
               (Printexc.to_string e)
               (String.concat "\n" (List.map Expr.to_string solver.expressions))
         );
-        failwith "Z3 solver error"
+        failwith "SMT solver error"
     )
 
 (** {1 Scoped Solving} *)
@@ -464,7 +145,6 @@ let fresh_solvers = ref (Option.is_some (Sys.getenv_opt "MORDOR_FRESH_SOLVER"))
 
 let scoped f =
   let solver = Domain.DLS.get scoped_solver_key in
-    Dump.call "push";
     ignore (push solver);
     Fun.protect ~finally:(fun () -> ignore (pop solver)) (fun () -> f solver)
 
@@ -538,7 +218,7 @@ module S7 = struct
   let record ~hit exprs =
     Option.iter
       (fun oc ->
-        let r = { site = caller_site (); hit; exprs } in
+        let r = { site = Call_site.caller (); hit; exprs } in
           Mutex.protect cache_mutex (fun () -> Marshal.to_channel oc r [])
       )
       out
@@ -632,26 +312,7 @@ let solve_advanced solver =
     Functions for extracting satisfying assignments and concrete values. *)
 
 (* The model of a solver [check] found satisfiable, as bindings. *)
-let model_bindings solver =
-  Dump.call "model";
-  match Z3.Solver.get_model solver.context.solver with
-  | Some m ->
-      let bindings = Hashtbl.create 16 in
-        Hashtbl.iter
-          (fun name var ->
-            match Z3.Model.eval m var true with
-            | Some value -> (
-                let str = Z3.Expr.to_string value in
-                  try
-                    let n = Z.of_string str in
-                      Hashtbl.add bindings name (VNumber n)
-                  with _ -> Hashtbl.add bindings name (VVar str)
-              )
-            | None -> ()
-          )
-          solver.context.vars;
-        Some bindings
-  | None -> None
+let model_bindings solver = Smt_backend.model solver.context
 
 (** Solve and extract a satisfying model.
 
@@ -800,14 +461,13 @@ let simplify_disjunction clauses =
 
 (** {1 Solver Introspection} *)
 
-(** Get statistics from Z3 solver.
+(** Get statistics from the SMT backend.
 
     Returns performance information like decisions, conflicts, propagations.
 
     @param solver The solver to inspect
     @return Formatted statistics string *)
-let get_statistics solver =
-  Z3.Statistics.to_string (Z3.Solver.get_statistics solver.context.solver)
+let get_statistics solver = Smt_backend.statistics solver.context
 
 (** {1 Semantic Equality}
 

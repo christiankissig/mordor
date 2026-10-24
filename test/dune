@@ -34,8 +34,18 @@
   test_symbolic_mrd
   test_types
   test_uset
+  test_z3_translate
   test_zoo_models)
- (libraries mordor_lib landmarks lwt lwt.unix z3 zarith core str alcotest)
+ (libraries
+  mordor_lib
+  mordor_native
+  landmarks
+  lwt
+  lwt.unix
+  z3
+  zarith
+  str
+  alcotest)
  (preprocess
   (pps lwt_ppx landmarks-ppx)))
 
@@ -53,12 +63,12 @@
   test_integration_parallel)
  (libraries
   mordor_lib
+  mordor_native
   landmarks
   lwt
   lwt.unix
   z3
   zarith
-  core
   str
   alcotest
   unix)

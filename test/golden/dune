@@ -9,7 +9,7 @@
  (modules golden_diff)
  (flags
   (:standard -g -w -33-26))
- (libraries mordor_lib lwt lwt.unix z3 zarith core str unix)
+ (libraries mordor_lib mordor_native lwt lwt.unix z3 zarith str unix)
  (preprocess
   (pps lwt_ppx)))
 
@@ -21,6 +21,6 @@
  (modules equivalence)
  (flags
   (:standard -g -w -33-26))
- (libraries mordor_lib lwt lwt.unix z3 zarith unix)
+ (libraries mordor_lib mordor_native lwt lwt.unix z3 zarith unix)
  (preprocess
   (pps lwt_ppx)))

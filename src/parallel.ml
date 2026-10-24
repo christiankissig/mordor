@@ -112,7 +112,7 @@ let split ~size items =
     guarding: there is no per-phase teardown left for an exception to skip. *)
 let pool_mutex = Mutex.create ()
 
-let pool_in_use : (int * Lwt_domain.pool) option ref = ref None
+let pool_in_use : (int * Domain_pool.pool) option ref = ref None
 
 (** [acquire ~num_threads] is the process's pool, built if this is the first
     call and rebuilt if the thread count has changed since the last one, or
@@ -124,10 +124,8 @@ let acquire ~num_threads =
         match !pool_in_use with
         | Some (n, pool) when n = num_threads -> Some pool
         | existing ->
-            Option.iter
-              (fun (_, pool) -> Lwt_domain.teardown_pool pool)
-              existing;
-            let pool = Lwt_domain.setup_pool num_threads in
+            Option.iter (fun (_, pool) -> Domain_pool.teardown pool) existing;
+            let pool = Domain_pool.setup num_threads in
               pool_in_use := Some (num_threads, pool);
               Some pool
     )
@@ -139,9 +137,7 @@ let acquire ~num_threads =
 let () =
   at_exit (fun () ->
       Mutex.protect pool_mutex (fun () ->
-          Option.iter
-            (fun (_, pool) -> Lwt_domain.teardown_pool pool)
-            !pool_in_use;
+          Option.iter (fun (_, pool) -> Domain_pool.teardown pool) !pool_in_use;
           pool_in_use := None
       )
   )
@@ -152,21 +148,19 @@ let map pool f items =
   | _ ->
       let size =
         let n = List.length items in
-        let chunks = Lwt_domain.get_num_domains pool * chunks_per_domain in
+        let chunks = Domain_pool.num_domains pool * chunks_per_domain in
           max 1 ((n + chunks - 1) / chunks)
       in
       let promises =
         List.map
           (fun chunk ->
-            Lwt_domain.detach pool
-              (fun () ->
+            Domain_pool.detach pool (fun () ->
                 match List.map f chunk with
                 | results -> results
                 | exception exn ->
                     let bt = Printexc.get_raw_backtrace () in
                       Printexc.raise_with_backtrace exn bt
-              )
-              ()
+            )
           )
           (split ~size items)
       in
