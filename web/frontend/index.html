@@ -73,6 +73,7 @@
                         <button data-action="assertions" data-endpoint="/api/assertions/stream"><span class="menu-label">Assertions</span><span class="menu-hint">Every stage, as the test runner runs it</span></button>
                     </div>
                 </div>
+                <button id="cancel-btn" class="btn btn-ghost" title="Cancel the run in progress" hidden>Cancel</button>
                 <button id="settings-btn" class="btn btn-ghost" title="Settings: loop semantics and memory models">
                     <svg class="icon" viewBox="0 0 24 24"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></svg>
                     <span class="btn-label">Settings</span>
@@ -91,7 +92,7 @@
                     <span class="btn-label">Tests</span>
                 </button>
                 <span class="topbar-divider" aria-hidden="true"></span>
-                <a id="manual-btn" class="btn btn-ghost" href="/manual/" target="_blank" title="Open the manual">
+                <a id="manual-btn" class="btn btn-ghost" href="manual.html" target="_blank" title="Open the manual">
                     <svg class="icon" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
                     <span class="btn-label">Manual</span>
                 </a>
@@ -107,7 +108,7 @@
                 <div class="panel-header">
                     <div class="panel-title">
                         <h2>Litmus Source</h2>
-                        <a class="help-link" href="/manual/#language" target="_blank" title="Language reference" aria-label="Language reference">
+                        <a class="help-link" href="manual.html#language" target="_blank" title="Language reference" aria-label="Language reference">
                             <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
                         </a>
                     </div>
@@ -478,13 +479,15 @@
     </div>
 
     <!-- Load Prism language definition for sMRD -->
-    <script src="/static/js/prism-smrd.js"></script>
+    <script src="static/js/prism-smrd.js"></script>
 
     <!-- Load Test Runner -->
-    <script src="/static/js/test-runner.js"></script>
+    <script src="static/js/config.js"></script>
+    <script src="static/js/transport.js"></script>
+    <script src="static/js/test-runner.js"></script>
 
     <!-- Load Graph Visualizer -->
-    <script src="/static/js/graph-visualizer.js"></script>
+    <script src="static/js/graph-visualizer.js"></script>
 
     <!-- Initialize the application -->
     <script>

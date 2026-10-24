@@ -1438,3 +1438,7 @@ pre.line-numbers > code {
     white-space: nowrap;
     border: 0;
 }
+
+/* The Cancel button shows only while a run goes (W5, #181); .btn would
+   otherwise override [hidden]. */
+#cancel-btn[hidden] { display: none; }
