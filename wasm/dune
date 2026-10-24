@@ -1,0 +1,32 @@
+; The browser build (W3, #179): mordor_lib with the browser platform
+; (platform/), compiled with js_of_ocaml. Both executables are built only in the
+; browser profile, so the native build needs no js_of_ocaml:
+;
+;   dune build --profile browser ./wasm/worker.bc.js     the Web Worker
+;   dune build --profile browser ./wasm/node_main.bc.js  the same, for node,
+;                                                        SSE framing on stdout
+;
+; (Gating on %{lib-available:js_of_ocaml} or an environment variable would
+; need (lang dune 3.15).)
+
+(library
+ (name mordor_session)
+ (wrapped false)
+ (modules session)
+ (libraries mordor_lib lwt yojson))
+
+(executable
+ (name worker)
+ (modes js)
+ (enabled_if
+  (= %{profile} browser))
+ (modules worker)
+ (libraries mordor_session mordor_browser js_of_ocaml zarith_stubs_js))
+
+(executable
+ (name node_main)
+ (modes js)
+ (enabled_if
+  (= %{profile} browser))
+ (modules node_main)
+ (libraries mordor_session mordor_browser js_of_ocaml zarith_stubs_js))

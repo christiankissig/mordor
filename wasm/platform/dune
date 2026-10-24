@@ -1,0 +1,7 @@
+; The browser platform (W3, #179): mordor_lib's slots for a build that runs
+; in a Web Worker. No SMT solver yet (W4, #180), one domain, no profiling.
+
+(library
+ (name mordor_browser)
+ (implements mordor_lib)
+ (libraries lwt))
