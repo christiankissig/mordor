@@ -138,19 +138,21 @@ let examples_handler _request =
     table uses, and ["ps1"] and ["ps2"]: promising semantics, which computes
     executions of its own and is compared by outcome (see [Semantics]). *)
 let comparable_models =
-  ("smrd" :: "rc11" :: "imm" :: Context.implemented_zoo_models) @ [ "ps1"; "ps2" ]
+  ("smrd" :: "rc11" :: "imm" :: Context.implemented_zoo_models)
+  @ [ "ps1"; "ps2" ]
 
 (** The primary models it offers: those, or ["default"], the model the litmus
     test states or sMRD, which can be one not offered here. *)
 let selectable_models = "default" :: comparable_models
 
-(** [step_executions ~send_data] computes the executions under the semantics
-    the model selection chose. sMRD's justifications are sent as they are
-    found; promising semantics has none, and tracks each execution's events and
+(** [step_executions ~send_data] computes the executions under the semantics the
+    model selection chose. sMRD's justifications are sent as they are found;
+    promising semantics has none, and tracks each execution's events and
     relations so that its graph has something to show. *)
 let step_executions ~send_data =
   Semantics.step_calculate_executions ~track:true
-    ~after_justifications:(Eventstructureviz.step_send_justification_set ~send_data)
+    ~after_justifications:
+      (Eventstructureviz.step_send_justification_set ~send_data)
 
 (** A request's choice of models: the primary executions are enumerated under,
     and the others each is checked against. *)
@@ -160,9 +162,9 @@ type model_selection = { primary : string; others : string list }
 
     No [memory_model] is ["default"], the model the litmus test states or sMRD.
     A model the server does not offer is an error naming it, primary or
-    compared: running under another model and labelling the results with the
-    one asked for would answer a different question. [Failure] carries the
-    message. *)
+    compared: running under another model and labelling the results with the one
+    asked for would answer a different question. [Failure] carries the message.
+*)
 let model_selection_of_json json =
   let field key =
     match json with
@@ -182,10 +184,9 @@ let model_selection_of_json json =
     match field "memory_model" with
     | None | Some `Null -> "default"
     | Some (`String m) -> known selectable_models m |> Option.value ~default:""
-    | Some other -> (
+    | Some other ->
         unknown := Yojson.Basic.to_string other :: !unknown;
         ""
-      )
   in
   let others =
     match field "compare_models" with
@@ -204,8 +205,7 @@ let model_selection_of_json json =
     | [] -> { primary; others }
     | names ->
         failwith
-          (Printf.sprintf
-             "Unknown memory model%s %s. The server offers %s."
+          (Printf.sprintf "Unknown memory model%s %s. The server offers %s."
              (if List.length names > 1 then "s" else "")
              (String.concat ", " (List.map (Printf.sprintf "%S") names))
              (String.concat ", " selectable_models)
@@ -483,40 +483,40 @@ let make_sse_handler pipeline_fn request =
             | Ok models -> models
             | Error msg -> failwith msg
           in
-          let* () =
-            Dream.write stream
-              (sse_data (`Assoc [ ("status", `String "parsing") ]))
-          in
-            let* () = Dream.flush stream in
-
-            (* No model is applied before parsing: [select_models] needs
-               to see what the test itself states. *)
-            let options =
-              { default_options with loop_semantics; step_counter }
-            in
-
-            Logs.info (fun m ->
-                m "Running single program with options\n%s"
-                  (show_options options)
-            );
-
             let* () =
               Dream.write stream
-                (sse_data (`Assoc [ ("status", `String "interpreting") ]))
+                (sse_data (`Assoc [ ("status", `String "parsing") ]))
             in
               let* () = Dream.flush stream in
 
+              (* No model is applied before parsing: [select_models] needs
+               to see what the test itself states. *)
+              let options =
+                { default_options with loop_semantics; step_counter }
+              in
+
+              Logs.info (fun m ->
+                  m "Running single program with options\n%s"
+                    (show_options options)
+              );
+
               let* () =
                 Dream.write stream
-                  (sse_data (`Assoc [ ("status", `String "visualizing") ]))
+                  (sse_data (`Assoc [ ("status", `String "interpreting") ]))
               in
                 let* () = Dream.flush stream in
 
-                let* _ctx =
-                  pipeline_fn program options step_counter ~models stream
+                let* () =
+                  Dream.write stream
+                    (sse_data (`Assoc [ ("status", `String "visualizing") ]))
                 in
+                  let* () = Dream.flush stream in
 
-                Lwt.return_unit
+                  let* _ctx =
+                    pipeline_fn program options step_counter ~models stream
+                  in
+
+                  Lwt.return_unit
         )
         (fun exn ->
           let error_msg = error_message exn in
@@ -606,28 +606,28 @@ let executions_export_handler request =
     Lwt.catch
       (fun () ->
         let models = { (model_selection_of_json json) with others = [] } in
-        let* ctx =
-          Lwt.return context
-          |> Parse.step_parse_litmus
-          |> select_models models
-          |> Lwt.map (fun (ctx : mordor_ctx) ->
-              (* The export is of sMRD's executions, with their dependencies. *)
-              Semantics.require_smrd ~command:"executions export" ctx.options;
-              ctx
-          )
-          |> Interpret.step_interpret
-          |> Elaborations.step_generate_justifications
-          |> Executions.step_calculate_dependencies
-        in
-          match Executions_export.to_json_string ctx with
-          | Some content ->
-              Dream.respond
-                ~headers:[ ("Content-Type", "application/json") ]
-                content
-          | None ->
-              Dream.respond ~status:`Internal_Server_Error
-                ~headers:[ ("Content-Type", "application/json") ]
-                {|{"error": "executions or event structure not available"}|}
+          let* ctx =
+            Lwt.return context
+            |> Parse.step_parse_litmus
+            |> select_models models
+            |> Lwt.map (fun (ctx : mordor_ctx) ->
+                (* The export is of sMRD's executions, with their dependencies. *)
+                Semantics.require_smrd ~command:"executions export" ctx.options;
+                ctx
+            )
+            |> Interpret.step_interpret
+            |> Elaborations.step_generate_justifications
+            |> Executions.step_calculate_dependencies
+          in
+            match Executions_export.to_json_string ctx with
+            | Some content ->
+                Dream.respond
+                  ~headers:[ ("Content-Type", "application/json") ]
+                  content
+            | None ->
+                Dream.respond ~status:`Internal_Server_Error
+                  ~headers:[ ("Content-Type", "application/json") ]
+                  {|{"error": "executions or event structure not available"}|}
       )
       (fun exn ->
         let error_msg = error_message exn in

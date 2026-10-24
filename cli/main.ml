@@ -285,8 +285,7 @@ module Display = struct
       | None, Some _
         when match ctx.assertions with
              | [] | [ Ir.Outcome { condition = Ir.CondUB; _ } ] -> true
-             | _ -> false ->
-          Printf.printf "Undefined Behavior: undecided\n"
+             | _ -> false -> Printf.printf "Undefined Behavior: undecided\n"
       | None, _ -> ()
       );
       (* Asked by query, the one execution is the witness: say what its
@@ -412,7 +411,9 @@ module Pipeline = struct
     (* A copy per program: a test's annotation sets the model, the coherence
        model and the semantics on it, and a directory run must not carry one
        test's into the next. *)
-    let options = { config.Config.options with model = config.Config.options.model } in
+    let options =
+      { config.Config.options with model = config.Config.options.model }
+    in
     let context =
       make_context options ?output_mode:config.output_mode
         ?output_file:config.output_file ?step_counter:config.step_counter
@@ -756,8 +757,7 @@ module Pipeline = struct
       | Config.Run | Config.Parse | Config.Interpret -> ()
       | command ->
           Semantics.require_smrd
-            ~command:
-              (String.lowercase_ascii (Config.show_command command))
+            ~command:(String.lowercase_ascii (Config.show_command command))
             config.Config.options
       );
       match config.Config.command with
@@ -1045,8 +1045,8 @@ module CLI = struct
       );
       ( "--overlapping-regions",
         Arg.Unit (fun () -> state.disjoint_regions <- false),
-        " Keep allocations apart by their base addresses only: an address \
-         past the start of one allocation may be another's"
+        " Keep allocations apart by their base addresses only: an address past \
+         the start of one allocation may be another's"
       );
       ( "--by-query",
         Arg.Unit (fun () -> state.by_query <- true),
@@ -1055,14 +1055,15 @@ module CLI = struct
          condition, or with undefined behaviour for ub and for a test without \
          assertions -- instead of enumerating every execution. Reports the \
          witness, if any, as the only execution; a verdict without one is \
-         given only if every combination was shown to have none. One \
-         assertion under sMRD; anything else is enumerated as usual"
+         given only if every combination was shown to have none. One assertion \
+         under sMRD; anything else is enumerated as usual"
       );
       ( "--semantics",
         Arg.String
           (fun s ->
             try state.semantics <- parse_semantics s
-            with Invalid_argument msg -> raise (Arg.Bad ("--semantics: " ^ msg))
+            with Invalid_argument msg ->
+              raise (Arg.Bad ("--semantics: " ^ msg))
           ),
         " Semantics to compute executions under: smrd (default), ps1 \
          (promising 1.0) or ps2 (promising 2.0). The promising semantics are \

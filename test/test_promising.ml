@@ -1,9 +1,9 @@
 (** Tests for the promising semantics, PS1.0 and PS2.0.
 
-    The verdicts are the papers' own: Kang et al., POPL 2017 (sections 1-4)
-    and Lee et al., PLDI 2020 (section 4). Each program runs through the same
-    pipeline as sMRD's, with {!Semantics.step_calculate_executions} choosing
-    the semantics. *)
+    The verdicts are the papers' own: Kang et al., POPL 2017 (sections 1-4) and
+    Lee et al., PLDI 2020 (section 4). Each program runs through the same
+    pipeline as sMRD's, with {!Semantics.step_calculate_executions} choosing the
+    semantics. *)
 
 open Alcotest
 open Context
@@ -69,8 +69,8 @@ let test_sb_outcomes () =
     )
     versions
 
-(** Load buffering is allowed by promising [y := 1], but out-of-thin-air --
-    the promise [y := r1] of LBd -- cannot be certified. *)
+(** Load buffering is allowed by promising [y := 1], but out-of-thin-air -- the
+    promise [y := r1] of LBd -- cannot be certified. *)
 let test_lb_outcomes () =
   let lb store =
     Printf.sprintf
@@ -117,8 +117,8 @@ allow (x = 2 && y = 2) [Promising]|}
     )
     versions
 
-(** An update's write is adjacent to the message it reads: two increments
-    cannot both read 0. *)
+(** An update's write is adjacent to the message it reads: two increments cannot
+    both read 0. *)
 let test_par_inc () =
   List.iter
     (fun (v, semantics) ->
@@ -138,8 +138,8 @@ allow (r1 = 1) [Promising]|}
     )
     versions
 
-(** POPL 2017, section 3: allowed, by first promising the update to [z]
-    attached to the message it reads. *)
+(** POPL 2017, section 3: allowed, by first promising the update to [z] attached
+    to the message it reads. *)
 let upd_stuck =
   {|x := 0; y := 0; z := 0;
 { r1 := x; rpz := &z; r2 := FADD(rlx, rlx, rpz, 1); y := r2 }
@@ -189,7 +189,8 @@ let test_parse_semantics () =
   check bool "smrd" true (parse_semantics "smrd" = Smrd);
   check_raises "unknown"
     (Invalid_argument "unknown semantics \"ps3\" (expected smrd, ps1 or ps2)")
-    (fun () -> ignore (parse_semantics "ps3"))
+    (fun () -> ignore (parse_semantics "ps3")
+  )
 
 (** A null dereference is undefined behaviour, reported as such: [forbid (ub)]
     fails and [allow (ub)] holds. An aborted run has no final state, so it
@@ -211,14 +212,16 @@ let test_undefined_behaviour () =
             ctx.undefined_behaviour;
           check bool ("allow (ub) under " ^ v) true
             (valid (run semantics (null "allow (ub)")));
-          check bool ("no final state under " ^ v) false
+          check bool
+            ("no final state under " ^ v)
+            false
             (valid (run semantics (null "allow (r1 = 5)")))
       )
       versions
 
-(** PS2.0 certifies a promise through an abort -- here dividing by the 0 the
-    cap holds -- since an abort stands for any behaviour. PS1.0 has to certify
-    for every cap value, 0 among them, and has no aborts. *)
+(** PS2.0 certifies a promise through an abort -- here dividing by the 0 the cap
+    holds -- since an abort stands for any behaviour. PS1.0 has to certify for
+    every cap value, 0 among them, and has no aborts. *)
 let abort_certifies =
   {|x := 0; y := 0;
 { r1 := x; r2 := 1 / r1; y := 1 } ||| { r3 := y; x := r3 }
@@ -231,10 +234,10 @@ let test_abort_certifies () =
   check bool "abort certifies under PS2.0" true
     (valid (run Promising2 abort_certifies))
 
-(** [.rf], [.co] and [.rmw] name the interpreter's events, and a promising
-    run's accesses are matched to them. Each assertion's verdict is the one
-    worked out by hand, and sMRD's on the same program: the two semantics agree
-    on these, so a mismatch in the labels shows. *)
+(** [.rf], [.co] and [.rmw] name the interpreter's events, and a promising run's
+    accesses are matched to them. Each assertion's verdict is the one worked out
+    by hand, and sMRD's on the same program: the two semantics agree on these,
+    so a mismatch in the labels shows. *)
 let relation_cases =
   [
     (* Event 3 reads x; [y := 2] is event 6 after the branch taken, 8 after
@@ -250,7 +253,8 @@ let relation_cases =
         ("allow ((2,8) in .co && r1 = 0)", true);
         ("allow ((2,8) in .co && r1 = 1)", false);
         ("allow ((2,6) in .co && r1 = 0)", false);
-      ] );
+      ]
+    );
     (* Load buffering: read 4 reads 2, promised before read 1. An initial
        value is read from no write. *)
     ( {|{ r1 := x; y := 1 } ||| { r2 := y; x := r2 }|},
@@ -258,7 +262,8 @@ let relation_cases =
         ("allow ((2,4) in .rf && r1 = 1)", true);
         ("allow ((5,1) in .rf && r2 = 1)", true);
         ("allow ((0,4) in .rf)", false);
-      ] );
+      ]
+    );
     (* Two iterations of a loop are two write events, 3 and 5. *)
     ( {|x := 0;
 { r1 := 0; while (r1 < 2) { r1 := r1 + 1; x := r1 } } ||| { r2 := x; r3 := x }|},
@@ -268,7 +273,8 @@ let relation_cases =
         ("allow ((5,3) in .co)", false);
         ("allow ((3,7) in .rf && (5,8) in .rf)", true);
         ("allow ((5,7) in .rf && (3,8) in .rf)", false);
-      ] );
+      ]
+    );
     (* An update's read and write, and its atomicity. *)
     ( {|x := 0;
 { rp := &x; r1 := FADD(rlx, rlx, rp, 1) } ||| { rq := &x; r2 := FADD(rlx, rlx, rq, 1) }|},
@@ -276,7 +282,8 @@ let relation_cases =
         ("allow ((2,3) in .rmw)", true);
         ("allow ((1,2) in .rf && (1,5) in .rf)", false);
         ("allow ((3,6) in .co)", true);
-      ] );
+      ]
+    );
   ]
 
 let test_relations () =
@@ -335,7 +342,10 @@ allow ((2,3) in .dp) []|}
 (** [annotate model source] is [source] with its [[Promising]] annotations
     naming [model] instead. *)
 let annotate model source =
-  Str.global_replace (Str.regexp_string "[Promising]") ("[" ^ model ^ "]") source
+  Str.global_replace
+    (Str.regexp_string "[Promising]")
+    ("[" ^ model ^ "]")
+    source
 
 (** [PS1] and [PS2] select their version as [IMM] selects a coherence model;
     [--semantics] chose one already, it stands. *)
@@ -361,21 +371,24 @@ let test_annotation_selects () =
     in
       check bool "primary ps2 over [PS1]" true (primary "ps2" = Promising2);
       check bool "primary rc11 over [PS1] is sMRD" true (primary "rc11" = Smrd);
-      check bool "primary default keeps [PS1]" true (primary "default" = Promising1);
-    check bool "RPacq under [PS1] alone" false
-      (valid (run Smrd (annotate "PS1" rpacq)));
-    check bool "RPacq under [PS2] alone" true
-      (valid (run Smrd (annotate "PS2" rpacq)))
+      check bool "primary default keeps [PS1]" true
+        (primary "default" = Promising1);
+      check bool "RPacq under [PS1] alone" false
+        (valid (run Smrd (annotate "PS1" rpacq)));
+      check bool "RPacq under [PS2] alone" true
+        (valid (run Smrd (annotate "PS2" rpacq)))
 
 (** A compared promising model admits an execution of another semantics by
     outcome. On load buffering sMRD's [r1 = r2 = 1] executions are admitted by
-    PS1.0 but not by RC11; on RPacq PS1.0 admits every PS2.0 outcome but the
-    one only reservations allow. *)
+    PS1.0 but not by RC11; on RPacq PS1.0 admits every PS2.0 outcome but the one
+    only reservations allow. *)
 let test_compare_by_outcome () =
   let compared ~primary ~others source =
     (* A copy: [select_models] sets the semantics on the options it is given,
        which would otherwise be every later test's [default_options]. *)
-    let ctx = make_context { default_options with model = default_options.model } () in
+    let ctx =
+      make_context { default_options with model = default_options.model } ()
+    in
       ctx.litmus_name <- "test";
       ctx.litmus <- Some source;
       Lwt_main.run
@@ -401,15 +414,20 @@ allow (r1 = 1) [PS1]|}
   in
   let ctx = compared ~primary:"smrd" ~others:[ "ps1"; "rc11" ] lb in
   let execs = USet.values (Option.get ctx.executions) in
-  let lb_execs = List.filter (fun ex -> value ctx ex "r1" && value ctx ex "r2") execs in
+  let lb_execs =
+    List.filter (fun ex -> value ctx ex "r1" && value ctx ex "r2") execs
+  in
     check bool "sMRD has load-buffering executions" true (lb_execs <> []);
     List.iter
       (fun ex ->
-        check bool "PS1.0 admits load buffering" true (List.mem "ps1" (admitted_by ctx ex));
+        check bool "PS1.0 admits load buffering" true
+          (List.mem "ps1" (admitted_by ctx ex));
         check bool "RC11 does not" false (List.mem "rc11" (admitted_by ctx ex))
       )
       lb_execs;
-    let ctx = compared ~primary:"ps2" ~others:[ "ps1" ] (annotate "PS2" rpacq) in
+    let ctx =
+      compared ~primary:"ps2" ~others:[ "ps1" ] (annotate "PS2" rpacq)
+    in
     let execs = USet.values (Option.get ctx.executions) in
       List.iter
         (fun ex ->
@@ -423,8 +441,8 @@ allow (r1 = 1) [PS1]|}
 
 (** One assertion can name models of both semantics, each checked against its
     own executions. Every model used to get the first one's verdict: under
-    [RC11, PS1] PS1.0 was said to forbid load buffering, under [PS1, RC11]
-    RC11 to allow it (github #128). *)
+    [RC11, PS1] PS1.0 was said to forbid load buffering, under [PS1, RC11] RC11
+    to allow it (github #128). *)
 let test_mixed_semantics () =
   let lb models =
     Printf.sprintf
@@ -439,18 +457,16 @@ let test_mixed_semantics () =
       (fun (assertion, holds) ->
         (* "allow (...) [model]" -> model *)
         let i = String.rindex assertion '[' in
-          ( String.sub assertion (i + 1) (String.length assertion - i - 2),
-            holds
-          )
+          (String.sub assertion (i + 1) (String.length assertion - i - 2), holds)
       )
       (run semantics source).assertion_verdicts
   in
   let expect name semantics source expected =
-    check
-      (list (pair string bool))
-      name expected (verdicts semantics source)
+    check (list (pair string bool)) name expected (verdicts semantics source)
   in
-  let lb_allow models = lb (Printf.sprintf "allow (r1 = 1 && r2 = 1) [%s]" models) in
+  let lb_allow models =
+    lb (Printf.sprintf "allow (r1 = 1 && r2 = 1) [%s]" models)
+  in
     expect "sMRD primary" Smrd
       (lb_allow "sMRD, RC11, PS1, PS2")
       [ ("smrd", true); ("rc11", false); ("ps1", true); ("ps2", true) ];
@@ -472,8 +488,8 @@ let test_mixed_semantics () =
 (** A run whose loop runs out of unrollings while its condition still holds is
     no run. sMRD kept it as an execution with no final registers, so any
     assertion over them held, and promising semantics and the per-loop counter
-    went on past the loop (github #133). A loop that exits within its
-    unrollings is unaffected. *)
+    went on past the loop (github #133). A loop that exits within its unrollings
+    is unaffected. *)
 let test_loop_bound () =
   let run_with loop_semantics semantics source =
     let ctx =
@@ -491,7 +507,9 @@ let test_loop_bound () =
         |> Assertion.step_check_assertions
         )
   in
-  let spin_while = "y := 0;\nry := y;\nrx := 0;\nwhile (ry = 0) { ry := y };\nrx := 5;" in
+  let spin_while =
+    "y := 0;\nry := y;\nrx := 0;\nwhile (ry = 0) { ry := y };\nrx := 5;"
+  in
   let spin_do = "y := 0;\nrx := 0;\ndo { ry := y } while (ry = 0);\nrx := 5;" in
   let exits = "rc := 0;\nwhile (rc < 1) { rc := rc + 1 };\nrx := 5;" in
   let mp_spin =
@@ -506,14 +524,24 @@ let test_loop_bound () =
             let holds source assertion =
               valid (run_with loops semantics (source ^ "\n%%\n" ^ assertion))
             in
-            let name what = Printf.sprintf "%s, %s counter, %s" what counter v in
-              check bool (name "spinning while-loop leaves no run") false
+            let name what =
+              Printf.sprintf "%s, %s counter, %s" what counter v
+            in
+              check bool
+                (name "spinning while-loop leaves no run")
+                false
                 (holds spin_while "allow (rx = 5 || rx = 0) []");
-              check bool (name "spinning do-loop leaves no run") false
+              check bool
+                (name "spinning do-loop leaves no run")
+                false
                 (holds spin_do "allow (rx = 5 || rx = 0) []");
-              check bool (name "a loop that exits has its run") true
+              check bool
+                (name "a loop that exits has its run")
+                true
                 (holds exits "allow (rc = 1 && rx = 5) []");
-              check bool (name "MP with a spin loop sees x = 7") true
+              check bool
+                (name "MP with a spin loop sees x = 7")
+                true
                 (holds mp_spin "forbid (rb != 7) []")
           )
           (("sMRD", Smrd) :: versions)
@@ -573,10 +601,13 @@ forbid (r1 + r2 != 1) [Promising]|};
       test_case "rf, co and rmw" `Quick test_relations;
       test_case "dp and ppo are refused" `Quick test_sMRD_relations_refused;
       test_case "[Promising] needs --semantics" `Quick test_model_name;
-      test_case "[PS1] and [PS2] select the semantics" `Quick test_annotation_selects;
-      test_case "comparing across semantics by outcome" `Quick test_compare_by_outcome;
+      test_case "[PS1] and [PS2] select the semantics" `Quick
+        test_annotation_selects;
+      test_case "comparing across semantics by outcome" `Quick
+        test_compare_by_outcome;
       test_case "an assertion naming both semantics" `Quick test_mixed_semantics;
       test_case "a loop out of unrollings" `Quick test_loop_bound;
       test_case "sMRD through the same step" `Quick test_smrd_unchanged;
       test_case "semantics names" `Quick test_parse_semantics;
-    ] )
+    ]
+  )

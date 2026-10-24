@@ -824,7 +824,8 @@ let suite =
       Alcotest.test_case "Parse integer" `Quick test_parse_int;
       Alcotest.test_case "Parse hex integer" `Quick test_parse_hex_int;
       Alcotest.test_case "Parse negative integer" `Quick test_parse_negative_int;
-      Alcotest.test_case "Parse boolean literals" `Quick test_parse_bool_literals;
+      Alcotest.test_case "Parse boolean literals" `Quick
+        test_parse_bool_literals;
       Alcotest.test_case "Parse register" `Quick test_parse_register_expr;
       Alcotest.test_case "Parse global" `Quick test_parse_global_expr;
       Alcotest.test_case "Parse atloc" `Quick test_parse_atloc_expr;

@@ -362,11 +362,11 @@ let check_source source =
     (Option.get ctx.valid, ctx.assertion_verdicts)
 
 (** The initial event writes every location, but a coherence order is per
-    location. Through it, [rf⁻¹;co] related a read of [z] to a store to [x],
-    and in [x := 3; r1 := z] that [fr] edge closed a cycle with [po]: SC, VbD,
-    DRFx, DeNovoSync, RA, SRA, CRC and OCaml admitted no execution at all
-    (github #127). Every model admits it, with the unwritten [z] read at any
-    value; the second program reads it in another thread. *)
+    location. Through it, [rf⁻¹;co] related a read of [z] to a store to [x], and
+    in [x := 3; r1 := z] that [fr] edge closed a cycle with [po]: SC, VbD, DRFx,
+    DeNovoSync, RA, SRA, CRC and OCaml admitted no execution at all (github
+    #127). Every model admits it, with the unwritten [z] read at any value; the
+    second program reads it in another thread. *)
 let test_unwritten_location_read () =
   let models =
     "sMRD, RC11, IMM, SC, VbD, TSO, x86-TSO, ClightTSO, RC11z, RC17, OD-LSO, \

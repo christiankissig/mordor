@@ -93,9 +93,9 @@ module type MEMORY_MODEL = sig
   val elidable : symbolic_event_structure -> elided:int -> by:int -> bool
 
   (** Whether the model allows out-of-thin-air executions: those whose
-      reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator
-      drops them before any model is asked unless a model of the run allows
-      them; then every model that does not rejects them itself. *)
+      reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator drops
+      them before any model is asked unless a model of the run allows them; then
+      every model that does not rejects them itself. *)
   val allows_thin_air : bool
 
   (** Whether [check_coherence] reads the coherence order it is given. A model
@@ -108,11 +108,10 @@ module type MEMORY_MODEL = sig
       as RC11z makes them. *)
   val orders_allocations : bool
 
-  (** Whether the model orders critical sections: a lock order joins its
-      [hb]. A model that does not refuses a program with locks
-      ({!check_model_program}) rather than read [lock] and [unlock] as no-ops,
-      which let SC see a write inside another thread's critical section
-      (github #125). *)
+  (** Whether the model orders critical sections: a lock order joins its [hb]. A
+      model that does not refuses a program with locks ({!check_model_program})
+      rather than read [lock] and [unlock] as no-ops, which let SC see a write
+      inside another thread's critical section (github #125). *)
   val orders_locks : bool
 
   (** [Error reason] when the model cannot answer for this program at all. It is
@@ -270,10 +269,10 @@ module ModelUtils = struct
       C++11's, IMM's -- a relaxed store overwriting a release store carries its
       release on, and an acquire reading it synchronises with the release. With
       the release store elided there is nothing to synchronise with. A release
-      store overwriting it synchronises with everything po-before it, the
-      elided store's predecessors included. *)
-  let release_elidable_by_release (structure : symbolic_event_structure)
-      ~elided ~by =
+      store overwriting it synchronises with everything po-before it, the elided
+      store's predecessors included. *)
+  let release_elidable_by_release (structure : symbolic_event_structure) ~elided
+      ~by =
     let events = structure.events in
     let release id =
       match Hashtbl.find_opt events id with
@@ -522,7 +521,8 @@ module IMM : MEMORY_MODEL = struct
        an RMW that read that store synchronised with the release (#150). *)
     let rs =
       let head =
-        URelation.compose [ w; URelation.reflexive_closure e (loc_restrict po); w ]
+        URelation.compose
+          [ w; URelation.reflexive_closure e (loc_restrict po); w ]
       in
       let chain =
         URelation.reflexive_closure e
@@ -592,8 +592,7 @@ module IMM : MEMORY_MODEL = struct
       let p2 =
         URelation.compose
           [
-            ModelUtils.match_events events e Read (Some Acquire) (Some ">")
-              None;
+            ModelUtils.match_events events e Read (Some Acquire) (Some ">") None;
             po;
           ]
       in
@@ -981,8 +980,7 @@ module RC11Config = struct
               match (ev.typ, mode ev) with
               | (Lock | Unlock | Fence), _ -> false
               | ( (Read | Write),
-                  Some (Relaxed | Acquire | Release | ReleaseAcquire) ) ->
-                  true
+                  Some (Relaxed | Acquire | Release | ReleaseAcquire) ) -> true
               | (Read | Write), _ -> false
               | _ -> true
           );
@@ -1261,8 +1259,7 @@ end) : MEMORY_MODEL = struct
 
   let axioms =
     [
-      ("rmw ∩ (rb;co) = ∅", atomicity);
-      ("hb;eco ∪ hb is irreflexive", coherence);
+      ("rmw ∩ (rb;co) = ∅", atomicity); ("hb;eco ∪ hb is irreflexive", coherence);
     ]
     @
     match Config.config.sc with
@@ -1315,6 +1312,7 @@ end) : MEMORY_MODEL = struct
                    description ev.label (show_event_type ev.typ)
                 )
       )
+
   let compute_dependencies _ _ _ _ _ = USet.create ()
 end
 
@@ -1444,8 +1442,7 @@ module SMRD : MEMORY_MODEL = struct
             match Hashtbl.find_opt structure.events id with
             | Some { typ = Read; rmod = SC; _ }
             | Some { typ = Write; wmod = SC; _ }
-            | Some { typ = Fence; fmod = SC; _ } ->
-                true
+            | Some { typ = Fence; fmod = SC; _ } -> true
             | _ -> false
           )
           execution.e
@@ -1513,6 +1510,7 @@ module SMRD : MEMORY_MODEL = struct
   let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
+
   (* hb = (ppo ∪ dp ∪ sw ∪ [Unlock];lo;[Lock])⁺, for each lock order. *)
   let orders_locks = true
   let check_program _ = Ok ()
@@ -1574,10 +1572,10 @@ end
 
     Two limits apply to all of them, and neither is theirs. A model here is a
     filter on sMRD's candidate executions, which have no cycle in
-    [dp ∪ ppo ∪ rf] unless a model of the run allows out-of-thin-air
-    executions; none of these does. And the distributed consistency models are
-    stated over histories; reading one as a shared-memory predicate needs an
-    encoding, which each module's comment states. *)
+    [dp ∪ ppo ∪ rf] unless a model of the run allows out-of-thin-air executions;
+    none of these does. And the distributed consistency models are stated over
+    histories; reading one as a shared-memory predicate needs an encoding, which
+    each module's comment states. *)
 
 (** The vocabulary shared by the models below: one execution's events and
     relations, restricted to the execution. *)
@@ -1716,11 +1714,11 @@ module Vocab = struct
 end
 
 (** Helpers for the models below: a model refusing a program outside the
-    fragment it is defined on, and the data races of an execution under an
-    [hb]. *)
+    fragment it is defined on, and the data races of an execution under an [hb].
+*)
 
-(** [refuse_outside ~name ~description inside structure] refuses the program
-    of [structure] when some event is not [inside], naming the first. *)
+(** [refuse_outside ~name ~description inside structure] refuses the program of
+    [structure] when some event is not [inside], naming the first. *)
 let refuse_outside ~name ~description inside
     (structure : symbolic_event_structure) =
   let outside =
@@ -1760,8 +1758,7 @@ let accesses_in (v : Vocab.t) atomic =
     event is [po] before everything, so it races with nothing. *)
 let races (v : Vocab.t) ~hb ~atomic =
   let accesses =
-    USet.union v.reads v.writes
-    |> USet.filter (fun id -> Some id <> v.initial)
+    USet.union v.reads v.writes |> USet.filter (fun id -> Some id <> v.initial)
   in
     URelation.cross accesses accesses
     |> USet.filter (fun (a, b) ->
@@ -1796,10 +1793,7 @@ module AxiomaticWith (A : sig
 
   val prepare : Vocab.t -> derived
   val axioms : (string * (derived axiomatic_candidate -> bool)) list
-
-  val data_races :
-    (derived axiomatic_candidate -> (int * int) uset) option
-
+  val data_races : (derived axiomatic_candidate -> (int * int) uset) option
   val allows_thin_air : bool
   val check_program : symbolic_event_structure -> (unit, string) result
 end) : MEMORY_MODEL = struct
@@ -1823,9 +1817,7 @@ end) : MEMORY_MODEL = struct
   let check_coherence cache co = holds axioms (candidate cache co)
   let check_thin_air _ _ = true
   let data_races = A.data_races
-
   let elidable = ModelUtils.elidable_always
-
   let allows_thin_air = A.allows_thin_air
   let uses_co = A.uses_co
   let orders_allocations = false
@@ -1887,10 +1879,10 @@ end)
 module TSOAxioms (N : sig
   val name : string
 
+  (** BMM (Demange et al., POPL 2013), the buffered memory model for Java: TSO,
+      where a store and a later load stay in order when either is volatile,
+      which MoRDor writes as mode [sc]. Locks are refused. *)
   val java_volatiles : bool
-  (** BMM (Demange et al., POPL 2013), the buffered memory model for Java:
-      TSO, where a store and a later load stay in order when either is
-      volatile, which MoRDor writes as mode [sc]. Locks are refused. *)
 end) =
 AxiomaticWith (struct
   let name = N.name
@@ -1946,7 +1938,8 @@ AxiomaticWith (struct
 
   let check_program =
     if N.java_volatiles then
-      refuse_outside ~name:(String.uppercase_ascii N.name)
+      refuse_outside
+        ~name:(String.uppercase_ascii N.name)
         ~description:"programs without locks" no_locks
     else fun _ -> Ok ()
 end)
@@ -2444,10 +2437,10 @@ end)
     a race, and DeNovoSync (Sung and Adve, ASPLOS 2015), which adopts the DRF
     model of C++ and Java. Each admits the SC executions, and a race in one is
     reported as undefined behaviour, an exception being no outcome either. A
-    race is between accesses of two threads to one location, one a write and
-    one non-atomic, that [hb = (po ∪ [A];rf;[A])⁺] does not order: atomic
-    accesses, any but [na], are the synchronisation operations. Locks are
-    refused, the SC axioms here having no lock order. *)
+    race is between accesses of two threads to one location, one a write and one
+    non-atomic, that [hb = (po ∪ [A];rf;[A])⁺] does not order: atomic accesses,
+    any but [na], are the synchronisation operations. Locks are refused, the SC
+    axioms here having no lock order. *)
 module DRFSC (N : sig
   val name : string
 end) =
@@ -2483,21 +2476,22 @@ AxiomaticWith (struct
   let allows_thin_air = false
 
   let check_program =
-    refuse_outside ~name:(String.uppercase_ascii N.name)
+    refuse_outside
+      ~name:(String.uppercase_ascii N.name)
       ~description:"programs without locks" no_locks
 end)
 
-(** CRC, the C11 fragment of Dodds, Batty and Gotsman's compositional
-    semantics (ESOP 2018): release-acquire and non-atomic accesses, and SC
-    fences. Every atomic access is release-acquire, so [rf] between atomic
-    accesses synchronises; a fence is a load-link/store-conditional pair on one
-    fence location, so the fences are totally ordered and each happens before
-    the next. Over [hb = (po ∪ [A];rf;[A] ∪ fences)⁺], RA's axioms (hb acyclic,
+(** CRC, the C11 fragment of Dodds, Batty and Gotsman's compositional semantics
+    (ESOP 2018): release-acquire and non-atomic accesses, and SC fences. Every
+    atomic access is release-acquire, so [rf] between atomic accesses
+    synchronises; a fence is a load-link/store-conditional pair on one fence
+    location, so the fences are totally ordered and each happens before the
+    next. Over [hb = (po ∪ [A];rf;[A] ∪ fences)⁺], RA's axioms (hb acyclic,
     [co;hb] and [co;hb;rf⁻¹] irreflexive, atomicity) and [rf;hb] irreflexive,
-    for a non-atomic read. A race on a non-atomic access is undefined
-    behaviour. Accesses in [acq], [rel] or [ra] mode are atomic and every
-    other but [sc] non-atomic; SC accesses and fences other than SC fences are
-    refused, and so are locks. *)
+    for a non-atomic read. A race on a non-atomic access is undefined behaviour.
+    Accesses in [acq], [rel] or [ra] mode are atomic and every other but [sc]
+    non-atomic; SC accesses and fences other than SC fences are refused, and so
+    are locks. *)
 module CRC = AxiomaticWith (struct
   let name = "crc"
   let uses_co = true
@@ -2523,7 +2517,8 @@ module CRC = AxiomaticWith (struct
           | _ -> false
         )
         v.e
-      |> USet.values |> List.sort compare
+      |> USet.values
+      |> List.sort compare
     in
       {
         base = Vocab.union [ v.po; URelation.compose [ a; v.rf; a ] ];
@@ -2558,8 +2553,8 @@ module CRC = AxiomaticWith (struct
   let axioms =
     [
       ("rmw ∩ (fr;co) = ∅", fun x -> Vocab.atomicity x.v x.co);
-      ( "some order of the fences makes hb acyclic, and co;hb, co;hb;rf⁻¹ \
-         and rf;hb irreflexive",
+      ( "some order of the fences makes hb acyclic, and co;hb, co;hb;rf⁻¹ and \
+         rf;hb irreflexive",
         fun x -> List.exists (consistent x) (hbs x)
       );
     ]
@@ -2580,26 +2575,25 @@ module CRC = AxiomaticWith (struct
     refuse_outside ~name:"CRC"
       ~description:
         "release-acquire and non-atomic accesses and SC fences, without SC \
-         accesses, other fences or locks"
-      (fun ev ->
+         accesses, other fences or locks" (fun ev ->
         no_locks ev
         &&
         match (ev.typ, mode_of ev) with
         | Fence, Some m -> m = SC
         | (Read | Write), Some SC -> false
         | _ -> true
-      )
+    )
 end)
 
-(** The OCaml memory model (Dolan, Sivaramakrishnan and Madhavapeddy, PLDI
-    2018, §6). Atomicity belongs to a location in OCaml, an [Atomic.t]; here an
-    access in mode [sc] is atomic and any other non-atomic, and [rf] and [co]
-    order only between two atomic accesses. [hb] is the transitive closure of
-    [po], the initial writes before everything, and [co ∪ rf] between atomic
-    accesses to one location:
+(** The OCaml memory model (Dolan, Sivaramakrishnan and Madhavapeddy, PLDI 2018,
+    §6). Atomicity belongs to a location in OCaml, an [Atomic.t]; here an access
+    in mode [sc] is atomic and any other non-atomic, and [rf] and [co] order
+    only between two atomic accesses. [hb] is the transitive closure of [po],
+    the initial writes before everything, and [co ∪ rf] between atomic accesses
+    to one location:
 
-    - Causality: [hb ∪ rf ∪ fr_at] is acyclic, [fr_at] being [fr] between
-      atomic accesses, so load buffering is forbidden
+    - Causality: [hb ∪ rf ∪ fr_at] is acyclic, [fr_at] being [fr] between atomic
+      accesses, so load buffering is forbidden
     - CoWW: [hb;co] is irreflexive
     - CoWR: [hb;fr] is irreflexive
 
@@ -2618,8 +2612,7 @@ module OCaml = AxiomaticWith (struct
   let hb (x : derived axiomatic_candidate) =
     let a = x.d.atomic in
     let com =
-      x.v.loc_restrict
-        (URelation.compose [ a; Vocab.union [ x.co; x.v.rf ]; a ])
+      x.v.loc_restrict (URelation.compose [ a; Vocab.union [ x.co; x.v.rf ]; a ])
     in
       URelation.transitive_closure (Vocab.union [ x.v.po; com ])
 
@@ -2637,8 +2630,7 @@ module OCaml = AxiomaticWith (struct
       );
       ( "hb;fr is irreflexive",
         fun x ->
-          URelation.is_irreflexive
-            (URelation.compose [ hb x; Lazy.force x.fr ])
+          URelation.is_irreflexive (URelation.compose [ hb x; Lazy.force x.fr ])
       );
     ]
 
@@ -2649,8 +2641,7 @@ module OCaml = AxiomaticWith (struct
     refuse_outside ~name:"OCAML"
       ~description:
         "programs whose accesses are atomic ([sc]) or non-atomic, without \
-         fences or locks"
-      (fun ev ->
+         fences or locks" (fun ev ->
         no_locks ev
         &&
         match (ev.typ, mode_of ev) with
@@ -2658,7 +2649,7 @@ module OCaml = AxiomaticWith (struct
         | (Read | Write), Some (SC | Nonatomic | Relaxed) -> true
         | (Read | Write), _ -> false
         | _ -> true
-      )
+    )
 end)
 
 (** Java Access Modes (Bender and Palsberg, OOPSLA 2019), the herd model of
@@ -2670,10 +2661,10 @@ end)
     the rules coww, cowr, corw, corr, cofw, coinit, and for RMWs cormwtotal and
     the recursive cormwexcl; the axioms are [acyclic co] and
     [acyclic ((po ∪ rf) ∩ (opq × opq))]. So plain accesses are coherent but may
-    be out of thin air, which the model allows. The final writes cofw orders
-    the other writes before are the last in the candidate coherence order, as
-    in herd. The trace order [to], a linearisation of the accesses, matters
-    only for full fences, volatiles and RMWs, and is then searched.
+    be out of thin air, which the model allows. The final writes cofw orders the
+    other writes before are the last in the candidate coherence order, as in
+    herd. The trace order [to], a linearisation of the accesses, matters only
+    for full fences, volatiles and RMWs, and is then searched.
 
     The paper's [filters.cat], which turns fences into specified orders, is not
     published; here, after the JDK: a release fence orders accesses before it
@@ -2790,8 +2781,7 @@ module JAM = AxiomaticWith (struct
       match v.initial with
       | None -> USet.create ()
       | Some i ->
-          USet.filter (fun w -> w <> i) v.writes
-          |> USet.map (fun w -> (i, w))
+          USet.filter (fun w -> w <> i) v.writes |> USet.map (fun w -> (i, w))
     in
     let rmw_writes = URelation.pi_2 v.rmw in
     let cormwtotal =
@@ -2869,12 +2859,13 @@ module JAM = AxiomaticWith (struct
 
   let check_program =
     refuse_outside ~name:"JAM" ~description:"programs without locks or consume"
-      (fun ev -> no_locks ev && mode_of ev <> Some Consume)
+      (fun ev -> no_locks ev && mode_of ev <> Some Consume
+    )
 end)
 
-(** WebAssembly's memory model (Watt, Rossberg and Pichon-Pharabod, OOPSLA
-    2019, Fig. 7), on MoRDor's accesses: each is to one whole location, so all
-    are aligned, of one size and tear-free, and each read reads from one write.
+(** WebAssembly's memory model (Watt, Rossberg and Pichon-Pharabod, OOPSLA 2019,
+    Fig. 7), on MoRDor's accesses: each is to one whole location, so all are
+    aligned, of one size and tear-free, and each read reads from one write.
 
     Two access modes: [sc] accesses are seqcst, every other access unordered.
     [sw] is [rf] from a seqcst write to a seqcst read, [hb = (po ∪ sw)⁺]. For
@@ -2884,10 +2875,10 @@ end)
       hb-between them;
     - sc-last-visible, over a total order [tot ⊇ hb], where [W] happens before
       [R]: a seqcst [R] of a seqcst [W] reads the last seqcst write to the
-      location tot-before it; (†) a seqcst [R] of an unordered [W] has no
-      seqcst write to the location hb-after [W] and tot-before [R]; (‡) an
-      unordered [R] of a seqcst [W] has no seqcst write to the location
-      tot-after [W] and hb-before [R].
+      location tot-before it; (†) a seqcst [R] of an unordered [W] has no seqcst
+      write to the location hb-after [W] and tot-before [R]; (‡) an unordered
+      [R] of a seqcst [W] has no seqcst write to the location tot-after [W] and
+      hb-before [R].
 
     Every [tot] constraint is between seqcst events, so a [tot] exists iff some
     linear order of the seqcst events extends [hb] and meets them, which is
@@ -2912,9 +2903,8 @@ module Wasm : MEMORY_MODEL = struct
 
     let is_sc (v : Vocab.t) id =
       match Hashtbl.find_opt v.events id with
-      | Some { typ = Read; rmod = SC; _ }
-      | Some { typ = Write; wmod = SC; _ } ->
-          true
+      | Some { typ = Read; rmod = SC; _ } | Some { typ = Write; wmod = SC; _ }
+        -> true
       | _ -> false
 
     let prepare (v : Vocab.t) =
@@ -2991,10 +2981,10 @@ module Wasm : MEMORY_MODEL = struct
                 )
             in
               USet.for_all
-                (fun (w, r) -> not (sc w && sc r) || none_between w r)
+                (fun (w, r) -> (not (sc w && sc r)) || none_between w r)
                 v.rf
               && USet.for_all
-                   (fun (r, w) -> not (sc r && sc w) || none_between r w)
+                   (fun (r, w) -> (not (sc r && sc w)) || none_between r w)
                    v.rmw
         in
           List.exists meets (Algorithms.linear_extensions before d.sc)
@@ -3268,8 +3258,7 @@ module SymbolicSMRD : SYMBOLIC_MODEL = struct
                     :: List.filter_map
                          (fun k ->
                            if
-                             k = j
-                             || not (enc.enc_reaches (target j) (source k))
+                             k = j || not (enc.enc_reaches (target j) (source k))
                            then None
                            else
                              Some
@@ -3789,9 +3778,9 @@ let location_equality structure execution =
     completion's, so a partial execution this rejects has no admitted
     completion.
 
-    An out-of-thin-air execution, one with a cycle in [dp ∪ ppo ∪ rf], reaches
-    a model only if the model allows thin air, and then only with elisions
-    within a thread. Eliding a store because another thread overwrites it -- an
+    An out-of-thin-air execution, one with a cycle in [dp ∪ ppo ∪ rf], reaches a
+    model only if the model allows thin air, and then only with elisions within
+    a thread. Eliding a store because another thread overwrites it -- an
     initialising store, overwritten through the fork -- left such an execution
     reading the initial event at a value nothing wrote. *)
 let elisions_admitted (module M : MEMORY_MODEL)
@@ -3835,8 +3824,8 @@ let thin_air_admitted (module M : MEMORY_MODEL) (execution : symbolic_execution)
 (** [rejected_by_one_location structure execution restrictions]: the model
     rejects [execution] whatever the coherence order at other locations, because
     it elides a write the model does not let be elided, its thin-air check
-    fails, or because some location has no po-respecting
-    order its axioms accept with every other location left unordered.
+    fails, or because some location has no po-respecting order its axioms accept
+    with every other location left unordered.
 
     Sound for a model whose violations only grow with co (S6: all but od-lso),
     rf and hb: every completion of a partial execution it holds of is rejected

@@ -175,7 +175,8 @@ module SetOperations = struct
           EBinOp
             ( decide_memberships e1 structure execution,
               op,
-              decide_memberships e2 structure execution )
+              decide_memberships e2 structure execution
+            )
       | EUnOp (op, e) -> EUnOp (op, decide_memberships e structure execution)
       | EOr es ->
           EOr (List.map (fun e -> decide_memberships e structure execution) es)
@@ -844,13 +845,13 @@ module ConditionChecker = struct
           false
 end
 
-(** [admits_outcome structure execution outcome] holds when [execution] can
-    end with [outcome]: every register and global of [outcome] with an integer
-    value taking that value, under the execution's own path predicates. This is
-    how an execution of one semantics is matched against the outcomes of
-    another, which enumerates executions of its own. Locations that are not
-    plain names, and values that are addresses, say nothing comparable and are
-    left out. An aborted execution ends with no outcome. *)
+(** [admits_outcome structure execution outcome] holds when [execution] can end
+    with [outcome]: every register and global of [outcome] with an integer value
+    taking that value, under the execution's own path predicates. This is how an
+    execution of one semantics is matched against the outcomes of another, which
+    enumerates executions of its own. Locations that are not plain names, and
+    values that are addresses, say nothing comparable and are left out. An
+    aborted execution ends with no outcome. *)
 let admits_outcome structure (execution : symbolic_execution) outcome =
   let plain k =
     k <> ""
@@ -1366,8 +1367,8 @@ module PerExecutionChecker = struct
   let should_skip_condition already_satisfied is_ub_assertion =
     already_satisfied || is_ub_assertion
 
-  (** An aborted run has no final state, so it neither witnesses nor
-      contradicts a condition on one; it counts only as undefined behaviour. *)
+  (** An aborted run has no final state, so it neither witnesses nor contradicts
+      a condition on one; it counts only as undefined behaviour. *)
   let has_final_state (execution : symbolic_execution) =
     execution.aborted = None
 
@@ -1420,8 +1421,7 @@ module PerExecutionChecker = struct
       if
         should_skip_condition !already_satisfied is_ub_assertion
         || not (has_final_state execution)
-      then
-        (!already_satisfied, !ub_reasons, None)
+      then (!already_satisfied, !ub_reasons, None)
       else
         match condition_expr_opt with
         | None -> failwith "Unexpected missing condition expression"
@@ -1855,33 +1855,33 @@ let race_model model =
   | Some _ -> None
 
 (** [query ctx] is the question [ctx]'s assertion asks, as {!Executions.query}
-    asks it of each kind of justification combination, or [None] where it
-    cannot be asked that way.
+    asks it of each kind of justification combination, or [None] where it cannot
+    be asked that way.
 
-    The question is existential: is there an execution satisfying the
-    condition -- [allow] holds and [forbid] fails exactly when there is -- or,
-    for [ub] and for a test without assertions, an execution with undefined
-    behaviour. An execution answers it as {!PerExecutionChecker} would find:
-    the same condition check, the same undefined-behaviour checks.
+    The question is existential: is there an execution satisfying the condition
+    -- [allow] holds and [forbid] fails exactly when there is -- or, for [ub]
+    and for a test without assertions, an execution with undefined behaviour. An
+    execution answers it as {!PerExecutionChecker} would find: the same
+    condition check, the same undefined-behaviour checks.
 
     The condition is also stated as a constraint, so the solver can show a
     combination has no such execution, when it asks about registers only: their
     final values are the combination's ({!Executions.final_env_of}), the same
-    whatever the read-from, which is not so of memory, and a relation
-    membership is decided on the read-from.
+    whatever the read-from, which is not so of memory, and a relation membership
+    is decided on the read-from.
 
     Undefined behaviour is stated as a constraint too, under a model with no
     race clause: use after free and a pointer used before its allocation are
     each a pair of events [rhb] leaves unordered, the episodic loops paper's
-    use-after-free over its no-thin-air order ({!Executions.Freeze.ub_constraint}).
-    A data race is not stated, so under a model with a race clause a
-    combination is shown to have no undefined behaviour only by trying its
-    read-froms.
+    use-after-free over its no-thin-air order
+    ({!Executions.Freeze.ub_constraint}). A data race is not stated, so under a
+    model with a race clause a combination is shown to have no undefined
+    behaviour only by trying its read-froms.
 
     Only one outcome assertion, or none, is asked: a conjunction asks several
     questions under several models, a model or refinement assertion asks none
-    this can answer, and an assertion under promising semantics has
-    executions of its own. *)
+    this can answer, and an assertion under promising semantics has executions
+    of its own. *)
 let query (ctx : mordor_ctx) : Executions.query option =
   let report r = ctx.query_report <- Some r in
   let ub_query model =
@@ -1896,9 +1896,10 @@ let query (ctx : mordor_ctx) : Executions.query option =
             );
           goal = (fun _ _ -> None);
           ub =
-            (match coherent with
+            ( match coherent with
             | Some name -> not (Coherence.has_race_clause name)
-            | None -> true);
+            | None -> true
+            );
           report;
         }
   in

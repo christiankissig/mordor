@@ -79,9 +79,9 @@ module type MEMORY_MODEL = sig
   val elidable : symbolic_event_structure -> elided:int -> by:int -> bool
 
   (** Whether the model allows out-of-thin-air executions: those whose
-      reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator
-      drops them before any model is asked unless a model of the run allows
-      them; then every model that does not rejects them itself. *)
+      reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator drops
+      them before any model is asked unless a model of the run allows them; then
+      every model that does not rejects them itself. *)
   val allows_thin_air : bool
 
   (** Whether [check_coherence] reads the coherence order it is given. A model
@@ -94,11 +94,10 @@ module type MEMORY_MODEL = sig
       as RC11z makes them. *)
   val orders_allocations : bool
 
-  (** Whether the model orders critical sections: a lock order joins its
-      [hb]. A model that does not refuses a program with locks
-      ({!check_model_program}) rather than read [lock] and [unlock] as no-ops,
-      which let SC see a write inside another thread's critical section
-      (github #125). *)
+  (** Whether the model orders critical sections: a lock order joins its [hb]. A
+      model that does not refuses a program with locks ({!check_model_program})
+      rather than read [lock] and [unlock] as no-ops, which let SC see a write
+      inside another thread's critical section (github #125). *)
   val orders_locks : bool
 
   (** [Error reason] when the model cannot answer for this program at all. It is
@@ -308,11 +307,10 @@ val allows_thin_air : string list -> bool
 (** [rejected_by_one_location structure execution restrictions]: the model
     rejects [execution] whatever the coherence order at other locations: it
     elides a write the model does not let be elided, its thin-air check fails,
-    or some location has no po-respecting order the axioms
-    accept with every other location unordered. For a model whose violations
-    only grow with co, rf and hb, it holds of every completion of a partial
-    execution it holds of, when the completion's predicates include the partial
-    one's. *)
+    or some location has no po-respecting order the axioms accept with every
+    other location unordered. For a model whose violations only grow with co, rf
+    and hb, it holds of every completion of a partial execution it holds of,
+    when the completion's predicates include the partial one's. *)
 val rejected_by_one_location :
   ?eqlocs:(int * int) uset ->
   symbolic_event_structure ->
