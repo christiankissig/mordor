@@ -150,7 +150,7 @@ make clean # clean up
 
 MoRDor also runs entirely in the browser, without a server: the
 [playground](https://christiankissig.github.io/mordor/playground/), published
-from each release, is the web UI with MoRDor compiled to JavaScript
+from each release, or from master when the Pages workflow is run by hand, is the web UI with MoRDor compiled to JavaScript
 (js_of_ocaml) and Z3 compiled to wasm, in a Web Worker. Its answers are the
 server's, message for message.
 
