@@ -13,7 +13,8 @@ native build needs no js_of_ocaml:
 
 ```bash
 opam install js_of_ocaml-compiler js_of_ocaml zarith_stubs_js
-dune build --profile browser --build-dir _build-js ./wasm/worker.bc.js ./wasm/node_main.bc.js
+dune build --profile browser --build-dir _build-js ./wasm/worker.bc.js ./wasm/node_main.bc.js \
+  ./wasm/test/hashes.bc.js
 ```
 
 A separate build directory keeps the browser profile's build apart from the
@@ -34,12 +35,19 @@ complete. The server and the worker run the same pipelines (`src/streaming.ml`).
 ## Testing
 
 ```bash
-dune build ./wasm/test/session_native.exe
+dune build ./wasm/test/session_native.exe ./wasm/test/hashes_native.exe
 python3 -I wasm/test/compare.py _build/default/wasm/test/session_native.exe \
   _build-js/default/wasm/node_main.bc.js "$PWD/_build-js/default/wasm/worker.bc.js"
 ```
 
-`compare.py` asks every pipeline about a fixed set of programs, natively (Z3)
+`compare.py` first checks that the browser build hashes as the native one does:
+`wasm/test/hash_probe.ml` prints the hashes of fixed values, and the orders
+they put sets in, and both builds must print the same. A hash that overflows
+depends on the width of `int` (63 bits natively, 32 in JavaScript), and once
+reordered the browser build's executions (#193); MoRDor's hashes keep their
+low 30 bits.
+
+Then it asks every pipeline about a fixed set of programs, natively (Z3)
 and under node, and checks the browser build's answers:
 
 - parse: identical for every program;

@@ -942,9 +942,10 @@ module ConjunctionCacheKey = struct
   (* Every conjunct counts. [Hashtbl.hash] of the list of their hashes looked
      at the first few only, and the conjunctions asked about are sorted and
      share long prefixes: on rcu-3-2t-trunc a lookup compared about a thousand
-     keys, and the cache took 98% of the run. *)
+     keys, and the cache took 98% of the run. The low 30 bits, not [max_int]:
+     those are the same whatever the width of [int] (#193). *)
   let hash exprs =
-    List.fold_left (fun h e -> (h * 31) + hash_expr e) 17 exprs land max_int
+    List.fold_left (fun h e -> (h * 31) + hash_expr e) 17 exprs land 0x3FFFFFFF
 
   let equal exprs1 exprs2 = List.equal Expr.equal exprs1 exprs2
 end

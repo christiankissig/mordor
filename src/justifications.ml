@@ -125,13 +125,15 @@ end = struct
     in
       (* [Hashtbl.hash] looks at no more than ten meaningful values, which here
        were the write and the heads of the lists: justifications of one write
-       that differ further in hashed alike. *)
+       that differ further in hashed alike. [hash_expr] overflows, so only its
+       low 30 bits go in, which are the same whatever the width of [int]
+       (#193). *)
       Hashtbl.hash_param 1000 1000
         ( j.w,
           USet.to_list j.fwd |> List.sort compare_pairs,
           USet.to_list j.we |> List.sort compare_pairs,
           USet.to_list j.d |> List.sort String.compare,
-          List.map hash_expr j.p
+          List.map (fun e -> hash_expr e land 0x3FFFFFFF) j.p
         )
 
   let get_symbols (just : justification) : string uset =
