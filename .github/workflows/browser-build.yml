@@ -75,7 +75,7 @@ jobs:
           '
 
       # Only the result, out/: emsdk and Z3's objects are 3.5 GB. A cold
-      # build takes about 40 minutes on a runner.
+      # build took 11 minutes on a runner.
       - name: Cache Z3 for wasm
         id: z3-cache
         uses: actions/cache@v4

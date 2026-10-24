@@ -144,7 +144,7 @@ python3 -I wasm/test/corpus.py CORPUS WORK/out \
 every push and pull request, in a workflow of its own: its opam switch, with
 js_of_ocaml, and its Z3 for wasm are cached apart from the native jobs'. Z3 is
 built at the native CI's version (4.15.2), only when `wasm/z3/` changes or the
-cache is gone (about 40 minutes); with the cache warm, the job builds MoRDor
+cache is gone (11 minutes on a runner); with the cache warm, the job builds MoRDor
 both ways and runs `size.sh`, `compare.py` and `verdicts.py` on the litmus
 subset.
 
