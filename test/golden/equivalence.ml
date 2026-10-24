@@ -1,14 +1,14 @@
 (** V1 (#97) — equivalence harness for the bounded pipeline.
 
-    Every bounded path of phase 2 builds different intermediate objects from
-    the enumeration it replaces -- one witness per future instead of every
-    execution (R13, [futures_by_witness]), one execution per question instead
-    of all of them (R16, [by_query]) -- and none of them may change what MoRDor
-    reports. This runs each program under the baseline, the enumeration, and
-    under each bounded path, and diffs what is reported:
+    Every bounded path of phase 2 builds different intermediate objects from the
+    enumeration it replaces -- one witness per future instead of every execution
+    (R13, [futures_by_witness]), one execution per question instead of all of
+    them (R16, [by_query]) -- and none of them may change what MoRDor reports.
+    This runs each program under the baseline, the enumeration, and under each
+    bounded path, and diffs what is reported:
 
-    - futures: the future set of the witness path against the enumeration's,
-      as sets of [dp ∪ ppo ∪ id] projections;
+    - futures: the future set of the witness path against the enumeration's, as
+      sets of [dp ∪ ppo ∪ id] projections;
     - assertions: the verdict asked by query against the enumeration's -- valid,
       and undefined behaviour where the query asks about it -- and the witness
       the query reports, which must be one of the enumeration's executions;
@@ -33,8 +33,7 @@
 
 open Types
 
-let default_dirs =
-  [ "litmus-tests"; "litmus-tests-jmm"; "programs" ]
+let default_dirs = [ "litmus-tests"; "litmus-tests-jmm"; "programs" ]
 
 let rec lit_files path =
   if not (Sys.file_exists path) then []
@@ -118,7 +117,8 @@ let entails ps qs =
     )
     qs
 
-let relations (c : Canonicalize.t) = Canonicalize.signature { c with predicates = [] }
+let relations (c : Canonicalize.t) =
+  Canonicalize.signature { c with predicates = [] }
 
 (** [index run] is [run]'s executions by their canonical relations, each with
     its predicates as text and as expressions. *)
@@ -163,7 +163,9 @@ type result = {
 
 let compare_program ~flags_off program =
   let differences = ref [] in
-  let differ fmt = Printf.ksprintf (fun s -> differences := s :: !differences) fmt in
+  let differ fmt =
+    Printf.ksprintf (fun s -> differences := s :: !differences) fmt
+  in
   let syntactic = ref 0 and semantic = ref 0 and divergent = ref 0 in
   let count = function
     | Syntactic -> incr syntactic
@@ -218,7 +220,10 @@ let compare_program ~flags_off program =
                 if query.valid = None && query.ub = None then
                   differ "query undecided"
                 else if
-                  not (same baseline.valid query.valid && same baseline.ub query.ub)
+                  not
+                    (same baseline.valid query.valid
+                    && same baseline.ub query.ub
+                    )
                 then
                   differ "verdict: %s/%s by enumeration, %s/%s by query"
                     (show baseline.valid) (show baseline.ub) (show query.valid)
@@ -252,16 +257,16 @@ let isolated ~timeout f =
           Marshal.to_channel oc outcome [];
           close_out oc;
           Unix._exit 0
-    | pid -> (
+    | pid ->
         Unix.close wr;
         let ic = Unix.in_channel_of_descr rd in
         let outcome =
-          try (Marshal.from_channel ic : outcome) with End_of_file -> Timed_out
+          try (Marshal.from_channel ic : outcome)
+          with End_of_file -> Timed_out
         in
           close_in ic;
           ignore (Unix.waitpid [] pid);
           outcome
-      )
 
 let () =
   let flags_off = ref false and timeout = ref 300 and paths = ref [] in
@@ -271,7 +276,8 @@ let () =
       ("--timeout", Arg.Set_int timeout, "SECS Per-program time limit (300)");
     ]
   in
-    Arg.parse spec (fun p -> paths := p :: !paths)
+    Arg.parse spec
+      (fun p -> paths := p :: !paths)
       "equivalence [--flags-off] [--timeout SECS] [DIR|FILE ...]";
     Logs.set_level (Some Logs.Error);
     let files =

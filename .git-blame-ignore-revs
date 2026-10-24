@@ -1,0 +1,5 @@
+# Formatting-only commits, for git blame --ignore-revs-file (GitHub reads this
+# file by default; locally: git config blame.ignoreRevsFile .git-blame-ignore-revs).
+
+# Format the code with ocamlformat 0.29.0
+ee884707f8984758ee1ce3f9fcc16668b25fc452

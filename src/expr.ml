@@ -378,8 +378,7 @@ end = struct
   let is_truth_valued = function
     | EBoolean _ | EUnOp ("!", _) | EOr _ -> true
     | EBinOp (_, ("=" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" | "=>"), _)
-      ->
-        true
+      -> true
     | _ -> false
 
   (** [!!e]: [e] itself when [e] is a truth value, otherwise [e != 0]. On a

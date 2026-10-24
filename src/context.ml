@@ -113,13 +113,13 @@ let semantics_name = function
   | Promising1 -> "ps1"
   | Promising2 -> "ps2"
 
-(** The model names a litmus test uses to ask for promising semantics:
-    [PS1] or [PS2] for a version, [Promising] for either. *)
+(** The model names a litmus test uses to ask for promising semantics: [PS1] or
+    [PS2] for a version, [Promising] for either. *)
 let promising_model_names =
   [ "promising"; "promising1"; "promising2"; "ps"; "ps1"; "ps2" ]
 
-(** The version a promising model name selects, [None] for [Promising] and
-    [PS], which name none. *)
+(** The version a promising model name selects, [None] for [Promising] and [PS],
+    which name none. *)
 let semantics_of_model_name name =
   match String.lowercase_ascii name with
   | "ps1" | "promising1" -> Some Promising1
@@ -185,10 +185,10 @@ type options = {
           default; [--overlapping-regions] keeps only the bases apart. A
           stand-in until memory regions are modelled. *)
   mutable by_query : bool;
-      (** Answer the assertion by asking, per justification combination, for
-          one execution that decides it, rather than enumerating every
-          execution (R16): [run --by-query]. The executions the pipeline then
-          returns are the witness, if one was found. *)
+      (** Answer the assertion by asking, per justification combination, for one
+          execution that decides it, rather than enumerating every execution
+          (R16): [run --by-query]. The executions the pipeline then returns are
+          the witness, if one was found. *)
 }
 [@@deriving show]
 
@@ -251,8 +251,8 @@ type ub_reason =
   | UPD of upd_ub_reason [@printer pp_int_urel]  (** Unsequenced data race *)
   | Aborted of string
       (** A run of an operational semantics aborted: a thread dereferenced
-          something that is not an address, or divided by zero. The string
-          says which. Only {!Promising} reports it. *)
+          something that is not an address, or divided by zero. The string says
+          which. Only {!Promising} reports it. *)
   | Race of upd_ub_reason [@printer pp_int_urel]
       (** Data races: pairs of conflicting accesses of two threads, one of them
           non-atomic, that the model's [hb] leaves unordered in a consistent
@@ -430,6 +430,22 @@ type loop_episodicity_result_summary = {
 
 (** {1 Pipeline Context} *)
 
+(** How an assertion asked by query ({!options.by_query}) was answered: over how
+    many kinds of justification combination, how many were shown to have no
+    witness, how many neither shown to have one nor to have none within the
+    budgets, how many were not asked because [MORDOR_QUERY_ONLY] left them out,
+    and whether a witness was found. A witness settles the question whatever the
+    rest; without one, the answer is a proof of absence only if no kind was left
+    undecided or unasked. *)
+type query_report = {
+  kinds : int;
+  absent : int;
+  undecided : int;
+  unasked : int;
+  witnessed : bool;
+}
+[@@deriving show]
+
 (** Main context that flows through the verification pipeline.
 
     This record accumulates results from each stage of analysis:
@@ -441,21 +457,6 @@ type loop_episodicity_result_summary = {
 
     Each stage reads from and writes to this context, creating a pipeline of
     transformations. *)
-(** How an assertion asked by query ({!options.by_query}) was answered: over
-    how many kinds of justification combination, how many were shown to have no
-    witness, how many neither shown to have one nor to have none within the
-    budgets, how many were not asked because [MORDOR_QUERY_ONLY] left them
-    out, and whether a witness was found. A witness settles the question
-    whatever the rest; without one, the answer is a proof of absence only if
-    no kind was left undecided or unasked. *)
-type query_report = {
-  kinds : int;
-  absent : int;
-  undecided : int;
-  unasked : int;
-  witnessed : bool;
-}
-[@@deriving show]
 
 type mordor_ctx = {
   (* Pipeline configuration *)
@@ -677,7 +678,8 @@ let model_options_table : (string, model_options) Hashtbl.t =
        the zoo's cat files are named. *)
     List.iter
       (fun (alias, name) ->
-        Hashtbl.add tbl alias { coherent = Some name; ubopt = false })
+        Hashtbl.add tbl alias { coherent = Some name; ubopt = false }
+      )
       [ ("cpp11", "c11"); ("cpp17", "c17"); ("cpp20", "c20") ];
     Hashtbl.add tbl "ub11" { coherent = None; ubopt = true };
     (* [_] is the litmus syntax for "any model": the grammar's [model_name]
@@ -720,34 +722,36 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
   let promising_name =
     List.mem (String.lowercase_ascii model) promising_model_names
   in
-  match Hashtbl.find_opt model_options_table (String.lowercase_ascii model) with
-  | None when promising_name -> (
-      (* The promising semantics is not a coherence model: [Promising] computes
+    match
+      Hashtbl.find_opt model_options_table (String.lowercase_ascii model)
+    with
+    | None when promising_name -> (
+        (* The promising semantics is not a coherence model: [Promising] computes
          the executions itself. [PS1] and [PS2] select it, as [IMM] selects a
          coherence model -- unless [--semantics] already chose a version, which
          stands. [Promising] names no version, so it needs one chosen. *)
-      match (ctx.options.semantics, semantics_of_model_name model) with
-      | Smrd, Some semantics -> ctx.options.semantics <- semantics
-      | Smrd, None ->
-          let msg =
-            Printf.sprintf
-              "The model %S asks for promising semantics without saying which: \
-               annotate the test [PS1] or [PS2], or run with --semantics ps1 \
-               or --semantics ps2."
-              model
-          in
-            if ctx.options.allow_unknown_model then
-              Logs_safe.warn (fun m -> m "%s" msg)
-            else failwith msg
-      | chosen, Some named when chosen <> named ->
-          Logs_safe.warn (fun m ->
-              m "The test asks for %s; --semantics %s stands." model
-                (semantics_name chosen)
-          )
-      | _ -> ()
-    )
-  | None ->
-      (* The name is not in the table at all, so there is no coherence model to
+        match (ctx.options.semantics, semantics_of_model_name model) with
+        | Smrd, Some semantics -> ctx.options.semantics <- semantics
+        | Smrd, None ->
+            let msg =
+              Printf.sprintf
+                "The model %S asks for promising semantics without saying \
+                 which: annotate the test [PS1] or [PS2], or run with \
+                 --semantics ps1 or --semantics ps2."
+                model
+            in
+              if ctx.options.allow_unknown_model then
+                Logs_safe.warn (fun m -> m "%s" msg)
+              else failwith msg
+        | chosen, Some named when chosen <> named ->
+            Logs_safe.warn (fun m ->
+                m "The test asks for %s; --semantics %s stands." model
+                  (semantics_name chosen)
+            )
+        | _ -> ()
+      )
+    | None ->
+        (* The name is not in the table at all, so there is no coherence model to
          apply and the one already in effect -- the [smrd] default, normally --
          would answer a different question from the one the litmus test asks.
          Table entries whose [coherent] is [None] are the other case: those are
@@ -758,38 +762,38 @@ let apply_model_options (ctx : mordor_ctx) (model : string) : unit =
          -- the release-acquire and C ones have since come back, under models
          of their own; failing here is what stops the next one
          being added unnoticed. Pass [--allow-unknown-model] to measure them. *)
-      let msg =
-        Printf.sprintf
-          "Unknown memory model %S. MoRDor implements imm, rc11, rc11c, smrd \
-           and %s, maps a further set of names onto those, and computes \
-           promising semantics for [PS1] and [PS2]; this one is in none of \
-           them, so no model can be applied. Re-run with \
-           --allow-unknown-model to check the test under the model already in \
-           effect instead -- the verdict is then that model's, not %S's."
-          model
-          (String.concat ", " implemented_zoo_models)
-          model
-      in
-        if ctx.options.allow_unknown_model then
-          Logs_safe.warn (fun m -> m "%s" msg)
-        else failwith msg
-  | Some options ->
-      Option.iter
-        (fun coherent ->
-          Logs_safe.debug (fun m -> m "setting coherent %s" coherent);
-          ctx.options.coherent <- coherent
-        )
-        options.coherent;
-      (* The table has carried [ubopt] since it was written and nothing ever
+        let msg =
+          Printf.sprintf
+            "Unknown memory model %S. MoRDor implements imm, rc11, rc11c, smrd \
+             and %s, maps a further set of names onto those, and computes \
+             promising semantics for [PS1] and [PS2]; this one is in none of \
+             them, so no model can be applied. Re-run with \
+             --allow-unknown-model to check the test under the model already \
+             in effect instead -- the verdict is then that model's, not %S's."
+            model
+            (String.concat ", " implemented_zoo_models)
+            model
+        in
+          if ctx.options.allow_unknown_model then
+            Logs_safe.warn (fun m -> m "%s" msg)
+          else failwith msg
+    | Some options ->
+        Option.iter
+          (fun coherent ->
+            Logs_safe.debug (fun m -> m "setting coherent %s" coherent);
+            ctx.options.coherent <- coherent
+          )
+          options.coherent;
+        (* The table has carried [ubopt] since it was written and nothing ever
          read it, so [UB11] and no annotation at all behaved identically.
          [Interpret] now gates the [e / !r -> e] rewrite on it. *)
-      Logs_safe.debug (fun m -> m "setting ubopt %b" options.ubopt
-      );
-      ctx.options.ubopt <- options.ubopt
+        Logs_safe.debug (fun m -> m "setting ubopt %b" options.ubopt
+        );
+        ctx.options.ubopt <- options.ubopt
 
 (** [primary_model_name ctx] is the name of the model the run's own executions
-    are under: the coherence model in effect under sMRD, or [ps1] or [ps2]
-    under promising semantics. *)
+    are under: the coherence model in effect under sMRD, or [ps1] or [ps2] under
+    promising semantics. *)
 let primary_model_name (ctx : mordor_ctx) =
   match ctx.options.semantics with
   | Smrd -> ctx.options.coherent
@@ -814,40 +818,40 @@ let assertion_coherence_model ?(forced = Smrd) (ctx : mordor_ctx) model =
   let promising_name =
     List.mem (String.lowercase_ascii model) promising_model_names
   in
-  match get_model_options model with
-  | _ when forced <> Smrd -> semantics_name forced
-  | None when promising_name -> (
-      (* Promising semantics is no coherence model: the assertion is checked
+    match get_model_options model with
+    | _ when forced <> Smrd -> semantics_name forced
+    | None when promising_name -> (
+        (* Promising semantics is no coherence model: the assertion is checked
          against the semantics' own executions, which {!Semantics} computes
          when the run's are another's (github #128). [Promising] names no
          version, and takes the one chosen, if any, as [apply_model_options]
          does. *)
-      match semantics_of_model_name model with
-      | Some semantics -> semantics_name semantics
-      | None ->
-          let probe = { ctx with options = { ctx.options with model } } in
-            apply_model_options probe model;
-            primary_model_name probe
-    )
-  | Some { coherent; ubopt } ->
-      if ubopt <> ctx.options.ubopt then
-        failwith
-          (Printf.sprintf
-             "The assertions of one test are checked against one enumeration \
-              of its executions, and %S and %S differ in whether they fold \
-              undefined behaviour, which happens before any model is \
-              consulted. Put the assertions under %S in a test of their own."
-             model ctx.options.model model
-          );
-      Option.value coherent ~default:(primary_model_name ctx)
-  | None ->
-      (* Unknown: fail as [apply_model_options] does, or measure under the
+        match semantics_of_model_name model with
+        | Some semantics -> semantics_name semantics
+        | None ->
+            let probe = { ctx with options = { ctx.options with model } } in
+              apply_model_options probe model;
+              primary_model_name probe
+      )
+    | Some { coherent; ubopt } ->
+        if ubopt <> ctx.options.ubopt then
+          failwith
+            (Printf.sprintf
+               "The assertions of one test are checked against one enumeration \
+                of its executions, and %S and %S differ in whether they fold \
+                undefined behaviour, which happens before any model is \
+                consulted. Put the assertions under %S in a test of their own."
+               model ctx.options.model model
+            );
+        Option.value coherent ~default:(primary_model_name ctx)
+    | None ->
+        (* Unknown: fail as [apply_model_options] does, or measure under the
          model in effect when asked to. *)
-      let probe =
-        { ctx with options = { ctx.options with model = ctx.options.model } }
-      in
-        apply_model_options probe model;
-        primary_model_name ctx
+        let probe =
+          { ctx with options = { ctx.options with model = ctx.options.model } }
+        in
+          apply_model_options probe model;
+          primary_model_name ctx
 
 (** [set_assertions ctx assertions] records a test's assertions, applies the
     first one's model, and resolves the model every assertion is checked under.
@@ -861,7 +865,7 @@ let set_assertions (ctx : mordor_ctx) (assertions : ir_assertion list) =
     | Ir.Model { model } -> Some model
     | Ir.Chained _ -> None
   in
-    let forced = ctx.options.semantics in
+  let forced = ctx.options.semantics in
     ( match assertions with
     | _ :: _ :: _
       when List.exists
@@ -942,7 +946,8 @@ let select_models (ctx : mordor_ctx) ~primary ~others =
       | "default" -> stated
       (* Promising semantics computes executions of its own, and is compared
          by outcome; see [Semantics]. *)
-      | name when semantics_of_model_name name <> None -> String.lowercase_ascii name
+      | name when semantics_of_model_name name <> None ->
+          String.lowercase_ascii name
       | name -> (
           match get_model_options name with
           | Some { coherent = Some coherent; _ } -> coherent

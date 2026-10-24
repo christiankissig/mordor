@@ -505,7 +505,8 @@ let verdict ~by_query litmus =
       ( ctx.valid,
         ctx.undefined_behaviour,
         ctx.query_report,
-        USet.size (Option.get ctx.executions) )
+        USet.size (Option.get ctx.executions)
+      )
 
 let uaf_program ~release =
   Printf.sprintf
@@ -524,7 +525,8 @@ let query_programs =
     ("MP+rel+acq", List.assoc "MP+rel+acq" witness_programs, `Absent);
     ( "final x",
       "x := 0; { x := 1 } ||| { x := 2 } %% allow (x = 1) []",
-      `Witness );
+      `Witness
+    );
     ("uaf", uaf_program ~release:false, `Witness);
     ("uaf fixed", uaf_program ~release:true, `Absent);
   ]
@@ -544,8 +546,9 @@ let test_assertions_by_query () =
               (name ^ ": witnessed as expected")
               (expected = `Witness) r.witnessed;
             if expected = `Absent then
-              check int (name ^ ": every kind shown to have none") r.kinds
-                r.absent
+              check int
+                (name ^ ": every kind shown to have none")
+                r.kinds r.absent
         );
         check bool (name ^ ": at most the witness") true (executions <= 1);
         if ub' <> None then
@@ -585,13 +588,17 @@ let test_ub_by_constraint () =
               | None -> fail (name ^ ": not asked by query")
               | Some r ->
                   check int (name ^ ": decided by the solver") 0 r.undecided;
-                  check bool (name ^ ": witnessed as expected")
+                  check bool
+                    (name ^ ": witnessed as expected")
                     (expected = `Witness) r.witnessed;
                   if expected = `Absent then
-                    check int (name ^ ": every kind shown to have none") r.kinds
-                      r.absent;
-                  check (option bool) (name ^ ": undefined behaviour")
-                    (Some (expected = `Witness)) ub
+                    check int
+                      (name ^ ": every kind shown to have none")
+                      r.kinds r.absent;
+                  check (option bool)
+                    (name ^ ": undefined behaviour")
+                    (Some (expected = `Witness))
+                    ub
           )
           [ ("uaf", false, `Witness); ("uaf fixed", true, `Absent) ]
       )
@@ -603,9 +610,7 @@ let test_ub_by_constraint () =
    witness, and with no time for it some kinds are left undecided -- how many
    depends on timing, so one of them is always left out as well. *)
 let test_ask_only_undecided () =
-  let program =
-    wide_uaf_program ~release:true ^ " %% forbid (x = 3) [smrd]"
-  in
+  let program = wide_uaf_program ~release:true ^ " %% forbid (x = 3) [smrd]" in
   let seconds = !Executions.Freeze.witness_seconds
   and rounds = !Executions.Freeze.witness_rounds
   and undecided_file = Filename.temp_file "undecided" ".keys" in
@@ -633,19 +638,20 @@ let test_ask_only_undecided () =
             Out_channel.with_open_text undecided_file (fun oc ->
                 List.iter (fun key -> output_string oc (key ^ "\n")) asked
             );
-          Executions.Freeze.witness_seconds := seconds;
-          Executions.Freeze.witness_rounds := rounds;
-          Executions.Freeze.query_undecided_file := None;
-          Executions.Freeze.query_only_file := Some undecided_file;
-          let valid, _, report, _ = verdict ~by_query:true program in
-          let again = Option.get report in
-            check int "the same kinds" first.kinds again.kinds;
-            check int "the listed kinds shown to have none" (List.length asked)
-              again.absent;
-            check int "none undecided" 0 again.undecided;
-            check int "the rest not asked" (first.kinds - List.length asked)
-              again.unasked;
-            check (option bool) "no verdict without the rest" None valid
+            Executions.Freeze.witness_seconds := seconds;
+            Executions.Freeze.witness_rounds := rounds;
+            Executions.Freeze.query_undecided_file := None;
+            Executions.Freeze.query_only_file := Some undecided_file;
+            let valid, _, report, _ = verdict ~by_query:true program in
+            let again = Option.get report in
+              check int "the same kinds" first.kinds again.kinds;
+              check int "the listed kinds shown to have none"
+                (List.length asked) again.absent;
+              check int "none undecided" 0 again.undecided;
+              check int "the rest not asked"
+                (first.kinds - List.length asked)
+                again.unasked;
+              check (option bool) "no verdict without the rest" None valid
       )
 
 let suite =

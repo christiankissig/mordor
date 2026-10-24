@@ -555,9 +555,10 @@ let test_evaluate_negation_without_complement () =
   let check_negated description inner =
     Alcotest.(check bool)
       description true
-      (match Expr.evaluate (Expr.unop "!" inner) with
+      ( match Expr.evaluate (Expr.unop "!" inner) with
       | EUnOp ("!", e) -> Expr.equal e inner
-      | _ -> false)
+      | _ -> false
+      )
   in
     check_negated "!(a && b) keeps the negation"
       (e_binop (e_var "a") "&&" (e_var "b"));

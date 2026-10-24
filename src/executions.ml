@@ -616,15 +616,14 @@ module ReadFromValidation = struct
       )
       rf
 
-  (** [init_rf structure ~writes rf] is what a read of the initial value,
-      event 0, needs of its location: that it is none of [writes] -- each write
-      or free of the execution the read is not program-order before. The
-      initial value is what a location holds that nothing writes; a location
-      the program writes has its initial store among the writes, and one a
-      concurrent write may reach is read from that write. Where the read's
-      location is fixed this rules out what the candidates already did; where
-      it is computed, [*(ra + r1)], it holds the offset to one no write
-      covers.
+  (** [init_rf structure ~writes rf] is what a read of the initial value, event
+      0, needs of its location: that it is none of [writes] -- each write or
+      free of the execution the read is not program-order before. The initial
+      value is what a location holds that nothing writes; a location the program
+      writes has its initial store among the writes, and one a concurrent write
+      may reach is read from that write. Where the read's location is fixed this
+      rules out what the candidates already did; where it is computed,
+      [*(ra + r1)], it holds the offset to one no write covers.
 
       @param structure The event structure.
       @param writes The writes and frees of the execution.
@@ -643,24 +642,21 @@ module ReadFromValidation = struct
                   if w' = 0 || USet.mem structure.po (r, w') then None
                   else
                     Option.map
-                      (fun w_loc ->
-                        Expr.evaluate (Expr.binop w_loc "!=" r_loc)
-                      )
+                      (fun w_loc -> Expr.evaluate (Expr.binop w_loc "!=" r_loc))
                       (get_loc structure w')
               )
     )
     |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))
 
-  (** [adjacent_same_location_allocation_events structure path rhb p] finds
-      the pairs of allocations that must have distinct addresses.
+  (** [adjacent_same_location_allocation_events structure path rhb p] finds the
+      pairs of allocations that must have distinct addresses.
 
       An allocator hands a released region back out only once it is released:
-      the malloc that reuses an address happens after the free that released
-      it. So two allocations are apart unless a free of one is [rhb]-between it
-      and the other. This used to be asked only of allocations in program
-      order, one way round; allocations in different threads, which no
-      program order relates, could share an address with no free between them
-      at all (R17).
+      the malloc that reuses an address happens after the free that released it.
+      So two allocations are apart unless a free of one is [rhb]-between it and
+      the other. This used to be asked only of allocations in program order, one
+      way round; allocations in different threads, which no program order
+      relates, could share an address with no free between them at all (R17).
 
       @param structure The event structure.
       @param path Current path information.
@@ -1508,7 +1504,9 @@ module Freeze = struct
             )
             (List.length candidates)
             (List.fold_left
-               (fun a (_, ws) -> a +. log10 (float_of_int (max 1 (List.length ws))))
+               (fun a (_, ws) ->
+                 a +. log10 (float_of_int (max 1 (List.length ws)))
+               )
                0. candidates
             )
       end;
@@ -1872,48 +1870,48 @@ module Freeze = struct
         )
     in
 
-      fun rf ->
-        Logs_safe.debug (fun m ->
-            m
-              "  [instantiate_execution] Starting validation for RF with %d \
-               edges: %s"
-              (USet.size rf)
-              (String.concat ", "
-                 (List.map
-                    (fun (w, r) -> Printf.sprintf "(%d->%d)" w r)
-                    (USet.values rf)
-                 )
-              )
-        );
+    fun rf ->
+      Logs_safe.debug (fun m ->
+          m
+            "  [instantiate_execution] Starting validation for RF with %d \
+             edges: %s"
+            (USet.size rf)
+            (String.concat ", "
+               (List.map
+                  (fun (w, r) -> Printf.sprintf "(%d->%d)" w r)
+                  (USet.values rf)
+               )
+            )
+      );
 
-        let ( let*? ) (condition, msg) f =
-          if condition then f ()
-          else (
-            Logs_safe.debug (fun m ->
-                m "  [instantiate_execution] Rejected: %s" msg
-            );
+      let ( let*? ) (condition, msg) f =
+        if condition then f ()
+        else (
+          Logs_safe.debug (fun m ->
+              m "  [instantiate_execution] Rejected: %s" msg
+          );
 
-            None
-          )
-        in
+          None
+        )
+      in
 
-        (* Check 3: All rf edges respect ppo_loc *)
-        Logs_safe.debug (fun m ->
-            m
-              "  [instantiate_execution] Checking RF respects PPO (PPO has %d \
-               edges)"
-              (USet.size ppo)
-        );
-        let*? () =
-          (Validation.rf_respects_ppo ~rf ~ppo, "RF edges do not respect PPO")
-        in
+      (* Check 3: All rf edges respect ppo_loc *)
+      Logs_safe.debug (fun m ->
+          m
+            "  [instantiate_execution] Checking RF respects PPO (PPO has %d \
+             edges)"
+            (USet.size ppo)
+      );
+      let*? () =
+        (Validation.rf_respects_ppo ~rf ~ppo, "RF edges do not respect PPO")
+      in
 
-        Logs_safe.debug (fun m ->
-            m "  [instantiate_execution] Delta (fwd U we) has %d edges"
-              (USet.size delta)
-        );
+      Logs_safe.debug (fun m ->
+          m "  [instantiate_execution] Delta (fwd U we) has %d edges"
+            (USet.size delta)
+      );
 
-        (* It is given by generation, and this never rejects. remap_just unions
+      (* It is given by generation, and this never rejects. remap_just unions
        the combination's whole fwd and we into every justification it remaps,
        so delta here is exactly the combination's fwd U we, and pi_2 delta is
        exactly the elided set compute_path_rf was handed. That subtracts it
@@ -1926,209 +1924,201 @@ module Freeze = struct
        way and a read observing an elided write. rf_total below is not
        in the same position: generation does not guarantee every read gets an
        edge. *)
+      let*? () =
+        (Validation.rf_not_elided ~rf ~delta, "RF fails RF elided check")
+      in
+        Logs_safe.debug (fun m ->
+            m "  [instantiate_execution] RF elided check passed"
+        );
         let*? () =
-          (Validation.rf_not_elided ~rf ~delta, "RF fails RF elided check")
+          ( Validation.rf_total ~rf ~reads:read_events ~delta,
+            "RF fails RF total check"
+          )
         in
           Logs_safe.debug (fun m ->
-              m "  [instantiate_execution] RF elided check passed"
+              m
+                "  [instantiate_execution] RF total check passed (reads: %d, \
+                 RF edges: %d)"
+                (USet.size read_events) (USet.size rf)
           );
-          let*? () =
-            ( Validation.rf_total ~rf ~reads:read_events ~delta,
-              "RF fails RF total check"
-            )
-          in
+
+          let rhb = Validation.rhb ~dp ~ppo ~rf in
+          let rhb_acyclic = Validation.rhb_acyclic rhb in
             Logs_safe.debug (fun m ->
                 m
-                  "  [instantiate_execution] RF total check passed (reads: %d, \
-                   RF edges: %d)"
-                  (USet.size read_events) (USet.size rf)
+                  "  [instantiate_execution] Checking RHB acyclicity (dp: %d, \
+                   ppo: %d, rf: %d, rhb: %d)"
+                  (USet.size dp) (USet.size ppo) (USet.size rf) (USet.size rhb)
             );
-
-            let rhb = Validation.rhb ~dp ~ppo ~rf in
-            let rhb_acyclic = Validation.rhb_acyclic rhb in
+            if not rhb_acyclic then (
               Logs_safe.debug (fun m ->
-                  m
-                    "  [instantiate_execution] Checking RHB acyclicity (dp: \
-                     %d, ppo: %d, rf: %d, rhb: %d)"
-                    (USet.size dp) (USet.size ppo) (USet.size rf) (USet.size rhb)
+                  m "dp = %s"
+                    (USet.to_string
+                       (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                       dp
+                    )
               );
-              if not rhb_acyclic then (
-                Logs_safe.debug (fun m ->
-                    m "dp = %s"
-                      (USet.to_string
-                         (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
-                         dp
-                      )
-                );
-                Logs_safe.debug (fun m ->
-                    m "ppo = %s"
-                      (USet.to_string
-                         (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
-                         ppo
-                      )
-                );
-                Logs_safe.debug (fun m ->
-                    m "rf = %s"
-                      (USet.to_string
-                         (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
-                         rf
-                      )
-                )
+              Logs_safe.debug (fun m ->
+                  m "ppo = %s"
+                    (USet.to_string
+                       (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                       ppo
+                    )
               );
-              (* Unless a model of the run allows out-of-thin-air executions:
+              Logs_safe.debug (fun m ->
+                  m "rf = %s"
+                    (USet.to_string
+                       (fun (a, b) -> Printf.sprintf "(%d,%d)" a b)
+                       rf
+                    )
+              )
+            );
+            (* Unless a model of the run allows out-of-thin-air executions:
                  then each model that does not rejects them itself
                  (Coherence.allows_thin_air). *)
-              let*? () = (rhb_acyclic || thin_air, "RHB is not acyclic") in
-                Logs_safe.debug (fun m ->
-                    m "  [instantiate_execution] RHB acyclicity check passed"
-                );
+            let*? () = (rhb_acyclic || thin_air, "RHB is not acyclic") in
+              Logs_safe.debug (fun m ->
+                  m "  [instantiate_execution] RHB acyclicity check passed"
+              );
 
-                (* Create environment from RF *)
-                let env_rf = ReadFromValidation.env_rf structure rf in
-                let check_rf = ReadFromValidation.check_rf structure rf in
-                let init_rf =
-                  ReadFromValidation.init_rf structure
-                    ~writes:
-                      (USet.union structure.write_events structure.free_events
-                      |> USet.intersection e
-                      )
-                    rf
-                in
+              (* Create environment from RF *)
+              let env_rf = ReadFromValidation.env_rf structure rf in
+              let check_rf = ReadFromValidation.check_rf structure rf in
+              let init_rf =
+                ReadFromValidation.init_rf structure
+                  ~writes:
+                    (USet.union structure.write_events structure.free_events
+                    |> USet.intersection e
+                    )
+                  rf
+              in
 
-                (* atomicity constraint; a free happens before a malloc in
+              (* atomicity constraint; a free happens before a malloc in
                    another thread only through a chain of rhb edges, so the
                    check takes the closure *)
-                let af =
-                  ReadFromValidation.adjacent_same_location_allocation_events
-                    structure path
-                    (URelation.transitive_closure rhb)
-                    (USet.values env_rf)
-                in
+              let af =
+                ReadFromValidation.adjacent_same_location_allocation_events
+                  structure path
+                  (URelation.transitive_closure rhb)
+                  (USet.values env_rf)
+              in
 
-                (* Create disjointness predicates *)
-                let disj =
-                  USet.map
-                    (fun (a, b) ->
-                      match
-                        ( Hashtbl.find_opt structure.events a,
-                          Hashtbl.find_opt structure.events b
-                        )
-                      with
-                      | None, _ ->
-                          failwith
-                            ("Event "
-                            ^ string_of_int a
-                            ^ " not found in structure!"
-                            )
-                      | _, None ->
-                          failwith
-                            ("Event "
-                            ^ string_of_int b
-                            ^ " not found in structure!"
-                            )
-                      | Some ea, Some eb -> (
-                          match
-                            ( get_loc structure a,
-                              get_val structure a,
-                              get_loc structure b,
-                              get_val structure b
-                            )
-                          with
-                          | None, _, _, _ ->
-                              failwith
-                                ("Event "
-                                ^ string_of_int a
-                                ^ " has no location!"
-                                )
-                          | _, None, _, _ ->
-                              failwith
-                                ("Event " ^ string_of_int a ^ " has no value!")
-                          | _, _, None, _ ->
-                              failwith
-                                ("Event "
-                                ^ string_of_int b
-                                ^ " has no location!"
-                                )
-                          | _, _, _, None ->
-                              failwith
-                                ("Event " ^ string_of_int b ^ " has no value!")
-                          | _ ->
-                              let loc_a = get_loc structure a |> Option.get in
-                              let val_a = get_val structure a |> Option.get in
-                              let loc_b = get_loc structure b |> Option.get in
-                              let val_b = get_val structure b |> Option.get in
-                                (* disjoint only uses location *)
-                                Expr.evaluate
-                                  (disjoint (loc_a, val_a) (loc_b, val_b))
-                        )
-                    )
-                    af
-                in
+              (* Create disjointness predicates *)
+              let disj =
+                USet.map
+                  (fun (a, b) ->
+                    match
+                      ( Hashtbl.find_opt structure.events a,
+                        Hashtbl.find_opt structure.events b
+                      )
+                    with
+                    | None, _ ->
+                        failwith
+                          ("Event "
+                          ^ string_of_int a
+                          ^ " not found in structure!"
+                          )
+                    | _, None ->
+                        failwith
+                          ("Event "
+                          ^ string_of_int b
+                          ^ " not found in structure!"
+                          )
+                    | Some ea, Some eb -> (
+                        match
+                          ( get_loc structure a,
+                            get_val structure a,
+                            get_loc structure b,
+                            get_val structure b
+                          )
+                        with
+                        | None, _, _, _ ->
+                            failwith
+                              ("Event " ^ string_of_int a ^ " has no location!")
+                        | _, None, _, _ ->
+                            failwith
+                              ("Event " ^ string_of_int a ^ " has no value!")
+                        | _, _, None, _ ->
+                            failwith
+                              ("Event " ^ string_of_int b ^ " has no location!")
+                        | _, _, _, None ->
+                            failwith
+                              ("Event " ^ string_of_int b ^ " has no value!")
+                        | _ ->
+                            let loc_a = get_loc structure a |> Option.get in
+                            let val_a = get_val structure a |> Option.get in
+                            let loc_b = get_loc structure b |> Option.get in
+                            let val_b = get_val structure b |> Option.get in
+                              (* disjoint only uses location *)
+                              Expr.evaluate
+                                (disjoint (loc_a, val_a) (loc_b, val_b))
+                      )
+                  )
+                  af
+              in
 
-                let execution_predicates =
-                  USet.of_list (init_rf @ p_combined)
-                  |> USet.union env_rf
-                  |> USet.union check_rf
-                  |> USet.union disj
-                  |> USet.filter (fun e -> not (Expr.equal e (EBoolean true)))
-                  |> USet.values
-                  |> List.sort Expr.compare
-                in
+              let execution_predicates =
+                USet.of_list (init_rf @ p_combined)
+                |> USet.union env_rf
+                |> USet.union check_rf
+                |> USet.union disj
+                |> USet.filter (fun e -> not (Expr.equal e (EBoolean true)))
+                |> USet.values
+                |> List.sort Expr.compare
+              in
 
+              Logs_safe.debug (fun m ->
+                  m
+                    "  [instantiate_execution] Checking satisfiability of %d \
+                     predicates (env_rf: %d, check_rf: %d, disj: %d, \
+                     p_combined: %d)"
+                    (List.length execution_predicates)
+                    (USet.size env_rf) (USet.size check_rf) (USet.size disj)
+                    (List.length p_combined)
+              );
+
+              (* Check satisfiability of combined predicates *)
+              let satisfiable = Solver.is_sat_cached execution_predicates in
                 Logs_safe.debug (fun m ->
                     m
-                      "  [instantiate_execution] Checking satisfiability of %d \
-                       predicates (env_rf: %d, check_rf: %d, disj: %d, \
-                       p_combined: %d)"
-                      (List.length execution_predicates)
-                      (USet.size env_rf) (USet.size check_rf) (USet.size disj)
-                      (List.length p_combined)
+                      "  [instantiate_execution] Satisfiability check result: \
+                       %b"
+                      satisfiable
                 );
+                let*? () = (satisfiable, "unsatisfiable combined predicates") in
 
-                (* Check satisfiability of combined predicates *)
-                let satisfiable = Solver.is_sat_cached execution_predicates in
-                  Logs_safe.debug (fun m ->
-                      m
-                        "  [instantiate_execution] Satisfiability check \
-                         result: %b"
-                        satisfiable
-                  );
-                  let*? () =
-                    (satisfiable, "unsatisfiable combined predicates")
-                  in
-
-                  (* Success! Return the freeze result *)
-                  let freeze_result : FreezeResult.t =
-                    (* Every candidate of the combination shares [e], [dp], [ppo] and
+                (* Success! Return the freeze result *)
+                let freeze_result : FreezeResult.t =
+                  (* Every candidate of the combination shares [e], [dp], [ppo] and
                        [rmw]. That once made the parallel pipeline pick a
                        different witnessing execution from the sequential one
                        (lb.lit): Base's hash sets wrote to themselves while
                        being read, and the hash of an execution read what they
                        wrote. USet's sets do neither. *)
-                    {
-                      e;
-                      dp;
-                      ppo;
-                      rf;
-                      rmw;
-                      (* Filled in by the caller, which is what knows the
+                  {
+                    e;
+                    dp;
+                    ppo;
+                    rf;
+                    rmw;
+                    (* Filled in by the caller, which is what knows the
                      justification combination these came from. *)
-                      fwd = USet.create ();
-                      we = USet.create ();
-                      justs = [];
-                      pp = execution_predicates;
-                      conds = [ EBoolean true ];
-                      write_values = [];
-                    }
-                  in
-                    Logs_safe.debug (fun m ->
-                        m
-                          "  [instantiate_execution] SUCCESS! Created freeze \
-                           result with %d events, %d RF edges"
-                          (USet.size e) (USet.size rf)
-                    );
+                    fwd = USet.create ();
+                    we = USet.create ();
+                    justs = [];
+                    pp = execution_predicates;
+                    conds = [ EBoolean true ];
+                    write_values = [];
+                  }
+                in
+                  Logs_safe.debug (fun m ->
+                      m
+                        "  [instantiate_execution] SUCCESS! Created freeze \
+                         result with %d events, %d RF edges"
+                        (USet.size e) (USet.size rf)
+                  );
 
-                    Some freeze_result
+                  Some freeze_result
 
   (** [freeze_dp structure just] freezes semantic dependency relations from
       justification.
@@ -2674,8 +2664,8 @@ module Freeze = struct
   let query_undecided_file = ref (Sys.getenv_opt "MORDOR_QUERY_UNDECIDED")
 
   (** A file of such keys; a query then asks only the kinds listed there:
-      [MORDOR_QUERY_ONLY], none by default. The rest are not asked, so without
-      a witness such a run gives no verdict. *)
+      [MORDOR_QUERY_ONLY], none by default. The rest are not asked, so without a
+      witness such a run gives no verdict. *)
   let query_only_file = ref (Sys.getenv_opt "MORDOR_QUERY_ONLY")
 
   let instantiator ?thin_air structure prep =
@@ -2784,8 +2774,7 @@ module Freeze = struct
     let check_partial combo ?alternatives pair =
       incr steps;
       if (!steps = 1 || !steps land 1023 = 0) && Unix.gettimeofday () > deadline
-      then
-        raise Out_of_time;
+      then raise Out_of_time;
       check_partial combo ?alternatives pair
     in
       try
@@ -2810,29 +2799,29 @@ module Freeze = struct
       {!Assertion.UBValidation} finds it. A read reads from a free; or there are
       a source [s] and a target [t] on the same allocation, with [t] not
       reachable from [s] in [rhb = (ppo ∪ fj ∪ dp ∪ rf)⁺]: a write and a free
-      (use after free), or an allocation and an access (a pointer used before
-      it is allocated). This is the episodic loops paper's use-after-free
+      (use after free), or an allocation and an access (a pointer used before it
+      is allocated). This is the episodic loops paper's use-after-free
       (Definition [def:uaf]), with [rhb] its no-thin-air order.
 
       {b The allocation.} The checks compare the location of each event by its
-      symbol, once the read symbols in it are replaced by the values their
-      reads read: the allocation, or global, it is based on. Here that is a
-      term [base], an integer per symbol, [0] where the location has no symbol
-      and so matches nothing: a constant for an allocation's symbol, and for
-      the symbol of a read the selectors decide, a variable the chosen edge
-      sets to the base of the value the write gives the read. A location or
-      value with more than one symbol is left unconstrained.
+      symbol, once the read symbols in it are replaced by the values their reads
+      read: the allocation, or global, it is based on. Here that is a term
+      [base], an integer per symbol, [0] where the location has no symbol and so
+      matches nothing: a constant for an allocation's symbol, and for the symbol
+      of a read the selectors decide, a variable the chosen edge sets to the
+      base of the value the write gives the read. A location or value with more
+      than one symbol is left unconstrained.
 
       {b Non-reachability.} [t] unreachable from [s] is stated by a set closed
       under the edges and holding [s], but not [t]: [reach x = 1] for [s],
-      [reach x = 1] for [y] whenever it holds for [x] and [(x, y)] is an edge
-      -- [static], the combination's [dp ∪ ppo], and [fj], always; a candidate
+      [reach x = 1] for [y] whenever it holds for [x] and [(x, y)] is an edge --
+      [static], the combination's [dp ∪ ppo], and [fj], always; a candidate
       read-from edge when its selector chooses it -- and [reach t <> 1]. Such a
       set exists exactly when [t] is unreachable, taking the reachable set
       itself. Only edges every result has are stated, so it is a necessary
-      condition: [t] unreachable in a result is unreachable here. One source
-      and one target, chosen by [witness_ub_src] and [witness_ub_tgt], serve
-      every pair. *)
+      condition: [t] unreachable in a result is unreachable here. One source and
+      one target, chosen by [witness_ub_src] and [witness_ub_tgt], serve every
+      pair. *)
   let ub_constraint structure ~e ~reads ~alts ~chosen ~static ~reaches =
     let var fmt = Printf.ksprintf (fun s -> ESymbol s) fmt in
     let num n = ENum (Z.of_int n) in
@@ -2870,7 +2859,9 @@ module Freeze = struct
     in
     let decided = Hashtbl.create 16 and read_symbols = Hashtbl.create 16 in
       List.iter
-        (fun r -> Option.iter (fun s -> Hashtbl.replace decided s r) (symbol_of r))
+        (fun r ->
+          Option.iter (fun s -> Hashtbl.replace decided s r) (symbol_of r)
+        )
         reads;
       USet.iter
         (fun r ->
@@ -2950,9 +2941,14 @@ module Freeze = struct
           )
           reads
       in
-      let written = List.concat_map (fun d -> List.filter_map (fun w -> pair w d) writes) frees
+      let written =
+        List.concat_map
+          (fun d -> List.filter_map (fun w -> pair w d) writes)
+          frees
       and unallocated =
-        List.concat_map (fun m -> List.filter_map (fun a -> pair m a) accesses) mallocs
+        List.concat_map
+          (fun m -> List.filter_map (fun a -> pair m a) accesses)
+          mallocs
       in
         match read_free @ written @ unallocated with
         | [] -> [ EBoolean false ]
@@ -2962,8 +2958,7 @@ module Freeze = struct
               USet.union static (URelation.restrict e structure.fj)
               |> USet.values
             in
-              EOr cases
-              :: bases
+              (EOr cases :: bases)
               @ List.map (fun x -> imp (eq src (num x)) (reach x)) events
               @ List.map (fun (a, b) -> imp (reach a) (reach b)) fixed
               @ List.concat_map
@@ -2982,13 +2977,14 @@ module Freeze = struct
 
       The constraints are a necessary condition for such a result (S19, #96): a
       selector per read ranges over its candidate writes (Init only where the
-      read's location may be one no other candidate writes); the chosen edge implies the read's value and location equal
-      the write's; the combination's predicates hold; [rhb] is acyclic, by
-      ranks; each write has a place in the coherence order at its location,
-      distinct from the others there, and a read has its write's. The model adds
-      its own, in levels, from the cheapest statement to the fullest
-      ({!Coherence.SYMBOLIC_MODEL}); the first that decides the combination is
-      the answer, and what one level ruled out the next keeps.
+      read's location may be one no other candidate writes); the chosen edge
+      implies the read's value and location equal the write's; the combination's
+      predicates hold; [rhb] is acyclic, by ranks; each write has a place in the
+      coherence order at its location, distinct from the others there, and a
+      read has its write's. The model adds its own, in levels, from the cheapest
+      statement to the fullest ({!Coherence.SYMBOLIC_MODEL}); the first that
+      decides the combination is the answer, and what one level ruled out the
+      next keeps.
 
       Unsatisfiable therefore means the combination has no result the model
       admits. A model with no symbolic form leaves it {!Undecided}, for the
@@ -3005,8 +3001,8 @@ module Freeze = struct
 
       [ub], when set, states that the result has undefined behaviour as
       {!Assertion}'s checks find it, which are the episodic loops paper's
-      use-after-free (Definition [def:uaf]) over the no-thin-air order [rhb]:
-      a read reads from a free; a write is not [rhb]-before a free of the
+      use-after-free (Definition [def:uaf]) over the no-thin-air order [rhb]: a
+      read reads from a free; a write is not [rhb]-before a free of the
       allocation it writes; or an access is not [rhb]-after the allocation of
       the location it accesses. See {!ub_constraint}. *)
   let solver_witness ?goal ?(ub = false) ~model ~check structure prep =
@@ -3137,7 +3133,8 @@ module Freeze = struct
           if ub then
             common
             @ ub_constraint structure ~e ~reads ~alts ~chosen ~static
-                ~reaches:(fun a b -> USet.mem closure (a, b))
+                ~reaches:(fun a b -> USet.mem closure (a, b)
+              )
           else common
         in
         let common =
@@ -3147,8 +3144,7 @@ module Freeze = struct
               let rec apart = function
                 | EVar v -> EVar (v ^ "#goal")
                 | ESymbol s when not (String.starts_with ~prefix:"witness_" s)
-                  ->
-                    ESymbol (s ^ "#goal")
+                  -> ESymbol (s ^ "#goal")
                 | EBinOp (a, op, b) -> EBinOp (apart a, op, apart b)
                 | EUnOp (op, a) -> EUnOp (op, apart a)
                 | EOr l -> EOr (List.map apart l)
@@ -3341,10 +3337,10 @@ let count_stage : 'a. string -> 'a list Lwt.t -> 'a list Lwt.t =
         Lwt.return s
     )
 
-(** [final_env_of structure e] is the final register environment of an
-    execution with events [e]: the register environments at its terminal events,
-    one per thread, merged. It depends on the events alone, so every execution of
-    a combination has the same. *)
+(** [final_env_of structure e] is the final register environment of an execution
+    with events [e]: the register environments at its terminal events, one per
+    thread, merged. It depends on the events alone, so every execution of a
+    combination has the same. *)
 let final_env_of (structure : symbolic_event_structure) e =
   let final_env = Hashtbl.create 16 in
     USet.iter
@@ -3494,8 +3490,7 @@ let execution_of_freeze_result (structure : symbolic_event_structure)
     @return Promise of list of valid coherent executions. *)
 let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
     ?(witnesses = false) ?query ?(compare_models = []) ?admissions
-    ?model_executions
-    (structure : symbolic_event_structure)
+    ?model_executions (structure : symbolic_event_structure)
     (fwd_es_ctx : Forwarding.event_structure_context)
     (justs : justification list) statex ~restrictions =
   (* let* _ = Lwt.return_unit in *)
@@ -3589,7 +3584,9 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
          of them. A related combination's results are what {!enumerate} gives
          it, so its read-froms are tested as it would find them, with the
          models it prunes by. *)
-      let digest x = Digest.string (Marshal.to_string x [ Marshal.No_sharing ]) in
+      let digest x =
+        Digest.string (Marshal.to_string x [ Marshal.No_sharing ])
+      in
       let sorted s = USet.values s |> List.sort compare in
       let kinds_of prepared =
         let kinds =
@@ -3716,89 +3713,87 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
          is now exactly the passes' ([kinds_of]). *)
       let witness_stage prepared =
         let kinds, frames, reject = kinds_of prepared in
-          (* Kinds with the same future, in order: the first with a witness
+        (* Kinds with the same future, in order: the first with a witness
              stands for all of them. *)
-          let groups =
-            let order = ref [] and members = Hashtbl.create 64 in
-              Array.iteri
-                (fun i (e, dp, ppo) ->
-                  let k =
-                    digest
-                      ( sorted e,
-                        sorted (URelation.restrict e (USet.union dp ppo))
-                      )
-                  in
-                    match Hashtbl.find_opt members k with
-                    | Some l -> Hashtbl.replace members k (i :: l)
-                    | None ->
-                        order := k :: !order;
-                        Hashtbl.replace members k [ i ]
-                )
-                frames;
-              List.rev_map (fun k -> List.rev (Hashtbl.find members k)) !order
-          in
-          let model = (restrictions : Coherence.restrictions).coherent in
-          let admits fr =
-            Option.is_some
-              (check_for_coherence structure
-                 (execution_of_freeze_result structure ~include_rf ~id:0 fr)
-                 restrictions
+        let groups =
+          let order = ref [] and members = Hashtbl.create 64 in
+            Array.iteri
+              (fun i (e, dp, ppo) ->
+                let k =
+                  digest
+                    (sorted e, sorted (URelation.restrict e (USet.union dp ppo)))
+                in
+                  match Hashtbl.find_opt members k with
+                  | Some l -> Hashtbl.replace members k (i :: l)
+                  | None ->
+                      order := k :: !order;
+                      Hashtbl.replace members k [ i ]
+              )
+              frames;
+            List.rev_map (fun k -> List.rev (Hashtbl.find members k)) !order
+        in
+        let model = (restrictions : Coherence.restrictions).coherent in
+        let admits fr =
+          Option.is_some
+            (check_for_coherence structure
+               (execution_of_freeze_result structure ~include_rf ~id:0 fr)
+               restrictions
+            )
+        in
+        let decide group =
+          let rec go tried undecided = function
+            | [] -> (None, tried, undecided)
+            | i :: rest -> (
+                let key, p = kinds.(i) in
+                  match
+                    Freeze.witness ~model ~coherence_models:[ model ] ~admits
+                      ~reject:(reject i) structure p
+                  with
+                  | Freeze.Witness fr -> (Some (key, fr), tried + 1, undecided)
+                  | Freeze.No_witness -> go (tried + 1) undecided rest
+                  | Freeze.Undecided -> go (tried + 1) (undecided + 1) rest
               )
           in
-          let decide group =
-            let rec go tried undecided = function
-              | [] -> (None, tried, undecided)
-              | i :: rest -> (
-                  let key, p = kinds.(i) in
-                    match
-                      Freeze.witness ~model ~coherence_models:[ model ] ~admits
-                        ~reject:(reject i) structure p
-                    with
-                    | Freeze.Witness fr -> (Some (key, fr), tried + 1, undecided)
-                    | Freeze.No_witness -> go (tried + 1) undecided rest
-                    | Freeze.Undecided -> go (tried + 1) (undecided + 1) rest
-                )
-            in
-              go 0 0 group
+            go 0 0 group
+        in
+          let* decided =
+            compute.run ~stage:("witnesses", "futures") decide groups
           in
-            let* decided =
-              compute.run ~stage:("witnesses", "futures") decide groups
-            in
-            let witnessed = Hashtbl.create 64 in
-              List.iter
-                (fun (found, _, _) ->
-                  Option.iter
-                    (fun (key, fr) -> Hashtbl.replace witnessed key fr)
-                    found
+          let witnessed = Hashtbl.create 64 in
+            List.iter
+              (fun (found, _, _) ->
+                Option.iter
+                  (fun (key, fr) -> Hashtbl.replace witnessed key fr)
+                  found
+              )
+              decided;
+            let tried = List.fold_left (fun n (_, t, _) -> n + t) 0 decided in
+            let open_futures =
+              List.length
+                (List.filter
+                   (fun (found, _, u) -> found = None && u > 0)
+                   decided
                 )
-                decided;
-              let tried = List.fold_left (fun n (_, t, _) -> n + t) 0 decided in
-              let open_futures =
-                List.length
-                  (List.filter
-                     (fun (found, _, u) -> found = None && u > 0)
-                     decided
-                  )
-              in
-                Logs_safe.info (fun m ->
+            in
+              Logs_safe.info (fun m ->
+                  m
+                    "Futures from witnesses: %d combinations, %d kinds, %d \
+                     futures to decide; %d witnessed; %d kinds searched, %d \
+                     skipped for a future already witnessed"
+                    (List.length prepared) (Array.length kinds)
+                    (List.length groups) (Hashtbl.length witnessed) tried
+                    (Array.length kinds - tried)
+              );
+              if open_futures > 0 then
+                Logs_safe.warn (fun m ->
                     m
-                      "Futures from witnesses: %d combinations, %d kinds, %d \
-                       futures to decide; %d witnessed; %d kinds searched, %d \
-                       skipped for a future already witnessed"
-                      (List.length prepared) (Array.length kinds)
-                      (List.length groups) (Hashtbl.length witnessed) tried
-                      (Array.length kinds - tried)
+                      "Futures may be incomplete: for %d of %d possible \
+                       futures no witness was found and some combination was \
+                       undecided within the budgets (MORDOR_WITNESS_ROUNDS, \
+                       MORDOR_WITNESS_SECS)"
+                      open_futures (List.length groups)
                 );
-                if open_futures > 0 then
-                  Logs_safe.warn (fun m ->
-                      m
-                        "Futures may be incomplete: for %d of %d possible \
-                         futures no witness was found and some combination was \
-                         undecided within the budgets (MORDOR_WITNESS_ROUNDS, \
-                         MORDOR_WITNESS_SECS)"
-                        open_futures (List.length groups)
-                  );
-                attach witnessed prepared |> Lwt.return
+              attach witnessed prepared |> Lwt.return
       in
       (* R16 (#102): the question [query] asks is existential, so one
          execution answering it settles it, and a kind of combination is
@@ -3826,111 +3821,113 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
               | None -> ()
             )
             prepared;
-        let model = (restrictions : Coherence.restrictions).coherent in
-        let found = Atomic.make false in
-        let only =
-          Option.map
-            (fun path ->
-              let keys = Hashtbl.create 64 in
-                In_channel.with_open_text path In_channel.input_lines
-                |> List.iter (fun line ->
-                    match String.trim line with
-                    | "" -> ()
-                    | hex -> Hashtbl.replace keys (Digest.of_hex hex) ()
-                );
-                keys
-            )
-            !Freeze.query_only_file
-        in
-        let decide i =
-          let key, p = kinds.(i) in
-          if Atomic.get found then `Skipped
-          else if
-            Option.fold ~none:false
-              ~some:(fun keys -> not (Hashtbl.mem keys key))
-              only
-          then `Unasked
-          else
-            let e, _, _ = frames.(i) in
-            let fwd, we = Hashtbl.find contexts key in
-            let admits (fr : FreezeResult.t) =
-              let exec =
-                execution_of_freeze_result structure ~include_rf ~id:0
-                  { fr with fwd; we }
-              in
-                match check_for_coherence structure exec restrictions with
-                | Some co ->
-                    exec.co <- Some co;
-                    query.holds structure exec
-                | None -> false
-            in
-            let goal = query.goal structure (final_env_of structure e) in
-              match
-                Freeze.witness ?goal ~ub:query.ub ~model
-                  ~coherence_models:[ model ] ~admits
-                  ~reject:(reject i) structure p
-              with
-              | Freeze.Witness fr ->
-                  Atomic.set found true;
-                  `Witness (key, fr)
-              | Freeze.No_witness -> `Absent
-              | Freeze.Undecided -> `Undecided key
-        in
-          let* decided =
-            compute.run ~stage:("queries", "kinds") decide
-              (List.init (Array.length kinds) Fun.id)
-          in
-          let undecided =
-            List.filter_map
-              (function
-                | `Undecided key -> Some key
-                | _ -> None
-                )
-              decided
-          in
-          Option.iter
-            (fun path ->
-              Out_channel.with_open_text path (fun oc ->
-                  List.iter
-                    (fun key -> output_string oc (Digest.to_hex key ^ "\n"))
-                    undecided
+          let model = (restrictions : Coherence.restrictions).coherent in
+          let found = Atomic.make false in
+          let only =
+            Option.map
+              (fun path ->
+                let keys = Hashtbl.create 64 in
+                  In_channel.with_open_text path In_channel.input_lines
+                  |> List.iter (fun line ->
+                      match String.trim line with
+                      | "" -> ()
+                      | hex -> Hashtbl.replace keys (Digest.of_hex hex) ()
+                  );
+                  keys
               )
-            )
-            !Freeze.query_undecided_file;
-          let count v = List.length (List.filter (( = ) v) decided) in
-          (* The witness of the earliest kind that has one among those asked.
+              !Freeze.query_only_file
+          in
+          let decide i =
+            let key, p = kinds.(i) in
+              if Atomic.get found then `Skipped
+              else if
+                Option.fold ~none:false
+                  ~some:(fun keys -> not (Hashtbl.mem keys key))
+                  only
+              then `Unasked
+              else
+                let e, _, _ = frames.(i) in
+                let fwd, we = Hashtbl.find contexts key in
+                let admits (fr : FreezeResult.t) =
+                  let exec =
+                    execution_of_freeze_result structure ~include_rf ~id:0
+                      { fr with fwd; we }
+                  in
+                    match check_for_coherence structure exec restrictions with
+                    | Some co ->
+                        exec.co <- Some co;
+                        query.holds structure exec
+                    | None -> false
+                in
+                let goal = query.goal structure (final_env_of structure e) in
+                  match
+                    Freeze.witness ?goal ~ub:query.ub ~model
+                      ~coherence_models:[ model ] ~admits ~reject:(reject i)
+                      structure p
+                  with
+                  | Freeze.Witness fr ->
+                      Atomic.set found true;
+                      `Witness (key, fr)
+                  | Freeze.No_witness -> `Absent
+                  | Freeze.Undecided -> `Undecided key
+          in
+            let* decided =
+              compute.run ~stage:("queries", "kinds") decide
+                (List.init (Array.length kinds) Fun.id)
+            in
+            let undecided =
+              List.filter_map
+                (function
+                  | `Undecided key -> Some key
+                  | _ -> None
+                  )
+                decided
+            in
+              Option.iter
+                (fun path ->
+                  Out_channel.with_open_text path (fun oc ->
+                      List.iter
+                        (fun key -> output_string oc (Digest.to_hex key ^ "\n"))
+                        undecided
+                  )
+                )
+                !Freeze.query_undecided_file;
+              let count v = List.length (List.filter (( = ) v) decided) in
+              (* The witness of the earliest kind that has one among those asked.
              Sequentially that is the first; in parallel, which kinds were
              asked before one found a witness depends on timing. *)
-          let witness =
-            List.find_map
-              (function
-                | `Witness w -> Some w
-                | _ -> None
-                )
-              decided
-          in
-          let report =
-            {
-              kinds = Array.length kinds;
-              absent = count `Absent;
-              undecided = List.length undecided;
-              unasked = count `Unasked;
-              witnessed = Option.is_some witness;
-            }
-          in
-            Logs_safe.info (fun m ->
-                m
-                  "By query: %d kinds of combination; %s, %d shown to have \
-                   none, %d undecided, %d not asked"
-                  report.kinds
-                  (if report.witnessed then "witnessed" else "no witness")
-                  report.absent report.undecided
-                  (count `Skipped + report.unasked)
-            );
-            query.report report;
-            let found = Hashtbl.create 1 in
-              Option.iter (fun (key, fr) -> Hashtbl.replace found key fr) witness;
-              attach found prepared |> Lwt.return
+              let witness =
+                List.find_map
+                  (function
+                    | `Witness w -> Some w
+                    | _ -> None
+                    )
+                  decided
+              in
+              let report =
+                {
+                  kinds = Array.length kinds;
+                  absent = count `Absent;
+                  undecided = List.length undecided;
+                  unasked = count `Unasked;
+                  witnessed = Option.is_some witness;
+                }
+              in
+                Logs_safe.info (fun m ->
+                    m
+                      "By query: %d kinds of combination; %s, %d shown to have \
+                       none, %d undecided, %d not asked"
+                      report.kinds
+                      (if report.witnessed then "witnessed" else "no witness")
+                      report.absent report.undecided
+                      (count `Skipped + report.unasked)
+                );
+                query.report report;
+                let found = Hashtbl.create 1 in
+                  Option.iter
+                    (fun (key, fr) -> Hashtbl.replace found key fr)
+                    witness;
+                  attach found prepared |> Lwt.return
       in
       let prepare_combo (path, just_combo) =
         let fwd =
@@ -3969,93 +3966,95 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
           match query with
           | Some query when include_rf -> query_stage query prepared
           | _ ->
-          if witnesses && include_rf then witness_stage prepared
-          else
-            (* Combinations that differ only in their forwarding and elision edges
+              if witnesses && include_rf then witness_stage prepared
+              else
+                (* Combinations that differ only in their forwarding and elision edges
          freeze to the same results, and deduplication merged those results
          afterwards. Each is frozen once, the first of its kind, and its
          results are given to every combination of the kind. On the litmus
          corpus that is more than half of all combinations (S11). *)
-            (* S11 measures duplicates, so it sees every combination. *)
-            let merge = !Freeze.merge_duplicates && not S11.enabled in
-            let distinct =
-              let seen = Hashtbl.create 64 in
-                List.filter_map
-                  (fun (_, _, _, prepared) ->
-                    match prepared with
-                    | Some (key, p) when merge && not (Hashtbl.mem seen key) ->
-                        Hashtbl.replace seen key ();
-                        Some (key, p)
-                    | Some (key, p) when not merge -> Some (key, p)
-                    | _ -> None
-                  )
-                  prepared
-            in
-              if !s4_counters then
-                Logs_safe.info (fun m ->
-                    m "[S4] combinations frozen: %d of %d"
-                      (List.length distinct) (List.length prepared)
-                );
-              let* frozen =
-                compute.run
-                  ~stage:("freeze", "kinds of combination")
-                  (fun (key, p) ->
-                    ( key,
-                      Freeze.enumerate ~coherence_models structure p ~include_rf
-                    )
-                  )
-                  distinct
-              in
-              let by_key = Hashtbl.create 64 in
-                List.iter
-                  (fun (key, results) -> Hashtbl.replace by_key key results)
-                  frozen;
-                (* Without merging, keys still repeat; each combination then takes its
-           own results, in order. *)
-                let own = ref frozen in
-                let results_of key =
-                  if merge then Hashtbl.find by_key key
-                  else
-                    match !own with
-                    | (_, results) :: rest ->
-                        own := rest;
-                        results
-                    | [] -> assert false
+                (* S11 measures duplicates, so it sees every combination. *)
+                let merge = !Freeze.merge_duplicates && not S11.enabled in
+                let distinct =
+                  let seen = Hashtbl.create 64 in
+                    List.filter_map
+                      (fun (_, _, _, prepared) ->
+                        match prepared with
+                        | Some (key, p) when merge && not (Hashtbl.mem seen key)
+                          ->
+                            Hashtbl.replace seen key ();
+                            Some (key, p)
+                        | Some (key, p) when not merge -> Some (key, p)
+                        | _ -> None
+                      )
+                      prepared
                 in
-                let results =
-                  List.map
-                    (fun (fwd, we, just_combo, prepared) ->
-                      match prepared with
-                      | None -> []
-                      | Some (key, _) ->
-                          let freeze_results = results_of key in
-                            Logs_safe.debug (fun m ->
-                                m
-                                  "Computed %d freeze results with %d \
-                                   justifications"
-                                  (List.length freeze_results)
-                                  (List.length just_combo)
-                            );
-                            (* The forwarding context is the combination's, not the
+                  if !s4_counters then
+                    Logs_safe.info (fun m ->
+                        m "[S4] combinations frozen: %d of %d"
+                          (List.length distinct) (List.length prepared)
+                    );
+                  let* frozen =
+                    compute.run
+                      ~stage:("freeze", "kinds of combination")
+                      (fun (key, p) ->
+                        ( key,
+                          Freeze.enumerate ~coherence_models structure p
+                            ~include_rf
+                        )
+                      )
+                      distinct
+                  in
+                  let by_key = Hashtbl.create 64 in
+                    List.iter
+                      (fun (key, results) -> Hashtbl.replace by_key key results)
+                      frozen;
+                    (* Without merging, keys still repeat; each combination then takes its
+           own results, in order. *)
+                    let own = ref frozen in
+                    let results_of key =
+                      if merge then Hashtbl.find by_key key
+                      else
+                        match !own with
+                        | (_, results) :: rest ->
+                            own := rest;
+                            results
+                        | [] -> assert false
+                    in
+                    let results =
+                      List.map
+                        (fun (fwd, we, just_combo, prepared) ->
+                          match prepared with
+                          | None -> []
+                          | Some (key, _) ->
+                              let freeze_results = results_of key in
+                                Logs_safe.debug (fun m ->
+                                    m
+                                      "Computed %d freeze results with %d \
+                                       justifications"
+                                      (List.length freeze_results)
+                                      (List.length just_combo)
+                                );
+                                (* The forwarding context is the combination's, not the
                        freeze's, so it is attached here.  Each result gets its
                        own copy: deduplication unions into whichever it keeps,
                        and sharing would make that union visible to results it
                        never applied to. *)
-                            List.map
-                              (fun (fr : FreezeResult.t) ->
-                                {
-                                  fr with
-                                  fwd = USet.clone fwd;
-                                  we = USet.clone we;
-                                  justs = just_combo;
-                                }
-                              )
-                              freeze_results
-                    )
-                    prepared
-                in
-                  if S11.enabled then S11.report ();
-                  List.flatten results |> Lwt.return
+                                List.map
+                                  (fun (fr : FreezeResult.t) ->
+                                    {
+                                      fr with
+                                      fwd = USet.clone fwd;
+                                      we = USet.clone we;
+                                      justs = just_combo;
+                                    }
+                                  )
+                                  freeze_results
+                        )
+                        prepared
+                    in
+                      if S11.enabled then S11.report ();
+                      List.flatten results |> Lwt.return
     in
 
     let stream_freeze_to_execution input_stream =

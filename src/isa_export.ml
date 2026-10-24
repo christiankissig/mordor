@@ -434,10 +434,10 @@ let iter_suffix (loops : int list) (iters : int list) : string =
     Events are grouped by [(span, iterations)] — i.e. one instruction in one
     loop iteration, the iterations taken from [ctx.loop_iters] — sorted by id,
     and assigned [k] by position modulo the instruction's declared event count
-    (so an RMW's [R;Branch;W] sub-events, created in that order, get
-    [#0;#1;#2], and a further copy of the instruction on another branch path
-    gets the same labels again). Events without a recorded span (init/terminal
-    markers, §4) are left unmapped and their edges are dropped. *)
+    (so an RMW's [R;Branch;W] sub-events, created in that order, get [#0;#1;#2],
+    and a further copy of the instruction on another branch path gets the same
+    labels again). Events without a recorded span (init/terminal markers, §4)
+    are left unmapped and their edges are dropped. *)
 let build_event_labels (ctx : mordor_ctx)
     (tbl : (int * int, instr_info) Hashtbl.t) : (int, string) Hashtbl.t =
   let evlabels = Hashtbl.create 64 in
@@ -509,8 +509,8 @@ let build_event_labels (ctx : mordor_ctx)
     Each entry also carries [rf], the reads-from edges of the execution the
     future was computed from (the witness, under [futures_by_witness]), as
     [[writer, reader]] label pairs. It is not part of the future; it is data
-    about that one execution, for a consumer that wants to know which write
-    each of its reads took.
+    about that one execution, for a consumer that wants to know which write each
+    of its reads took.
 
     And [events], the labels of all of the execution's events. An event that no
     [(ppo ∪ dp)] edge touches -- a write nothing is ordered with, a read whose
@@ -547,8 +547,7 @@ let futures_json (ctx : mordor_ctx) (evlabels : (int, string) Hashtbl.t) :
         let rf =
           Uset.USet.values exec.rf
           |> List.filter_map (fun (a, b) ->
-              if
-                (not (Uset.USet.mem exec.e a)) || not (Uset.USet.mem exec.e b)
+              if (not (Uset.USet.mem exec.e a)) || not (Uset.USet.mem exec.e b)
               then None
               else
                 match

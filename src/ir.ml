@@ -238,4 +238,5 @@ let rec to_string ~ann_to_string (node : 'a ir_node) : string =
         Printf.sprintf "Labeled [%s]: %s" (String.concat "; " label)
           (to_string stmt)
     | Skip -> "Skip"
-    | Blocked { condition } -> Printf.sprintf "Blocked if %s" (Expr.to_string condition)
+    | Blocked { condition } ->
+        Printf.sprintf "Blocked if %s" (Expr.to_string condition)

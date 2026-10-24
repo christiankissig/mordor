@@ -120,10 +120,10 @@ val interpret_statements :
 
 (** [interpret_generic ?ubopt ?regions ~stmt_semantics ~defacto ~constraints
      stmts] interprets [stmts] under [stmt_semantics], prefixes the initial
-    event and attaches the tables of the events context. With [regions]
-    (default [false]) the structure's constraints also say that no address
-    based on one allocation or global is an address based on another, whatever
-    the offsets (R17).
+    event and attaches the tables of the events context. With [regions] (default
+    [false]) the structure's constraints also say that no address based on one
+    allocation or global is an address based on another, whatever the offsets
+    (R17).
     @return
       The symbolic event structure, the source spans table and the per-event
       loop iterations table. *)

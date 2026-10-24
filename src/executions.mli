@@ -165,9 +165,9 @@ module Freeze : sig
       product of the reads' choices is at least {!coherence_prune_min}, and the
       check drops a partial relation, given as [(read, write)] pairs, when it
       holds of it. [shuffle] and [inspect] are S10's: each read's alternatives
-      in a random order, and a look at them. With [thin_air], a relation
-      closing a cycle in [dp ∪ ppo ∪ rf] is not dropped, for a model that
-      allows out-of-thin-air executions. *)
+      in a random order, and a look at them. With [thin_air], a relation closing
+      a cycle in [dp ∪ ppo ∪ rf] is not dropped, for a model that allows
+      out-of-thin-air executions. *)
   val fold_path_rf :
     ?shuffle:Random.State.t ->
     ?inspect:((int, int list) Hashtbl.t -> int list -> unit) ->
@@ -254,8 +254,8 @@ module Freeze : sig
   val query_undecided_file : string option ref
 
   (** A file of such keys; a query then asks only the kinds listed there:
-      [MORDOR_QUERY_ONLY], none by default. The rest are not asked, so without
-      a witness such a run gives no verdict. *)
+      [MORDOR_QUERY_ONLY], none by default. The rest are not asked, so without a
+      witness such a run gives no verdict. *)
   val query_only_file : string option ref
 
   (** [frame_of structure prepared] is the combination's events, [dp] and [ppo]:
@@ -285,11 +285,11 @@ module Freeze : sig
       after {!witness_rounds}, a search does, most constrained read first,
       pruned by [coherence_models], within {!witness_seconds}.
 
-      [goal] is a necessary condition on the result sought, over the
-      structure's symbols, which the solver is asked alongside the model's
-      constraints, so that it can show there is none. [ub] states that the
-      result has undefined behaviour, use after free or a pointer used before
-      its allocation, as a necessary condition the solver is asked too. *)
+      [goal] is a necessary condition on the result sought, over the structure's
+      symbols, which the solver is asked alongside the model's constraints, so
+      that it can show there is none. [ub] states that the result has undefined
+      behaviour, use after free or a pointer used before its allocation, as a
+      necessary condition the solver is asked too. *)
   val witness :
     ?goal:expr list ->
     ?ub:bool ->
@@ -433,10 +433,10 @@ end
 
 (** {2 Main Execution Generation} *)
 
-(** [final_env_of structure e] is the final register environment of an
-    execution with events [e]: the register environments at its terminal events
-    merged. It depends on the events alone, so every execution of a combination
-    has the same. *)
+(** [final_env_of structure e] is the final register environment of an execution
+    with events [e]: the register environments at its terminal events merged. It
+    depends on the events alone, so every execution of a combination has the
+    same. *)
 val final_env_of :
   symbolic_event_structure -> int uset -> (string, expr) Hashtbl.t
 
@@ -458,8 +458,8 @@ type query = {
           there is none to state. *)
   ub : bool;
       (** Whether [holds] is undefined behaviour the solver can state a
-          necessary condition for: use after free, or a pointer used before
-          its allocation, and no data race. *)
+          necessary condition for: use after free, or a pointer used before its
+          allocation, and no data race. *)
   report : query_report -> unit;  (** Told how the question was answered. *)
 }
 

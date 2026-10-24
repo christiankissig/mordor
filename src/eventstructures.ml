@@ -399,16 +399,16 @@ let origin structure (s : string) = Hashtbl.find_opt structure.origin s
     Which allocation a free releases is read off its location. A free of an
     allocation's own symbol releases that allocation and no other. A free
     through a pointer loaded from memory, or computed from one, may release any
-    allocation whose address escapes into memory -- is written somewhere, and
-    so may be loaded back. An address that is never written cannot be loaded:
+    allocation whose address escapes into memory -- is written somewhere, and so
+    may be loaded back. An address that is never written cannot be loaded:
     rcu-3's counter cell [rC] is only ever written through, and taking its
-    reclaim loop's [free(rtemp)] to release it let the counter alias a node.
-    The order is approximated by program order: the free cannot follow the
-    later allocation in program order, the earlier allocation cannot follow
-    the free, and the free and the later allocation must be able to occur
-    together. Across threads nothing orders them yet, and a free in one thread
-    may precede an allocation in another -- the allocator synchronises the two
-    when it reuses the region. *)
+    reclaim loop's [free(rtemp)] to release it let the counter alias a node. The
+    order is approximated by program order: the free cannot follow the later
+    allocation in program order, the earlier allocation cannot follow the free,
+    and the free and the later allocation must be able to occur together. Across
+    threads nothing orders them yet, and a free in one thread may precede an
+    allocation in another -- the allocator synchronises the two when it reuses
+    the region. *)
 let may_reuse (structure : symbolic_event_structure) =
   let allocations =
     USet.values structure.malloc_events
@@ -463,7 +463,8 @@ let may_reuse (structure : symbolic_event_structure) =
     fun a b ->
       match
         ( List.find_opt (fun (_, loc) -> Expr.equal loc a) allocations,
-          List.find_opt (fun (_, loc) -> Expr.equal loc b) allocations )
+          List.find_opt (fun (_, loc) -> Expr.equal loc b) allocations
+        )
       with
       | Some a, Some b -> reused a b || reused b a
       | _ -> false
@@ -537,9 +538,9 @@ let generate_max_conflictfree_sets (structure : symbolic_event_structure) =
            ran out inside a loop whose condition still held -- and is no run of
            the program: kept, it became an execution with no final registers,
            so every assertion over them held (github #133). *)
-        ( match Hashtbl.find_opt structure.events current with
+        match Hashtbl.find_opt structure.events current with
         | Some { typ = Terminal; _ } -> [ USet.singleton current ]
-        | _ -> [] )
+        | _ -> []
       else if USet.size neighbours == 1 then
         (* one neighbour; continue down that path *)
         let next = USet.values neighbours |> List.hd in

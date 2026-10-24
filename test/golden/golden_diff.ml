@@ -16,8 +16,8 @@
     the pipeline does not depend on the order golden_diff check-query [DIR ...]
     decide each test's assertion by enumeration and by query (R16), assert the
     verdicts agree golden_diff check-regions [DIR ...] render each test with
-    allocations kept apart by their bases and by their regions (R17), list
-    every test whose verdict or executions differ
+    allocations kept apart by their bases and by their regions (R17), list every
+    test whose verdict or executions differ
 
     DIR defaults to the litmus corpora in [default_dirs]. Goldens live under
     [test/goldens/<litmus-path>.golden]. `check` exits non-zero on any mismatch
@@ -160,7 +160,8 @@ let verdict ~by_query (program : string) =
         ctx.query_report,
         ctx.valid,
         ctx.undefined_behaviour,
-        Unix.gettimeofday () -. t0 )
+        Unix.gettimeofday () -. t0
+      )
 
 (* Query gate (R16, V1): every test's verdict asked by query is the verdict
    enumeration gives. Undefined behaviour is compared where the query asks
@@ -209,9 +210,7 @@ let run_check_query files =
     Printf.printf "time        : enumeration %.1fs, query %.1fs\n" !t_enum
       !t_query;
     List.iter (fun d -> Printf.printf "  differs %s\n" d) (List.rev !differ);
-    List.iter
-      (fun f -> Printf.printf "  undecided %s\n" f)
-      (List.rev !undecided);
+    List.iter (fun f -> Printf.printf "  undecided %s\n" f) (List.rev !undecided);
     List.iter
       (fun (f, m) -> Printf.printf "  error %s: %s\n" f m)
       (List.rev !errs);
@@ -269,11 +268,13 @@ let run_check_regions files =
               let a, b =
                 first
                   ( String.split_on_char '\n' bases,
-                    String.split_on_char '\n' regions )
+                    String.split_on_char '\n' regions
+                  )
               in
                 executions :=
-                  Printf.sprintf "%s: %s -> %s executions\n      - %s\n      + %s"
-                    lit (count bases) (count regions) a b
+                  Printf.sprintf
+                    "%s: %s -> %s executions\n      - %s\n      + %s" lit
+                    (count bases) (count regions) a b
                   :: !executions
         | exception e -> errs := (lit, Printexc.to_string e) :: !errs
       )

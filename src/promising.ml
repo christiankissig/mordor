@@ -112,8 +112,8 @@ exception Unsupported of string
 
 let unsupported fmt = Printf.ksprintf (fun s -> raise (Unsupported s)) fmt
 
-(** Raised by a step with undefined behaviour -- a dereference of something
-    that is not an address, a division by zero. The thread aborts there: see
+(** Raised by a step with undefined behaviour -- a dereference of something that
+    is not an address, a division by zero. The thread aborts there: see
     {!Abort}. *)
 exception Stuck of string
 
@@ -129,8 +129,8 @@ let note_stuck what =
 
 (** {1 Values, Locations and Views} *)
 
-(** A concrete value: an integer, or an address -- a base location and an
-    offset into it. [&x] is [Ptr ("x", 0)]. *)
+(** A concrete value: an integer, or an address -- a base location and an offset
+    into it. [&x] is [Ptr ("x", 0)]. *)
 module Val = struct
   type t = Int of Z.t | Ptr of string * Z.t
 
@@ -187,7 +187,10 @@ module View = struct
   let bot : t = LocMap.empty
   let get (v : t) l = Option.value (LocMap.find_opt l v) ~default:Q.zero
   let single l t : t = if Q.equal t Q.zero then bot else LocMap.singleton l t
-  let join (a : t) (b : t) : t = LocMap.union (fun _ x y -> Some (Q.max x y)) a b
+
+  let join (a : t) (b : t) : t =
+    LocMap.union (fun _ x y -> Some (Q.max x y)) a b
+
   let le (a : t) (b : t) = LocMap.for_all (fun l t -> Q.leq t (get b l)) a
 end
 
@@ -247,13 +250,11 @@ and binop op a b =
     | ">", Int x, Int y -> cmp ( > ) x y
     | "<=", Int x, Int y -> cmp ( <= ) x y
     | ">=", Int x, Int y -> cmp ( >= ) x y
-    | ("<" | ">" | "<=" | ">="), Ptr (g, o), Ptr (h, p) when String.equal g h
-      ->
+    | ("<" | ">" | "<=" | ">="), Ptr (g, o), Ptr (h, p) when String.equal g h ->
         binop op (Int o) (Int p)
     | "=>", _, _ -> of_bool ((not (truthy a)) || truthy b)
     | _ ->
-        unsupported "the operator %s on %s and %s" op (to_string a)
-          (to_string b)
+        unsupported "the operator %s on %s and %s" op (to_string a) (to_string b)
 
 (** {1 Memory} *)
 
@@ -278,15 +279,15 @@ type cell = {
   src : src option;  (** The write this message is, when tracked. *)
 }
 
-(** A location's cells, in timestamp order, or [dflt] for a location nothing
-    has been written to. [dflt] is the initialisation message, and in capped
-    memory its cap too. *)
+(** A location's cells, in timestamp order, or [dflt] for a location nothing has
+    been written to. [dflt] is the initialisation message, and in capped memory
+    its cap too. *)
 type memory = {
   locs : cell list LocMap.t;
   dflt : cell list;
   resolved : (string * int) list;
-      (** The write event each fulfilled promise turned out to be, sorted:
-          what a read of the promise read from. *)
+      (** The write event each fulfilled promise turned out to be, sorted: what
+          a read of the promise read from. *)
 }
 
 let init_cell =
@@ -300,10 +301,7 @@ let init_cell =
   }
 
 let empty_memory = { locs = LocMap.empty; dflt = [ init_cell ]; resolved = [] }
-
-let cells mem l =
-  Option.value (LocMap.find_opt l mem.locs) ~default:mem.dflt
-
+let cells mem l = Option.value (LocMap.find_opt l mem.locs) ~default:mem.dflt
 let by_ts a b = Q.compare a.to_ b.to_
 
 let insert mem l c =
@@ -316,7 +314,10 @@ let replace mem l old c =
     mem with
     locs =
       LocMap.add l
-        (List.map (fun d -> if Q.equal d.to_ old.to_ then c else d) (cells mem l))
+        (List.map
+           (fun d -> if Q.equal d.to_ old.to_ then c else d)
+           (cells mem l)
+        )
         mem.locs;
   }
 
@@ -379,8 +380,8 @@ let place (lo, hi) =
 
 (** What a thread has left to run. [Iterate] is a loop under the per-loop step
     counter, with the iterations it may still make. [Blocked] is a thread whose
-    loop ran out of iterations while its condition still held: it takes no
-    step and never finishes, so the run is not an outcome (github #133). *)
+    loop ran out of iterations while its condition still held: it takes no step
+    and never finishes, so the run is not an outcome (github #133). *)
 type item =
   | Stmt of ir_node
   | Iterate of { condition : expr; body : ir_node list; left : int }
@@ -424,8 +425,9 @@ let set_reg th r v =
     th with
     regs = SMap.add r v th.regs;
     written =
-      (if List.mem r th.written then th.written
-       else List.sort String.compare (r :: th.written));
+      ( if List.mem r th.written then th.written
+        else List.sort String.compare (r :: th.written)
+      );
   }
 
 let stmts nodes = List.map (fun n -> Stmt n) nodes
@@ -456,7 +458,8 @@ let rec normalize ~loops th =
             {
               th with
               code =
-                stmts body @ (Iterate { condition; body; left = left - 1 } :: rest);
+                stmts body
+                @ (Iterate { condition; body; left = left - 1 } :: rest);
             }
         else { th with code = [ Blocked ] }
       else normalize ~loops { th with code = rest }
@@ -465,7 +468,8 @@ let rec normalize ~loops th =
         match node.Ir.stmt with
         | Ir.Skip | Ir.Free _ -> normalize ~loops next
         | Ir.Blocked { condition } ->
-            if Val.truthy (eval th.regs condition) then { th with code = [ Blocked ] }
+            if Val.truthy (eval th.regs condition) then
+              { th with code = [ Blocked ] }
             else normalize ~loops next
         | Ir.Labeled { stmt; _ } ->
             normalize ~loops { th with code = Stmt stmt :: rest }
@@ -486,7 +490,10 @@ let rec normalize ~loops th =
             match loops with
             | PerLoop k ->
                 normalize ~loops
-                  { th with code = Iterate { condition; body; left = k } :: rest }
+                  {
+                    th with
+                    code = Iterate { condition; body; left = k } :: rest;
+                  }
             | Global ->
                 (* As the interpreter's global step counter: each unrolling
                    spends one, and the one that would exhaust the budget is
@@ -499,15 +506,20 @@ let rec normalize ~loops th =
                   else normalize ~loops { th with code = rest }
                 else
                   let budget = th.budget - 1 in
-                    let again =
-                      Ir.If { condition; then_body = body @ [ node ]; else_body = None }
-                    in
-                      normalize ~loops
-                        {
-                          th with
-                          budget;
-                          code = Stmt { node with Ir.stmt = again } :: rest;
-                        }
+                  let again =
+                    Ir.If
+                      {
+                        condition;
+                        then_body = body @ [ node ];
+                        else_body = None;
+                      }
+                  in
+                    normalize ~loops
+                      {
+                        th with
+                        budget;
+                        code = Stmt { node with Ir.stmt = again } :: rest;
+                      }
           )
         | Ir.Do { body; condition } -> (
             match loops with
@@ -525,24 +537,25 @@ let rec normalize ~loops th =
                 if th.budget <= 1 then { th with code = [ Blocked ] }
                 else
                   let budget = th.budget - 1 in
-                    let again =
-                      Ir.If { condition; then_body = [ node ]; else_body = None }
-                    in
-                      normalize ~loops
-                        {
-                          th with
-                          budget;
-                          code =
-                            stmts body @ (Stmt { node with Ir.stmt = again } :: rest);
-                        }
+                  let again =
+                    Ir.If { condition; then_body = [ node ]; else_body = None }
+                  in
+                    normalize ~loops
+                      {
+                        th with
+                        budget;
+                        code =
+                          stmts body
+                          @ (Stmt { node with Ir.stmt = again } :: rest);
+                      }
           )
         | _ -> th
     )
 
-(** [locations ~stores th mem] are the locations [th]'s remaining updates --
-    and with [stores], its stores too -- could address. An address the
-    registers do not determine yet -- a pointer loaded later -- could be any
-    location [mem] has. *)
+(** [locations ~stores th mem] are the locations [th]'s remaining updates -- and
+    with [stores], its stores too -- could address. An address the registers do
+    not determine yet -- a pointer loaded later -- could be any location [mem]
+    has. *)
 let locations ~stores th mem =
   let unknown = ref false in
   (* The references the rest of the code takes, [r := &x]: an address held in
@@ -583,10 +596,10 @@ let locations ~stores th mem =
     in
       match node.Ir.stmt with
       | Ir.Cas { address; _ } | Ir.Fadd { address; _ } -> addr address
-      | Ir.Lock { global } -> (Option.value global ~default:"lock", Z.zero) :: acc
-      | (Ir.GlobalStore { global; _ } | Ir.GlobalMalloc { global; _ }) when stores
-        ->
-          (global, Z.zero) :: acc
+      | Ir.Lock { global } ->
+          (Option.value global ~default:"lock", Z.zero) :: acc
+      | (Ir.GlobalStore { global; _ } | Ir.GlobalMalloc { global; _ })
+        when stores -> (global, Z.zero) :: acc
       | Ir.DerefStore { address; _ } when stores -> addr address
       | Ir.Unlock { global } when stores ->
           (Option.value global ~default:"lock", Z.zero) :: acc
@@ -613,16 +626,21 @@ let rmw_locations = locations ~stores:false
 
 (** [max_writes ~loops th] bounds the writes [th] can still make, along any
     path, counting each loop at its bound. A run that finishes fulfils each of
-    its promises by a write of its own, so a thread never needs more
-    outstanding promises than this -- which, when an abort certifies them all,
-    is the only bound there is. *)
+    its promises by a write of its own, so a thread never needs more outstanding
+    promises than this -- which, when an abort certifies them all, is the only
+    bound there is. *)
 let max_writes ~loops th =
-  let rec of_nodes nodes = List.fold_left (fun n node -> n + of_node node) 0 nodes
+  let rec of_nodes nodes =
+    List.fold_left (fun n node -> n + of_node node) 0 nodes
   and of_node (node : ir_node) =
     match node.Ir.stmt with
-    | Ir.GlobalStore _ | Ir.DerefStore _ | Ir.GlobalMalloc _ | Ir.Cas _
-    | Ir.Fadd _ | Ir.Lock _ | Ir.Unlock _ ->
-        1
+    | Ir.GlobalStore _
+    | Ir.DerefStore _
+    | Ir.GlobalMalloc _
+    | Ir.Cas _
+    | Ir.Fadd _
+    | Ir.Lock _
+    | Ir.Unlock _ -> 1
     | Ir.If { then_body; else_body; _ } ->
         max (of_nodes then_body) (of_nodes (Option.value else_body ~default:[]))
     | Ir.While { body; _ } | Ir.Do { body; _ } ->
@@ -633,7 +651,8 @@ let max_writes ~loops th =
         in
           bound * of_nodes body
     | Ir.Labeled { stmt; _ } -> of_node stmt
-    | Ir.Threads { threads } -> List.fold_left (fun n t -> n + of_nodes t) 0 threads
+    | Ir.Threads { threads } ->
+        List.fold_left (fun n t -> n + of_nodes t) 0 threads
     | _ -> 0
   in
     List.fold_left
@@ -653,14 +672,14 @@ let promise_count mem tid =
 
 (** {1 Tracking the Relations}
 
-    An assertion asks about [.rf] and [.co] in the labels of the event
-    structure {!Interpret} built, so each access a run makes has to be named by
-    its event. A statement is several events -- one per branch it follows and
-    per loop iteration it is in -- that share its source span, and each event
-    carries its path condition over the symbols of the reads before it. In
-    program order, then, an access is the event of its span, after the
-    thread's last one, whose path condition the values the thread has read so
-    far satisfy. The earliest such is the one.
+    An assertion asks about [.rf] and [.co] in the labels of the event structure
+    {!Interpret} built, so each access a run makes has to be named by its event.
+    A statement is several events -- one per branch it follows and per loop
+    iteration it is in -- that share its source span, and each event carries its
+    path condition over the symbols of the reads before it. In program order,
+    then, an access is the event of its span, after the thread's last one, whose
+    path condition the values the thread has read so far satisfy. The earliest
+    such is the one.
 
     Tracking puts which message a read took into the state, so fewer states
     merge; it is only switched on when an assertion asks about a relation. *)
@@ -714,16 +733,21 @@ let event_of tr ~typ span th =
     |> List.filter (fun l ->
         (Hashtbl.find tr.structure.events l).typ = typ
         && ( match th.last with
-           | None -> true
-           | Some p -> USet.mem po (p, l)
-           )
+          | None -> true
+          | Some p -> USet.mem po (p, l)
+          )
         && path_holds tr th.binds
-             (Option.value (Hashtbl.find_opt tr.structure.restrict l) ~default:[])
+             (Option.value
+                (Hashtbl.find_opt tr.structure.restrict l)
+                ~default:[]
+             )
     )
   in
   let earliest =
     List.filter
-      (fun l -> not (List.exists (fun l' -> l' <> l && USet.mem po (l', l)) candidates))
+      (fun l ->
+        not (List.exists (fun l' -> l' <> l && USet.mem po (l', l)) candidates)
+      )
       candidates
   in
     match earliest with
@@ -747,7 +771,8 @@ let track_read at th c v =
       let binds =
         match (Hashtbl.find tr.structure.events l).rval with
         | Some (VSymbol s) ->
-            List.sort compare ((s, Val.to_expr v) :: List.remove_assoc s th.binds)
+            List.sort compare
+              ((s, Val.to_expr v) :: List.remove_assoc s th.binds)
         | _ -> th.binds
       in
       let rf_log =
@@ -762,7 +787,8 @@ let track_read at th c v =
             rf_log;
             mapped = List.sort compare (l :: th.mapped);
           },
-          Some l )
+          Some l
+        )
 
 (** [th] after the write at [at], and the message's provenance. *)
 let track_write at th =
@@ -770,7 +796,9 @@ let track_write at th =
   | None -> (th, None)
   | Some (tr, span) ->
       let l = event_of tr ~typ:Write span th in
-        ({ th with last = Some l; mapped = List.sort compare (l :: th.mapped) }, Some l)
+        ( { th with last = Some l; mapped = List.sort compare (l :: th.mapped) },
+          Some l
+        )
 
 let label_src = Option.map (fun l -> Label l)
 
@@ -792,8 +820,8 @@ type config = { th : thread; mem : memory; sc : View.t }
 (** A successor of a step, with the write the step made, if any. *)
 type succ = (Loc.t * Val.t) option * config
 
-(** What a thread can do next: a step, or -- on undefined behaviour -- abort,
-    in the configuration it reached. *)
+(** What a thread can do next: a step, or -- on undefined behaviour -- abort, in
+    the configuration it reached. *)
 type move = Step of succ | Abort of string * config
 
 (** PS2.0's condition for aborting (section 4.3): the thread's view of every
@@ -816,9 +844,9 @@ let read_view th l c mode =
   let acq = View.join (View.join th.acq s) (View.join c.view cur) in
     { th with cur; acq }
 
-(** The thread after writing [l] at [t], and the message view of the write:
-    the release view of [l], joined for an update with the view of the message
-    it read -- which is what makes a release sequence. *)
+(** The thread after writing [l] at [t], and the message view of the write: the
+    release view of [l], joined for an update with the view of the message it
+    read -- which is what makes a release sequence. *)
 let write_view th l t mode extra =
   let s = View.single l t in
   let cur = View.join th.cur s in
@@ -835,7 +863,9 @@ let reads ?at ~tid cfg l mode register =
       (fun c ->
         if readable_by tid c && Q.geq c.to_ curl then
           let th, _ =
-            track_read at (set_reg (read_view cfg.th l c mode) register c.value) c c.value
+            track_read at
+              (set_reg (read_view cfg.th l c mode) register c.value)
+              c c.value
           in
             Some (None, { cfg with th })
         else None
@@ -886,24 +916,31 @@ let writes ?at ~world ~tid cfg l v mode =
             let from, to_ = place g in
             let th', view = write_view th l to_ mode View.bot in
             let th', w = track_write at th' in
-                ( Some (l, v),
-                  {
-                    cfg with
-                    th = th';
-                    mem =
-                      insert cfg.mem l
-                        { from; to_; value = v; view; kind = Msg; src = label_src w };
-                  }
-                )
+              ( Some (l, v),
+                {
+                  cfg with
+                  th = th';
+                  mem =
+                    insert cfg.mem l
+                      {
+                        from;
+                        to_;
+                        value = v;
+                        view;
+                        kind = Msg;
+                        src = label_src w;
+                      };
+                }
+              )
           )
           candidates
       in
         fulfil @ fresh_writes
 
 (** An update of [l]: [update] maps the value read to [Some] value to write, or
-    to [None] where the update fails -- a failing CAS, which is a plain read,
-    or a lock already held, which cannot step at all ([blocking]). [register]
-    gets [result read written]: FADD the sum it wrote, CAS whether it wrote. *)
+    to [None] where the update fails -- a failing CAS, which is a plain read, or
+    a lock already held, which cannot step at all ([blocking]). [register] gets
+    [result read written]: FADD the sum it wrote, CAS whether it wrote. *)
 let updates ?at ~world ~tid ~blocking cfg l ~rmode ~wmode register ~result
     update =
   let th = cfg.th in
@@ -917,46 +954,63 @@ let updates ?at ~world ~tid ~blocking cfg l ~rmode ~wmode register ~result
       let th', w = track_write at th' in
         match (r_label, w) with
         | Some r, Some w ->
-            ({ th' with rmw_log = List.sort compare ((r, w) :: th'.rmw_log) }, w |> Option.some)
+            ( { th' with rmw_log = List.sort compare ((r, w) :: th'.rmw_log) },
+              w |> Option.some
+            )
         | _ -> (th', w)
     in
-    match slot cs c.to_ with
-    | Some p when p.kind = Promise tid ->
-        if Val.equal p.value v then
-          let th', view = write_view th_r l p.to_ wmode c.view in
-            if View.le view p.view then
-              let th', w = written th' in
-                Some
-                  ( th',
-                    replace (resolve mem p w) l p
-                      { p with kind = Msg; view; value = v; src = label_src w }
-                  )
-            else None
-        else None
-    | Some r when r.kind = Reserve tid ->
-        let th', view = write_view th_r l r.to_ wmode c.view in
-        let th', w = written th' in
-          Some
-            ( th',
-              replace mem l r
-                { r with kind = Msg; view; value = v; src = label_src w }
-            )
-    | Some _ -> None
-    | None ->
-        let to_ = attach_to cs c.to_ in
-        let th', view = write_view th_r l to_ wmode c.view in
-        let th', w = written th' in
-          Some
-            ( th',
-              insert mem l
-                { from = c.to_; to_; value = v; view; kind = Msg; src = label_src w }
-            )
+      match slot cs c.to_ with
+      | Some p when p.kind = Promise tid ->
+          if Val.equal p.value v then
+            let th', view = write_view th_r l p.to_ wmode c.view in
+              if View.le view p.view then
+                let th', w = written th' in
+                  Some
+                    ( th',
+                      replace (resolve mem p w) l p
+                        {
+                          p with
+                          kind = Msg;
+                          view;
+                          value = v;
+                          src = label_src w;
+                        }
+                    )
+              else None
+          else None
+      | Some r when r.kind = Reserve tid ->
+          let th', view = write_view th_r l r.to_ wmode c.view in
+          let th', w = written th' in
+            Some
+              ( th',
+                replace mem l r
+                  { r with kind = Msg; view; value = v; src = label_src w }
+              )
+      | Some _ -> None
+      | None ->
+          let to_ = attach_to cs c.to_ in
+          let th', view = write_view th_r l to_ wmode c.view in
+          let th', w = written th' in
+            Some
+              ( th',
+                insert mem l
+                  {
+                    from = c.to_;
+                    to_;
+                    value = v;
+                    view;
+                    kind = Msg;
+                    src = label_src w;
+                  }
+              )
   in
   (* The step reading [c] from memory [mem], or [None] if it cannot be made. *)
   let step cs mem c =
     let th_r, r_label =
       track_read at
-        (set_reg (read_view th l c rmode) register (result c.value (update c.value)))
+        (set_reg (read_view th l c rmode) register
+           (result c.value (update c.value))
+        )
         c c.value
     in
       match update c.value with
@@ -970,13 +1024,14 @@ let updates ?at ~world ~tid ~blocking cfg l ~rmode ~wmode register ~result
   in
     List.filter_map
       (fun c ->
-        if readable_by tid c && Q.geq c.to_ curl then step cs cfg.mem c else None
+        if readable_by tid c && Q.geq c.to_ curl then step cs cfg.mem c
+        else None
       )
       cs
 
-(** A fence. A release, acq-rel or SC fence cannot be made while the thread
-    has promises: a promise made before it could not be fulfilled by a write
-    the fence releases. *)
+(** A fence. A release, acq-rel or SC fence cannot be made while the thread has
+    promises: a promise made before it could not be fulfilled by a write the
+    fence releases. *)
 let fence ~tid cfg mode =
   let th = cfg.th in
   let acquire th = { th with cur = th.acq } in
@@ -989,13 +1044,14 @@ let fence ~tid cfg mode =
     | SC ->
         let v = View.join th.acq cfg.sc in
           [
-              ( None,
-                {
-                  cfg with
-                  th = { th with cur = v; acq = v; rel_all = v; rel = LocMap.empty };
-                  sc = v;
-                }
-              );
+            ( None,
+              {
+                cfg with
+                th =
+                  { th with cur = v; acq = v; rel_all = v; rel = LocMap.empty };
+                sc = v;
+              }
+            );
           ]
     | Relaxed | Normal | Strong | Nonatomic -> [ (None, cfg) ]
 
@@ -1011,15 +1067,20 @@ and program_steps_exn ?tr ~world ~loops ~tid cfg =
   | Stmt node :: rest ->
       let cfg = { cfg with th = { cfg.th with code = rest } } in
       let regs = cfg.th.regs in
-      let at = Option.map (fun tr -> (tr, node.Ir.annotations.source_span)) tr in
+      let at =
+        Option.map (fun tr -> (tr, node.Ir.annotations.source_span)) tr
+      in
       let succs =
         match node.Ir.stmt with
         | Ir.GlobalLoad { register; global; load } ->
             reads ?at ~tid cfg (global, Z.zero) load.mode register
         | Ir.DerefLoad { register; address; load } ->
-            reads ?at ~tid cfg (Loc.of_value (eval regs address)) load.mode register
+            reads ?at ~tid cfg
+              (Loc.of_value (eval regs address))
+              load.mode register
         | Ir.GlobalStore { global; expr; assign } ->
-            writes ?at ~world ~tid cfg (global, Z.zero) (eval regs expr) assign.mode
+            writes ?at ~world ~tid cfg (global, Z.zero) (eval regs expr)
+              assign.mode
         | Ir.DerefStore { address; expr; assign } ->
             writes ?at ~world ~tid cfg
               (Loc.of_value (eval regs address))
@@ -1027,12 +1088,13 @@ and program_steps_exn ?tr ~world ~loops ~tid cfg =
         | Ir.GlobalMalloc { global; _ } ->
             let th, p = fresh_alloc cfg.th in
               writes ?at ~world ~tid { cfg with th } (global, Z.zero) p Relaxed
-        | Ir.Cas { register; address; expected; desired; load_mode; assign_mode }
-          ->
+        | Ir.Cas
+            { register; address; expected; desired; load_mode; assign_mode } ->
             let expected = eval regs expected and desired = eval regs desired in
               updates ?at ~world ~tid ~blocking:false cfg
                 (Loc.of_value (eval regs address))
-                ~rmode:load_mode ~wmode:assign_mode register
+                ~rmode:load_mode ~wmode:assign_mode
+                register
                 (* Whether the swap happened, as the episodic loops paper's
                    CAS continues with [ρ[r ↦ ⊤]] or [ρ[r ↦ ⊥]]. *)
                 ~result:(fun _ written -> Val.of_bool (Option.is_some written))
@@ -1041,8 +1103,8 @@ and program_steps_exn ?tr ~world ~loops ~tid cfg =
             let operand = eval regs operand in
               updates ?at ~world ~tid ~blocking:false cfg
                 (Loc.of_value (eval regs address))
-                ~rmode:load_mode ~wmode:assign_mode register
-                (* Fetch-and-add: the register gets the sum written. *)
+                ~rmode:load_mode ~wmode:assign_mode
+                register (* Fetch-and-add: the register gets the sum written. *)
                 ~result:(fun read _ -> binop "+" read operand)
                 (fun v -> Some (binop "+" v operand))
         | Ir.Lock { global } ->
@@ -1050,11 +1112,15 @@ and program_steps_exn ?tr ~world ~loops ~tid cfg =
                It has no register to report into. *)
             let l = (Option.value global ~default:"lock", Z.zero) in
               updates ~world ~tid ~blocking:true cfg l ~rmode:Acquire
-                ~wmode:Relaxed " lock" ~result:(fun read _ -> read) (fun v ->
+                ~wmode:Relaxed " lock"
+                ~result:(fun read _ -> read)
+                (fun v ->
                   if Val.equal v Val.zero then Some (Val.Int Z.one) else None
-              )
+                )
               |> List.map (fun (w, c) ->
-                (w, { c with th = { c.th with regs; written = cfg.th.written } })
+                  ( w,
+                    { c with th = { c.th with regs; written = cfg.th.written } }
+                  )
               )
         | Ir.Unlock { global } ->
             writes ~world ~tid cfg
@@ -1088,25 +1154,29 @@ let thread_repr th =
     List.map (fun (l, v) -> (l, view_repr v)) (LocMap.bindings th.rel),
     th.budget,
     th.allocs,
-    (th.last, th.binds, th.rf_log, th.rmw_log, th.mapped, th.promised) )
+    (th.last, th.binds, th.rf_log, th.rmw_log, th.mapped, th.promised)
+  )
 
 let mem_repr mem =
-  List.map
-    (fun (l, cs) ->
-      ( l,
-        List.map
-          (fun c -> (c.from, c.to_, c.value, view_repr c.view, c.kind, c.src))
-          cs ))
-    (LocMap.bindings mem.locs),
-  mem.resolved
+  ( List.map
+      (fun (l, cs) ->
+        ( l,
+          List.map
+            (fun c -> (c.from, c.to_, c.value, view_repr c.view, c.kind, c.src))
+            cs
+        )
+      )
+      (LocMap.bindings mem.locs),
+    mem.resolved
+  )
 
 (** A digest identifying a state: equal states have equal digests. *)
 let key repr = Digest.string (Marshal.to_string repr [ Marshal.No_sharing ])
 
 (** {1 Certification} *)
 
-(** The values a PS1.0 cap message may take, for [th] certifying in [mem]:
-    the values in memory, in [th]'s registers and in its code, 0 and 1, and one
+(** The values a PS1.0 cap message may take, for [th] certifying in [mem]: the
+    values in memory, in [th]'s registers and in its code, 0 and 1, and one
     value none of those is. PS1.0 quantifies over every value; the program can
     only tell apart the values it holds or mentions, so one representative of
     all the rest suffices. *)
@@ -1130,8 +1200,7 @@ let domain th mem =
     match node.Ir.stmt with
     | Ir.RegisterStore { expr; _ }
     | Ir.GlobalStore { expr; _ }
-    | Ir.DerefStore { expr; _ } ->
-        of_expr expr
+    | Ir.DerefStore { expr; _ } -> of_expr expr
     | Ir.Cas { expected; desired; _ } ->
         of_expr expected;
         of_expr desired
@@ -1175,9 +1244,9 @@ let domain th mem =
     location's last cell, carrying the value of its last concrete message and
     the maximal view -- unless that last cell is [tid]'s own reservation.
     [values] overrides the caps' values: PS1.0's certification against every
-    future memory is certification against every such choice (PS2.0, Remark
-    2). A location nothing was written to is capped at its initial value.
-    Returns the maximal view too, which the SC view is raised to. *)
+    future memory is certification against every such choice (PS2.0, Remark 2).
+    A location nothing was written to is capped at its initial value. Returns
+    the maximal view too, which the SC view is raised to. *)
 let cap ~tid ?(values = LocMap.empty) mem =
   let last cs = List.nth cs (List.length cs - 1) in
   let maxview =
@@ -1239,7 +1308,8 @@ let cap ~tid ?(values = LocMap.empty) mem =
         dflt = capped None [ init_cell ];
         resolved = mem.resolved;
       },
-      maxview )
+      maxview
+    )
 
 (** The capped memories thread [tid] certifies against from [cfg]: the one
     capped memory for PS2.0, one per choice of cap values for PS1.0. *)
@@ -1263,9 +1333,9 @@ let certification_starts ~version ~tid cfg =
 
 let config_key cfg = key (thread_repr cfg.th, mem_repr cfg.mem, view_repr cfg.sc)
 
-(** [consistent ~version ~loops ~tid cfg] holds when thread [tid], running
-    alone from [cfg], can fulfil every promise it has outstanding in each
-    memory it certifies against. *)
+(** [consistent ~version ~loops ~tid cfg] holds when thread [tid], running alone
+    from [cfg], can fulfil every promise it has outstanding in each memory it
+    certifies against. *)
 let consistent ~version ~loops ~tid cfg =
   if not (has_promises cfg.mem tid) then true
   else
@@ -1297,9 +1367,9 @@ let consistent ~version ~loops ~tid cfg =
     certifies against: the only promises certification can accept.
 
     Under PS2.0 a reachable abort certifies every promise, as it stands for any
-    behaviour at all. Then the thread may also promise any value of {!domain}
-    to any location its code stores to -- the same finite stand-in for "any
-    value" PS1.0's caps use. *)
+    behaviour at all. Then the thread may also promise any value of {!domain} to
+    any location its code stores to -- the same finite stand-in for "any value"
+    PS1.0's caps use. *)
 let potential_writes ~version ~loops ~tid cfg =
   let seen = Hashtbl.create 64 in
   let found = ref [] in
@@ -1359,12 +1429,23 @@ let canonical st =
   in
   let add_view v = LocMap.iter add v in
     LocMap.iter
-      (fun l cs -> List.iter (fun c -> add l c.from; add l c.to_; add_view c.view) cs)
+      (fun l cs ->
+        List.iter
+          (fun c ->
+            add l c.from;
+            add l c.to_;
+            add_view c.view
+          )
+          cs
+      )
       st.memory.locs;
     Array.iter
       (fun th ->
-        add_view th.cur; add_view th.acq; add_view th.rel_all;
-        LocMap.iter (fun _ v -> add_view v) th.rel)
+        add_view th.cur;
+        add_view th.acq;
+        add_view th.rel_all;
+        LocMap.iter (fun _ v -> add_view v) th.rel
+      )
       st.threads;
     add_view st.sc_view;
     let ranks = Hashtbl.create 16 in
@@ -1372,13 +1453,22 @@ let canonical st =
         (fun l ts ->
           let sorted = List.sort_uniq Q.compare ts in
           let tbl = Hashtbl.create 8 in
-            List.iteri (fun i t -> Hashtbl.replace tbl (Q.to_string t) (Q.of_int i)) sorted;
-            Hashtbl.replace ranks l tbl)
+            List.iteri
+              (fun i t -> Hashtbl.replace tbl (Q.to_string t) (Q.of_int i))
+              sorted;
+            Hashtbl.replace ranks l tbl
+        )
         stamps;
       let rank l t = Hashtbl.find (Hashtbl.find ranks l) (Q.to_string t) in
       let view v = LocMap.mapi rank v in
       let thread th =
-        { th with cur = view th.cur; acq = view th.acq; rel_all = view th.rel_all; rel = LocMap.map view th.rel }
+        {
+          th with
+          cur = view th.cur;
+          acq = view th.acq;
+          rel_all = view th.rel_all;
+          rel = LocMap.map view th.rel;
+        }
       in
         {
           threads = Array.map thread st.threads;
@@ -1387,7 +1477,18 @@ let canonical st =
               st.memory with
               locs =
                 LocMap.mapi
-                  (fun l cs -> List.map (fun c -> { c with from = rank l c.from; to_ = rank l c.to_; view = view c.view }) cs)
+                  (fun l cs ->
+                    List.map
+                      (fun c ->
+                        {
+                          c with
+                          from = rank l c.from;
+                          to_ = rank l c.to_;
+                          view = view c.view;
+                        }
+                      )
+                      cs
+                  )
                   st.memory.locs;
             };
           sc_view = view st.sc_view;
@@ -1399,7 +1500,8 @@ let state_key st =
     ( Array.map thread_repr st.threads,
       mem_repr st.memory,
       view_repr st.sc_view,
-      st.aborted )
+      st.aborted
+    )
 
 (** Exploration statistics, for the log. *)
 type stats = {
@@ -1493,9 +1595,10 @@ let rec explore ?tr ~version ~loops ~stats threads memory sc_view =
         stats.states <- stats.states + 1;
         (* A finished thread has no promises left: the step that finished it
            had to leave it consistent. An aborted run is over. *)
-        if st.aborted <> None || Array.for_all (fun th -> th.code = []) st.threads
-        then
-          Hashtbl.replace finals k st
+        if
+          st.aborted <> None
+          || Array.for_all (fun th -> th.code = []) st.threads
+        then Hashtbl.replace finals k st
         else
           for tid = 0 to n - 1 do
             List.iter dfs (successors st tid)
@@ -1527,32 +1630,38 @@ let rec explore ?tr ~version ~loops ~stats threads memory sc_view =
                alongside others"
           else
             let parent = { th with code = rest } in
-            (* The forking thread has no promises, being alone, so it can
+              (* The forking thread has no promises, being alone, so it can
                always abort. *)
-            begin
-            match Array.of_list (fork_threads ~loops parent forked) with
-            | exception Stuck what -> [ rebuild ~aborted:what cfg ]
-            | children ->
-                List.map
-                  (fun fin ->
-                    let c = { th = parent; mem = fin.memory; sc = fin.sc_view } in
-                      match fin.aborted with
-                      | Some what -> rebuild ~aborted:what c
-                      | None -> (
-                          match join ~loops parent (Array.to_list fin.threads) with
-                          | parent' -> rebuild { c with th = parent' }
-                          | exception Stuck what -> rebuild ~aborted:what c
-                        )
-                  )
-                  (explore ?tr ~version ~loops ~stats children st.memory st.sc_view)
-            end
+              begin match Array.of_list (fork_threads ~loops parent forked) with
+              | exception Stuck what -> [ rebuild ~aborted:what cfg ]
+              | children ->
+                  List.map
+                    (fun fin ->
+                      let c =
+                        { th = parent; mem = fin.memory; sc = fin.sc_view }
+                      in
+                        match fin.aborted with
+                        | Some what -> rebuild ~aborted:what c
+                        | None -> (
+                            match
+                              join ~loops parent (Array.to_list fin.threads)
+                            with
+                            | parent' -> rebuild { c with th = parent' }
+                            | exception Stuck what -> rebuild ~aborted:what c
+                          )
+                    )
+                    (explore ?tr ~version ~loops ~stats children st.memory
+                       st.sc_view
+                    )
+              end
       | _ ->
           let steps =
             List.filter_map
               (function
                 | Step (_, c) -> if admissible c then Some (rebuild c) else None
                 | Abort (what, c) ->
-                    if promise_consistent ~tid c then Some (rebuild ~aborted:what c)
+                    if promise_consistent ~tid c then
+                      Some (rebuild ~aborted:what c)
                     else (
                       note_stuck what;
                       None
@@ -1573,54 +1682,58 @@ let rec explore ?tr ~version ~loops ~stats threads memory sc_view =
   and promise_steps cfg tid =
     let th = cfg.th in
     let rmw = rmw_locations th cfg.mem in
-    if promise_count cfg.mem tid >= max_writes ~loops th then []
-    else
-      List.concat_map
-        (fun (l, v) ->
-          let cs = cells cfg.mem l in
-          let curl = View.get th.cur l in
-          let with_interval (from, to_) =
-            stats.promises <- stats.promises + 1;
-            let view = View.join (rel_of th l) (View.single l to_) in
-            let src, th =
-              match tr with
-              | Some _ ->
-                  ( Some (Pending (Printf.sprintf "%s#%d" th.name th.promised)),
-                    { th with promised = th.promised + 1 } )
-              | None -> (None, th)
+      if promise_count cfg.mem tid >= max_writes ~loops th then []
+      else
+        List.concat_map
+          (fun (l, v) ->
+            let cs = cells cfg.mem l in
+            let curl = View.get th.cur l in
+            let with_interval (from, to_) =
+              stats.promises <- stats.promises + 1;
+              let view = View.join (rel_of th l) (View.single l to_) in
+              let src, th =
+                match tr with
+                | Some _ ->
+                    ( Some (Pending (Printf.sprintf "%s#%d" th.name th.promised)),
+                      { th with promised = th.promised + 1 }
+                    )
+                | None -> (None, th)
+              in
+                {
+                  th;
+                  mem =
+                    insert cfg.mem l
+                      { from; to_; value = v; view; kind = Promise tid; src };
+                  sc = cfg.sc;
+                }
             in
-              {
-                th;
-                mem =
-                  insert cfg.mem l
-                    { from; to_; value = v; view; kind = Promise tid; src };
-                sc = cfg.sc;
-              }
-          in
-          (* Anywhere free above what the thread has seen, and attached to a
+            (* Anywhere free above what the thread has seen, and attached to a
              message it could update. *)
-          let detached = List.map (fun g -> with_interval (place g)) (gaps cs curl) in
-          (* An attached promise can only be fulfilled by an update; for a
+            let detached =
+              List.map (fun g -> with_interval (place g)) (gaps cs curl)
+            in
+            (* An attached promise can only be fulfilled by an update; for a
              plain write the detached one in the same gap does as well. *)
-          let updatable = List.exists (fun l' -> Loc.compare l l' = 0) rmw in
-          let attached =
-            List.filter_map
-              (fun c ->
-                if
-                  updatable && readable_by tid c && Q.geq c.to_ curl
-                  && slot cs c.to_ = None
-                then
-                  Some (with_interval (c.to_, attach_to cs c.to_))
-                else None
-              )
-              cs
-          in
-            detached @ attached
-        )
-        (memoized stats.candidates ~tid cfg (fun () ->
-             potential_writes ~version ~loops ~tid cfg
-         )
-        )
+            let updatable = List.exists (fun l' -> Loc.compare l l' = 0) rmw in
+            let attached =
+              List.filter_map
+                (fun c ->
+                  if
+                    updatable
+                    && readable_by tid c
+                    && Q.geq c.to_ curl
+                    && slot cs c.to_ = None
+                  then Some (with_interval (c.to_, attach_to cs c.to_))
+                  else None
+                )
+                cs
+            in
+              detached @ attached
+          )
+          (memoized stats.candidates ~tid cfg (fun () ->
+               potential_writes ~version ~loops ~tid cfg
+           )
+          )
   and reservation_steps cfg tid =
     let th = cfg.th in
     let reserve =
@@ -1630,7 +1743,8 @@ let rec explore ?tr ~version ~loops ~stats threads memory sc_view =
           let curl = View.get th.cur l in
             List.filter_map
               (fun c ->
-                if readable_by tid c && Q.geq c.to_ curl && slot cs c.to_ = None then
+                if readable_by tid c && Q.geq c.to_ curl && slot cs c.to_ = None
+                then
                   Some
                     {
                       cfg with
@@ -1656,7 +1770,8 @@ let rec explore ?tr ~version ~loops ~stats threads memory sc_view =
         (fun l cs acc ->
           List.fold_left
             (fun acc c ->
-              if c.kind = Reserve tid then { cfg with mem = remove cfg.mem l c } :: acc
+              if c.kind = Reserve tid then
+                { cfg with mem = remove cfg.mem l c } :: acc
               else acc
             )
             acc cs
@@ -1732,7 +1847,9 @@ let relations_of tr (st : state) =
             match src with
             | Label w -> Some (w, r)
             | Pending id ->
-                Option.map (fun w -> (w, r)) (List.assoc_opt id st.memory.resolved)
+                Option.map
+                  (fun w -> (w, r))
+                  (List.assoc_opt id st.memory.resolved)
           )
           th.rf_log
       )
@@ -1779,7 +1896,9 @@ let relations_of tr (st : state) =
 
 let execution_of_result id r : symbolic_execution =
   let set l = USet.of_list l in
-  let rel f = Option.fold ~none:(USet.create ()) ~some:(fun r -> set (f r)) r.relations in
+  let rel f =
+    Option.fold ~none:(USet.create ()) ~some:(fun r -> set (f r)) r.relations
+  in
     {
       id;
       e = rel (fun r -> r.events);
@@ -1819,82 +1938,83 @@ let outcomes ?tr ~version ~loops ~step_counter (program : ir_node list) =
       candidates = Hashtbl.create 1024;
     }
   in
-  Hashtbl.reset stuck_paths;
-  let main () =
-    normalize ~loops
-      {
-        name = "t";
-        code = stmts program;
-        regs = SMap.empty;
-        written = [];
-        cur = View.bot;
-        acq = View.bot;
-        rel_all = View.bot;
-        rel = LocMap.empty;
-        budget = step_counter;
-        allocs = 0;
-        last = None;
-        binds = [];
-        rf_log = [];
-        rmw_log = [];
-        mapped = [];
-        promised = 0;
-      }
-  in
-  let finals =
-    match main () with
-    | main ->
-        (* A read of an initial value reads from no write event, and has no
+    Hashtbl.reset stuck_paths;
+    let main () =
+      normalize ~loops
+        {
+          name = "t";
+          code = stmts program;
+          regs = SMap.empty;
+          written = [];
+          cur = View.bot;
+          acq = View.bot;
+          rel_all = View.bot;
+          rel = LocMap.empty;
+          budget = step_counter;
+          allocs = 0;
+          last = None;
+          binds = [];
+          rf_log = [];
+          rmw_log = [];
+          mapped = [];
+          promised = 0;
+        }
+    in
+    let finals =
+      match main () with
+      | main ->
+          (* A read of an initial value reads from no write event, and has no
            [rf] edge, as under sMRD: the initial message carries no [src]. *)
-        explore ?tr ~version ~loops ~stats [| main |] empty_memory View.bot
-    | exception Stuck what ->
-        [
-          {
-            threads = [||];
-            memory = empty_memory;
-            sc_view = View.bot;
-            aborted = Some what;
-          };
-        ]
-  in
-    Hashtbl.iter
-      (fun what n ->
-        Logs_safe.warn (fun m ->
-            m
-              "%s: %d steps had undefined behaviour (%s) in a thread that was \
-               not promise-consistent, so could not abort; their paths were \
-               discarded"
-              (show_version version) n what
-        )
-      )
-      stuck_paths;
-  let seen = Hashtbl.create 16 in
-  let envs =
-    List.filter_map
-      (fun st ->
-        let env = outcome st in
-        let relations = Option.map (fun tr -> relations_of tr st) tr in
-        let k =
-          ( show_outcome env,
-            st.aborted,
-            Option.map (fun r -> (r.rf, r.co, r.rmw)) relations )
-        in
-          if Hashtbl.mem seen k then None
-          else (
-            Hashtbl.add seen k ();
-            Some (k, { env; why_aborted = st.aborted; relations })
+          explore ?tr ~version ~loops ~stats [| main |] empty_memory View.bot
+      | exception Stuck what ->
+          [
+            {
+              threads = [||];
+              memory = empty_memory;
+              sc_view = View.bot;
+              aborted = Some what;
+            };
+          ]
+    in
+      Hashtbl.iter
+        (fun what n ->
+          Logs_safe.warn (fun m ->
+              m
+                "%s: %d steps had undefined behaviour (%s) in a thread that \
+                 was not promise-consistent, so could not abort; their paths \
+                 were discarded"
+                (show_version version) n what
           )
-      )
-      finals
-    |> List.sort (fun (a, _) (b, _) -> compare a b)
-    |> List.map snd
-  in
-    Logs_safe.info (fun m ->
-        m "%s: %d states, %d promises tried, %d certifications, %d outcomes"
-          (show_version version) stats.states stats.promises
-          stats.certifications (List.length envs)
-    );
-    envs
+        )
+        stuck_paths;
+      let seen = Hashtbl.create 16 in
+      let envs =
+        List.filter_map
+          (fun st ->
+            let env = outcome st in
+            let relations = Option.map (fun tr -> relations_of tr st) tr in
+            let k =
+              ( show_outcome env,
+                st.aborted,
+                Option.map (fun r -> (r.rf, r.co, r.rmw)) relations
+              )
+            in
+              if Hashtbl.mem seen k then None
+              else (
+                Hashtbl.add seen k ();
+                Some (k, { env; why_aborted = st.aborted; relations })
+              )
+          )
+          finals
+        |> List.sort (fun (a, _) (b, _) -> compare a b)
+        |> List.map snd
+      in
+        Logs_safe.info (fun m ->
+            m "%s: %d states, %d promises tried, %d certifications, %d outcomes"
+              (show_version version) stats.states stats.promises
+              stats.certifications (List.length envs)
+        );
+        envs
 
 (** {1 Pipeline Step} *)
 
@@ -1912,8 +2032,6 @@ let loops_of_options (options : options) step_counter =
         "symbolic loop semantics; promising semantics needs a step counter \
          (--step-counter or --step-counter-per-loop)"
 
-(** [calculate_executions ~version ctx] fills [ctx.executions] with the
-    outcomes of the program under [version], one execution per outcome. *)
 (** The relations promising semantics can answer for: [.rf] and [.co], which it
     defines, [.rmw], and [.po], the event structure's own. [.dp] and [.ppo] are
     sMRD's, and have no counterpart. *)
@@ -1939,6 +2057,8 @@ let own_assertions (ctx : mordor_ctx) =
       |> List.filter (fun (_, m) -> m = model)
       |> List.map fst
 
+(** [calculate_executions ~version ctx] fills [ctx.executions] with the outcomes
+    of the program under [version], one execution per outcome. *)
 let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
   match ctx.program_stmts with
   | None ->
@@ -1957,8 +2077,8 @@ let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
                    (relations_named e) ->
               failwith
                 (Printf.sprintf
-                   "%s: the assertion asks about %s, which promising \
-                    semantics does not define; it answers for %s."
+                   "%s: the assertion asks about %s, which promising semantics \
+                    does not define; it answers for %s."
                    ctx.litmus_name
                    (String.concat ", "
                       (List.filter
@@ -1968,16 +2088,17 @@ let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
                    )
                    (String.concat ", " answerable_relations)
                 )
-          | Ir.Outcome { model = Some model; _ } | Ir.Model { model }
+          | (Ir.Outcome { model = Some model; _ } | Ir.Model { model })
             when model <> ""
                  && not
-                      (List.mem (String.lowercase_ascii model)
+                      (List.mem
+                         (String.lowercase_ascii model)
                          promising_model_names
                       ) ->
               Logs_safe.warn (fun m ->
                   m
-                    "The assertion names the model %S, and is checked under \
-                     %s instead."
+                    "The assertion names the model %S, and is checked under %s \
+                     instead."
                     model (show_version version)
               )
           | _ -> ()
@@ -1996,7 +2117,8 @@ let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
       let asks =
         List.exists
           (function
-            | Ir.Outcome { condition = Ir.CondExpr e; _ } -> relations_named e <> []
+            | Ir.Outcome { condition = Ir.CondExpr e; _ } ->
+                relations_named e <> []
             | _ -> false
             )
           (own_assertions ctx)
@@ -2021,7 +2143,8 @@ let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
         List.iter
           (fun r ->
             Logs_safe.debug (fun m ->
-                m "%s outcome: %s%s%s" (show_version version) (show_outcome r.env)
+                m "%s outcome: %s%s%s" (show_version version)
+                  (show_outcome r.env)
                   ( match r.why_aborted with
                   | Some what -> " (aborted: " ^ what ^ ")"
                   | None -> ""
@@ -2030,9 +2153,13 @@ let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
                   | Some rel ->
                       let pairs ps =
                         String.concat " "
-                          (List.map (fun (a, b) -> Printf.sprintf "%d->%d" a b) ps)
+                          (List.map
+                             (fun (a, b) -> Printf.sprintf "%d->%d" a b)
+                             ps
+                          )
                       in
-                        Printf.sprintf "; rf: %s; co: %s" (pairs rel.rf) (pairs rel.co)
+                        Printf.sprintf "; rf: %s; co: %s" (pairs rel.rf)
+                          (pairs rel.co)
                   | None -> ""
                   )
             )
@@ -2053,9 +2180,9 @@ let calculate_executions ?(track = false) ~version (ctx : mordor_ctx) =
 (** [step_calculate_executions lwt_ctx] computes the executions under the
     promising semantics [ctx.options.semantics] selects, in place of sMRD's
     justification and dependency steps: it follows [Interpret.step_interpret]
-    and precedes [Assertion.step_check_assertions]. With [track], each
-    execution carries its events and relations whether or not an assertion
-    asks, for a caller that shows them.
+    and precedes [Assertion.step_check_assertions]. With [track], each execution
+    carries its events and relations whether or not an assertion asks, for a
+    caller that shows them.
 
     @raise Invalid_argument if the options select sMRD. *)
 let step_calculate_executions ?track (lwt_ctx : mordor_ctx Lwt.t) :

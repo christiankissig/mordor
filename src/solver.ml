@@ -340,12 +340,12 @@ let caller_site () =
 (** W1 (#175): with [MORDOR_SMT_DUMP] set to a directory, every query that
     reaches Z3 is written there in SMT-LIB 2, so that other solvers can be
     measured on the queries MoRDor actually asks. A query is its solver's
-    assertions, across every pushed scope, as Z3 prints them, and
-    [(check-sat)]: one file per distinct query, named by its digest.
-    [index.tsv] has a line per query asked -- digest, caller, Z3's answer and
-    seconds -- and [calls.tsv], written at exit, counts the scope pushes and
-    model reads by caller. A model read counts whether or not Z3 was asked:
-    {!solve} reads one off a query {!trivially} answered too. *)
+    assertions, across every pushed scope, as Z3 prints them, and [(check-sat)]:
+    one file per distinct query, named by its digest. [index.tsv] has a line per
+    query asked -- digest, caller, Z3's answer and seconds -- and [calls.tsv],
+    written at exit, counts the scope pushes and model reads by caller. A model
+    read counts whether or not Z3 was asked: {!solve} reads one off a query
+    {!trivially} answered too. *)
 module Dump = struct
   let dir = Sys.getenv_opt "MORDOR_SMT_DUMP"
   let enabled = Option.is_some dir
@@ -364,15 +364,14 @@ module Dump = struct
         in
           at_exit (fun () ->
               close_out oc;
-              Out_channel.with_open_gen
-                [ Open_append; Open_creat; Open_text ]
-                0o644
-                (Filename.concat dir "calls.tsv")
-                (fun oc ->
+              Out_channel.with_open_gen [ Open_append; Open_creat; Open_text ]
+                0o644 (Filename.concat dir "calls.tsv") (fun oc ->
                   Hashtbl.iter
-                    (fun (what, site) n -> Printf.fprintf oc "%s\t%s\t%d\n" what site n)
+                    (fun (what, site) n ->
+                      Printf.fprintf oc "%s\t%s\t%d\n" what site n
+                    )
                     calls
-                )
+              )
           );
           (* A run cut short by [timeout] still writes what it asked. *)
           Sys.set_signal Sys.sigterm (Sys.Signal_handle (fun _ -> exit 143));

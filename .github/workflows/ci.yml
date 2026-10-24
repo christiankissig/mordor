@@ -107,6 +107,5 @@ jobs:
       - name: Run integration tests
         run: opam exec -- dune exec test/test_integration.exe -- test "Integration Tests - Parallel"
       
-      - name: Check formatting (optional)
+      - name: Check formatting
         run: opam exec -- dune build @fmt
-        continue-on-error: true

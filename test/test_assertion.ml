@@ -997,8 +997,8 @@ let boolean_literal_tests =
     Alcotest.test_case "literal: allow (false) never holds" `Quick
       (check_verdict "allow false" "r1 := x\n%% allow (false) [sMRD]" false);
     Alcotest.test_case "literal: true in a conjunction" `Quick
-      (check_verdict "true && r1 = 0" "r1 := x\n%% allow (true && r1 = 0) [RC11]"
-         true
+      (check_verdict "true && r1 = 0"
+         "r1 := x\n%% allow (true && r1 = 0) [RC11]" true
       );
     Alcotest.test_case "literal: a program branch on true" `Quick
       (check_verdict "if (true)"

@@ -796,8 +796,7 @@ module WriteCondition = struct
       | ESymbol symbol
         when match Hashtbl.find_opt structure.origin symbol with
              | Some origin -> USet.mem structure.read_events origin
-             | None -> false ->
-          symbol_can_be visited symbol
+             | None -> false -> symbol_can_be visited symbol
       | _ -> Solver.expoteq ~state value wloc
     in
       if Expr.equal wloc rloc then true

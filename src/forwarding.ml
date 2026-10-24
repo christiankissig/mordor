@@ -927,9 +927,9 @@ module ForwardingContext = struct
   (** [ppo_loc ctx predicates] computes location-based PPO.
 
       Computes PPO restricted to events whose locations may be equal under the
-      given predicates (the paper's [<=_alias]). Unlike {!ppo}, it is not cut
-      to a justification's po-down-set, so it orders events after a thread's
-      last justified write.
+      given predicates (the paper's [<=_alias]). Unlike {!ppo}, it is not cut to
+      a justification's po-down-set, so it orders events after a thread's last
+      justified write.
 
       @param ctx The forwarding context.
       @param predicates The predicate constraints.

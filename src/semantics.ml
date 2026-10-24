@@ -6,11 +6,11 @@
     [Assertion.step_check_assertions]:
 
     {[
-      Lwt.return ctx
-      |> Parse.step_parse_litmus
-      |> Interpret.step_interpret
-      |> Semantics.step_calculate_executions
-      |> Assertion.step_check_assertions
+    Lwt.return ctx
+    |> Parse.step_parse_litmus
+    |> Interpret.step_interpret
+    |> Semantics.step_calculate_executions
+    |> Assertion.step_check_assertions
     ]} *)
 
 open Context
@@ -21,8 +21,8 @@ open Context
     primary model, and admits some of them. Promising semantics enumerates
     executions of its own, so it is compared by outcome instead: a model admits
     an execution when it allows that execution's outcome -- sMRD's symbolic
-    final values able to equal a promising run's concrete ones, or two
-    promising runs ending alike. *)
+    final values able to equal a promising run's concrete ones, or two promising
+    runs ending alike. *)
 
 let is_promising model = semantics_of_model_name model <> None
 
@@ -63,8 +63,12 @@ let smrd_admitted (ctx : mordor_ctx) models =
                if m = first then (m, executions_of sub)
                else
                  ( m,
-                   Option.bind sub.model_executions (fun t -> Hashtbl.find_opt t m)
-                   |> Option.value ~default:[] ))
+                   Option.bind sub.model_executions (fun t ->
+                       Hashtbl.find_opt t m
+                   )
+                   |> Option.value ~default:[]
+                 )
+             )
              models
           )
 
@@ -86,12 +90,12 @@ let promising_run (ctx : mordor_ctx) semantics =
 
     An assertion is checked against the executions of the model it names
     ([Context.set_assertions]). A coherence model checks sMRD's executions, and
-    a promising semantics computes its own, so a test whose assertions name
-    both -- [allow P [RC11, PS1]] -- needs the other semantics' executions
-    besides the run's own. They go into [model_executions], where
+    a promising semantics computes its own, so a test whose assertions name both
+    -- [allow P [RC11, PS1]] -- needs the other semantics' executions besides
+    the run's own. They go into [model_executions], where
     [Assertion.step_check_assertions] looks up every model but the primary.
-    Before, every assertion got the primary's executions and its verdict
-    (github #128). *)
+    Before, every assertion got the primary's executions and its verdict (github
+    #128). *)
 
 (** [assertion_executions ctx] adds to [ctx.model_executions] the executions of
     each model an assertion names whose semantics is not the run's: a promising
@@ -118,7 +122,9 @@ let assertion_executions (ctx : mordor_ctx) =
       in
       let promising, coherence = List.partition is_promising foreign in
       let%lwt by_model = smrd_admitted ctx coherence in
-        List.iter (fun (m, executions) -> Hashtbl.replace tbl m executions) by_model;
+        List.iter
+          (fun (m, executions) -> Hashtbl.replace tbl m executions)
+          by_model;
         let%lwt () =
           Lwt_list.iter_s
             (fun m ->
@@ -182,7 +188,9 @@ let calculate_executions ?track ~after_justifications lwt_ctx =
       in
       let admit (e : Types.symbolic_execution) model =
         Hashtbl.replace admissions e.id
-          (Option.value (Hashtbl.find_opt admissions e.id) ~default:[] @ [ model ])
+          (Option.value (Hashtbl.find_opt admissions e.id) ~default:[]
+          @ [ model ]
+          )
       in
       (* [model] admits a primary execution when one of [others] can end
          with its outcome, or it can end with one of theirs. *)
@@ -206,7 +214,7 @@ let calculate_executions ?track ~after_justifications lwt_ctx =
           executions
       in
       let%lwt () =
-        if primary <> Smrd && coherence <> [] then
+        if primary <> Smrd && coherence <> [] then (
           let%lwt by_model = smrd_admitted ctx coherence in
             List.iter
               (fun (model, admitted) ->
@@ -214,6 +222,7 @@ let calculate_executions ?track ~after_justifications lwt_ctx =
               )
               by_model;
             Lwt.return_unit
+        )
         else Lwt.return_unit
       in
       let%lwt () =

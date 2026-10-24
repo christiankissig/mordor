@@ -78,12 +78,15 @@ module PredCache = struct
   (** [find_or_add t just f] is [just]'s cached value, or [f ()] recorded. Two
       domains may both compute a missing entry; either result is the same. *)
   let find_or_add t just f =
-    match Mutex.protect t.mutex (fun () -> JustificationCache.find_opt t.tbl just)
+    match
+      Mutex.protect t.mutex (fun () -> JustificationCache.find_opt t.tbl just)
     with
     | Some v -> v
     | None ->
         let v = f () in
-          Mutex.protect t.mutex (fun () -> JustificationCache.replace t.tbl just v);
+          Mutex.protect t.mutex (fun () ->
+              JustificationCache.replace t.tbl just v
+          );
           v
 end
 
@@ -442,9 +445,9 @@ module ForwardElab = struct
       |> URelation.inverse
 
   (** [substitute elab_ctx just] applies sMRD's forwarding environment
-      [g = [val(e2) ↦ val(e1)]] (def:elab-fwd in the appendix) for each edge of [just.fwd]
-      whose forwarded event is a read, to the predicate and to the justified
-      write's location and value, and recomputes [d] from the write as
+      [g = [val(e2) ↦ val(e1)]] (def:elab-fwd in the appendix) for each edge of
+      [just.fwd] whose forwarded event is a read, to the predicate and to the
+      justified write's location and value, and recomputes [d] from the write as
       ValueAssignElab does. A predicate the substitution makes [false] is
       dropped by the caller, as the rule asks for [P ∧ Ω] to be satisfiable.
 
@@ -456,8 +459,8 @@ module ForwardElab = struct
 
       A forwarded value may itself mention a forwarded read's symbol, so the
       environment is applied until nothing changes; edges follow [po], so at
-      most once per edge. Store-store forwarding rewrites a written value, not
-      a symbol, and is left as it was. *)
+      most once per edge. Store-store forwarding rewrites a written value, not a
+      symbol, and is left as it was. *)
   let substitute elab_ctx (just : justification) =
     let val_fn = elab_ctx.fwd_es_ctx.val_fn in
     let bindings =
@@ -615,7 +618,8 @@ module ForwardElab = struct
               )
               filtered_fwd
             |> List.filter (fun (j : justification) ->
-                not (List.exists (Expr.equal (EBoolean false)) j.p))
+                not (List.exists (Expr.equal (EBoolean false)) j.p)
+            )
           in
 
           let we_justs =
@@ -1936,7 +1940,9 @@ let generate_justifications ?(num_threads = 1) ?(collapse_forwarding = false)
   (* Build context for elaborations *)
   let op_trace = OpTrace.create 0 in
   let pred_cache = PredCache.create 0 in
-  let elab_ctx : context = { fwd_es_ctx; structure; fj; op_trace; pred_cache } in
+  let elab_ctx : context =
+    { fwd_es_ctx; structure; fj; op_trace; pred_cache }
+  in
 
   Logs_safe.debug (fun m -> m "Starting elaborations...");
 

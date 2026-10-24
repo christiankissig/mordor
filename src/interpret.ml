@@ -105,8 +105,8 @@ type events_t = {
       (** Mapping from event labels to loop indices. *)
   loop_iters : (int, int list) Hashtbl.t;
       (** Mapping from event labels to the iteration, per enclosing loop and
-          parallel to [loop_indices], the event was created in. Every event of
-          a loop body carries iteration [1] unless the step-counter unroller
+          parallel to [loop_indices], the event was created in. Every event of a
+          loop body carries iteration [1] unless the step-counter unroller
           retagged the body copy it came from. *)
   loop_conditions : (int, expr list) Hashtbl.t;
       (** Mapping from a loop index to the continuation guards recorded for it,
@@ -931,13 +931,22 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
             | EBoolean false -> recurse rest env phi events
             | EBoolean true -> EventStructure.empty ()
             | _ ->
-                let blocked = { node with stmt = Blocked { condition = EBoolean true } } in
+                let blocked =
+                  { node with stmt = Blocked { condition = EBoolean true } }
+                in
                   recurse
                     ({
                        node with
-                       stmt = If { condition; then_body = [ blocked ]; else_body = None };
+                       stmt =
+                         If
+                           {
+                             condition;
+                             then_body = [ blocked ];
+                             else_body = None;
+                           };
                      }
-                    :: rest)
+                    :: rest
+                    )
                     env phi events
           )
         | _ ->
@@ -1324,8 +1333,7 @@ end = struct
     let r = retag lid iter in
     let stmt : ir_stmt =
       match node.stmt with
-      | While { condition; body } ->
-          While { condition; body = List.map r body }
+      | While { condition; body } -> While { condition; body = List.map r body }
       | Do { body; condition } -> Do { body = List.map r body; condition }
       | If { condition; then_body; else_body } ->
           If
@@ -1388,8 +1396,8 @@ end = struct
             (If { condition; then_body = [ residual ]; else_body = None });
         ]
 
-  (** Unroll a while loop a specific number of times; the [i]th copy of the
-      body is tagged as iteration [i].
+  (** Unroll a while loop a specific number of times; the [i]th copy of the body
+      is tagged as iteration [i].
 
       @param lid The loop's id.
       @param body The loop body.
@@ -1491,7 +1499,8 @@ end = struct
           | While { condition; body } ->
               if per_loop then
                 let unrolled =
-                  unrol_while_loop ~lid:(lid_of node) body condition step_counter
+                  unrol_while_loop ~lid:(lid_of node) body condition
+                    step_counter
                 in
                   interpret_statements_step_counter step_counter per_loop
                     (unrolled @ rest) env phi events
