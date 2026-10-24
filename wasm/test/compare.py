@@ -17,6 +17,10 @@ It exits non-zero on any FAIL, or if a pair the browser build must answer in
 full is not identical: parse for every program, interpret for the programs
 whose conditions are decided without a solver. With WORKER_JS, the Web Worker
 is driven through worker_test.mjs and must post exactly what node_main prints.
+
+First, hashes_native.exe (next to SESSION_NATIVE) and test/hashes.bc.js (next
+to NODE_MAIN_JS) must print the same report: MoRDor's hashes, and the orders
+they put sets in, must not depend on the width of int (#193).
 """
 import json
 import os
@@ -54,9 +58,21 @@ def classify(native, browser):
     return 'FAIL'
 
 
+def hashes(session_native, node_main):
+    native = subprocess.run([os.path.join(os.path.dirname(session_native), 'hashes_native.exe')],
+                            capture_output=True, text=True, check=True).stdout
+    browser = subprocess.run(['node', os.path.join(os.path.dirname(node_main), 'test', 'hashes.bc.js')],
+                             capture_output=True, text=True, check=True).stdout
+    differ = [n.split(':')[0] for n, b in zip(native.splitlines(), browser.splitlines()) if n != b]
+    if native.count('\n') != browser.count('\n'):
+        differ.append('the number of lines')
+    print('hashes: ' + ('identical' if not differ else 'differ in ' + ', '.join(differ)))
+    return [f'hashes: {d}' for d in differ]
+
+
 def main(session_native, node_main, worker=None):
     repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    failures = []
+    failures = hashes(session_native, node_main)
     for program in PROGRAMS:
         with open(os.path.join(repo, program)) as f:
             body = {'program': f.read()}

@@ -449,9 +449,15 @@ end = struct
         s.buckets;
       !acc
 
+  (* The low 30 bits of [h]. The hashes below multiply and add, and overflow;
+     cut to [max_int] they would depend on the width of [int], 63 bits natively
+     and 32 under js_of_ocaml, and so would the buckets and the order a set's
+     members come out in (#193). Their low 30 bits agree on both. *)
+  let low_bits h = h land 0x3FFFFFFF
+
   (* A set's hash is the sum of its members': the same members, the same
      hash, whatever order they went in. *)
-  let set_hash s = (s.sum + s.size) land max_int
+  let set_hash s = low_bits (s.sum + s.size)
 
   (* A block with no block inside: a pair of labels, the common case. *)
   let flat (v : Obj.t) =
@@ -485,7 +491,7 @@ end = struct
                   h := (!h * 31) + hash_obj budget f
               )
             done;
-            !h land max_int
+            low_bits !h
         )
 
   let hash x = hash_obj (ref 16) (Obj.repr x)

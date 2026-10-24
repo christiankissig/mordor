@@ -4,3 +4,25 @@
  (name session_native)
  (modules session_native)
  (libraries mordor_session mordor_native))
+
+; The hashes of a fixed set of values (#193), natively and in the browser
+; build, for compare.py: hashes_native.exe and, in the browser profile,
+; hashes.bc.js.
+
+(library
+ (name hash_probe)
+ (modules hash_probe)
+ (libraries mordor_lib))
+
+(executable
+ (name hashes_native)
+ (modules hashes_native)
+ (libraries hash_probe mordor_native))
+
+(executable
+ (name hashes)
+ (modes js)
+ (enabled_if
+  (= %{profile} browser))
+ (modules hashes)
+ (libraries hash_probe mordor_browser zarith_stubs_js))
