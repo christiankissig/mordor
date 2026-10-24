@@ -129,12 +129,24 @@ python3 -I wasm/test/corpus.py CORPUS WORK/out \
   its whole `assertions` answer with the native session's, for the CLI's
   samples and a fixed litmus subset (`all` for every litmus test), and prints
   the time each took.
+- `size.sh DIST` reports each file's size, raw and gzipped, and fails if what
+  a page loads is over a budget (6.5 MB gzipped; W4 measured 5.3 MB).
 - `ui_test.py` drives the UI in Chromium (Playwright) and Firefox
   (geckodriver), on the static build and on `mordor-web`: parse, visualize and
   assertions of SB, MP and LB, the example library and the test runner, the
   page's timers during a long run in the worker, and cancelling a run.
 - `corpus.py` solves every distinct query of a W1 corpus with Z3 in wasm and
   compares each answer with native Z3's.
+
+## CI
+
+`.github/workflows/browser-build.yml` (W6, #182) builds the browser build on
+every push and pull request, in a workflow of its own: its opam switch, with
+js_of_ocaml, and its Z3 for wasm are cached apart from the native jobs'. Z3 is
+built at the native CI's version (4.15.2), only when `wasm/z3/` changes or the
+cache is gone (11 minutes on a runner); with the cache warm, the job builds MoRDor
+both ways and runs `size.sh`, `compare.py` and `verdicts.py` on the litmus
+subset.
 
 ## Timing
 

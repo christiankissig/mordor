@@ -1,0 +1,113 @@
+# The browser build (W6, #182): MoRDor compiled with js_of_ocaml and Z3
+# compiled to wasm (wasm/README.md), checked under node against the native
+# build. A workflow of its own, with caches of its own, so the native jobs do
+# not gain js_of_ocaml or emscripten.
+name: Browser Build
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+env:
+  # The native build's Z3 (ci.yml pins it: the last version that builds on
+  # ubuntu-22.04), so that both builds answer alike.
+  Z3_VERSION: 4.15.2
+
+jobs:
+  browser:
+    name: Browser Build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.2.x
+          dune-cache: true
+
+      - name: Set up node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Get cache week
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      # Not ci.yml's cache: this switch also has js_of_ocaml.
+      - name: Cache opam dependencies
+        uses: actions/cache@v4
+        with:
+          path: _opam
+          key: opam-browser-v1-${{ steps.week.outputs.week }}-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-browser-v1-${{ steps.week.outputs.week }}-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgmp-dev pkg-config libev-dev z3 libz3-dev cmake ninja-build
+
+      - name: Install dependencies
+        run: |
+          opam pin add . --no-action
+          opam install z3.$Z3_VERSION
+          opam install . --deps-only
+          opam install js_of_ocaml-compiler.6.4.1 js_of_ocaml.6.4.1 zarith_stubs_js
+
+      - name: Fix Landmarks stubs library
+        run: |
+          opam exec -- bash -c '
+            cd "$(opam var lib)/landmarks"
+            if [ -f liblandmark_stubs.a ]; then
+              ar x liblandmark_stubs.a
+              ocamlmklib -o landmark_stubs *.o
+              cp dlllandmark_stubs.so "$(ocamlc -where)/stublibs/"
+              rm *.o
+            fi
+          '
+
+      # Only the result, out/: emsdk and Z3's objects are 3.5 GB. A cold
+      # build took 11 minutes on a runner.
+      - name: Cache Z3 for wasm
+        id: z3-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/z3-wasm/out
+          key: z3-wasm-v1-${{ env.Z3_VERSION }}-${{ hashFiles('wasm/z3/build.sh', 'wasm/z3/z3-polling-timer.patch', 'wasm/z3/z3_shim.js') }}
+
+      - name: Build Z3 for wasm
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        run: wasm/z3/build.sh ~/z3-wasm "$(nproc)"
+
+      - name: Record Z3 for wasm
+        run: cat ~/z3-wasm/out/VERSIONS >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build
+        timeout-minutes: 15
+        run: |
+          opam exec -- dune build ./wasm/test/session_native.exe ./wasm/test/hashes_native.exe ./cli/main.exe
+          opam exec -- dune build --profile browser --build-dir _build-js \
+            ./wasm/worker.bc.js ./wasm/node_main.bc.js ./wasm/test/hashes.bc.js
+          wasm/dist.sh ~/z3-wasm/out dist
+
+      - name: Bundle size
+        run: wasm/test/size.sh dist >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Every pipeline against native
+        run: |
+          python3 -I wasm/test/compare.py _build/default/wasm/test/session_native.exe \
+            _build-js/default/wasm/node_main.bc.js ~/z3-wasm/out "$PWD/dist"
+
+      - name: Verdicts against the CLI
+        run: |
+          python3 -I wasm/test/verdicts.py _build/default/cli/main.exe \
+            _build/default/wasm/test/session_native.exe \
+            _build-js/default/wasm/node_main.bc.js ~/z3-wasm/out
