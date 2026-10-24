@@ -2049,15 +2049,27 @@ let step_check_assertions (ctx : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
                   | [] | [ Outcome { condition = Ir.CondUB; _ } ] -> true
                   | _ -> false
                 in
-                  if (not report.witnessed) && report.undecided > 0 then begin
-                    Logs_safe.warn (fun m ->
-                        m
-                          "No witness, and %d of %d kinds of combination \
-                           undecided within the budgets \
-                           (MORDOR_WITNESS_ROUNDS, MORDOR_WITNESS_SECS): the \
-                           assertion is undecided"
-                          report.undecided report.kinds
-                    );
+                  if
+                    (not report.witnessed)
+                    && report.undecided + report.unasked > 0
+                  then begin
+                    if report.undecided > 0 then
+                      Logs_safe.warn (fun m ->
+                          m
+                            "No witness, and %d of %d kinds of combination \
+                             undecided within the budgets \
+                             (MORDOR_WITNESS_ROUNDS, MORDOR_WITNESS_SECS): the \
+                             assertion is undecided"
+                            report.undecided report.kinds
+                      );
+                    if report.unasked > 0 then
+                      Logs_safe.warn (fun m ->
+                          m
+                            "No witness, and %d of %d kinds of combination not \
+                             asked (MORDOR_QUERY_ONLY): the assertion is \
+                             undecided"
+                            report.unasked report.kinds
+                      );
                     if ctx.assertions <> [] then ctx.valid <- None;
                     if asks_ub then ctx.undefined_behaviour <- None
                   end;

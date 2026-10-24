@@ -397,6 +397,22 @@ budgets (`MORDOR_WITNESS_ROUNDS`, 50 solver rounds, and `MORDOR_WITNESS_SECS`,
 with its undefined behaviour named. Without a witness, the verdict is given
 only if every kind was shown to have none; otherwise it is `undecided`.
 
+A run that leaves kinds undecided can name them for a second run, which asks
+only those, with larger budgets:
+
+```bash
+MORDOR_QUERY_UNDECIDED=undecided.keys mordor run --single evaluation/rcu-2.lit \
+  --by-query --step-counter-per-loop 2 --threads 16
+MORDOR_QUERY_ONLY=undecided.keys MORDOR_WITNESS_SECS=600 MORDOR_WITNESS_ROUNDS=500 \
+  mordor run --single evaluation/rcu-2.lit --by-query --step-counter-per-loop 2 --threads 16
+```
+
+`MORDOR_QUERY_UNDECIDED` writes one key per undecided kind, a digest of the
+combination that is the same from run to run. Under `MORDOR_QUERY_ONLY` the
+kinds not listed are not asked, so the second run gives no verdict without a
+witness: it shows that the listed kinds have none, and the first run showed
+the rest.
+
 What the query can and cannot answer:
 
 | Question | By query |

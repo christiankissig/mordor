@@ -596,6 +596,58 @@ let test_ub_by_constraint () =
           [ ("uaf", false, `Witness); ("uaf fixed", true, `Absent) ]
       )
 
+(* The kinds one run leaves undecided, written out ([query_undecided_file]) and
+   asked again on their own ([query_only_file]) with the default budgets, are
+   all decided; the kinds left out are not asked, so there is no verdict. The
+   condition names a location, so only the search can show a kind has no
+   witness, and with no time for it some kinds are left undecided -- how many
+   depends on timing, so one of them is always left out as well. *)
+let test_ask_only_undecided () =
+  let program =
+    wide_uaf_program ~release:true ^ " %% forbid (x = 3) [smrd]"
+  in
+  let seconds = !Executions.Freeze.witness_seconds
+  and rounds = !Executions.Freeze.witness_rounds
+  and undecided_file = Filename.temp_file "undecided" ".keys" in
+    Fun.protect
+      ~finally:(fun () ->
+        Executions.Freeze.witness_seconds := seconds;
+        Executions.Freeze.witness_rounds := rounds;
+        Executions.Freeze.query_undecided_file := None;
+        Executions.Freeze.query_only_file := None;
+        Sys.remove undecided_file
+      )
+      (fun () ->
+        Executions.Freeze.witness_seconds := 0.;
+        Executions.Freeze.witness_rounds := 0;
+        Executions.Freeze.query_undecided_file := Some undecided_file;
+        let _, _, report, _ = verdict ~by_query:true program in
+        let first = Option.get report in
+        let listed =
+          In_channel.with_open_text undecided_file In_channel.input_lines
+        in
+          check bool "some kinds undecided" true (first.undecided > 0);
+          check int "one key per undecided kind" first.undecided
+            (List.length listed);
+          let asked = List.tl listed in
+            Out_channel.with_open_text undecided_file (fun oc ->
+                List.iter (fun key -> output_string oc (key ^ "\n")) asked
+            );
+          Executions.Freeze.witness_seconds := seconds;
+          Executions.Freeze.witness_rounds := rounds;
+          Executions.Freeze.query_undecided_file := None;
+          Executions.Freeze.query_only_file := Some undecided_file;
+          let valid, _, report, _ = verdict ~by_query:true program in
+          let again = Option.get report in
+            check int "the same kinds" first.kinds again.kinds;
+            check int "the listed kinds shown to have none" (List.length asked)
+              again.absent;
+            check int "none undecided" 0 again.undecided;
+            check int "the rest not asked" (first.kinds - List.length asked)
+              again.unasked;
+            check (option bool) "no verdict without the rest" None valid
+      )
+
 let suite =
   [
     (* Parameterized origin tests *)
@@ -628,6 +680,7 @@ let suite =
       ("futures from witnesses", `Quick, test_futures_from_witnesses);
       ("assertions by query", `Quick, test_assertions_by_query);
       ("undefined behaviour by constraint", `Quick, test_ub_by_constraint);
+      ("ask only the undecided kinds", `Quick, test_ask_only_undecided);
     ];
   ]
   |> List.flatten

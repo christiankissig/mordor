@@ -248,6 +248,16 @@ module Freeze : sig
       by default. *)
   val witness_seconds : float ref
 
+  (** Where a query writes the keys of the kinds of combination it leaves
+      undecided, one hex digest per line: [MORDOR_QUERY_UNDECIDED], none by
+      default. *)
+  val query_undecided_file : string option ref
+
+  (** A file of such keys; a query then asks only the kinds listed there:
+      [MORDOR_QUERY_ONLY], none by default. The rest are not asked, so without
+      a witness such a run gives no verdict. *)
+  val query_only_file : string option ref
+
   (** [frame_of structure prepared] is the combination's events, [dp] and [ppo]:
       what its future, and minimality, compare it by. *)
   val frame_of :

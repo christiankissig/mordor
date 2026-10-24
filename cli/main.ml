@@ -256,7 +256,10 @@ module Display = struct
              undecided\n"
             r.kinds
             (if r.witnessed then "witness found" else "no witness")
-            r.absent r.undecided
+            r.absent r.undecided;
+          if r.unasked > 0 then
+            Printf.printf "By query: %d kinds not asked (MORDOR_QUERY_ONLY)\n"
+              r.unasked
       );
       ( match (ctx.valid, ctx.query_report) with
       | Some valid, _ -> Printf.printf "Valid: %b\n" valid

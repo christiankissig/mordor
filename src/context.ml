@@ -444,13 +444,15 @@ type loop_episodicity_result_summary = {
 (** How an assertion asked by query ({!options.by_query}) was answered: over
     how many kinds of justification combination, how many were shown to have no
     witness, how many neither shown to have one nor to have none within the
-    budgets, and whether a witness was found. A witness settles the question
+    budgets, how many were not asked because [MORDOR_QUERY_ONLY] left them
+    out, and whether a witness was found. A witness settles the question
     whatever the rest; without one, the answer is a proof of absence only if
-    no kind was left undecided. *)
+    no kind was left undecided or unasked. *)
 type query_report = {
   kinds : int;
   absent : int;
   undecided : int;
+  unasked : int;
   witnessed : bool;
 }
 [@@deriving show]
