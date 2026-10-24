@@ -11,8 +11,10 @@ via Server-Sent Events (SSE).
 ```
 ├── dune
 ├── server.ml                          # Main entry point; routes and SSE handlers
+├── examples.ml                        # The editor's example library
 ├── test_runner_api.ml                 # REST handlers for running litmus tests via CLI
 ├── episodicity_runner_api.ml          # REST handlers for episodicity analysis via CLI
+├── export_static.ml                   # The static build's data: examples.json, tests.json
 └── frontend/
     ├── index.html                     # Main split-screen editor/visualizer UI
     ├── manual.html                    # The manual, including the language reference
@@ -21,10 +23,18 @@ via Server-Sent Events (SSE).
         │   ├── mordor.css             # Main application styles
         │   └── test-runner.css        # Test runner panel styles
         └── js/
+            ├── config.js              # Server or worker: which transport.js uses
+            ├── transport.js           # Runs and data, from the server or the worker
             ├── graph-visualizer.js    # D3-based event structure graph renderer
             ├── prism-smrd.js          # Prism syntax highlighting for litmus format
             └── test-runner.js         # Test runner panel logic
 ```
+
+The same frontend also runs without the server, on the browser build's Web
+Worker (W5, #181): `transport.js` sends each run, and each request for the
+examples or the test runner's lists, to the server or to the worker and the
+static build's data files, as `config.js` says. `wasm/static.sh` builds that
+static site; see [wasm/README.md](../wasm/README.md).
 
 ## Source Modules
 
@@ -44,7 +54,7 @@ via Server-Sent Events (SSE).
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Main application page (`index.html`) |
-| `GET` | `/manual/` | The manual (`manual.html`) |
+| `GET` | `/manual/`, `/manual.html` | The manual (`manual.html`) |
 | `GET` | `/help/` | The manual, for links to the former help page |
 | `GET` | `/static/**` | CSS, JS, and other static assets |
 | `GET` | `/health` | Health check — returns `{"status": "ok"}` |

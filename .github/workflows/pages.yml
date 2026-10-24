@@ -1,0 +1,160 @@
+# GitHub Pages, https://christiankissig.github.io/mordor/ (W7, #183):
+#
+#   /             the manual (web/frontend/manual.html)
+#   /playground/  the web UI running MoRDor in the browser, without a server
+#                 (wasm/README.md), as of the latest release
+#
+# A repository has one Pages site and every deployment replaces it whole, so
+# this one workflow publishes both. When a release is published, the release's
+# playground is built, attached to the release as playground.tar.gz, and
+# deployed. When the manual changes on master, the manual is deployed with the
+# playground of the latest release that has one, downloaded from it.
+name: Pages
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - web/frontend/manual.html
+      - .github/workflows/pages.yml
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: write # to attach the playground to the release
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # As browser-build.yml, so that this reuses its caches.
+  Z3_VERSION: 4.15.2
+
+jobs:
+  playground:
+    name: Build playground
+    if: github.event_name == 'release'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.2.x
+          dune-cache: true
+
+      - name: Get cache week
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache opam dependencies
+        uses: actions/cache@v4
+        with:
+          path: _opam
+          key: opam-browser-v1-${{ steps.week.outputs.week }}-${{ hashFiles('*.opam') }}
+          restore-keys: |
+            opam-browser-v1-${{ steps.week.outputs.week }}-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgmp-dev pkg-config libev-dev z3 libz3-dev cmake ninja-build
+
+      - name: Install dependencies
+        run: |
+          opam pin add . --no-action
+          opam install z3.$Z3_VERSION
+          opam install . --deps-only
+          opam install js_of_ocaml-compiler.6.4.1 js_of_ocaml.6.4.1 zarith_stubs_js
+
+      - name: Cache Z3 for wasm
+        id: z3-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/z3-wasm/out
+          key: z3-wasm-v1-${{ env.Z3_VERSION }}-${{ hashFiles('wasm/z3/build.sh', 'wasm/z3/z3-polling-timer.patch', 'wasm/z3/z3_shim.js') }}
+
+      - name: Build Z3 for wasm
+        if: steps.z3-cache.outputs.cache-hit != 'true'
+        run: wasm/z3/build.sh ~/z3-wasm "$(nproc)"
+
+      - name: Build playground
+        run: |
+          opam exec -- dune build ./web/export_static.exe
+          opam exec -- dune build --profile browser --build-dir _build-js ./wasm/worker.bc.js
+          wasm/static.sh ~/z3-wasm/out playground
+          tar -czf playground.tar.gz playground
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" playground.tar.gz --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: playground
+          path: playground.tar.gz
+
+  deploy:
+    name: Publish
+    needs: playground
+    # After the playground's build on a release; at once otherwise.
+    if: ${{ !cancelled() && (needs.playground.result == 'success' || needs.playground.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: This release's playground
+        if: github.event_name == 'release'
+        uses: actions/download-artifact@v4
+        with:
+          name: playground
+
+      - name: The latest release's playground
+        if: github.event_name != 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for tag in $(gh release list --exclude-drafts --limit 50 --json tagName --jq '.[].tagName'); do
+            if gh release download "$tag" --pattern playground.tar.gz; then
+              echo "The playground of $tag" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          done
+          echo "No release has a playground yet" >> "$GITHUB_STEP_SUMMARY"
+
+      # The manual's header links back to the web UI at "./": on Pages, to
+      # the playground, or to the repository if there is none yet.
+      - name: Assemble site
+        run: |
+          mkdir _site
+          if [ -f playground.tar.gz ]; then
+            tar -xzf playground.tar.gz -C _site
+            ui=playground/
+          else
+            ui=https://github.com/christiankissig/mordor
+          fi
+          sed "s|<a href=\"./\">Open MoRDor</a>|<a href=\"$ui\">Open MoRDor</a>|" \
+            web/frontend/manual.html > _site/index.html
+          grep -q "href=\"$ui\">Open MoRDor" _site/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
