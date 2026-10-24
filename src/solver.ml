@@ -318,11 +318,115 @@ let trivially exprs =
       in
         if not all_constant_true then Some false else None
 
+(* The first caller in MoRDor's own code outside this file, by function name: a
+   closure passed to [Hashtbl.filteri] is reported as its caller. *)
+let caller_site () =
+  let slots =
+    Printexc.get_callstack 24
+    |> Printexc.backtrace_slots
+    |> Option.value ~default:[||]
+  in
+    Array.to_list slots
+    |> List.find_map (fun slot ->
+        match Printexc.Slot.location slot with
+        | Some loc
+          when String.starts_with ~prefix:"src/" loc.filename
+               && not (String.ends_with ~suffix:"solver.ml" loc.filename) ->
+            Some (Option.value (Printexc.Slot.name slot) ~default:loc.filename)
+        | _ -> None
+    )
+    |> Option.value ~default:"?"
+
+(** W1 (#175): with [MORDOR_SMT_DUMP] set to a directory, every query that
+    reaches Z3 is written there in SMT-LIB 2, so that other solvers can be
+    measured on the queries MoRDor actually asks. A query is its solver's
+    assertions, across every pushed scope, as Z3 prints them, and
+    [(check-sat)]: one file per distinct query, named by its digest.
+    [index.tsv] has a line per query asked -- digest, caller, Z3's answer and
+    seconds -- and [calls.tsv], written at exit, counts the scope pushes and
+    model reads by caller. A model read counts whether or not Z3 was asked:
+    {!solve} reads one off a query {!trivially} answered too. *)
+module Dump = struct
+  let dir = Sys.getenv_opt "MORDOR_SMT_DUMP"
+  let enabled = Option.is_some dir
+  let mutex = Mutex.create ()
+  let calls = Hashtbl.create 16
+
+  let index =
+    Option.map
+      (fun dir ->
+        if not (Sys.file_exists dir) then Sys.mkdir dir 0o755;
+        let oc =
+          open_out_gen
+            [ Open_append; Open_creat; Open_text ]
+            0o644
+            (Filename.concat dir "index.tsv")
+        in
+          at_exit (fun () ->
+              close_out oc;
+              Out_channel.with_open_gen
+                [ Open_append; Open_creat; Open_text ]
+                0o644
+                (Filename.concat dir "calls.tsv")
+                (fun oc ->
+                  Hashtbl.iter
+                    (fun (what, site) n -> Printf.fprintf oc "%s\t%s\t%d\n" what site n)
+                    calls
+                )
+          );
+          (* A run cut short by [timeout] still writes what it asked. *)
+          Sys.set_signal Sys.sigterm (Sys.Signal_handle (fun _ -> exit 143));
+          oc
+      )
+      dir
+
+  (** Counts a scope push or a model evaluation, by its caller. *)
+  let call what =
+    if enabled then
+      let key = (what, caller_site ()) in
+        Mutex.protect mutex (fun () ->
+            Hashtbl.replace calls key
+              (1 + Option.value ~default:0 (Hashtbl.find_opt calls key))
+        )
+
+  let query solver status seconds =
+    Option.iter
+      (fun dir ->
+        let text = Z3.Solver.to_string solver ^ "(check-sat)\n" in
+        let digest = Digest.to_hex (Digest.string text) in
+        let answer =
+          match status with
+          | Z3.Solver.SATISFIABLE -> "sat"
+          | Z3.Solver.UNSATISFIABLE -> "unsat"
+          | Z3.Solver.UNKNOWN -> "unknown"
+        in
+        let site = caller_site () in
+          Mutex.protect mutex (fun () ->
+              let path = Filename.concat dir (digest ^ ".smt2") in
+                if not (Sys.file_exists path) then
+                  Out_channel.with_open_text path (fun oc ->
+                      output_string oc text
+                  );
+                Option.iter
+                  (fun oc ->
+                    Printf.fprintf oc "%s\t%s\t%s\t%.6f\n%!" digest site answer
+                      seconds
+                  )
+                  index
+          )
+      )
+      dir
+end
+
 let check_asserted solver =
-  match Z3.Solver.check solver.context.solver [] with
-  | Z3.Solver.SATISFIABLE -> Some true
-  | Z3.Solver.UNSATISFIABLE -> Some false
-  | Z3.Solver.UNKNOWN -> None
+  let started = if Dump.enabled then Unix.gettimeofday () else 0. in
+  let status = Z3.Solver.check solver.context.solver [] in
+    if Dump.enabled then
+      Dump.query solver.context.solver status (Unix.gettimeofday () -. started);
+    match status with
+    | Z3.Solver.SATISFIABLE -> Some true
+    | Z3.Solver.UNSATISFIABLE -> Some false
+    | Z3.Solver.UNKNOWN -> None
 
 let check solver =
   match trivially solver.expressions with
@@ -353,6 +457,7 @@ let fresh_solvers = ref (Option.is_some (Sys.getenv_opt "MORDOR_FRESH_SOLVER"))
 
 let scoped f =
   let solver = Domain.DLS.get scoped_solver_key in
+    Dump.call "push";
     ignore (push solver);
     Fun.protect ~finally:(fun () -> ignore (pop solver)) (fun () -> f solver)
 
@@ -423,29 +528,10 @@ module S7 = struct
       )
       (Sys.getenv_opt "MORDOR_S7_TRACE")
 
-  (* The first caller in MoRDor's own code outside this file, by function
-     name: a closure passed to [Hashtbl.filteri] is reported as its caller. *)
-  let site () =
-    let slots =
-      Printexc.get_callstack 24
-      |> Printexc.backtrace_slots
-      |> Option.value ~default:[||]
-    in
-      Array.to_list slots
-      |> List.find_map (fun slot ->
-          match Printexc.Slot.location slot with
-          | Some loc
-            when String.starts_with ~prefix:"src/" loc.filename
-                 && not (String.ends_with ~suffix:"solver.ml" loc.filename) ->
-              Some (Option.value (Printexc.Slot.name slot) ~default:loc.filename)
-          | _ -> None
-      )
-      |> Option.value ~default:"?"
-
   let record ~hit exprs =
     Option.iter
       (fun oc ->
-        let r = { site = site (); hit; exprs } in
+        let r = { site = caller_site (); hit; exprs } in
           Mutex.protect cache_mutex (fun () -> Marshal.to_channel oc r [])
       )
       out
@@ -540,6 +626,7 @@ let solve_advanced solver =
 
 (* The model of a solver [check] found satisfiable, as bindings. *)
 let model_bindings solver =
+  Dump.call "model";
   match Z3.Solver.get_model solver.context.solver with
   | Some m ->
       let bindings = Hashtbl.create 16 in
