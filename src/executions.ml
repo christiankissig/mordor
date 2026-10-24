@@ -2668,6 +2668,16 @@ module Freeze = struct
       |> Option.value ~default:60.
       )
 
+  (** Where a query writes the keys of the kinds of combination it leaves
+      undecided, one hex digest per line: [MORDOR_QUERY_UNDECIDED], none by
+      default. A later run can ask just those, with larger budgets. *)
+  let query_undecided_file = ref (Sys.getenv_opt "MORDOR_QUERY_UNDECIDED")
+
+  (** A file of such keys; a query then asks only the kinds listed there:
+      [MORDOR_QUERY_ONLY], none by default. The rest are not asked, so without
+      a witness such a run gives no verdict. *)
+  let query_only_file = ref (Sys.getenv_opt "MORDOR_QUERY_ONLY")
+
   let instantiator ?thin_air structure prep =
     instantiate_execution ?thin_air structure prep.prep_path prep.prep_dp
       prep.prep_ppo prep.prep_justs prep.prep_path.p prep.prep_p_combined
@@ -3818,10 +3828,29 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             prepared;
         let model = (restrictions : Coherence.restrictions).coherent in
         let found = Atomic.make false in
+        let only =
+          Option.map
+            (fun path ->
+              let keys = Hashtbl.create 64 in
+                In_channel.with_open_text path In_channel.input_lines
+                |> List.iter (fun line ->
+                    match String.trim line with
+                    | "" -> ()
+                    | hex -> Hashtbl.replace keys (Digest.of_hex hex) ()
+                );
+                keys
+            )
+            !Freeze.query_only_file
+        in
         let decide i =
+          let key, p = kinds.(i) in
           if Atomic.get found then `Skipped
+          else if
+            Option.fold ~none:false
+              ~some:(fun keys -> not (Hashtbl.mem keys key))
+              only
+          then `Unasked
           else
-            let key, p = kinds.(i) in
             let e, _, _ = frames.(i) in
             let fwd, we = Hashtbl.find contexts key in
             let admits (fr : FreezeResult.t) =
@@ -3845,12 +3874,29 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                   Atomic.set found true;
                   `Witness (key, fr)
               | Freeze.No_witness -> `Absent
-              | Freeze.Undecided -> `Undecided
+              | Freeze.Undecided -> `Undecided key
         in
           let* decided =
             compute.run ~stage:("queries", "kinds") decide
               (List.init (Array.length kinds) Fun.id)
           in
+          let undecided =
+            List.filter_map
+              (function
+                | `Undecided key -> Some key
+                | _ -> None
+                )
+              decided
+          in
+          Option.iter
+            (fun path ->
+              Out_channel.with_open_text path (fun oc ->
+                  List.iter
+                    (fun key -> output_string oc (Digest.to_hex key ^ "\n"))
+                    undecided
+              )
+            )
+            !Freeze.query_undecided_file;
           let count v = List.length (List.filter (( = ) v) decided) in
           (* The witness of the earliest kind that has one among those asked.
              Sequentially that is the first; in parallel, which kinds were
@@ -3867,7 +3913,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
             {
               kinds = Array.length kinds;
               absent = count `Absent;
-              undecided = count `Undecided;
+              undecided = List.length undecided;
+              unasked = count `Unasked;
               witnessed = Option.is_some witness;
             }
           in
@@ -3877,7 +3924,8 @@ let generate_executions ?(include_rf = true) ?(compute = sequential_compute)
                    none, %d undecided, %d not asked"
                   report.kinds
                   (if report.witnessed then "witnessed" else "no witness")
-                  report.absent report.undecided (count `Skipped)
+                  report.absent report.undecided
+                  (count `Skipped + report.unasked)
             );
             query.report report;
             let found = Hashtbl.create 1 in
