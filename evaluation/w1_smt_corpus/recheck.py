@@ -6,7 +6,8 @@
 Each distinct query is solved from its .smt2 file alone, and the answer
 compared with every answer MoRDor's Z3 gave it. A disagreement is sat against
 unsat; an unknown or a timeout on either side is counted, not compared. Exits
-non-zero if any query disagrees.
+non-zero if any query disagrees, or if any file is not a query z3 can solve on
+its own.
 """
 import collections
 import concurrent.futures
@@ -52,7 +53,13 @@ def main(out, workers=4, seconds=60):
     for d in disagree:
         print(f'  {paths[d]}: standalone {standalone[d]}, in MoRDor {sorted(answers[d])}')
     print(f'queries MoRDor answered both sat and unsat: {len(inconsistent)}')
-    return 1 if disagree or inconsistent else 0
+    # A file that z3 cannot solve on its own is not a standalone query.
+    unsolved = [d for d, a in standalone.items()
+                if a not in ('sat', 'unsat', 'unknown', 'timeout')]
+    print(f'files z3 could not solve on their own: {len(unsolved)}')
+    for d in unsolved[:10]:
+        print(f'  {paths[d]}: {standalone[d]}')
+    return 1 if disagree or inconsistent or unsolved else 0
 
 
 if __name__ == '__main__':

@@ -11,8 +11,12 @@ written there (`Solver.Dump`, called from `Solver.check_asserted`, which all of
 MoRDor's satisfiability checks go through):
 
 - `<digest>.smt2`: one file per distinct query. It holds the solver's
-  assertions across every pushed scope, as Z3 prints them (`Z3.Solver.to_string`),
-  and `(check-sat)`, so each file can be solved on its own.
+  assertions across every pushed scope, as asserted
+  (`Z3.Solver.get_assertions`), printed with their declarations and
+  `(check-sat)` by `Z3.SMT.benchmark_to_smtstring`, so each file can be solved
+  on its own. Not `Z3.Solver.to_string`: on a solver that has been checked
+  before, that prints the preprocessed assertions and the model converter's
+  state (`model-add`, `model-del`), which is not SMT-LIB.
 - `index.tsv`: one line per query asked, in the order asked: digest, caller (the
   first function outside `solver.ml`), Z3's answer, and seconds in
   `Z3.Solver.check`.

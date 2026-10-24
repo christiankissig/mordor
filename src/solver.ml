@@ -340,12 +340,15 @@ let caller_site () =
 (** W1 (#175): with [MORDOR_SMT_DUMP] set to a directory, every query that
     reaches Z3 is written there in SMT-LIB 2, so that other solvers can be
     measured on the queries MoRDor actually asks. A query is its solver's
-    assertions, across every pushed scope, as Z3 prints them, and [(check-sat)]:
-    one file per distinct query, named by its digest. [index.tsv] has a line per
-    query asked -- digest, caller, Z3's answer and seconds -- and [calls.tsv],
-    written at exit, counts the scope pushes and model reads by caller. A model
-    read counts whether or not Z3 was asked: {!solve} reads one off a query
-    {!trivially} answered too. *)
+    assertions, across every pushed scope, as asserted, printed as a standalone
+    benchmark with their declarations and [(check-sat)]: one file per distinct
+    query, named by its digest. Not [Z3.Solver.to_string], which on a solver
+    checked before prints its preprocessed assertions and the model converter's
+    state ([model-add], [model-del]), which is not SMT-LIB. [index.tsv] has a
+    line per query asked -- digest, caller, Z3's answer and seconds -- and
+    [calls.tsv], written at exit, counts the scope pushes and model reads by
+    caller. A model read counts whether or not Z3 was asked: {!solve} reads one
+    off a query {!trivially} answered too. *)
 module Dump = struct
   let dir = Sys.getenv_opt "MORDOR_SMT_DUMP"
   let enabled = Option.is_some dir
@@ -388,10 +391,14 @@ module Dump = struct
               (1 + Option.value ~default:0 (Hashtbl.find_opt calls key))
         )
 
-  let query solver status seconds =
+  let query ctx solver status seconds =
     Option.iter
       (fun dir ->
-        let text = Z3.Solver.to_string solver ^ "(check-sat)\n" in
+        let text =
+          Z3.SMT.benchmark_to_smtstring ctx "mordor" "" "unknown" ""
+            (Z3.Solver.get_assertions solver)
+            (Z3.Boolean.mk_true ctx)
+        in
         let digest = Digest.to_hex (Digest.string text) in
         let answer =
           match status with
@@ -421,7 +428,8 @@ let check_asserted solver =
   let started = if Dump.enabled then Unix.gettimeofday () else 0. in
   let status = Z3.Solver.check solver.context.solver [] in
     if Dump.enabled then
-      Dump.query solver.context.solver status (Unix.gettimeofday () -. started);
+      Dump.query solver.context.ctx solver.context.solver status
+        (Unix.gettimeofday () -. started);
     match status with
     | Z3.Solver.SATISFIABLE -> Some true
     | Z3.Solver.UNSATISFIABLE -> Some false

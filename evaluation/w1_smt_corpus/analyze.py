@@ -54,6 +54,12 @@ def features(sexps):
         if not isinstance(node, list) or not node:
             return
         h = head(node)
+        if h == 'let' and len(node) == 3:  # Z3 names shared terms a!1, a!2, ...
+            ops[h] += 1
+            for binding in node[1]:
+                walk(binding[1])
+            walk(node[2])
+            return
         if isinstance(h, str):
             ops[h] += 1
             args = node[1:]
@@ -61,7 +67,7 @@ def features(sexps):
                 nonlinear = True
             if h in ('div', 'mod') and len(args) == 2 and not numeral(args[1]):
                 nonlinear = True
-        for child in node[1:] if isinstance(node[0], str) else node:
+        for child in node[1:]:
             walk(child)
 
     asserts = 0
