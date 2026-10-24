@@ -8,7 +8,10 @@
 # this one workflow publishes both. When a release is published, the release's
 # playground is built, attached to the release as playground.tar.gz, and
 # deployed. When the manual changes on master, the manual is deployed with the
-# playground of the latest release that has one, downloaded from it.
+# playground of the latest release that has one, downloaded from it. Run by
+# hand (workflow_dispatch), it builds the playground from the ref it runs on
+# and deploys that, attached to no release: until the next release replaces
+# it, the playground is that ref's.
 name: Pages
 
 on:
@@ -39,7 +42,7 @@ env:
 jobs:
   playground:
     name: Build playground
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
@@ -94,6 +97,7 @@ jobs:
           tar -czf playground.tar.gz playground
 
       - name: Attach to the release
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" playground.tar.gz --clobber
@@ -106,7 +110,7 @@ jobs:
   deploy:
     name: Publish
     needs: playground
-    # After the playground's build on a release; at once otherwise.
+    # After the playground's build on a release or by hand; at once otherwise.
     if: ${{ !cancelled() && (needs.playground.result == 'success' || needs.playground.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment:
@@ -116,14 +120,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: This release's playground
-        if: github.event_name == 'release'
+      - name: This run's playground
+        if: needs.playground.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: playground
 
       - name: The latest release's playground
-        if: github.event_name != 'release'
+        if: needs.playground.result == 'skipped'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
