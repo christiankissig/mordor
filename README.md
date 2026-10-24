@@ -193,6 +193,16 @@ Run the Web UI locally with
 dune exec mordor-web
 ```
 
+## Formatting
+
+The code is formatted with ocamlformat 0.29.0, the version `.ocamlformat`
+pins, and CI fails on unformatted code. Format before pushing with
+
+```bash
+opam install ocamlformat.0.29.0
+dune fmt
+```
+
 ## Testing
 
 Run unit tests with
