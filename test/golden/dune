@@ -24,3 +24,13 @@
  (libraries mordor_lib mordor_native lwt lwt.unix z3 zarith unix)
  (preprocess
   (pps lwt_ppx)))
+
+; S8 (#20) loop goldens: the structure symbolic loop semantics builds, which
+; golden_diff, unrolling loops, does not see.
+;   dune exec test/golden/loop_goldens.exe -- check
+;   dune exec test/golden/loop_goldens.exe -- update FILE ...
+
+(executable
+ (name loop_goldens)
+ (modules loop_goldens)
+ (libraries mordor_lib mordor_native lwt lwt.unix unix))

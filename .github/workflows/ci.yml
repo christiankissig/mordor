@@ -101,6 +101,11 @@ jobs:
       - name: Run tests
         run: opam exec -- dune runtest
 
+      # What symbolic loop semantics builds, for 34 programs with loops (S8,
+      # #20): the unit and golden tests unroll loops and do not see it.
+      - name: Loop goldens
+        run: opam exec -- dune exec test/golden/loop_goldens.exe -- check
+
       # The integration tests other than the litmus and episodicity suites,
       # which have workflows and badges of their own (litmus-tests.yml,
       # episodicity-tests.yml): parallel runs against sequential ones.
