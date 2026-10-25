@@ -272,6 +272,19 @@ _build/default/test/golden/golden_diff.exe check    # compare
 _build/default/test/golden/golden_diff.exe update   # re-record after an intended change
 ```
 
+They run each test under the default loop semantics, which unrolls loops, so
+they see nothing of what symbolic loop semantics builds. The loop goldens do
+(S8, #20): for each of 34 programs with a loop, the interpreted structure's
+`po`, `po_iter`, `conflict` and `restrict`, and the tables `loop_indices` and
+`loop_conditions`, under `loop_semantics = Symbolic`, against
+`test/goldens-loops/<program>.structure`. CI runs `check`.
+
+```bash
+dune build test/golden/loop_goldens.exe
+_build/default/test/golden/loop_goldens.exe check            # compare
+_build/default/test/golden/loop_goldens.exe update FILE ...  # re-record those programs' goldens
+```
+
 `test/golden/equivalence.exe` is the equivalence harness for the bounded
 paths (V1, #97). It runs every program under the enumeration and under each
 bounded path -- futures from one witness per future, assertions by query -- and
