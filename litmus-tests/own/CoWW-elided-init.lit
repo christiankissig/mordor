@@ -1,0 +1,21 @@
+// Write elision must not order two threads' writes.
+//
+// MoRDor's own test. Under RC11 the two writes race and either may be
+// co-last, so @x = 1 and @x = 2 are both allowed. sMRD's write elision may
+// fold x := 0 into x := 1. If ppo_loc's pair from x := 0 to x := 2 is remapped
+// with it, it becomes a pair from x := 1 to x := 2 across threads, and
+// coherence over ppo then forces x := 1 co-before x := 2 in that combination.
+// MoRDor cuts the remapped ppo_loc and ppo_sync to pairs whose events are both
+// po-before-or-equal one event of the path, which drops the cross-thread pair.
+// Both outcomes also have a witness without elision, so the verdict does not
+// depend on the cut; the golden records that the elided executions keep the
+// two writes unordered in ppo.
+x := 0;
+{
+  x := 1
+} ||| {
+  x := 2
+}
+%%
+allow (@x = 1) [RC11, sMRD]
+allow (@x = 2) [RC11, sMRD]

@@ -2146,6 +2146,57 @@ module Freeze = struct
 
     dp
 
+  (** [anchored_on_path structure path rel] keeps the pairs [(a, b)] of [rel]
+      for which some event [e] of the path has [a ⊑ e ∨ a = e] and
+      [b ⊑ e ∨ b = e]: both events lie in the [⊑]-down-set of one event. This is
+      the per-justification window of sMRD's Def. 4.9 anchored at any event
+      instead of at a justified write. [rel] is cut after remapping, so a pair
+      that write elision moves into another thread is dropped (F1).
+
+      A pair ordered by [po] either way is anchored at its later event, so only
+      [po]-incomparable pairs search for a common successor. *)
+  let anchored_on_path structure path rel =
+    let po = structure.po in
+    let on_path e = USet.mem path.path e in
+    (* The events of the path [⊑]-after-or-equal to each event, built on first
+       use. *)
+    let up =
+      lazy
+        (let tbl = Hashtbl.create 64 in
+         let add a e =
+           let s =
+             match Hashtbl.find_opt tbl a with
+             | Some s -> s
+             | None ->
+                 let s = USet.singleton a in
+                   Hashtbl.replace tbl a s;
+                   s
+           in
+             USet.add s e |> ignore
+         in
+           USet.iter (fun e -> add e e) path.path;
+           USet.iter (fun (a, e) -> if on_path e then add a e) po;
+           tbl
+        )
+    in
+    let up_of e =
+      Hashtbl.find_opt (Lazy.force up) e
+      |> Option.value ~default:(USet.create ())
+    in
+      USet.filter
+        (fun (a, b) ->
+          on_path a
+          && on_path b
+          && (a = b
+             || USet.mem po (a, b)
+             || USet.mem po (b, a)
+             ||
+             let ua = up_of a and ub = up_of b in
+               USet.exists (fun e -> USet.mem ub e) ua
+             )
+        )
+        rel
+
   (** [freeze_ppo structure path j_list fwd_ctx p_combined] computes PPO for
       justification list.
 
@@ -2182,8 +2233,14 @@ module Freeze = struct
         j_list
     in
 
+    (* Cut ppo_loc and ppo_sync after remapping, anchored at any event of the
+       path (F1). *)
+    let anchored = anchored_on_path structure path in
+
     (* Compute ppo_loc *)
-    let ppo_loc_base = ForwardingContext.ppo_loc fwd_ctx p_combined in
+    let ppo_loc_base =
+      ForwardingContext.ppo_loc fwd_ctx p_combined |> anchored
+    in
     let ppo_loc =
       USet.union ppo_loc_base fwd_es_ctx.ppo.ppo_init
       |> URelation.restrict path.path
@@ -2192,7 +2249,7 @@ module Freeze = struct
 
     let ppo =
       List.fold_left USet.union (USet.create ()) ppos
-      |> USet.union (ForwardingContext.ppo_sync fwd_ctx)
+      |> USet.union (anchored (ForwardingContext.ppo_sync fwd_ctx))
       |> USet.union fwd_es_ctx.ppo.ppo_init
       |> USet.union ppo_loc
       |> URelation.restrict path.path
