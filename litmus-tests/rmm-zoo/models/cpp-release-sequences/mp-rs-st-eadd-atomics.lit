@@ -31,8 +31,9 @@
 //
 // sMRD's write elision would drop P0's release store, which its own relaxed
 // store overwrites, and leave the acquire nothing to synchronise with. Under
-// C++11 that relaxed store continues the release sequence, so C11, like RC11,
-// does not let a relaxed store elide a release store (MEMORY_MODEL.elidable).
+// C++11 that relaxed store continues the release sequence, so sMRD does not
+// let a relaxed store elide a release store (ForwardElab.elision_blocked);
+// C11 and RC11 elide nothing at all (#207).
 x := 0;
 y := 0;
 {

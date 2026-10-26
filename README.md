@@ -94,7 +94,10 @@ under sMRD.
 | `ryw`, `mr`, `mw`, `wfr` | Terry et al.'s session guarantees. |
 | `ps1`, `ps2` | Promising semantics 1.0 and 2.0, computed operationally (or `--semantics ps1\|ps2`). |
 
-Every model but `ps1` and `ps2` checks the executions sMRD derives. Every model
+Every model but `ps1` and `ps2` checks the executions sMRD derives. Only `smrd`
+and `mrd` see those built with forwarding or write elision, sMRD's account of
+compiler transformations; every other model checks the program's own events.
+Every model
 here but `rc11c` is one of the
 [Relaxed Memory Model Zoo](https://rmm-zoo.kissig.org). A model defined on a
 fragment of programs (`mrd`, `orc11`, `rar`, `crc`, `drfx`, `denovosync`,

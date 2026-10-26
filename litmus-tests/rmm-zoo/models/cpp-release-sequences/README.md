@@ -71,16 +71,14 @@ agrees with herd7 under `rc11.cat` on every row too.
 ### Write elision and release sequences
 
 In `mp-rs`, `mp-rs-st-eadd-atomics` and `mp-rs-st-est` a release store is
-overwritten by a relaxed store of its own thread. sMRD's write elision
-(`Elaborations.we`) may elide any write that is neither volatile nor part of an
-RMW, and dropping the release store leaves the acquire nothing to synchronise
-with. Under C++11, RC11 and IMM the relaxed store continues the release sequence
-the release store heads, so the elision is unsound there, and those models
-reject every execution that elides a release store for a store that is not a
-release (`MEMORY_MODEL.elidable`). Under C++17 and C++20 the relaxed store does
-not continue the sequence, the elision changes nothing, and they keep it. sMRD,
-with no release sequences, keeps it too. Until this was checked per model, C11
-and RC11 allowed `mp-rs` and `mp-rs-st-eadd-atomics`.
+overwritten by a relaxed store of its own thread. sMRD's write elision would
+drop the release store and leave the acquire nothing to synchronise with. Under
+sMRD, as under C++11, RC11 and IMM, the relaxed store continues the release
+sequence the release store heads, so sMRD does not elide a release store for a
+store that is not a release (`ForwardElab.elision_blocked`). The other models
+elide nothing (`MEMORY_MODEL.elaborates`, #207): their executions are the
+program's own events. Until elision was restricted, C11 and RC11 allowed
+`mp-rs` and `mp-rs-st-eadd-atomics`.
 
 ### The zoo's C++20 column is `cpp2w.cat`'s
 

@@ -9,10 +9,13 @@
 // acyclic, the no-thin-air axiom does, and rejects every execution using this
 // elision.
 //
-// MoRDor elides x := 1 here too, but keeps executions with the elision
-// consistent: it drops the elided event from the execution and orders a
+// MoRDor used to elide x := 1 here too, and kept executions with the elision
+// consistent: it dropped the elided event from the execution and ordered a
 // release fence by edges into the fence rather than across it, so no cycle
-// arises. The golden records that.
+// arose. Since #207 it does not elide a write across a release fence at all:
+// sMRD keeps elided writes out of coherence, and a thread synchronising with
+// the fence would happen after x := 1 but not after x := 2. The golden went
+// from 16 executions to 5.
 //
 // The elision changes no outcome, the execution without it remains: r2 may
 // still read 1.

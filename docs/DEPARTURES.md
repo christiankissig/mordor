@@ -7,7 +7,9 @@ every place where MoRDor's sMRD differs from the paper's definitions. It covers
 the sMRD pipeline only: interpretation, justification and elaboration,
 preserved program order, freezing, coherence and assertions. The other models
 check the executions sMRD builds, so the departures before coherence apply to
-them too.
+them too, with one exception: only sMRD and MRD, which MoRDor implements as
+sMRD, see executions built with forwarding or write elision (E4). Every other
+model, RC11 among them, is asked about the program's own events (#207).
 
 Each entry gives:
 
@@ -43,7 +45,7 @@ Issue and PR numbers refer to `christiankissig/mordor`.
 | [E1](#e1-allocations-and-frees-are-justified) | justify | allocations and frees get justifications and `dp` edges | extension |
 | [E2](#e2-value-assignment) | elaborate | value assignment needs entailment, uses Ω, and leaves locations alone | restriction, relaxation |
 | [E3](#e3-strengthening-only-inside-lifting) | elaborate | strengthening is applied only inside lifting, with the equation between two written values | restriction |
-| [E4](#e4-forwarding-and-write-elision) | elaborate | forwarding is cut to the write's po-window, is thread-local for W×W, never elides volatile or RMW accesses, and is also tried under Ω | restriction, repair |
+| [E4](#e4-forwarding-and-write-elision) | elaborate | forwarding is cut to the write's po-window, is thread-local for W×W, never elides volatile or RMW accesses, and is also tried under Ω; write elision does not cross a release, nor elide a release store into a relaxed one; only sMRD and MRD elaborate | restriction, repair |
 | [E5](#e5-lifting-is-syntactic) | elaborate | lifting matches predicates syntactically and keeps the common conjuncts | restriction, open |
 | [E6](#e6-weakening) | elaborate | Ω is per write and stated over registers | extension |
 | [E7](#e7-covered-justifications-are-dropped) | elaborate | a justification covered by one with fewer conjuncts is dropped | restriction |
@@ -58,7 +60,7 @@ Issue and PR numbers refer to `christiankissig/mordor`.
 | [F5](#f5-allocation-disjointness) | freeze | allocation disjointness is on base addresses, without sizes | restriction |
 | [C1](#c1-hb-is-over-ppo-dp-not-sb) | coherence | `hb = (ppo ∪ dp ∪ sw ∪ lo)⁺`, not RC11's `(sb ∪ sw)⁺` | relaxation (deliberate) |
 | [C2](#c2-sw-release-sequences-fences-and-psc) | coherence | `sw` is RC11's over `rfe`; `psc` takes `sb = po` | conforms since #126, #170 |
-| [C3](#c3-write-elision-is-checked-against-the-model) | coherence | a release store is elided only by a release store | repair |
+| [C3](#c3-elided-writes-are-not-in-coherence) | coherence | elided and forwarded events are not in coherence; other models reject elaborated executions | repair |
 | [C4](#c4-co-relates-writes-whose-locations-must-be-equal) | coherence | `co` orders writes whose locations are equal under the execution's predicates | repair |
 | [C5](#c5-no-data-races) | coherence | no data races; `na` is relaxed | extension |
 | [A1](#a1-final-values-come-from-an-admitted-coherence-order) | assert | `@x` is the co-maximal write of an admitted `co` | extension |
@@ -160,10 +162,11 @@ Issue and PR numbers refer to `christiankissig/mordor`.
   - Both events must be po-before the justified write (or be it), and `e₁` must not be the initial event.
   - W×W forwarding (redundant-store elimination) is within one thread. Write elision is not.
   - A volatile access, or either access of an RMW, is never in the elided position.
+  - Write elision (`ForwardElab.elision_blocked`) does not elide a release store into a store that is not a release, nor elide a write across an event po-between the two that publishes it: a write or fence of mode `rel` or stronger, an `unlock`, or an `sc` access. Acquires do not block it. This holds for an initialising write too, elided across the fork by a thread's write.
   - Forwarding is tried under `P`, and again under `P ∧ Ω` when the write has de facto constraints.
   - Only forwarding into a read substitutes (`ForwardElab.substitute`). A store-store forwarding rewrites nothing, since `val(e₂)` is an expression, not a symbol.
-- **Why**: the po-window anticipates the freeze cut (F1). The thread-local W×W fixes POPL 2019's "Preserving detour" (#58). The RMW exclusion keeps RMW atomicity, which is stated over `rf`, effective. Substitution into `P` fixes #46.
-- **Witness**: `litmus-tests/popl_bridging/Preserving detour.lit`, `litmus-tests/imm/FADD RMW Atomicity.lit`, `litmus-tests/esop_problem/RRE.lit`, `litmus-tests/own/volatile-store-not-elided.lit`. Checking without `ψ_δ` and forwarding under Ω have no witness.
+- **Why**: the po-window anticipates the freeze cut (F1). The thread-local W×W fixes POPL 2019's "Preserving detour" (#58). The RMW exclusion keeps RMW atomicity, which is stated over `rf`, effective. Substitution into `P` fixes #46. The release restrictions are C3's.
+- **Witness**: `litmus-tests/popl_bridging/Preserving detour.lit`, `litmus-tests/imm/FADD RMW Atomicity.lit`, `litmus-tests/esop_problem/RRE.lit`, `litmus-tests/own/volatile-store-not-elided.lit`, `litmus-tests/own/WE-across-release.lit`, `litmus-tests/opts/we-fence-remap.lit`. Checking without `ψ_δ` and forwarding under Ω have no witness.
 
 ### E5. Lifting is syntactic
 
@@ -297,12 +300,17 @@ The paper: the semantics is "the subset of the complete executions that are cohe
 - **Why**: this conforms, up to `rfe`, since #126 and #170. Before them sMRD had no fence synchronisation, no release sequences and no `psc`.
 - **Witness**: `litmus-tests/own/SB+sc.lit`, `litmus-tests/own/RC11-RS-SameThreadRlx.lit`, `litmus-tests/c20/rs-example.lit`, `litmus-tests/own/MP+rel+fence-acq.lit`.
 
-### C3. Write elision is checked against the model
+### C3. Elided writes are not in coherence
 
-- **Paper**: Def. 4.12, `→WE` is any `W × W` pair with the forwarding relation. The mode of the elided write is not restricted.
-- **MoRDor**: `src/coherence.ml:elisions_admitted` keeps an execution only if the model's `elidable` accepts each elision. For sMRD this is `ModelUtils.release_elidable_by_release`: a release store may be elided only by a release store.
-- **Why**: eliding a release store that a relaxed store overwrites loses the release sequence that the relaxed store continues (#168, #170).
-- **Witness**: `litmus-tests/own/RC11-RS-SameThreadRlx.lit`, `litmus-tests/own/relaxed-store-elided.lit`.
+- **Paper**: Def. 4.12, `→WE` is any `W × W` pair with the forwarding relation, whatever the modes of the two writes and of the events between them. §4.6 checks RC11's axioms over the frozen execution.
+- **MoRDor**: the forwarded and elided events are dropped from the execution (`src/executions.ml:Freeze.frame`, `e = path ∖ π₂(fwd ∪ we)`), so coherence does not see them. To keep that sound under RC11's `hb`, write elision is restricted where it is made (`src/elaborations.ml:ForwardElab.elision_blocked`, E4):
+  - a release store is elided only by a release store (#168);
+  - no write or fence of mode `rel` or stronger, `unlock` or `sc` access may lie po-between the elided and the eliding write (#207).
+
+  Only sMRD and MRD elaborate (`MEMORY_MODEL.elaborates`). Every other model, RC11 included, rejects every execution with a forwarding or an elision (`src/coherence.ml:elisions_admitted`) and so is asked about the program's own events. Executions are still enumerated once for all the models of a run; each model's set is the subset it admits. IMM takes its own `ar` for no-thin-air (`allows_thin_air`), since `ar` has `rfe` but sMRD's `dp ∪ ppo ∪ rf` has every `rf`.
+- **Why**: an elided write loses its happens-before obligations. With a release between the elided write `w₁` and the eliding write `w₂`, a thread that synchronises with the release happens after `w₁` but not after `w₂`, and could read a write coherence-before `w₁`. sMRD forbade that outcome only because remapping `ppo` through the elision turned the pair `(w₁, release)` into the backward pair `(w₂, release)`; RC11, whose `hb` is `(po ∪ sw)⁺`, admitted it (#207). A compiler does not sink a store past a release, so the restricted elisions are the dead-store eliminations it can make. An acquire between the two does not block: a store may sink past an acquire, an acquire adds `hb` predecessors to `w₂` that `w₁` does not have, and `ppo` orders nothing from `w₁` to the acquire for the remap to turn backward. An `sc` read blocks with the `sc` fence: sinking an `sc` store past an `sc` load is store buffering. Eliding a release store into a relaxed one loses the release sequence that the relaxed store continues (#168, #170). Forwarding and elision are sMRD's account of compiler transformations, and the other models are models of the program as written.
+- **Consequences**: on the goldens, no verdict changes. Executions with an elision across a release are gone from 9 sMRD tests (opts/we-fence-remap 16 → 5); all but that one lose only elisions of an initialising write across a thread's release fence, release store or `unlock`. Under the other models every elaborated execution is gone. Over all models and the corpus (the model matrix), RC11, the C11 family, SC, TSO, sMRD and MRD change no verdict; 14 weaker models (Coherence, RA, SRA, WRA, PC, PRAM, Local, Slow, POCausal, RYW, MR, MW, CRC, IMM) lose the outcomes only compiler transformations reach, such as `esop_problem/RRE.lit` and JCTC2, since they take `dp ∪ ppo ∪ rf` over the program's own dependencies for no-thin-air. IMM, deciding no-thin-air by its own `ar`, now allows `own/JCTC12.lit`, which IMM forbids through `addr;po`: MoRDor's IMM takes sMRD's `dp` for its `deps` (#63). No outcome that RC11 allows is one sMRD forbids. Store-store forwarding across an acquire is still made, and sMRD forbids the outcome it would admit only through the remapped backward pair, as above (`litmus-tests/own/RSE-across-acquire.lit`).
+- **Witness**: `litmus-tests/own/WE-across-release.lit`, `litmus-tests/own/RSE-across-acquire.lit`, `litmus-tests/own/RC11-RS-SameThreadRlx.lit`, `litmus-tests/own/relaxed-store-elided.lit`, `litmus-tests/popl_bridging/rfi is not always preserved.lit` (IMM).
 
 ### C4. co relates writes whose locations must be equal
 

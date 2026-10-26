@@ -70,13 +70,11 @@ module type MEMORY_MODEL = sig
       execution undefined behaviour; [None] for a model without one. *)
   val data_races : (candidate -> (int * int) uset) option
 
-  (** Whether the model lets sMRD elide the write [elided], which the po-later
-      write [by] of its thread to the same location overwrites. sMRD's write
-      elision drops an overwritten write whatever its mode. Under a model whose
-      release sequence continues through later stores of the writer's thread,
-      eliding a release store loses the synchronisation those stores carried,
-      and the model rejects every execution that does. *)
-  val elidable : symbolic_event_structure -> elided:int -> by:int -> bool
+  (** Whether the model is asked about sMRD's elaborated executions, those with
+      a forwarding or a write elision. Only sMRD's (and MRD's, which MoRDor
+      implements as sMRD) are; every other model rejects them and is asked about
+      the program's own events (github #207). *)
+  val elaborates : bool
 
   (** Whether the model allows out-of-thin-air executions: those whose
       reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator drops

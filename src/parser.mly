@@ -355,7 +355,9 @@ stmt_base:
         register = reg;
         address = e1;
         operand = e2;
-        rmw_mode = "strong";
+        (* No strength given. IMM reads it as normal, as MoRDor always has;
+           the ISA export, as strong (Isa_export). *)
+        rmw_mode = "default";
         load_mode;
         assign_mode
       } }

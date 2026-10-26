@@ -1,0 +1,28 @@
+// Write elision may not cross a release, and RC11 does not elide (#207).
+//
+// RC11 forbids r1 = 1 && r2 = 0: x := 1 is po-before the release store to
+// flag, which synchronises with the acquire load, which is po-before the load
+// of x. So x := 1 happens-before r2, and r2 reading the initial write puts it
+// fr-before x := 1: an hb;eco cycle.
+//
+// MoRDor used to check RC11 against sMRD's elaborated executions. Two of them
+// elide x := 1 into x := 2 and drop it, and with it the happens-before
+// obligation, so RC11 admitted the outcome (22 executions, Valid: false).
+// sMRD forbade it only because the remapped ppo turned the pair
+// (x := 1, flag) into (x := 2, flag), a backward pair that closed the cycle.
+//
+// Now RC11 and every model other than sMRD and MRD are asked about the
+// program's own events only, and sMRD does not elide a store across a release
+// write, a release, acq_rel or sc fence, an unlock or an sc access: a compiler
+// cannot sink a store past a release.
+x := 0; flag := 0;
+{
+  x.store(1, rlx);
+  flag.store(1, release);
+  x.store(2, rlx)
+} ||| {
+  r1 := flag.load(acquire);
+  r2 := x.load(rlx)
+}
+%%
+forbid (r1 = 1 && r2 = 0) [RC11, sMRD]
