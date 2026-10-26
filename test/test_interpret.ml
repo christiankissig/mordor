@@ -755,12 +755,41 @@ let test_threads_relabelled_into_place () =
       )
       accesses
 
+(* The event structure graph draws only the po-minimal conflicting pairs. Here
+   that is the two writes of the branch: the writes to z after it conflict too,
+   but inherit their conflict from the branch writes. *)
+let test_po_minimal_conflict () =
+  let structure =
+    interpret_symbolic
+      "x := 0; { r1 := x; if (r1 = 1) { y := 1 } else { y := 2 }; z := 1 } ||| \
+       { x := 1 }"
+  in
+  let minimal =
+    Eventstructureviz.EventStructureViz.po_minimal_conflict structure
+  in
+  let wval e =
+    (Hashtbl.find structure.events e).wval |> Option.map Expr.to_string
+  in
+    Alcotest.(check (list (pair (option string) (option string))))
+      "the branch writes, once"
+      [ (Some "1", Some "2") ]
+      (USet.values minimal
+      |> List.map (fun (a, b) ->
+          let va = wval a and vb = wval b in
+            if va <= vb then (va, vb) else (vb, va)
+      )
+      );
+    Alcotest.(check bool)
+      "more conflict than the minimal pairs" true
+      (USet.size structure.conflict > 2 * USet.size minimal)
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
     [
       Alcotest.test_case "Structure describes its events only" `Quick
         test_structure_describes_its_events_only;
+      Alcotest.test_case "Po-minimal conflict" `Quick test_po_minimal_conflict;
       Alcotest.test_case "Threads are relabelled into place" `Quick
         test_threads_relabelled_into_place;
       Alcotest.test_case "While symbolic guard well-formed" `Quick

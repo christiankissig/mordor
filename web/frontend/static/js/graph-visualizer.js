@@ -23,7 +23,26 @@ const EDGE_COLORS = {
     fwd: '#00ced1',   // Dark turquoise - forwarding
     we: '#c71585',    // Medium violet red - write elision
     uaf: '#ff0000',   // Bright Red for use-after-free
+    cf: '#e03131',    // Red - conflict, drawn zig-zag
     default: '#6a6a6a' 
+};
+
+// What each relation is, for the Relations menu, which names it beside its
+// abbreviation.
+const RELATION_NAMES = {
+    po: 'Program order',
+    rf: 'Reads-from',
+    dp: 'Dependencies',
+    ppo: 'Preserved program order',
+    rmw: 'Read-modify-write',
+    co: 'Coherence order',
+    fr: 'From-reads',
+    lo: 'Lock order',
+    fj: 'Fork-join',
+    fwd: 'Forwarding',
+    we: 'Write elision',
+    uaf: 'Use-after-free',
+    cf: 'Conflict'
 };
 
 // Elided nodes are the one graph element whose fill has to work on both
@@ -61,6 +80,9 @@ const EDGE_DOT_STYLES = {
     fwd: { style: 'dashed', penwidth: 1.5 },
     we:  { style: 'dashed', penwidth: 1.5 },
     uaf: { style: 'dashed', penwidth: 2.0 },
+    // Conflict is symmetric: an arrowhead at each end. graphviz has no
+    // zig-zag line, so only the TikZ export draws one.
+    cf:  { style: 'solid',  penwidth: 1.5, dir: 'both', zigzag: true },
     default: { style: 'solid', penwidth: 1.0 }
 };
 
@@ -101,6 +123,10 @@ class GraphVisualizer {
         earlier: { label: 'earlier iteration',    color: 'rgba(229, 211, 143, 0.35)', border: 'rgba(229, 211, 143, 0.95)', swatch: '#e5d38f' },
         later:   { label: 'later iteration',      color: 'rgba(247, 131, 122, 0.30)', border: 'rgba(247, 131, 122, 0.9)', swatch: '#f7837a' },
     };
+
+    // The bends of a zig-zag edge: evenly along it, alternately 5px either side.
+    static ZIGZAG_WEIGHTS = Array.from({ length: 13 }, (_, i) => (i + 1) / 14);
+    static ZIGZAG_DISTANCES = GraphVisualizer.ZIGZAG_WEIGHTS.map((_, i) => i % 2 ? -5 : 5);
 
     constructor() {
         this.graphs = [];  // Array to store all graphs
@@ -226,6 +252,19 @@ class GraphVisualizer {
                     'text-background-opacity': 0.85,
                     'text-background-padding': '2px',
                     'text-background-shape': 'roundrectangle'
+                }
+            },
+            {
+                // Conflict: symmetric, so an arrowhead at each end, and drawn
+                // as a zig-zag of short segments, alternately either side of
+                // the straight line.
+                selector: 'edge[type = "cf"]',
+                style: {
+                    'source-arrow-color': 'data(color)',
+                    'source-arrow-shape': 'triangle',
+                    'curve-style': 'segments',
+                    'segment-weights': GraphVisualizer.ZIGZAG_WEIGHTS,
+                    'segment-distances': GraphVisualizer.ZIGZAG_DISTANCES
                 }
             }
         ];
@@ -1473,10 +1512,20 @@ class GraphVisualizer {
             lbl.style.color = 'var(--text)';
             lbl.style.fontSize = '13px';
             lbl.style.cursor = 'pointer';
+            // Wide enough for the longest abbreviation, so the names line up
+            lbl.style.minWidth = '2.2em';
 
             item.appendChild(cb);
             item.appendChild(dot);
             item.appendChild(lbl);
+            if (RELATION_NAMES[rel]) {
+                const name = document.createElement('span');
+                name.textContent = RELATION_NAMES[rel];
+                name.style.color = 'var(--text-muted)';
+                name.style.fontSize = '12px';
+                name.style.cursor = 'pointer';
+                item.appendChild(name);
+            }
             item.addEventListener('click', (e) => {
                 if (e.target !== cb) cb.click();
             });
@@ -1605,7 +1654,8 @@ class GraphVisualizer {
             lines.push(
                 `  ${this.dotNodeId(e.source().id())} -> ${this.dotNodeId(e.target().id())}` +
                 ` [label="${this.dotEscape(type)}", color="${color}",` +
-                ` style="${shape.style}", penwidth=${shape.penwidth.toFixed(1)}];`
+                ` style="${shape.style}", penwidth=${shape.penwidth.toFixed(1)}` +
+                (shape.dir ? `, dir=${shape.dir}` : '') + '];'
             );
         });
 
@@ -1690,10 +1740,19 @@ class GraphVisualizer {
             const shape = EDGE_DOT_STYLES[relation] || EDGE_DOT_STYLES.default;
             const colour = EDGE_COLORS[relation] || EDGE_COLORS.default;
             const dash = DOT_STYLE_TO_TIKZ[shape.style] || '';
-            body.push('    mrd ' + relation + '/.style={-{Stealth[length=2mm]}, draw=' +
+            const arrows = shape.dir === 'both'
+                ? '{Stealth[length=2mm]}-{Stealth[length=2mm]}'
+                : '-{Stealth[length=2mm]}';
+            // The zig-zag stops short of either end so the arrowheads sit on a
+            // straight piece.
+            const zigzag = shape.zigzag
+                ? ', decorate, decoration={zigzag, amplitude=1.5pt,' +
+                  ' segment length=4pt, pre length=2mm, post length=2mm}'
+                : '';
+            body.push('    mrd ' + relation + '/.style={' + arrows + ', draw=' +
                       this.tikzColorName(colour) + ', line width=' +
                       (shape.penwidth * 0.4).toFixed(1) + 'pt' +
-                      (dash ? ', ' + dash : '') + '},');
+                      (dash ? ', ' + dash : '') + zigzag + '},');
         }
         body.push(']');
 
@@ -1749,7 +1808,7 @@ class GraphVisualizer {
             '% Requires, in the preamble:',
             '%     \\usepackage{tikz}',
             '%     \\usepackage{xcolor}',
-            '%     \\usetikzlibrary{arrows.meta}',
+            '%     \\usetikzlibrary{arrows.meta, decorations.pathmorphing}',
             '%',
             '% Greek letters in labels are already math mode. The rest is set as',
             '% ordinary text; to typeset a whole label as mathematics, wrap the',
