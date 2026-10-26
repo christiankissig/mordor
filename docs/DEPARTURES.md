@@ -243,7 +243,7 @@ The paper's `≤^δ_P` subtracts a set written `E?_{P∧ψ_δ}`. MoRDor's `Forwa
 - **Why**: MoRDor's sMRD coherence uses `hb` over `ppo` (C1). The paper's cut leaves the events of a thread after its last justified write unordered. A thread that only reads would have an empty `ppo`, and coherence would admit CoRR violations.
 - **Consequences**, measured on the experiment branch `ppo-trunc-experiment` (30b1ff4, where `MORDOR_PPO_TRUNC=paper` applies the paper's cut to all four parts):
   - 21 `[sMRD]` verdicts flip under the paper's cut, all through sMRD coherence.
-  - The uncut parts carry pairs across threads: 28,952 cross-thread `ppo` pairs in 344 of 459 tests. They come from `ppo_init` pairs remapped when an initialising write is elided by a thread's write.
+  - The uncut parts carry pairs across threads: 28,952 cross-thread `ppo` pairs in 344 of 459 tests. They come from the remapped `ppo_sync` and `ppo_loc` pairs of a write that write elision folds into another thread's write: an initialising write (`x := 0` elided by a thread's `x := 1`), or a thread's own write (`x := 0; (x := 1 ||| x := 2)` with one write elision relates the two threads' writes). `ppo_init` is added unremapped and only orders event 0 and the terminal events, so it contributes none.
   - The closure makes extra executions fail `rhb` acyclicity. On `litmus-tests/own/SB+sc.lit`, some combinations' `ppo` contains both `(3,6)` and `(6,3)`.
 - **Witness**: `litmus-tests/own/CoRR-ReaderNoWrites.lit`. Under the paper's cut its `forbid (r1 = 1 && r2 = 0) [sMRD]` fails.
 
