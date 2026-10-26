@@ -2,6 +2,9 @@
 
 open Lwt.Syntax
 
+(* Resolve the corpus from the project root (Test_integration_root). *)
+let () = Test_integration_root.enter ()
+
 (* Configuration *)
 let episodicity_dir = "programs/episodicity"
 
@@ -993,12 +996,21 @@ let litmus_test_cases =
       files
     |> List.sort compare
   in
-    List.map
-      (fun filepath ->
-        let test_name = filepath in
-          Alcotest.test_case test_name `Quick (test_episodicity_file filepath)
-      )
-      additional_files
+    if files = [] then
+      (* A missing corpus is a failure, not a suite of no cases that passes. *)
+      [
+        Alcotest.test_case "episodicity corpus present" `Quick (fun () ->
+            Alcotest.failf "no .lit files under %s (working directory %s)"
+              episodicity_dir (Sys.getcwd ())
+        );
+      ]
+    else
+      List.map
+        (fun filepath ->
+          let test_name = filepath in
+            Alcotest.test_case test_name `Quick (test_episodicity_file filepath)
+        )
+        additional_files
 
 (* Test suites *)
 let suite_spec =

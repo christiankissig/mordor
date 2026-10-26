@@ -418,6 +418,14 @@ let () =
   in
   let files = List.concat_map lit_files dirs in
     Printf.printf "golden %s: %d litmus files\n%!" mode (List.length files);
+    (* Run from elsewhere than the repo root, the corpus is not found; that must
+       not pass as a check of nothing. *)
+    if files = [] then begin
+      Printf.eprintf
+        "golden_diff: no .lit files under %s (working directory %s)\n"
+        (String.concat ", " dirs) (Sys.getcwd ());
+      exit 2
+    end;
     match mode with
     | "check" -> run_check files
     | "update" -> run_update files
