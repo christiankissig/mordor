@@ -1,0 +1,22 @@
+verdict: valid
+  holds allow ((x = 1)) [rc11]
+  holds allow ((x = 1)) [smrd]
+  holds allow ((x = 2)) [rc11]
+  holds allow ((x = 2)) [smrd]
+executions: 2
+--- execution 0 ---
+E: 0=t-:I@ 1=t-:T@ 2=t-:T@ 3=t0:W@x 4=t1:W@x 5=t2:W@x
+po: (0,1) (0,2) (0,3) (0,4) (0,5) (3,1) (3,2) (3,4) (3,5) (4,1) (5,2)
+rf: 
+dp: 
+ppo: (0,1) (0,2) (0,3) (0,4) (0,5) (3,1) (3,2) (3,4) (3,5) (4,1) (5,2)
+rmw: 
+phi: 
+--- execution 1 ---
+E: 0=t-:I@ 1=t-:T@ 2=t-:T@ 3=t1:W@x 4=t2:W@x
+po: (0,1) (0,2) (0,3) (0,4) (3,1) (4,2)
+rf: 
+dp: 
+ppo: (0,1) (0,2) (0,3) (0,4) (3,1) (4,2)
+rmw: 
+phi: 
