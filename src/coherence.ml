@@ -84,13 +84,15 @@ module type MEMORY_MODEL = sig
       execution undefined behaviour; [None] for a model without one. *)
   val data_races : (candidate -> (int * int) uset) option
 
-  (** Whether the model lets sMRD elide the write [elided], which the po-later
-      write [by] of its thread to the same location overwrites. sMRD's write
-      elision drops an overwritten write whatever its mode. Under a model whose
-      release sequence continues through later stores of the writer's thread,
-      eliding a release store loses the synchronisation those stores carried,
-      and the model rejects every execution that does. *)
-  val elidable : symbolic_event_structure -> elided:int -> by:int -> bool
+  (** Whether the model is asked about sMRD's elaborated executions: those whose
+      justifications forward a write or read into a read, or elide a write that
+      a later one overwrites, and which drop the forwarded and elided events.
+      Forwarding and write elision are sMRD's account of compiler
+      transformations; only sMRD, and MRD, which MoRDor implements as sMRD,
+      admit them. Every other model is a model of the program as written: its
+      executions are the program's own events, and it rejects every execution
+      with a forwarding or an elision (github #207). *)
+  val elaborates : bool
 
   (** Whether the model allows out-of-thin-air executions: those whose
       reads-happen-before, [dp ∪ ppo ∪ rf], has a cycle. sMRD's generator drops
@@ -260,26 +262,6 @@ module ModelUtils = struct
         e;
       let result = URelation.identity result in
         result
-
-  (** Every write elision stands. *)
-  let elidable_always _ ~elided:_ ~by:_ = true
-
-  (** A release store may be elided only by a release store. Under a release
-      sequence that later stores of the writer's thread continue -- RC11's,
-      C++11's, IMM's -- a relaxed store overwriting a release store carries its
-      release on, and an acquire reading it synchronises with the release. With
-      the release store elided there is nothing to synchronise with. A release
-      store overwriting it synchronises with everything po-before it, the elided
-      store's predecessors included. *)
-  let release_elidable_by_release (structure : symbolic_event_structure) ~elided
-      ~by =
-    let events = structure.events in
-    let release id =
-      match Hashtbl.find_opt events id with
-      | Some { typ = Write; wmod; _ } -> mode_at_least wmod Release
-      | _ -> false
-    in
-      (not (release elided)) || release by
 
   (** [same_thread thread_index a b]: [a] and [b] are events of one thread.
       Events outside every thread -- the initial event, terminals -- are in
@@ -769,12 +751,19 @@ module IMM : MEMORY_MODEL = struct
     ]
 
   let check_coherence cache co = holds axioms (candidate cache co)
+
+  (* IMM's no-thin-air axiom is [ar] acyclic, among [axioms] above. *)
   let check_thin_air _ _ = true
   let data_races = None
+  let elaborates = false
 
-  (* IMM's release sequence continues through [po ∩ loc]. *)
-  let elidable = ModelUtils.release_elidable_by_release
-  let allows_thin_air = false
+  (* sMRD's [dp ∪ ppo ∪ rf], which the generator asks of every execution
+     unless a model allows thin air, has every [rf]. IMM's [ar] has [rfe], and
+     [rfi] only inside [ppo]'s [[R];(rfi ∪ deps)⁺;[W]], so it allows
+     executions sMRD's order rejects (popl_bridging/rfi is not always
+     preserved.lit). Until #207 IMM saw them through sMRD's store-to-load
+     forwarding, which dropped the read; IMM does not elaborate any more. *)
+  let allows_thin_air = true
   let uses_co = true
   let orders_allocations = false
   let orders_locks = false
@@ -1276,13 +1265,7 @@ end) : MEMORY_MODEL = struct
       | _ -> CoherenceChecks.thin_air_check ~hb:sb ~rf ()
 
   let data_races = Some data_races
-
-  (* C++17's release sequence stops at a relaxed store of the writer's thread,
-     so eliding the release store before it changes nothing. *)
-  let elidable =
-    match Config.config.release_sequence with
-    | Rc11 | Cpp11 -> ModelUtils.release_elidable_by_release
-    | Rc17 -> ModelUtils.elidable_always
+  let elaborates = false
 
   (* The standard's models have no thin-air axiom (RC11Config.no_thin_air). *)
   let allows_thin_air = Config.config.no_thin_air = `None
@@ -1504,9 +1487,10 @@ module SMRD : MEMORY_MODEL = struct
 
   let data_races = None
 
-  (* [sw]'s release sequence continues through later relaxed stores of the
-     writer's thread, as RC11's does. *)
-  let elidable = ModelUtils.release_elidable_by_release
+  (* Write elision is restricted where it is made
+     ({!Elaborations.ForwardElab.elision_blocked}): it does not elide a release
+     store into a relaxed one, nor across a release (#168, #207). *)
+  let elaborates = true
   let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
@@ -1553,7 +1537,9 @@ module Undefined : MEMORY_MODEL = struct
   let check_coherence cache co = holds axioms (candidate cache co)
   let check_thin_air execution cache = true
   let data_races = None
-  let elidable = ModelUtils.elidable_always
+
+  (* The raw output of sMRD's generator, up to RMW atomicity. *)
+  let elaborates = true
   let allows_thin_air = false
   let uses_co = true
   let orders_allocations = false
@@ -1571,11 +1557,12 @@ end
     primitive.
 
     Two limits apply to all of them, and neither is theirs. A model here is a
-    filter on sMRD's candidate executions, which have no cycle in
-    [dp ∪ ppo ∪ rf] unless a model of the run allows out-of-thin-air executions;
-    none of these does. And the distributed consistency models are stated over
-    histories; reading one as a shared-memory predicate needs an encoding, which
-    each module's comment states. *)
+    filter on sMRD's candidate executions without forwarding or write elision
+    ([elaborates] is false, #207), which have no cycle in [dp ∪ ppo ∪ rf] unless
+    a model of the run allows out-of-thin-air executions; JAM and Wasm do, and
+    the rest take that order for their no-thin-air. And the distributed
+    consistency models are stated over histories; reading one as a shared-memory
+    predicate needs an encoding, which each module's comment states. *)
 
 (** The vocabulary shared by the models below: one execution's events and
     relations, restricted to the execution. *)
@@ -1817,7 +1804,7 @@ end) : MEMORY_MODEL = struct
   let check_coherence cache co = holds axioms (candidate cache co)
   let check_thin_air _ _ = true
   let data_races = A.data_races
-  let elidable = ModelUtils.elidable_always
+  let elaborates = false
   let allows_thin_air = A.allows_thin_air
   let uses_co = A.uses_co
   let orders_allocations = false
@@ -3772,31 +3759,34 @@ let location_equality structure execution =
   in
     USet.inplace_union ~into:eqlocs (URelation.inverse eqlocs)
 
-(** [elisions_admitted model structure execution]: [model] lets every write
-    elision [execution] was built with stand. [we] pairs the overwriting write
-    with the one it elides. A partial execution's elisions are among its
-    completion's, so a partial execution this rejects has no admitted
-    completion.
+(** [elisions_admitted model structure execution]: [model] admits the
+    elaborations [execution] was built with. A model that does not elaborate
+    ([elaborates]) admits none: an execution with a forwarding ([fwd]) or a
+    write elision ([we]) has dropped events of the program, and such a model
+    asks about the program's own events (github #207). Before, RC11 checked
+    sMRD's elaborated executions, and an elided write lost the happens-before
+    obligations RC11 puts on it. A partial execution carries no elaborations, so
+    this rejects none, and a rejected execution has no admitted completion.
 
     An out-of-thin-air execution, one with a cycle in [dp ∪ ppo ∪ rf], reaches a
     model only if the model allows thin air, and then only with elisions within
     a thread. Eliding a store because another thread overwrites it -- an
     initialising store, overwritten through the fork -- left such an execution
-    reading the initial event at a value nothing wrote. *)
+    reading the initial event at a value nothing wrote. No elaborating model
+    allows thin air today. *)
 let elisions_admitted (module M : MEMORY_MODEL)
     (structure : symbolic_event_structure) (execution : symbolic_execution) =
-  USet.for_all
-    (fun (by, elided) -> M.elidable structure ~elided ~by)
-    execution.we
-  && ((not M.allows_thin_air)
-     || URelation.acyclic
-          (USet.union (USet.union execution.dp execution.ppo) execution.rf)
-     || USet.for_all
-          (fun (by, elided) ->
-            ModelUtils.same_thread structure.thread_index elided by
-          )
-          execution.we
-     )
+  if not M.elaborates then
+    USet.is_empty execution.fwd && USet.is_empty execution.we
+  else
+    (not M.allows_thin_air)
+    || URelation.acyclic
+         (USet.union (USet.union execution.dp execution.ppo) execution.rf)
+    || USet.for_all
+         (fun (by, elided) ->
+           ModelUtils.same_thread structure.thread_index elided by
+         )
+         execution.we
 
 (** [allows_thin_air models]: some model of [models] allows out-of-thin-air
     executions, so the generator has to keep them for it. *)

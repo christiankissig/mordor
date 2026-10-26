@@ -9,7 +9,8 @@
 // po-before-or-equal one event of the path, which drops the cross-thread pair.
 // Both outcomes also have a witness without elision, so the verdict does not
 // depend on the cut; the golden records that the elided executions keep the
-// two writes unordered in ppo.
+// two writes unordered in ppo. It records sMRD's executions, since RC11 sees
+// no elided ones (#207).
 x := 0;
 {
   x := 1
@@ -17,5 +18,5 @@ x := 0;
   x := 2
 }
 %%
-allow (@x = 1) [RC11, sMRD]
-allow (@x = 2) [RC11, sMRD]
+allow (@x = 1) [sMRD, RC11]
+allow (@x = 2) [sMRD, RC11]

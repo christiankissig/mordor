@@ -23,8 +23,9 @@
 // in coherence order. Between P0's two stores it breaks C++11's release
 // sequence (coe;coe), the acquire does not synchronise, and the read is stale
 // and races.
-// sMRD's write elision would drop P0's release store; C11 does not let a
-// relaxed store elide a release store (MEMORY_MODEL.elidable).
+// sMRD's write elision would drop P0's release store; sMRD does not let a
+// relaxed store elide a release store (ForwardElab.elision_blocked), and C11
+// elides nothing at all (#207).
 x := 0;
 y := 0;
 {

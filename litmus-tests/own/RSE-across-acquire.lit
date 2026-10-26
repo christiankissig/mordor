@@ -1,0 +1,26 @@
+// Store-store forwarding must not be applied to RC11 (#207).
+//
+// RC11 forbids r0 = 1 with x ending at 2: x := 2 is po-before the release
+// store to flag, which synchronises with the acquire load, which is po-before
+// the second x := 1. So x := 2 happens-before that store, coherence orders it
+// first, and the last store to x is x := 1.
+//
+// sMRD's redundant-store elimination forwards the first x := 1 into the second
+// and drops the second, across the acquire. MoRDor used to check RC11 against
+// that execution too, where nothing orders x := 2 before a later store of
+// thread 0, and RC11 admitted the outcome. sMRD forbids it: the remapped ppo
+// turns the acquire's pair (r0, second x := 1) into (r0, first x := 1), which
+// orders x := 2 before the first store.
+//
+// Now RC11 is asked about the program's own events only.
+x := 0; flag := 0;
+{
+  x.store(1, rlx);
+  r0 := flag.load(acquire);
+  x.store(1, rlx)
+} ||| {
+  x.store(2, rlx);
+  flag.store(1, release)
+}
+%%
+forbid (r0 = 1 && @x = 2) [RC11, sMRD]

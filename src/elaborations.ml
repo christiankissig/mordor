@@ -415,6 +415,65 @@ module ForwardElab = struct
         (fun (e1, e2) -> fprime elab_ctx pred_fn ppo_loc just e1 e2)
         combined
 
+  (** [publishes ev]: [ev] makes the stores po-before it visible to a thread
+      that synchronises with it, or orders them in [psc]: a write of mode
+      release or stronger (an RMW's included), a fence of mode release or
+      stronger, an [Unlock], or any [sc] access. *)
+  let publishes (ev : event) =
+    let release = function
+      | Release | ReleaseAcquire | SC -> true
+      | _ -> false
+    in
+      match ev.typ with
+      | Write -> release ev.wmod
+      | Fence -> release ev.fmod
+      | Read -> ev.rmod = SC
+      | Unlock -> true
+      | _ -> false
+
+  (** [elision_blocked structure ~elided ~by]: write elision may not drop the
+      write [elided] for the po-later write [by] (github #168, #207).
+
+      - A release store may be elided only by a release store. A relaxed store
+        overwriting a release store continues its release sequence, and an
+        acquire reading it synchronises with the release; with the release store
+        elided there is nothing to synchronise with. A release store overwriting
+        it synchronises with everything po-before it, the elided store's
+        predecessors included.
+      - No event that {!publishes} may lie po-between the two. Eliding [elided]
+        is sinking it to [by] and merging the two, and a store does not sink
+        past a release (roach motel): an acquire reading the release, or a later
+        store of its release sequence, happens-after [elided] but not after
+        [by]. sMRD keeps elided writes out of coherence, so a reader that
+        synchronises through the release could read a store coherence-before
+        [elided]. An [sc] read is included with the [sc] fence: sinking an [sc]
+        store past an [sc] load is store buffering.
+
+      An acquire read, acquire fence or [Lock] between the two does not block: a
+      store may sink past an acquire, into its critical section, and the acquire
+      adds happens-before predecessors to [by] that [elided] does not have, so
+      [by] is ordered after everything [elided] was. Nor does the remapping of
+      [ppo] through the elision add a backward pair there: an acquire orders
+      only events po-after it, so [ppo] has no pair from [elided] to it that the
+      remap could turn into one from [by]. *)
+  let elision_blocked (structure : symbolic_event_structure) ~elided ~by =
+    let release id =
+      match Hashtbl.find_opt structure.events id with
+      | Some { typ = Write; wmod = Release | ReleaseAcquire | SC; _ } -> true
+      | _ -> false
+    in
+      (release elided && not (release by))
+      || USet.exists
+           (fun (a, b) ->
+             a = elided
+             && USet.mem structure.po (b, by)
+             &&
+             match Hashtbl.find_opt structure.events b with
+             | Some ev -> publishes ev
+             | None -> false
+           )
+           structure.po
+
   (** [we elab_ctx pred_fn ctx ppo_loc just] computes write-exclusion edges.
 
       Finds all valid write-exclusion edges between write events.
@@ -440,7 +499,10 @@ module ForwardElab = struct
     in
     let w_cross_w = URelation.cross elidable write_events in
       USet.filter
-        (fun (e1, e2) -> fprime elab_ctx pred_fn ppo_loc just e1 e2)
+        (fun (e1, e2) ->
+          fprime elab_ctx pred_fn ppo_loc just e1 e2
+          && not (elision_blocked elab_ctx.structure ~elided:e1 ~by:e2)
+        )
         w_cross_w
       |> URelation.inverse
 

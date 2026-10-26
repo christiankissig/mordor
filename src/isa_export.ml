@@ -158,7 +158,9 @@ let command_and_events (stmt : ir_node_ann ir_stmt) :
                 ("dst", `String register);
                 ("loc", expr_json address);
                 ("addend", expr_json operand);
-                ("rmw_op", `String rmw_mode);
+                ( "rmw_op",
+                  `String (if rmw_mode = "default" then "strong" else rmw_mode)
+                );
               ],
             [ (0, "R"); (1, "W") ]
           )

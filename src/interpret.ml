@@ -603,6 +603,10 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   wmod = assign_mode;
                   volatile = false;
                   is_rdmw;
+                  (* IMM orders the write of an RMW declared strong before
+                     every po-later write: [[W_strong];po;[W]] in [ar]. An
+                     RMW of no declared strength is normal. *)
+                  strong = (if rmw_mode = "strong" then Some Strong else None);
                 }
               in
               let event_store' : event =
