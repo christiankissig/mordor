@@ -49,15 +49,23 @@
  (preprocess
   (pps lwt_ppx landmarks-ppx)))
 
-(test
+;; The integration tests run the CLI on the corpora and take minutes, so the
+;; whole of them is not in @runtest. [dune test] runs the quick suites and
+;; prints, for each suite it skips, its name and number of cases;
+;; [dune build @integration] runs every suite and the litmus goldens
+;; (test/golden). Either way the suites resolve their corpora from the project
+;; root (test_integration_root.ml), and a missing corpus fails.
+
+(executable
  (name test_integration)
- (modes byte exe)
+ (modes exe)
  (flags
   (:standard -g -w -33-26))
  (ocamlc_flags
   (:standard -g))
  (modules
   test_integration
+  test_integration_root
   test_integration_litmus_tests
   test_integration_episodicity
   test_integration_parallel)
@@ -73,5 +81,29 @@
   alcotest
   unix)
  (preprocess
-  (pps lwt_ppx landmarks-ppx))
- (deps ../cli/main.exe))
+  (pps lwt_ppx landmarks-ppx)))
+
+(rule
+ (alias runtest)
+ (deps ../cli/main.exe)
+ (action
+  (run %{exe:test_integration.exe} --quick)))
+
+(rule
+ (alias integration)
+ (deps
+  ../cli/main.exe
+  (source_tree ../litmus-tests)
+  (source_tree ../programs))
+ (action
+  (run %{exe:test_integration.exe})))
+
+(rule
+ (alias integration)
+ (deps
+  (source_tree ../litmus-tests)
+  (source_tree goldens))
+ (action
+  (chdir
+   %{workspace_root}
+   (run %{exe:golden/golden_diff.exe} check))))

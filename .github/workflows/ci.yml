@@ -106,11 +106,15 @@ jobs:
       - name: Loop goldens
         run: opam exec -- dune exec test/golden/loop_goldens.exe -- check
 
-      # The integration tests other than the litmus and episodicity suites,
-      # which have workflows and badges of their own (litmus-tests.yml,
-      # episodicity-tests.yml): parallel runs against sequential ones.
-      - name: Run integration tests
-        run: opam exec -- dune exec test/test_integration.exe -- test "Integration Tests - Parallel"
+      # dune runtest above runs the unit tests and the integration tests other
+      # than the litmus and episodicity suites (test_integration.exe --quick:
+      # parallel runs against sequential ones), and names the suites it skips.
+      # Those have workflows and badges of their own (litmus-tests.yml,
+      # episodicity-tests.yml). dune build @integration runs all of them.
+
+      # Each litmus test's verdict and executions against test/goldens/.
+      - name: Litmus goldens
+        run: opam exec -- dune exec test/golden/golden_diff.exe -- check
       
       - name: Check formatting
         run: opam exec -- dune build @fmt

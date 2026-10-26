@@ -136,7 +136,7 @@ mordor/
 - `cli/`: `mordor` executable — argument parsing, pipeline orchestration. See [cli/README.md](cli/README.md).
 - `web/`: `mordor-web` Dream server — SSE streaming, REST API, browser UI. See [web/README.md](web/README.md).
 - `wasm/`: MoRDor compiled to JavaScript, with Z3 compiled to wasm, in a Web Worker; the static playground. See [wasm/README.md](wasm/README.md).
-- `test/`: Alcotest unit tests (`dune test`) and integration tests (`dune exec test/test_integration.exe`).
+- `test/`: Alcotest unit tests (`dune test`) and integration tests (`dune build @integration`, or `dune exec test/test_integration.exe`).
 - `litmus-tests/`: Litmus test suite run by CI.
 - `programs/`: Hand-written sample programs including episodicity examples.
 
@@ -237,18 +237,29 @@ dune fmt
 
 ## Testing
 
-Run unit tests with
+Run the unit tests and the quick integration tests with
 
 ```bash
 dune test
 ```
 
-Run all integration tests (litmus tests, episodicity and the remaining
-integration tests) with
+The litmus and episodicity suites take minutes, so `dune test` skips them and
+says so: it prints `SKIPPED (--quick): <suite>, <n> cases` for each. Run all
+integration tests (litmus tests, episodicity and the remaining integration
+tests) and the golden check below with
+
+```bash
+dune build @integration
+```
+
+or the integration tests alone, from any directory of the checkout, with
 
 ```bash
 dune exec test/test_integration.exe
 ```
+
+The suites find their corpora from the project root, and fail rather than pass
+with no cases when a corpus is not there.
 
 The integration tests come in three suites, which can be run alone by name:
 
@@ -277,6 +288,9 @@ dune build test/golden/golden_diff.exe
 _build/default/test/golden/golden_diff.exe check    # compare
 _build/default/test/golden/golden_diff.exe update   # re-record after an intended change
 ```
+
+Run them from the repository root; `check` fails when it finds no litmus
+tests. CI runs `check`.
 
 They run each test under the default loop semantics, which unrolls loops, so
 they see nothing of what symbolic loop semantics builds. The loop goldens do

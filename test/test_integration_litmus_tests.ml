@@ -2,6 +2,9 @@
 
 open Lwt.Syntax
 
+(* Resolve the corpus from the project root (Test_integration_root). *)
+let () = Test_integration_root.enter ()
+
 (* Configuration *)
 (* [litmus-tests/promising/] is annotated [PS1], which selects promising
    semantics, so its tests run as they are, without --semantics. *)
@@ -226,12 +229,22 @@ let litmus_test_cases ~strict =
   let test_fn =
     if strict then test_litmus_file else test_litmus_file_permissive
   in
-    List.map
-      (fun filepath ->
-        let test_name = filepath in
-          Alcotest.test_case test_name `Quick (test_fn filepath)
-      )
-      files
+    if files = [] then
+      (* A missing corpus is a failure, not a suite of no cases that passes. *)
+      [
+        Alcotest.test_case "litmus corpus present" `Quick (fun () ->
+            Alcotest.failf "no .lit files under %s (working directory %s)"
+              (String.concat ", " litmus_dirs)
+              (Sys.getcwd ())
+        );
+      ]
+    else
+      List.map
+        (fun filepath ->
+          let test_name = filepath in
+            Alcotest.test_case test_name `Quick (test_fn filepath)
+        )
+        files
 
 (* Test suites *)
 let suite_strict =
