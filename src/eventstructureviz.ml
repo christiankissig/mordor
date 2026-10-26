@@ -75,8 +75,10 @@ module EventStructureViz = struct
       - [PPO preds]: Preserved Program Order with predicates
       - [RF preds]: Read-From relationship with predicates
       - [FWD]: Forwarding - a read took its value from an earlier write
-      - [WE]: Write elision - a write was elided by a later one *)
-  type edge_label = PO | RMW | LO | FJ | DP | PPO | RF | FWD | WE
+      - [WE]: Write elision - a write was elided by a later one
+      - [CF]: Conflict - a po-minimal pair of conflicting events, one edge per
+        pair; conflict is symmetric, so the edge's direction means nothing *)
+  type edge_label = PO | RMW | LO | FJ | DP | PPO | RF | FWD | WE | CF
 
   (** {3 Edge Module}
 
@@ -360,16 +362,55 @@ module EventStructureViz = struct
 
         g
 
+  (** [po_minimal_conflict structure] is the conflict relation cut down to its
+      po-minimal pairs: [(a, b)] in conflict such that no strict po-predecessor
+      of [a] is in conflict with [b], and none of [b] with [a]. Each unordered
+      pair appears once, as [(min, max)].
+
+      All predecessors are checked, not only the immediate ones: conflict is not
+      inherited past the join of threads, whose events follow both sides of a
+      conflict in either thread (programs/cas_aba.lit).
+
+      @param structure The symbolic event structure, whose [po] is transitive
+      @return The po-minimal conflicting pairs *)
+  let po_minimal_conflict (structure : symbolic_event_structure) :
+      (int * int) USet.t =
+    let preds = Hashtbl.create 64 in
+      USet.iter
+        (fun (a, b) -> if a <> b then Hashtbl.add preds b a)
+        structure.po;
+      let conflicting a b =
+        USet.mem structure.conflict (a, b) || USet.mem structure.conflict (b, a)
+      in
+        structure.conflict
+        |> USet.map (fun (a, b) -> (min a b, max a b))
+        |> USet.filter (fun (a, b) ->
+            a <> b
+            && USet.mem structure.e a
+            && USet.mem structure.e b
+            && (not
+                  (List.exists
+                     (fun a' -> conflicting a' b)
+                     (Hashtbl.find_all preds a)
+                  )
+               )
+            && not
+                 (List.exists
+                    (fun b' -> conflicting a b')
+                    (Hashtbl.find_all preds b)
+                 )
+        )
+
   (** [build_event_structure_graph structure source_spans] builds an event
-      structure graph with only program order edges.
+      structure graph with program order and conflict edges.
 
       This simplified graph is used by the web server to show the basic event
-      structure before dependency analysis. It includes all events but only PO
-      edges.
+      structure before dependency analysis. It includes all events, PO edges and
+      the po-minimal conflict edges (see {!po_minimal_conflict}).
 
       @param structure The symbolic event structure
       @param source_spans Hash table mapping event IDs to source locations
-      @return A graph with only PO edges *)
+      @return A graph with PO and CF edges *)
   let build_event_structure_graph (structure : symbolic_event_structure)
       (source_spans : (int, source_span) Hashtbl.t) : G.t =
     let g = G.create () in
@@ -379,9 +420,12 @@ module EventStructureViz = struct
       add_vertices_to_graph g structure.e structure source_spans
     in
 
-    (* Add only program order edges (with transitive reduction) *)
+    (* Add program order edges (with transitive reduction) *)
     let po_reduced = URelation.transitive_reduction structure.po in
       add_edges_from_relation g vertex_map po_reduced PO;
+
+      (* Add the conflict edges the rest of the conflict relation inherits *)
+      add_edges_from_relation g vertex_map (po_minimal_conflict structure) CF;
 
       g
 
@@ -631,6 +675,7 @@ module EventStructureViz = struct
         - DP: Orange, bold
         - PPO: Purple, bold
         - RF: Brown, bold
+        - CF: Red, solid, an arrowhead at each end
 
         @param e The edge
         @return List of DOT attributes including label, color, style, and width
@@ -647,8 +692,12 @@ module EventStructureViz = struct
         | RF -> ("rf", 0xA52A2A, `Bold, 1.5)
         | FWD -> ("fwd", 0x00CED1, `Dashed, 1.5)
         | WE -> ("we", 0xC71585, `Dashed, 1.5)
+        | CF -> ("cf", 0xE03131, `Solid, 1.5)
       in
+      (* Conflict is symmetric: an arrowhead at each end *)
+      let dir = if G.E.label e = CF then [ `Dir `Both ] else [] in
         [ `Label label_txt; `Color color; `Style style; `Penwidth penwidth ]
+        @ dir
 
     (** [get_subgraph v] determines subgraph membership for a vertex.
         @param v The vertex
@@ -751,6 +800,7 @@ module EventStructureViz = struct
     | RF -> "rf"
     | FWD -> "fwd"
     | WE -> "we"
+    | CF -> "cf"
 
   (** [sort_edges_po_first edges] sorts edges to place program order edges
       first.

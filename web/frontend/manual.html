@@ -544,7 +544,7 @@
                 <h3 id="ui-graph">Event structure and executions</h3>
                 <p>The graph panel holds a carousel. Its first graph is the event structure. The graphs after it are the admitted executions, labelled <em>Execution i of n</em> at the top. Move through them with <strong>‹</strong> and <strong>›</strong>.</p>
                 <p>Hover over an event to highlight the source code it came from. The log also names the event. You can drag events to rearrange the graph.</p>
-                <p>The event structure shows program order (<code>po</code>), plus lock order (<code>lo</code>) and fork-join (<code>fj</code>) edges where the program has them. An execution graph shows the execution's events and relations:</p>
+                <p>The event structure shows program order (<code>po</code>), plus lock order (<code>lo</code>) and fork-join (<code>fj</code>) edges where the program has them. Conflict (<code>cf</code>), between events on different sides of a branch, is drawn as a red zig-zag with an arrowhead at each end, since it is symmetric. Only the po-minimal pairs are drawn: those where no event before either one in program order conflicts with the other. Every other conflict follows from these, as the events after two conflicting events conflict too, up to where the threads join. An execution graph shows the execution's events and relations:</p>
                 <table>
                     <thead><tr><th>Edge</th><th>Colour</th><th>Meaning</th></tr></thead>
                     <tbody>
