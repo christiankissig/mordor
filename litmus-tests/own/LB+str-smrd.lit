@@ -1,0 +1,33 @@
+// Load buffering where only Strengthening breaks the cycle. MoRDor's own test,
+// after the strengthening example of sMRD (Richards et al., OOPSLA 2025,
+// Appendix C).
+//
+// Thread 1 writes y := 1 when r1 = 1, and when r1 != 1 and r2 = 1. sMRD's
+// Strengthening (Definition 4.11) may conjoin r2 = 1 to the first write's
+// predicate, since the read of z is po-before it. The two writes then lift
+// into (r2 = 1) |- W y 1, which depends on the read of z and no longer on the
+// read of x. Nothing orders z := 1 after the read of y in thread 2, so
+// dp ∪ ppo ∪ rf has no cycle and sMRD allows r1 = 1 && r2 = 1 && ry = 1.
+//
+// MoRDor strengthens only with the equation between the values of two
+// conflicting writes, as part of Lifting (Elaborations.StrengthenLiftElab).
+// Here both write 1, so there is no equation to add, the writes keep their
+// dependency on the read of x, and the outcome is forbidden. This records the
+// restriction; docs/DEPARTURES.md lists it. RC11 forbids the outcome: po ∪ rf
+// is cyclic.
+x := 0; y := 0; z := 0;
+{
+  r1 := x;
+  r2 := z;
+  if (r1 = 1) {
+    y := 1
+  } else {
+    if (r2 = 1) { y := 1 }
+  }
+} ||| {
+  z := 1;
+  ry := y;
+  x := ry
+}
+%%
+forbid (r1 = 1 && r2 = 1 && ry = 1) [sMRD, RC11]

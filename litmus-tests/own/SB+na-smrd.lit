@@ -1,0 +1,19 @@
+// Store buffering over non-atomic accesses. MoRDor's own test.
+//
+// sMRD's language has no non-atomic accesses: every load and store carries one
+// of rlx, rel, acq and sc. MoRDor accepts na and, under sMRD, treats it as
+// relaxed: it reports no data race. RC11 makes a race on a non-atomic location
+// undefined behaviour, so the same program has undefined behaviour under RC11
+// and none under sMRD. Both allow the store-buffering outcome.
+x := 0; y := 0;
+{
+  x.store(1, na);
+  r1 := y.load(na)
+} ||| {
+  y.store(1, na);
+  r2 := x.load(na)
+}
+%%
+allow (r1 = 0 && r2 = 0) [sMRD, RC11]
+forbid (ub) [sMRD]
+allow (ub) [RC11]
