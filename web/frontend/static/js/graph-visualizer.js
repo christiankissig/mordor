@@ -1126,8 +1126,9 @@ class GraphVisualizer {
         const layoutBtn = document.getElementById('layout-dropdown-btn');
         const layoutContent = document.getElementById('layout-dropdown-content');
 
-        layoutBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
+        // No stopPropagation: the click must reach the other dropdowns'
+        // outside-click listeners so that they close.
+        layoutBtn.addEventListener('click', () => {
             const isOpen = layoutWrapper.classList.contains('open');
             if (!isOpen) {
                 layoutWrapper.classList.add('open');
@@ -1183,8 +1184,7 @@ class GraphVisualizer {
             exportBtn.textContent = 'Export \u25b2';
         };
 
-        exportBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
+        exportBtn.addEventListener('click', () => {
             if (exportWrapper.classList.contains('open')) {
                 closeExport();
                 return;
@@ -1381,8 +1381,7 @@ class GraphVisualizer {
         const relationsBtn = document.getElementById('relations-dropdown-btn');
         const relationsContent = document.getElementById('relations-dropdown-content');
 
-        relationsBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
+        relationsBtn.addEventListener('click', () => {
             const isOpen = relationsWrapper.classList.contains('open');
             if (!isOpen) {
                 relationsWrapper.classList.add('open');
