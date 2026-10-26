@@ -100,6 +100,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/JCTC12.lit
 - own/LB+deps+const-smrd.lit
 - own/LB+deps-smrd.lit
+- own/LB+str-smrd.lit
 - own/LF.lit
 - own/OOTA7.lit
 - own/ORI.lit
@@ -304,6 +305,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/SB+sc.lit
 - own/SB+sc+rlx.lit
 - own/SB+fence-sc+rlx.lit
+- own/SB+na-smrd.lit
 - own/MP+sc+sc.lit
 - own/MP+rel+sc.lit
 - own/MP+sc+acq.lit

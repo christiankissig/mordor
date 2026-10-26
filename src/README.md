@@ -88,6 +88,12 @@ consisting of
   - `lwt_utils.ml` — Lwt concurrency utilities
   - `landmark_lwt.ml` — Lwt profiling helpers for Landmarks (not compiled into the library)
 
+## Departures from the paper
+
+The pipeline above differs from the sMRD paper's definitions in places, stage
+by stage. [docs/DEPARTURES.md](../docs/DEPARTURES.md) lists each one, with the
+function that implements it.
+
 ## Platform slots
 
 `mordor_lib` links no native-only library itself. Three of its modules are

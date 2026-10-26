@@ -102,6 +102,10 @@ fragment of programs (`mrd`, `orc11`, `rar`, `crc`, `drfx`, `denovosync`,
 that is. Only sMRD and MRD, and promising semantics, give locks a semantics:
 every other model refuses a program with `lock` or `unlock` the same way.
 
+Where MoRDor's sMRD differs from the paper's definitions, the difference is
+recorded in [docs/DEPARTURES.md](docs/DEPARTURES.md): what the paper says, what
+MoRDor does and why, and the litmus tests that show it.
+
 `Power` runs under `imm`, and `_` under the default. `UB11`, `RC11UB` and
 `IMMUB` are sMRD, `rc11` and `imm` with optimisations that exploit undefined
 behaviour. Any other name is an error unless `--allow-unknown-model` is given;
@@ -122,11 +126,13 @@ mordor/
 ├── web/          # Web server (mordor-web) — see web/README.md
 ├── wasm/         # The browser build: MoRDor in a Web Worker — see wasm/README.md
 ├── test/         # Unit and integration tests
+├── docs/         # DEPARTURES.md: where MoRDor departs from the sMRD paper
 ├── litmus-tests/ # Litmus test suite
 └── programs/     # Sample concurrent programs
 ```
 
 - `src/`: Core analysis library shared by CLI and web server. See [src/README.md](src/README.md).
+- `docs/DEPARTURES.md`: every departure of MoRDor's sMRD from the paper.
 - `cli/`: `mordor` executable — argument parsing, pipeline orchestration. See [cli/README.md](cli/README.md).
 - `web/`: `mordor-web` Dream server — SSE streaming, REST API, browser UI. See [web/README.md](web/README.md).
 - `wasm/`: MoRDor compiled to JavaScript, with Z3 compiled to wasm, in a Web Worker; the static playground. See [wasm/README.md](wasm/README.md).
