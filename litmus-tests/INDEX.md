@@ -102,6 +102,8 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/LB+deps-smrd.lit
 - own/LB+str-smrd.lit
 - own/LF.lit
+- own/LIFT-TWO-CONJUNCTS-SWAPPED.lit
+- own/LIFT-TWO-CONJUNCTS.lit
 - own/OOTA7.lit
 - own/ORI.lit
 - own/ORI2.lit
@@ -295,6 +297,12 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - fwd/rlx/lift_F1w.lit
 - fwd/rlx/lift_F1wr.lit
 - fwd/rlx/lift_F2w.lit
+- own/FWD-po-forward.lit
+- own/LF-across-acquire.lit
+- own/LF-across-lock.lit
+- own/LF-across-release.lit
+- own/LF-into-acquire.lit
+- own/LF-sc-across-sc-store.lit
 - own/sync/fence0lift.lit
 - own/sync/fence1lift.lit
 - own/sync/fence2lift.lit
@@ -325,6 +333,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/ReuseAfterFree.lit
 - own/ReuseStalePointer.lit
 - own/ReuseThroughLoadedPointer.lit
+- own/SF-across-acquire.lit
 - own/UncoveredOffsetReadsInitial.lit
 - popl_promising/LBaa/LBa'0.lit
 - popl_promising/LBaa/LBa'1.lit

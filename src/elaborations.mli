@@ -136,10 +136,10 @@ module LiftElab : sig
       justifications. *)
   val elab : context -> justification -> justification -> justification list
 
-  (** [find_distinguishing_predicate p1 p2] finds a predicate that is positive
-      in [p1] and negative in [p2], or vice versa, along with the common
-      predicates. Both lists are in CNF.
-      @return [Some (distinguishing, common)] if found, [None] otherwise. *)
+  (** [find_distinguishing_predicate p1 p2] is [Some ([d], c)] when, as sets of
+      conjuncts, [p1] is [c] with [d] and [p2] is [c] with the complement of
+      [d]: then [c] is the disjunction of the two, the predicate a lift takes.
+      Otherwise [None]. The order of the conjuncts does not matter (#203). *)
   val find_distinguishing_predicate :
     expr list -> expr list -> (expr list * expr list) option
 

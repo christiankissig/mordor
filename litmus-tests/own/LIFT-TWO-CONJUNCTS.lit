@@ -1,0 +1,36 @@
+// Lifting must keep a dependency on two reads that the arms test jointly,
+// under sMRD.
+//
+// Thread 1 writes z := 1 exactly when r1 = 1 and r2 = 1 agree: on the
+// then-arm under r2 = 1 && r1 = 1, on the else-arm under r2 != 1 && r1 != 1.
+// Thread 2 copies z into x and y. The outcome r1 = r2 = r3 = 1 is thin air:
+// the write of z would justify the reads it depends on.
+//
+// sMRD's Lifting gives the two writes the disjunction of their predicates,
+// (r1 = 1 && r2 = 1) || (r1 != 1 && r2 != 1), which still depends on both
+// reads. MoRDor lifted them to the conjuncts the arms share, here none, so
+// the write depended on nothing and the outcome was admitted: 101 executions,
+// Contradicted (#203). It now lifts only predicates that differ in a single
+// complementary conjunct. LIFT-TWO-CONJUNCTS-SWAPPED.lit nests the tests the
+// other way round, and was forbidden throughout: the conjuncts arrived in an
+// order the old test refused.
+x := 0; y := 0; z := 0;
+{
+  r1 := x;
+  r2 := y;
+  if (r2 = 1) {
+    if (r1 = 1) {
+      z := 1
+    }
+  } else {
+    if (r1 != 1) {
+      z := 1
+    }
+  }
+} ||| {
+  r3 := z;
+  x := r3;
+  y := r3
+}
+%%
+forbid (r1 = 1 && r2 = 1 && r3 = 1) [sMRD]

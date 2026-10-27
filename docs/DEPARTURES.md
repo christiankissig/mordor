@@ -46,7 +46,7 @@ Issue and PR numbers refer to `christiankissig/mordor`.
 | [E2](#e2-value-assignment) | elaborate | value assignment needs entailment, uses Ω, and leaves locations alone | restriction, relaxation |
 | [E3](#e3-strengthening-only-inside-lifting) | elaborate | strengthening is applied only inside lifting, with the equation between two written values | restriction |
 | [E4](#e4-forwarding-and-write-elision) | elaborate | forwarding and elision are po-forward and cut to the write's po-window; forwarding is thread-local for W×W, never elides volatile or RMW accesses, does not cross an acquire, and is also tried under Ω; write elision does not cross a release, nor elide a release store into a relaxed one; only sMRD and MRD elaborate | restriction, repair |
-| [E5](#e5-lifting-is-syntactic) | elaborate | lifting matches predicates syntactically and keeps the common conjuncts | restriction, open |
+| [E5](#e5-lifting-is-syntactic) | elaborate | lifting matches predicates syntactically: they must differ in one complementary conjunct | restriction since #203 |
 | [E6](#e6-weakening) | elaborate | Ω is per write and stated over registers | extension |
 | [E7](#e7-covered-justifications-are-dropped) | elaborate | a justification covered by one with fewer conjuncts is dropped | restriction |
 | [E8](#e8-derived-program-wide-guarantees-are-not-implemented) | elaborate | the extended semantics of Def. 4.18 is not implemented | restriction |
@@ -174,25 +174,13 @@ Issue and PR numbers refer to `christiankissig/mordor`.
 
 - **Paper**: Def. 4.14–4.16, `G_lift`: if `w₁` under `P₁` and `w₂` under `P₂` are closed relabel-equivalent with a one-to-one relabelling Λ, and `⟦D₁⟧Λ = D₂`, add `(⟦P₁⟧Λ ∨ P₂, D₂) ⊢_δ w₂`. Both justifications have the same `δ`.
 - **MoRDor**: `src/elaborations.ml:LiftElab.elab`.
-  - Predicates are lists of conjuncts. `find_distinguishing_predicate` asks that each side's uncommon conjuncts, negated, appear in the other side. The lifted predicate is the common conjuncts, not the disjunction.
-  - The test assumes both lists are sorted, which they need not be.
+  - Predicates are lists of conjuncts. `find_distinguishing_predicate` lifts only `C ∧ d` against `C ∧ ¬d`: after sorting and removing duplicates, each side has exactly one conjunct the other lacks, and the two are complementary comparisons (`=`/`≠`, `<`/`≥`, `>`/`≤`, by `Expr.inverse`). The lifted predicate is `C`, which is the disjunction. Any other pair is refused, though its disjunction may still be a conjunction: a pair one of whose predicates contains both `d` and `¬d`, which the old test lifted to the other predicate, is refused too.
   - The two `δ` need not be equal: their union must be functional, and the result takes `w₂`'s.
   - It never lifts a volatile write, or a relabelling that pairs a volatile read.
   - It skips pairs where both predicates are empty.
-- **Why**: the syntactic test is cheap and covers the common case of `C ∧ d` against `C ∧ ¬d`.
+- **Why**: the syntactic test is cheap and covers the common case of `C ∧ d` against `C ∧ ¬d`, where it is exact. A pair whose disjunction is a conjunction only under the solver, such as `C ∧ a ∧ b` against `C ∧ ¬a ∧ ¬b` where `C` makes `a` and `b` equivalent, is not looked for; across `litmus-tests/`, `litmus-tests-jmm/` and `programs/`, refusing such pairs changes no verdict and no execution.
 - **Witness**: #36 is the restriction. `litmus-tests-jmm/jctc/JCTC6.lit` needs a lift whose predicates are `β = 1` against `β = 0 ∧ β ≠ 1`, and it is refused. That file is annotated `[JMM]`, so the suite does not run it.
-- **Open**: when the uncommon parts have more than one literal, the common conjuncts are weaker than the disjunction. `C ∧ a ∧ b` and `C ∧ ¬a ∧ ¬b` lift to `C`, though `P₁ ∨ P₂ = C ∧ ((a ∧ b) ∨ (¬a ∧ ¬b))`, which still depends on `a` and `b`. This admits thin air, and whether it does depends on the order of the conjuncts:
-
-  ```
-  x := 0; y := 0; z := 0;
-  { r1 := x; r2 := y;
-    if (r2 = 1) { if (r1 = 1) { z := 1 } } else { if (r1 != 1) { z := 1 } } }
-  ||| { r3 := z; x := r3; y := r3 }
-  %%
-  forbid (r1 = 1 && r2 = 1 && r3 = 1) [sMRD]
-  ```
-
-  The `forbid` fails at 6dd8521. With the nesting swapped (`if (r1 = 1) { if (r2 = 1) ... }`) it holds. No issue is filed yet.
+- **Repaired** (#203): until then the test accepted uncommon parts of any size, each side's negated conjuncts appearing in the other, and the lifted predicate was the common conjuncts. With more than one uncommon conjunct that is weaker than the disjunction: `C ∧ a ∧ b` and `C ∧ ¬a ∧ ¬b` lifted to `C`, though `P₁ ∨ P₂ = C ∧ ((a ∧ b) ∨ (¬a ∧ ¬b))` still depends on `a` and `b`, and the dependency dropped admitted thin air. The containment test also merged lists it took to be sorted, and `P₂` need not be, so whether a pair lifted depended on the order of its conjuncts. `litmus-tests/own/LIFT-TWO-CONJUNCTS.lit` was admitted (101 executions) and `LIFT-TWO-CONJUNCTS-SWAPPED.lit`, the same program nested the other way, forbidden (93); both are now forbidden with 93.
 
 ### E6. Weakening
 
