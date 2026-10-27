@@ -1,0 +1,20 @@
+// An sc read is not forwarded across an sc store (#210).
+//
+// RC11 forbids r2 = 0 && r3 = 0: it is store buffering over sc accesses, and
+// psc orders y := 1 before r2, r2 before x := 1, x := 1 before r3 and r3
+// before y := 1.
+//
+// Forwarding r1 into r2 hoists r2 above the sc store to y, which leaves the
+// store-buffering outcome to r1, which psc allows.
+x := 0; y := 0; z := 0;
+{
+  r1 := x.load(sc);
+  y.store(1, sc);
+  r2 := x.load(sc);
+  z := r2
+} ||| {
+  x.store(1, sc);
+  r3 := y.load(sc)
+}
+%%
+forbid (r2 = 0 && r3 = 0) [sMRD, RC11]

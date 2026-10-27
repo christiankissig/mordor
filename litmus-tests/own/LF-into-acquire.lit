@@ -1,0 +1,21 @@
+// An acquire read is not forwarded from a relaxed read (#210).
+//
+// RC11 forbids r2 = 1 && r3 = 0: r2 reads the release store to flag and
+// synchronises with it, so x := 1 happens-before r3.
+//
+// Forwarding the relaxed r1 into r2 drops the acquire. r1 may read the
+// release store too, but a relaxed read does not synchronise, and r3 could
+// read the initial write. A read is forwarded only from a read at least as
+// strong.
+x := 0; flag := 0; z := 0;
+{
+  r1 := flag.load(rlx);
+  r2 := flag.load(acquire);
+  r3 := x.load(rlx);
+  z := r3
+} ||| {
+  x.store(1, rlx);
+  flag.store(1, release)
+}
+%%
+forbid (r2 = 1 && r3 = 0) [sMRD, RC11]

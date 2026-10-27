@@ -1,0 +1,12 @@
+// Forwarding is po-forward (#210).
+//
+// The source of a forwarding is po-before the event it replaces: a read is
+// never satisfied from a store po-after it. Forwarding x := 1 into r1 would
+// give r1 = 1, which no model of a single thread allows. The store to y puts
+// both in the window of a justified write.
+x := 0; y := 0;
+r1 := x;
+x := 1;
+y := r1;
+%%
+forbid (r1 = 1) [sMRD, RC11]

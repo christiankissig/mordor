@@ -1,0 +1,18 @@
+// Load forwarding may cross a release (#210).
+//
+// Forwarding r1 into r2 hoists r2 above the release store to flag, into what
+// the release publishes, which a compiler may do (roach motel). The control
+// for LF-across-acquire.lit: sMRD's executions here include those with r2
+// forwarded from r1 (r2 is not among their events); under
+// MORDOR_FWD_SYNC=rel or both they are gone.
+x := 0; flag := 0; z := 0;
+{
+  r1 := x.load(rlx);
+  flag.store(1, release);
+  r2 := x.load(rlx);
+  z := r2
+} ||| {
+  x.store(1, rlx)
+}
+%%
+allow (r1 = 1 && r2 = 1) [sMRD, RC11]
