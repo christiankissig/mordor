@@ -1,0 +1,22 @@
+// Store forwarding may not cross an acquire (#210).
+//
+// RC11 forbids r0 = 1 && r1 = 1 with x ending at 2: x := 2 is po-before the
+// release store to flag, which synchronises with the acquire load, which is
+// po-before r1. So x := 2 happens-before r1, and r1 reading x := 1 puts
+// x := 2 coherence-before x := 1, which is then the last store to x.
+//
+// Forwarding x := 1 into r1 drops the read, and with it the obligation that
+// x := 2 be coherence-before x := 1: it hoists r1 above the acquire, which a
+// compiler may not do.
+x := 0; flag := 0; z := 0;
+{
+  x.store(1, rlx);
+  r0 := flag.load(acquire);
+  r1 := x.load(rlx);
+  z := r1
+} ||| {
+  x.store(2, rlx);
+  flag.store(1, release)
+}
+%%
+forbid (r0 = 1 && r1 = 1 && @x = 2) [sMRD, RC11]

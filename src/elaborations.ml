@@ -358,6 +358,176 @@ module ForwardElab = struct
         | _ -> false
     else false
 
+  (** [publishes ev]: [ev] makes the stores po-before it visible to a thread
+      that synchronises with it, or orders them in [psc]: a write of mode
+      release or stronger (an RMW's included), a fence of mode release or
+      stronger, an [Unlock], or any [sc] access. *)
+  let publishes (ev : event) =
+    let release = function
+      | Release | ReleaseAcquire | SC -> true
+      | _ -> false
+    in
+      match ev.typ with
+      | Write -> release ev.wmod
+      | Fence -> release ev.fmod
+      | Read -> ev.rmod = SC
+      | Unlock -> true
+      | _ -> false
+
+  (** [po_forward structure e1 e2]: [e1] is po-before [e2]. Every forwarding and
+      elision pair is po-forward: the source of a forwarding, and the eliding
+      write of an elision, is po-before the event it replaces (github #210).
+      [fprime] asks for a [ppo_loc] pair, but [ppo_loc] is remapped through the
+      context built so far, and a remapped pair need not follow [po]; this
+      states the requirement on the program's own order. Both events are also
+      po-before the justified write, or are it ([elab]), so forwarding stays
+      within the write's window (DEPARTURES E4). *)
+  let po_forward (structure : symbolic_event_structure) e1 e2 =
+    USet.mem structure.po (e1, e2)
+
+  (** Which synchronisation a forwarding pair may not cross ([MORDOR_FWD_SYNC],
+      github #210). *)
+  type fwd_sync =
+    | Sync_none  (** no restriction: forwarding as before #210 *)
+    | Sync_rel
+        (** an event that {!publishes}: a release-or-stronger write or fence, an
+            [unlock], an [sc] access *)
+    | Sync_acq  (** an event that {!acquires}; the default *)
+    | Sync_both  (** either *)
+    | Sync_sc  (** an [sc] access or fence *)
+
+  let fwd_sync_of_string = function
+    | "none" -> Some Sync_none
+    | "rel" -> Some Sync_rel
+    | "acq" -> Some Sync_acq
+    | "both" -> Some Sync_both
+    | "sc" -> Some Sync_sc
+    | _ -> None
+
+  (** The mode, read once from [MORDOR_FWD_SYNC] when the module is initialised,
+      before any domain elaborates (a [lazy] forced from two domains at once
+      raises). An unknown value is fatal, so that an experiment does not
+      silently run the default. *)
+  let fwd_sync =
+    match Sys.getenv_opt "MORDOR_FWD_SYNC" with
+    | None | Some "" -> Sync_acq
+    | Some s -> (
+        match fwd_sync_of_string s with
+        | Some m -> m
+        | None ->
+            failwith
+              (Printf.sprintf
+                 "MORDOR_FWD_SYNC=%s: expected none, rel, acq, both or sc" s
+              )
+      )
+
+  (** [acquires ev]: [ev] orders the events po-after it after what it
+      synchronises with: a read of mode acquire or stronger (an RMW's included),
+      a fence of mode acquire or stronger, or a [Lock]. *)
+  let acquires (ev : event) =
+    let acquire = function
+      | Acquire | ReleaseAcquire | SC -> true
+      | _ -> false
+    in
+      match ev.typ with
+      | Read -> acquire ev.rmod
+      | Fence -> acquire ev.fmod
+      | Lock -> true
+      | _ -> false
+
+  (** [is_sc ev]: an [sc] access or fence. *)
+  let is_sc (ev : event) =
+    match ev.typ with
+    | Read -> ev.rmod = SC
+    | Write -> ev.wmod = SC
+    | Fence -> ev.fmod = SC
+    | _ -> false
+
+  (** [forwarding_blocked structure ~src ~fwd]: the forwarding [src → fwd] may
+      not be made under the mode [MORDOR_FWD_SYNC] (github #210).
+
+      Every kind of forwarding drops the po-later event [fwd] and lets [src]
+      stand for it: load forwarding [R × R] and store forwarding [W × R_rlx]
+      satisfy the read [fwd] at [src]; store-store forwarding [W × W_rlx]
+      (redundant-store elimination) keeps [src] and drops the store [fwd] of the
+      same value. Each is [fwd] hoisted up to [src], and then an adjacent
+      elimination. A compiler may hoist an access above a release (into a
+      critical section, roach motel) but not above an acquire. So under [acq]:
+
+      - no event that {!acquires} may lie po-between [src] and [fwd]: an acquire
+        read, an acquire fence, a [Lock], an [sc] read or fence;
+      - a read of mode acquire or stronger is forwarded only from a read at
+        least as strong: forwarding it from a relaxed read, or from a write,
+        drops the acquire, and with it what the acquire synchronises with. An
+        [sc] read is forwarded only from an [sc] read;
+      - an [sc] read is not hoisted above an [sc] write (store buffering).
+
+      A release write or fence, or an [unlock], between the two does not block:
+      hoisting an access above a release moves it into the critical section,
+      which a compiler may do, and [ppo] orders nothing from a release to a
+      po-later event for the remap to turn backward.
+
+      Under [rel], instead, no event that {!publishes} may lie between, as for
+      write elision; under [both] neither; under [sc] no [sc] access or fence,
+      and an [sc] read only from an [sc] read. *)
+  let forwarding_blocked (structure : symbolic_event_structure) ~src ~fwd =
+    let mode = fwd_sync in
+    let event id = Hashtbl.find_opt structure.events id in
+    let between blocks =
+      USet.exists
+        (fun (a, b) ->
+          a = src
+          && USet.mem structure.po (b, fwd)
+          &&
+          match event b with
+          | Some ev -> blocks ev
+          | None -> false
+        )
+        structure.po
+    in
+    let read_mode id =
+      match event id with
+      | Some ({ typ = Read; _ } as ev) -> Some ev.rmod
+      | _ -> None
+    in
+    (* The forwarded read keeps its mode: [fwd] is an acquire (or [sc]) read
+       forwarded from something weaker. *)
+    let weakened ~strong =
+      match read_mode fwd with
+      | Some m when strong m -> (
+          match read_mode src with
+          | Some m' -> not (strong m')
+          | None -> true
+        )
+      | _ -> false
+    in
+    let acquire_mode = function
+      | Acquire | ReleaseAcquire | SC -> true
+      | _ -> false
+    in
+    let sc_mode m = m = SC in
+    (* An [sc] read is not hoisted above an [sc] write either: that is store
+       buffering, which [psc] forbids. *)
+    let sc_past_sc ev =
+      is_sc ev
+      &&
+      match event fwd with
+      | Some f -> is_sc f
+      | None -> false
+    in
+      match mode with
+      | Sync_none -> false
+      | Sync_rel -> between publishes
+      | Sync_acq ->
+          weakened ~strong:acquire_mode
+          || weakened ~strong:sc_mode
+          || between (fun ev -> acquires ev || sc_past_sc ev)
+      | Sync_both ->
+          weakened ~strong:acquire_mode
+          || weakened ~strong:sc_mode
+          || between (fun ev -> acquires ev || sc_past_sc ev || publishes ev)
+      | Sync_sc -> weakened ~strong:sc_mode || between is_sc
+
   (** [fwd elab_ctx pred_fn ctx ppo_loc just] computes forward edges.
 
       Finds all valid forwarding edges between write/read events that satisfy
@@ -412,24 +582,12 @@ module ForwardElab = struct
     let combined = USet.union w_cross_r r_cross_r in
     let combined = USet.union combined w_cross_w in
       USet.filter
-        (fun (e1, e2) -> fprime elab_ctx pred_fn ppo_loc just e1 e2)
+        (fun (e1, e2) ->
+          po_forward elab_ctx.structure e1 e2
+          && fprime elab_ctx pred_fn ppo_loc just e1 e2
+          && not (forwarding_blocked elab_ctx.structure ~src:e1 ~fwd:e2)
+        )
         combined
-
-  (** [publishes ev]: [ev] makes the stores po-before it visible to a thread
-      that synchronises with it, or orders them in [psc]: a write of mode
-      release or stronger (an RMW's included), a fence of mode release or
-      stronger, an [Unlock], or any [sc] access. *)
-  let publishes (ev : event) =
-    let release = function
-      | Release | ReleaseAcquire | SC -> true
-      | _ -> false
-    in
-      match ev.typ with
-      | Write -> release ev.wmod
-      | Fence -> release ev.fmod
-      | Read -> ev.rmod = SC
-      | Unlock -> true
-      | _ -> false
 
   (** [elision_blocked structure ~elided ~by]: write elision may not drop the
       write [elided] for the po-later write [by] (github #168, #207).
@@ -500,7 +658,8 @@ module ForwardElab = struct
     let w_cross_w = URelation.cross elidable write_events in
       USet.filter
         (fun (e1, e2) ->
-          fprime elab_ctx pred_fn ppo_loc just e1 e2
+          po_forward elab_ctx.structure e1 e2
+          && fprime elab_ctx pred_fn ppo_loc just e1 e2
           && not (elision_blocked elab_ctx.structure ~elided:e1 ~by:e2)
         )
         w_cross_w

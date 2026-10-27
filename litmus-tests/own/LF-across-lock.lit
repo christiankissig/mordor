@@ -1,0 +1,24 @@
+// Load forwarding may not cross a lock (#210).
+//
+// If r3 = 1, thread 1's critical section came first, and its x := 1 happens
+// before r2 through the lock order, so r2 = 1. RC11 has no locks; sMRD orders
+// critical sections by the lock order.
+//
+// Forwarding r1 into r2 hoists r2 out of the critical section, above the
+// lock, where it may read the initial write.
+x := 0; y := 0; z := 0;
+{
+  r1 := x;
+  lock;
+  r3 := y;
+  r2 := x;
+  unlock;
+  z := r2
+} ||| {
+  lock;
+  x := 1;
+  y := 1;
+  unlock
+}
+%%
+forbid (r1 = 0 && r3 = 1 && r2 = 0) [sMRD]

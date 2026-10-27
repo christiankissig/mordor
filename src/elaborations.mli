@@ -112,6 +112,16 @@ module ForwardElab : sig
     justification ->
     int URelation.t
 
+  (** [po_forward structure e1 e2]: [e1] is po-before [e2]. Every forwarding and
+      elision pair is po-forward (github #210). *)
+  val po_forward : symbolic_event_structure -> int -> int -> bool
+
+  (** [forwarding_blocked structure ~src ~fwd]: the forwarding [src → fwd]
+      crosses synchronisation that the mode [MORDOR_FWD_SYNC] (default [acq])
+      does not let it cross (github #210). *)
+  val forwarding_blocked :
+    symbolic_event_structure -> src:int -> fwd:int -> bool
+
   (** [elab elab_ctx just] extends [just] by every valid forwarding and
       write-exclusion edge, each validated for consistency before it is added.
   *)

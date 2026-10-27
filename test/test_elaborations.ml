@@ -335,6 +335,44 @@ let test_we_operations () =
          Lwt.return_unit
     )
 
+(* Forwarding is po-forward, and under the default MORDOR_FWD_SYNC=acq does
+   not cross an acquire, nor forward an acquire read from a relaxed one (#210). *)
+let test_forwarding_restrictions () =
+  let structure = TestData.make_structure () in
+    check bool "po-forward pair" true (ForwardElab.po_forward structure 1 2);
+    check bool "po-backward pair" false (ForwardElab.po_forward structure 2 1);
+    match Sys.getenv_opt "MORDOR_FWD_SYNC" with
+    | Some m when m <> "acq" -> ()
+    | _ ->
+        let x = Some (ENum Z.one) in
+        let structure_with middle last =
+          let events = Hashtbl.create 4 in
+            Hashtbl.add events 1 (TestData.make_event 1 ~loc:x ~typ:Read);
+            Option.iter (fun ev -> Hashtbl.add events 2 ev) middle;
+            Hashtbl.add events 3 last;
+            TestData.make_structure ~events
+              ~po:(USet.of_list [ (1, 2); (1, 3); (2, 3) ])
+              ()
+        in
+        let read = TestData.make_event 3 ~loc:x ~typ:Read in
+        let fence fmod = TestData.make_event 2 ~typ:Fence ~fmod in
+        let blocked s = ForwardElab.forwarding_blocked s ~src:1 ~fwd:3 in
+          check bool "nothing between" false (blocked (structure_with None read));
+          check bool "acquire fence between" true
+            (blocked (structure_with (Some (fence Acquire)) read));
+          check bool "release fence between" false
+            (blocked (structure_with (Some (fence Release)) read));
+          check bool "lock between" true
+            (blocked
+               (structure_with (Some (TestData.make_event 2 ~typ:Lock)) read)
+            );
+          check bool "acquire read from a relaxed read" true
+            (blocked
+               (structure_with None
+                  (TestData.make_event 3 ~loc:x ~typ:Read ~rmod:Acquire)
+               )
+            )
+
 let test_forward_operations () =
   let ctx = TestData.make_context () in
   let pred = EBinOp (ENum Z.one, "=", ENum Z.one) in
@@ -1029,6 +1067,7 @@ let suite =
       test_case "fprime operations" `Quick test_fprime_operations;
       test_case "fwd operations" `Quick test_fwd_operations;
       test_case "we operations" `Quick test_we_operations;
+      test_case "forwarding restrictions" `Quick test_forwarding_restrictions;
       test_case "forward operations" `Quick test_forward_operations;
       (* Lift, weaken, strengthen *)
       test_case "lift and weaken" `Quick test_lift_and_weaken;

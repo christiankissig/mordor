@@ -1,0 +1,22 @@
+// Load forwarding may not cross an acquire (#210).
+//
+// RC11 forbids r0 = 1 && r2 = 0: x := 1 is po-before the release store to
+// flag, which synchronises with the acquire load, which is po-before r2. So
+// x := 1 happens-before r2, and r2 cannot read the initial write.
+//
+// Forwarding r1 into r2 satisfies r2 from r1, which may read the initial
+// write: it hoists r2 above the acquire, which a compiler may not do. sMRD
+// does not forward a read across an acquire read, an acquire fence, a lock or
+// an sc read or fence (MORDOR_FWD_SYNC=acq, the default).
+x := 0; flag := 0; z := 0;
+{
+  r1 := x.load(rlx);
+  r0 := flag.load(acquire);
+  r2 := x.load(rlx);
+  z := r2
+} ||| {
+  x.store(1, rlx);
+  flag.store(1, release)
+}
+%%
+forbid (r0 = 1 && r2 = 0) [sMRD, RC11]
