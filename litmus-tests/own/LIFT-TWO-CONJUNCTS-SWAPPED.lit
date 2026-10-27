@@ -1,0 +1,31 @@
+// Lifting must keep a dependency on two reads that the arms test jointly,
+// under sMRD: LIFT-TWO-CONJUNCTS.lit with the tests nested the other way
+// round.
+//
+// z := 1 is written exactly when r1 = 1 and r2 = 1 agree, and thread 2
+// copies z into x and y, so r1 = r2 = r3 = 1 is thin air. sMRD's Lifting
+// gives the two writes the disjunction of their predicates, which depends on
+// both reads. MoRDor forbade this nesting even when it admitted the other:
+// its test for a lift merged conjunct lists it took to be sorted, and here
+// they were not, so the pair was refused by accident (#203). Whether a pair
+// lifts no longer depends on the order of its conjuncts.
+x := 0; y := 0; z := 0;
+{
+  r1 := x;
+  r2 := y;
+  if (r1 = 1) {
+    if (r2 = 1) {
+      z := 1
+    }
+  } else {
+    if (r2 != 1) {
+      z := 1
+    }
+  }
+} ||| {
+  r3 := z;
+  x := r3;
+  y := r3
+}
+%%
+forbid (r1 = 1 && r2 = 1 && r3 = 1) [sMRD]

@@ -596,6 +596,73 @@ module LiftElabTests = struct
               |> Expr.evaluate_conjunction
               );
         };
+        (* The same pair with P2's conjuncts out of order: the test compares
+           sets, so it lifts as before (#203). *)
+        {
+          name = "unsorted_distinguishing_predicates";
+          p1 =
+            [
+              EBinOp (ESymbol "δ", "=", ENum Z.zero);
+              EBinOp (ESymbol "α", "!=", ENum Z.zero);
+            ];
+          p2 =
+            [
+              EBinOp (ESymbol "α", "=", ENum Z.zero);
+              EBinOp (ESymbol "δ", "=", ENum Z.zero);
+            ];
+          expected_dist_pred =
+            Some
+              ([ EBinOp (ESymbol "α", "!=", ENum Z.zero) ]
+              |> Expr.evaluate_conjunction
+              );
+          expected_disjunction =
+            Some
+              ([ EBinOp (ESymbol "δ", "=", ENum Z.zero) ]
+              |> Expr.evaluate_conjunction
+              );
+        };
+        (* C /\ a /\ b against C /\ ~a /\ ~b: the disjunction is not C, so
+           no lift (#203), in either order. *)
+        {
+          name = "two_complementary_conjuncts";
+          p1 =
+            [
+              EBinOp (ESymbol "δ", "=", ENum Z.zero);
+              EBinOp (ESymbol "α", "=", ENum Z.one);
+              EBinOp (ESymbol "β", "=", ENum Z.one);
+            ];
+          p2 =
+            [
+              EBinOp (ESymbol "δ", "=", ENum Z.zero);
+              EBinOp (ESymbol "α", "!=", ENum Z.one);
+              EBinOp (ESymbol "β", "!=", ENum Z.one);
+            ];
+          expected_dist_pred = None;
+          expected_disjunction = None;
+        };
+        {
+          name = "two_complementary_conjuncts_swapped";
+          p1 =
+            [
+              EBinOp (ESymbol "β", "=", ENum Z.one);
+              EBinOp (ESymbol "α", "=", ENum Z.one);
+            ];
+          p2 =
+            [
+              EBinOp (ESymbol "β", "!=", ENum Z.one);
+              EBinOp (ESymbol "α", "!=", ENum Z.one);
+            ];
+          expected_dist_pred = None;
+          expected_disjunction = None;
+        };
+        (* One uncommon conjunct each, but not complementary. *)
+        {
+          name = "non_complementary_conjuncts";
+          p1 = [ EBinOp (ESymbol "α", "=", ENum Z.one) ];
+          p2 = [ EBinOp (ESymbol "α", "=", ENum (Z.of_int 2)) ];
+          expected_dist_pred = None;
+          expected_disjunction = None;
+        };
       ]
 
     (* Justification builder *)

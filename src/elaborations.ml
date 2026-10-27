@@ -723,14 +723,10 @@ module LiftElab : sig
       @return Promise of list of lifted justifications. *)
   val elab : context -> justification -> justification -> justification list
 
-  (** [find_distinguishing_predicate p1 p2] finds distinguishing predicate.
-
-      Finds a predicate that is positive in [p1] and negative in [p2], or vice
-      versa, along with common predicates.
-
-      @param p1 First predicate list (in CNF).
-      @param p2 Second predicate list (in CNF).
-      @return [Some (distinguishing, common)] if found, [None] otherwise. *)
+  (** [find_distinguishing_predicate p1 p2] is [Some ([d], c)] when, as sets of
+      conjuncts, [p1] is [c] with [d] and [p2] is [c] with the complement of
+      [d]: then [c] is the disjunction of the two, the predicate a lift takes.
+      Otherwise [None]. The order of the conjuncts does not matter (#203). *)
   val find_distinguishing_predicate :
     expr list -> expr list -> (expr list * expr list) option
 
@@ -977,81 +973,47 @@ end = struct
   let find_dist_preds_landmark =
     Landmark_safe.register "Elaborations.find_distinguishing_predicate"
 
+  (* sMRD's lifted predicate is the disjunction P1 \/ P2. MoRDor keeps
+     predicates as lists of conjuncts, so it lifts only where the disjunction is
+     a list of conjuncts it can read off: P1 = C /\ d and P2 = C /\ ~d, whose
+     disjunction is C. Each side must have exactly one conjunct the other lacks,
+     and the two must be complementary comparisons.
+
+     It used to accept uncommon parts of any size, each side's negated
+     conjuncts appearing in the other, and return the common conjuncts. With
+     more than one, that is weaker than the disjunction: C /\ a /\ b against
+     C /\ ~a /\ ~b lifted to C, though the disjunction
+     C /\ ((a /\ b) \/ (~a /\ ~b)) still depends on a and b, and dropping
+     that dependency admitted thin air (#203, own/LIFT-TWO-CONJUNCTS-*.lit).
+     The containment test also merged lists it took to be sorted, and P2 need
+     not be, so whether a pair lifted depended on the order of its conjuncts:
+     the test now compares sets. *)
   let find_distinguishing_predicate preds_1 preds_2 =
     Landmark_safe.enter find_dist_preds_landmark;
-    let common_preds_1 =
-      List.filter
-        (fun expr_1 ->
-          List.exists (fun expr_2 -> Expr.equal expr_1 expr_2) preds_2
-        )
-        preds_1
+    let preds_1 = List.sort_uniq Expr.compare preds_1 in
+    let preds_2 = List.sort_uniq Expr.compare preds_2 in
+    let mem e l = List.exists (Expr.equal e) l in
+    let common = List.filter (fun e -> mem e preds_2) preds_1 in
+    let uncommon_1 = List.filter (fun e -> not (mem e preds_2)) preds_1 in
+    let uncommon_2 = List.filter (fun e -> not (mem e preds_1)) preds_2 in
+    (* Expr.inverse leaves anything but a comparison as it is, so a conjunct
+       that is not one has no complement here. *)
+    let complement e =
+      let e' = Expr.inverse e in
+        if Expr.equal e' e then None else Some (Expr.evaluate e')
     in
-    let common_preds_2 =
-      List.filter
-        (fun expr_2 ->
-          List.exists (fun expr_1 -> Expr.equal expr_1 expr_2) preds_1
-        )
-        preds_2
+    let complementary d1 d2 =
+      match (complement d1, complement d2) with
+      | Some n1, Some n2 -> Expr.equal n1 d2 || Expr.equal n2 d1
+      | _ -> false
     in
-    let uncommon_preds_1 =
-      List.filter
-        (fun expr_1 ->
-          not
-            (List.exists (fun expr_2 -> Expr.equal expr_1 expr_2) common_preds_2)
-        )
-        preds_1
+    let result =
+      match (uncommon_1, uncommon_2) with
+      | [ d1 ], [ d2 ] when complementary d1 d2 -> Some ([ d1 ], common)
+      | _ -> None
     in
-    let uncommon_preds_2 =
-      List.filter
-        (fun expr_2 ->
-          not
-            (List.exists (fun expr_1 -> Expr.equal expr_1 expr_2) common_preds_1)
-        )
-        preds_2
-    in
-    let inverse_preds_1 =
-      List.map Expr.inverse uncommon_preds_1
-      |> Expr.evaluate_conjunction
-      |> List.sort Expr.compare
-    in
-    let inverse_preds_2 =
-      List.map Expr.inverse uncommon_preds_2
-      |> Expr.evaluate_conjunction
-      |> List.sort Expr.compare
-    in
-    let rec sorted_contains l1 l2 =
-      match (l1, l2) with
-      | _, [] -> true
-      | [], _ -> false
-      | h1 :: t1, h2 :: t2 ->
-          let cmp = Expr.compare h1 h2 in
-            if cmp = 0 then sorted_contains t1 t2 else sorted_contains t1 l2
-    in
-      if not (sorted_contains preds_2 inverse_preds_1) then (
-        Landmark_safe.exit find_dist_preds_landmark;
-        None
-      )
-      else if not (sorted_contains preds_1 inverse_preds_2) then (
-        Landmark_safe.exit find_dist_preds_landmark;
-        None
-      )
-      else
-        let rec sorted_list_minus l1 l2 =
-          match (l1, l2) with
-          | [], _ -> []
-          | _, [] -> l1
-          | h1 :: t1, h2 :: t2 ->
-              let cmp = Expr.compare h1 h2 in
-                if cmp = 0 then sorted_list_minus t1 t2
-                else h1 :: sorted_list_minus t1 l2
-        in
-
-        let distinguishing_predicate =
-          uncommon_preds_1 @ inverse_preds_2 |> List.sort_uniq Expr.compare
-        in
-        let disjunction = common_preds_1 in
-          Landmark_safe.exit find_dist_preds_landmark;
-          Some (distinguishing_predicate, disjunction)
+      Landmark_safe.exit find_dist_preds_landmark;
+      result
 
   let gen_relabs_landmark =
     Landmark_safe.register "Elaborations.generate_relabelings"
