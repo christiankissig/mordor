@@ -102,6 +102,8 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/LB+deps-smrd.lit
 - own/LB+str-smrd.lit
 - own/LF.lit
+- own/LIFT-TWO-CONJUNCTS-SWAPPED.lit
+- own/LIFT-TWO-CONJUNCTS.lit
 - own/OOTA7.lit
 - own/ORI.lit
 - own/ORI2.lit
