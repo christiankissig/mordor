@@ -105,4 +105,8 @@ jobs:
         run: opam exec -- dune build
       
       - name: Run ${{ inputs.name }}
+        # hp-1.lit takes 200-300 s on CI runners; the test's default of 300 s
+        # makes it flaky.
+        env:
+          MORDOR_EPISODICITY_TIMEOUT: "900"
         run: opam exec -- dune exec test/test_integration.exe -- test "${{ inputs.suite }}"
