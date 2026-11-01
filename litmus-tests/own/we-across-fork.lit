@@ -1,0 +1,21 @@
+// Write elision may not sink a write past a fork.
+//
+// RC11 forbids r1 = 0: the creation of a thread happens-before everything it
+// does, so x := 5 happens-before r1 := x, and x := 0 is coherence-before
+// x := 5. Reading x := 0 would put r1 := x fr-before x := 5: an hb;eco cycle.
+// Without the first thread's x := 1, MoRDor forbids it too.
+//
+// sMRD keeps elided writes out of coherence. Eliding x := 5 into the first
+// thread's x := 1 moved it past the fork, as a store would move past a
+// release: the second thread then no longer happened after it, x := 0 was the
+// only write it could read before, and sMRD allowed r1 = 0. A write is now
+// elided only into a write on its own thread or after the join.
+x := 0;
+x := 5;
+{
+  x := 1;
+} ||| {
+  r1 := x;
+}
+%%
+forbid (r1 = 0) [sMRD]

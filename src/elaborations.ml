@@ -606,6 +606,21 @@ module ForwardElab = struct
         synchronises through the release could read a store coherence-before
         [elided]. An [sc] read is included with the [sc] fence: sinking an [sc]
         store past an [sc] load is store buffering.
+      - [by] lies on [elided]'s thread or after the join: no event po-after
+        [elided], other than [by], is po-incomparable with [by] without being in
+        conflict with it. A fork synchronises like a release -- in C11 and RC11
+        the creation of a thread happens-before everything the thread does -- so
+        eliding a pre-fork store into a store of one forked thread sinks it past
+        the fork. A sibling thread's read happens-after [elided] through the
+        fork but not after [by], and with [elided] out of coherence it could
+        read a store coherence-before [elided]. In
+        [x := 0; x := 5; { x := 1 } ||| { r1 := x }] that admitted [r1 = 0],
+        which RC11 forbids ([x := 5] hb [r1 := x], and [x := 0] co [x := 5]) and
+        which MoRDor forbids too without the sibling store
+        (litmus-tests/own/we-across-fork.lit). Elision into code after the join
+        is unaffected: every sibling access is then po-between the two stores.
+        This relies on [po] being transitive, which [dot] and [seq] build it to
+        be.
 
       An acquire read, acquire fence or [Lock] between the two does not block: a
       store may sink past an acquire, into its critical section, and the acquire
@@ -621,16 +636,25 @@ module ForwardElab = struct
       | _ -> false
     in
       (release elided && not (release by))
-      || USet.exists
-           (fun (a, b) ->
-             a = elided
-             && USet.mem structure.po (b, by)
-             &&
-             match Hashtbl.find_opt structure.events b with
-             | Some ev -> publishes ev
-             | None -> false
-           )
-           structure.po
+      ||
+      let after_elided =
+        USet.filter (fun (a, b) -> a = elided && b <> by) structure.po
+      in
+        USet.exists
+          (fun (_, b) ->
+            let before_by = USet.mem structure.po (b, by) in
+              (* forked: [b] and [by] are on different threads of a fork,
+                 not in different branches of a choice *)
+              (not before_by)
+              && (not (USet.mem structure.po (by, b)))
+              && not (USet.mem structure.conflict (b, by))
+              || before_by
+                 &&
+                 match Hashtbl.find_opt structure.events b with
+                 | Some ev -> publishes ev
+                 | None -> false
+          )
+          after_elided
 
   (** [we elab_ctx pred_fn ctx ppo_loc just] computes write-exclusion edges.
 
