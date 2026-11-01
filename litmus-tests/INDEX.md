@@ -335,6 +335,7 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/ReuseThroughLoadedPointer.lit
 - own/SF-across-acquire.lit
 - own/UncoveredOffsetReadsInitial.lit
+- own/we-across-fork.lit
 - popl_promising/LBaa/LBa'0.lit
 - popl_promising/LBaa/LBa'1.lit
 - sevcik_thesis/Irrelevant Read Elimination/IREA.lit
