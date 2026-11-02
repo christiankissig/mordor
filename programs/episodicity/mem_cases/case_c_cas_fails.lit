@@ -1,0 +1,16 @@
+name=rdmw compare and swap fails
+%%
+// The control for case_c_cas_admits: cas(rC,0,1) reads 0 and writes 1, so it
+// modifies the value, and the next iteration's read of it is admitted by none
+// of the write condition's cases. Only the write condition fails.
+rC := malloc 1;
+*rC := 0;
+{
+  do {
+    rv := cas(acquire,release,rC,0,1);
+  } while (rv = 1)
+}
+|||
+{
+  *rC :rel= 1;
+}

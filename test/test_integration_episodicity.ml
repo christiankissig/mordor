@@ -597,6 +597,18 @@ let test_specifications =
     single_failing "programs/episodicity/mem_cases/case_c_fails.lit" [ 2 ]
       "Write condition case (c) fails - a modifying RMW's write is read by the \
        next iteration";
+    (* A read-don't-modify-write is decided by the values: the write equals
+       the read under the path condition and, for a CAS, its success
+       condition. *)
+    single_episodic "programs/episodicity/mem_cases/case_c_cas_admits.lit"
+      "Write condition case (c) - a CAS whose expected and desired values \
+       agree is a read-don't-modify-write";
+    single_failing "programs/episodicity/mem_cases/case_c_cas_fails.lit" [ 2 ]
+      "Write condition case (c) fails - a CAS writing a value other than the \
+       one it read is read by the next iteration";
+    single_episodic "programs/episodicity/mem_cases/case_c_fadd_path_zero.lit"
+      "Write condition case (c) - fadd of an operand that is zero on its path \
+       is a read-don't-modify-write";
     (* As case_b_fails: case (b) fails by the definition, through a
        (dp u rf)+ path via thread 2, and MoRDor reports the loop episodic.
        The relays show that no write storing a value derived from a read

@@ -783,6 +783,33 @@ let test_po_minimal_conflict () =
       "more conflict than the minimal pairs" true
       (USet.size structure.conflict > 2 * USet.size minimal)
 
+(* An RMW's write is flagged read-don't-modify-write when it stores back the
+   value read under the path condition, and for a CAS its success condition:
+   by the values, not by the instruction's shape. *)
+let rmw_writes_rdmw program =
+  let structure = interpret_symbolic program in
+    USet.values structure.rmw
+    |> List.map (fun (_, _, ew) -> (Hashtbl.find structure.events ew).is_rdmw)
+    |> List.sort_uniq compare
+
+let test_rdmw_flag () =
+  let check name expected program =
+    Alcotest.(check (list bool)) name [ expected ] (rmw_writes_rdmw program)
+  in
+    check "fadd of 0" true "x := 0; rx := &x; r1 := fadd(acquire,release,rx,0)";
+    check "fadd of 1" false "x := 0; rx := &x; r1 := fadd(acquire,release,rx,1)";
+    check "fadd of a value 0 on the path" true
+      "x := 0; k := 0; rx := &x; rk := k; if (rk = 0) { r1 := \
+       fadd(acquire,release,rx,rk) } else { skip }";
+    check "fadd of a value not 0 on the path" false
+      "x := 0; k := 0; rx := &x; rk := k; r1 := fadd(acquire,release,rx,rk)";
+    check "cas expecting and writing 0" true
+      "x := 0; rx := &x; r1 := cas(acquire,release,rx,0,0)";
+    check "cas expecting 0, writing 1" false
+      "x := 0; rx := &x; r1 := cas(acquire,release,rx,0,1)";
+    check "cas expecting and writing a register" true
+      "x := 0; k := 0; rx := &x; rk := k; r1 := cas(acquire,release,rx,rk,rk)"
+
 (** Test suite *)
 let suite =
   ( "Interpreter",
@@ -790,6 +817,8 @@ let suite =
       Alcotest.test_case "Structure describes its events only" `Quick
         test_structure_describes_its_events_only;
       Alcotest.test_case "Po-minimal conflict" `Quick test_po_minimal_conflict;
+      Alcotest.test_case "RMW writes flagged read-don't-modify by value" `Quick
+        test_rdmw_flag;
       Alcotest.test_case "Threads are relabelled into place" `Quick
         test_threads_relabelled_into_place;
       Alcotest.test_case "While symbolic guard well-formed" `Quick
