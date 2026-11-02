@@ -557,7 +557,12 @@ The JSON document has the shape:
         { "id": 1, "type": "W", "label": 1, "thread": 0,
           "location": "x", "wval": "1",
           "rmod": "Relaxed", "wmod": "Relaxed", "fmod": "Relaxed",
-          "volatile": false, "is_rmw": false, "constraints": [] }
+          "volatile": false, "is_rmw": false, "constraints": [] },
+        { "id": 6, "type": "R", "label": 6, "thread": 2,
+          "location": "y", "rval": "β",
+          "rmod": "Relaxed", "wmod": "Relaxed", "fmod": "Relaxed",
+          "volatile": false, "is_rmw": false, "constraints": ["(α = 0)"],
+          "loops": [1], "iters": [2] }
       ],
       "po":  [[0, 1]],
       "dp":  [],
@@ -568,6 +573,11 @@ The JSON document has the shape:
   ]
 }
 ```
+
+An event inside loops carries `loops`, the ids of the loops enclosing it,
+outermost first, and `iters`, its iteration of each of them, counted from 1; an
+event outside every loop has neither field. Together they tell the events of
+one iteration apart from those of the next in each execution.
 
 The same document is available from the web server at `POST /api/executions`
 (see [web/README.md](web/README.md)).
