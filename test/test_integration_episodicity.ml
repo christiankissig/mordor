@@ -627,6 +627,15 @@ let test_specifications =
     single_episodic "programs/episodicity/events_condition/cas_inc_loop.lit"
       "Valid episodic loop with RMW events - should be episodic with no \
        failing conditions";
+    (* Depends on a CAS's ppo_rmw: its write and branch are ordered before
+       the next iteration's relaxed read only through its acquire read. With
+       the CAS's condition decided under no assumptions it never held, the CAS
+       contributed nothing, and this failed the events condition with those
+       two pairs. *)
+    single_episodic
+      "programs/episodicity/events_condition/cas_orders_next_iteration.lit"
+      "CAS ordering the next iteration - its write is ordered after its \
+       acquire read";
     (* Conditions 1 and 2. It was called register_events_fail and failed the
        write condition rather than the events one, so it now carries the name
        of the pair it delivers: the trivial bisection fails the register and
@@ -724,12 +733,16 @@ let test_specifications =
        address inside one allocation is not an address inside another. See
        allocation_interiors_are_disjoint in the write condition.
 
-       Episodic at one boundary only, the one the paper's ex:episodic-rcu
-       draws: the iteration starts at the fetch-and-add, with the rcu marker
-       writes of lines 21-22 moved to its end. The fetch-and-add's release
-       write orders them before the next iteration, and the cross-iteration
-       ppo_rmw carries that to its acquire read. Every other boundary fails the
-       events condition or the register condition. *)
+       Episodic at the trivial bisection, which is tried first. Its events
+       condition holds through the CAS's ppo_rmw: the CAS's write, and the
+       write of *rn ordered before it by its release, are ordered with its
+       acquire read and so before the next iteration's rcu marker writes. Until
+       the episodicity check decided a CAS's condition where its write exists
+       (under no assumptions it never held), the CAS gave no ppo_rmw, those six
+       pairs were unordered, and the first bisection to pass was the one the
+       paper's ex:episodic-rcu draws: the iteration starting at the
+       fetch-and-add, with the marker writes of lines 21-22 moved to its end.
+       That bisection still passes; it is no longer the first. *)
     {
       filepath = "programs/episodicity/rcu-1.lit";
       loop_expectations =
@@ -738,10 +751,10 @@ let test_specifications =
             loop_id = 1;
             expected_episodic = true;
             expected_failing_conditions = [];
-            expected_bisection_left_lines = Some [ 21; 22 ];
+            expected_bisection_left_lines = Some [];
           };
         ];
-      description = "RCU increment loop - episodic, starting at the fadd";
+      description = "RCU increment loop - episodic at the trivial bisection";
     };
     (* Treiber stack: push and pop, each a read of top and a CAS on it. Both
        loops are episodic: neither iteration writes anything a later one
@@ -770,17 +783,18 @@ let test_specifications =
        then dequeue in one program, do not finish in 12 minutes, while each
        alone takes seconds. Both fail on the helping CAS that swings a
        lagging tail. In both the next iteration reads tail from it, failing the
-       write condition. In the dequeue it also fails the events condition: the
-       CAS is a release write to tail, the next iteration's first event an
-       acquire read of head, and nothing orders the two across the boundary.
-       In the enqueue the next event reads tail itself, which orders them.
-       With the helping CAS left out, each loop is episodic. *)
+       write condition. The dequeue used to fail the events condition too, with
+       the helping CAS's write and branch unordered against the next
+       iteration's acquire read of head. The CAS's ppo_rmw orders its write
+       with its acquire read and so before that read; it was missing while the
+       CAS's condition was decided under no assumptions. With the helping CAS
+       left out, each loop is episodic. *)
     single_failing "programs/episodicity/msqueue-enqueue-1.lit" [ 2 ]
       "Michael-Scott queue enqueue - the helping CAS on tail fails the write \
        condition";
-    single_failing "programs/episodicity/msqueue-dequeue-1.lit" [ 2; 4 ]
+    single_failing "programs/episodicity/msqueue-dequeue-1.lit" [ 2 ]
       "Michael-Scott queue dequeue - the helping CAS on tail fails the write \
-       and events conditions";
+       condition";
     single_episodic "programs/episodicity/msqueue_without_helping/enqueue.lit"
       "Michael-Scott queue enqueue without helping - episodic";
     single_episodic "programs/episodicity/msqueue_without_helping/dequeue.lit"

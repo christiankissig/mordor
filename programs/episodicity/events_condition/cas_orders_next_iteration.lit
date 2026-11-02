@@ -1,0 +1,30 @@
+name=compare and swap orders the next iteration
+%%
+// A relaxed read followed by an acquire-release CAS. The loop repeats while
+// the CAS fails, so the CAS's write, and the branch on its outcome, are the
+// last events of an iteration that has one.
+//
+// Under sMRD an RMW's write is ordered with its read: what is ordered before
+// the release write is ordered before the read, and what the acquire read
+// orders after it is ordered after the write too. For the read of *rD in the
+// next iteration the acquire read gives the second half, so the CAS's write
+// and its branch are ordered before that read, and every event of one
+// iteration is ordered before every event of the next.
+//
+// A CAS's write exists only where it succeeds, where the value read is the
+// expected 0. MoRDor's episodicity check used to decide that condition with no
+// assumptions at all, under which it never holds, so it gave a CAS none of
+// this ordering; a fetch-and-add, whose condition is true, always had it. The
+// CAS's write and branch were left unordered against the next read of *rD,
+// and the loop was reported not episodic. No other start of the iteration
+// helps: one starting at the CAS uses rv before the iteration reads it. The
+// check now decides the condition where the write exists.
+rC := malloc 1;
+rD := malloc 1;
+*rC := 0;
+*rD := 0;
+rs := 0;
+do {
+  rv := *rD;
+  rs := cas(acquire,release,rC,0,rv);
+} while (rs = 0)
