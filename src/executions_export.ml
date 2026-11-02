@@ -33,6 +33,10 @@ type json_event = {
   is_rmw : bool;  (** Whether the event is part of an RMW *)
   constraints : string list; [@default []]
       (** Path constraints restricting this event *)
+  loops : int list; [@default []]
+      (** Ids of the loops nesting the event, outermost first *)
+  iters : int list; [@default []]
+      (** The event's iteration of each loop in [loops], counted from 1 *)
 }
 [@@deriving yojson]
 
@@ -91,8 +95,8 @@ let mode_to_string (m : mode) : string =
   | Nonatomic -> "Nonatomic"
   | Consume -> "Consume"
 
-let event_to_json (structure : symbolic_event_structure) (event_id : int) :
-    json_event =
+let event_to_json ?(loop_iters : (int, int list) Hashtbl.t option)
+    (structure : symbolic_event_structure) (event_id : int) : json_event =
   let evt = Hashtbl.find structure.events event_id in
   let constraints =
     try Hashtbl.find structure.restrict event_id with Not_found -> []
@@ -113,12 +117,20 @@ let event_to_json (structure : symbolic_event_structure) (event_id : int) :
       volatile = evt.volatile;
       is_rmw = evt.is_rdmw;
       constraints = List.map Expr.to_string constraints;
+      loops =
+        Option.value ~default:[]
+          (Hashtbl.find_opt structure.loop_indices event_id);
+      iters =
+        Option.bind loop_iters (fun t -> Hashtbl.find_opt t event_id)
+        |> Option.value ~default:[];
     }
 
-let execution_to_json (structure : symbolic_event_structure)
+let execution_to_json ?loop_iters (structure : symbolic_event_structure)
     (exec : symbolic_execution) : json_execution =
   let events =
-    USet.values exec.e |> List.sort compare |> List.map (event_to_json structure)
+    USet.values exec.e
+    |> List.sort compare
+    |> List.map (event_to_json ?loop_iters structure)
   in
   let po =
     USet.filter
@@ -151,7 +163,11 @@ let build_executions_document (ctx : mordor_ctx) : json_executions option =
   match (ctx.structure, ctx.executions) with
   | Some structure, Some executions ->
       let exec_list = USet.values executions in
-      let exec_jsons = List.map (execution_to_json structure) exec_list in
+      let exec_jsons =
+        List.map
+          (execution_to_json ?loop_iters:ctx.loop_iters structure)
+          exec_list
+      in
       let justifications =
         ctx.justification_derivations
         |> Option.value ~default:[]

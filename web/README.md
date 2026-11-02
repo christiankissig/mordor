@@ -127,7 +127,12 @@ Request body matches the SSE endpoints (`program`, `loop_semantics`, `steps`,
         { "id": 1, "type": "W", "label": 1, "thread": 0,
           "location": "x", "wval": "1",
           "rmod": "Relaxed", "wmod": "Relaxed", "fmod": "Relaxed",
-          "volatile": false, "is_rmw": false, "constraints": [] }
+          "volatile": false, "is_rmw": false, "constraints": [] },
+        { "id": 6, "type": "R", "label": 6, "thread": 2,
+          "location": "y", "rval": "β",
+          "rmod": "Relaxed", "wmod": "Relaxed", "fmod": "Relaxed",
+          "volatile": false, "is_rmw": false, "constraints": ["(α = 0)"],
+          "loops": [1], "iters": [2] }
       ],
       "po":  [[0, 1]],
       "dp":  [],
@@ -138,6 +143,9 @@ Request body matches the SSE endpoints (`program`, `loop_semantics`, `steps`,
   ]
 }
 ```
+
+`loops` and `iters` appear on events inside loops only: the enclosing loop ids,
+outermost first, and the event's iteration of each, counted from 1.
 
 The same payload is produced by the CLI's `executions` command.
 

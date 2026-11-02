@@ -199,6 +199,100 @@ let test_to_json_string_is_valid_json () =
           | _ -> fail "expected JSON object at top level"
       )
 
+(** Loop membership: [loops] comes from the structure's [loop_indices] and
+    [iters] from the interpreter's per-event iterations, passed in alongside. An
+    event outside every loop has both lists empty. *)
+let test_event_to_json_loops () =
+  let s = TestData.make_structure () in
+    Hashtbl.replace s.loop_indices 2 [ 4; 1 ];
+    let loop_iters = Hashtbl.create 1 in
+      Hashtbl.replace loop_iters 2 [ 1; 2 ];
+      let j = event_to_json ~loop_iters s 2 in
+        check (list int) "loops" [ 4; 1 ] j.loops;
+        check (list int) "iters" [ 1; 2 ] j.iters;
+        let j = event_to_json ~loop_iters s 1 in
+          check (list int) "no loops" [] j.loops;
+          check (list int) "no iters" [] j.iters;
+          (* Without the interpreter's iterations the loop ids still export. *)
+          let j = event_to_json s 2 in
+            check (list int) "loops without iters" [ 4; 1 ] j.loops;
+            check (list int) "iters absent" [] j.iters
+
+(** The JSON document on a spin loop:
+    [{ y := 1 } ||| { do { ry := y } while (ry = 0) }] with each loop bounded at
+    2 iterations. One execution reads y = 1 in iteration 1, the other reads 0
+    there and 1 in iteration 2; both reads are in the one loop, and the writes
+    are in none. *)
+let spin_src = {|y := 0;
+{ y := 1 }
+||| { do { ry := y } while (ry = 0) }|}
+
+let reads_by_iteration (exec : Yojson.Safe.t) =
+  let open Yojson.Safe.Util in
+  exec
+  |> member "events"
+  |> to_list
+  |> List.filter (fun e -> member "type" e = `String "R")
+  |> List.map (fun e ->
+      let ints k =
+        match member k e with
+        | `Null -> []
+        | l -> List.map to_int (to_list l)
+      in
+        (ints "loops", ints "iters")
+  )
+
+let test_document_loops_on_spin_loop () =
+  let ctx =
+    Context.make_context Context.default_options ~output_mode:Context.Json
+      ~step_counter:2 ~num_threads:1 ()
+  in
+    ctx.litmus_name <- "spin";
+    ctx.litmus <- Some spin_src;
+    let ctx =
+      Lwt_main.run
+        (Lwt.return ctx
+        |> Parse.step_parse_litmus
+        |> Interpret.step_interpret
+        |> Elaborations.step_generate_justifications
+        |> Executions.step_calculate_dependencies
+        )
+    in
+      match to_json_string ctx with
+      | None -> fail "expected JSON output"
+      | Some content ->
+          let open Yojson.Safe.Util in
+          let execs =
+            Yojson.Safe.from_string content |> member "executions" |> to_list
+          in
+          let shapes = List.map reads_by_iteration execs |> List.sort compare in
+          let loop_id =
+            match shapes with
+            | ((l :: _, _) :: _) :: _ -> l
+            | _ -> fail "expected a read inside a loop"
+          in
+            check
+              (list (list (pair (list int) (list int))))
+              "reads per execution, by loop and iteration"
+              [
+                [ ([ loop_id ], [ 1 ]) ];
+                [ ([ loop_id ], [ 1 ]); ([ loop_id ], [ 2 ]) ];
+              ]
+              shapes;
+            (* Events outside the loop carry neither field. *)
+            List.iter
+              (fun exec ->
+                exec
+                |> member "events"
+                |> to_list
+                |> List.filter (fun e -> member "type" e = `String "W")
+                |> List.iter (fun e ->
+                    check bool "write has no loops" true
+                      (member "loops" e = `Null && member "iters" e = `Null)
+                )
+              )
+              execs
+
 let suite =
   ( "ExecutionsExport",
     [
@@ -219,5 +313,10 @@ let suite =
         test_build_document_requires_structure_and_executions
       );
       ("to_json_string round-trips", `Quick, test_to_json_string_is_valid_json);
+      ("event_to_json loops and iters", `Quick, test_event_to_json_loops);
+      ( "document loops and iters on a spin loop",
+        `Quick,
+        test_document_loops_on_spin_loop
+      );
     ]
   )
