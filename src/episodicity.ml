@@ -332,30 +332,67 @@ module Bisection = struct
         not (USet.mem left read_event && USet.mem right write_event)
     )
 
-  (** Generate all compatible bisections of the events in a loop.
+  (** The most down-sets of a loop's program order {!all_bisections} enumerates
+      before it gives up on them. A poset can have exponentially many: [n]
+      pairwise unordered events have [2^n]. Enumerating them is cheap, but each
+      becomes a bisection whose four conditions are checked, all of them when
+      the loop is not episodic. The bound admits the larger loop of hp-1, 42
+      events with 6,724 down-sets, while the Michael-Scott queue's loops, with
+      194,481 and more, fall back. *)
+  let max_order_ideals = 8192
 
-      A bisection splits the loop's events so that every event of [left] is
-      program-order before every event of [right]. That completeness is a severe
-      constraint, and two facts follow from it.
+  (** The down-sets of program order restricted to [events], at most [limit] of
+      them, or [None] if there are more.
 
-      No two distinct splits of the same size can both be valid: if [x] were
-      left in one and right in the other, and [y] the other way round, [x] and
-      [y] would each have to be po-before the other. And a valid [left] of size
-      [k] is exactly the events with fewer than [k] of the loop's events
-      po-before them — an event of [left] has all its predecessors in [left], an
-      event of [right] has all of [left] before it.
+      A down-set holds, with each event, every event of [events] po-before it.
+      The events are visited in a linear extension of po and each is either left
+      out or, when everything before it is already in, taken. Every leaf of that
+      search is a down-set and every down-set is one leaf, so the cost is
+      proportional to the number returned, and the search stops as soon as it
+      has seen one more than [limit].
 
-      So the candidates are the [|E|+1] prefixes of the events ranked by how
-      many of the loop's events precede them, not the [2^|E|] subsets. That
-      matters: the larger loop of hp-1 carries 48 events, because the loop body
-      is duplicated across the branches of the loops around it, and
-      materialising its power set is what made the analysis intractable. Nearly
-      all of those subsets fail the first filter anyway — copies of a loop body
-      under different branches conflict, so nothing can be split across them. *)
-  let all_bisections structure loop_id =
-    let events_in_loop =
-      SymbolicEventStructure.events_in_loop structure loop_id
+      [po] is taken to be transitive, as the event structure's is. *)
+  let order_ideals ~limit po events =
+    let event_list = USet.to_list events in
+    let predecessors event =
+      List.filter (fun other -> USet.mem po (other, event)) event_list
     in
+    (* Fewer predecessors first is a linear extension of a transitive order. *)
+    let ordered =
+      event_list
+      |> List.map (fun event -> (event, predecessors event))
+      |> List.stable_sort (fun (_, a) (_, b) ->
+          compare (List.length a) (List.length b)
+      )
+    in
+    let found = ref [] in
+    let count = ref 0 in
+    let exception Too_many in
+    let rec search taken = function
+      | [] ->
+          incr count;
+          if !count > limit then raise Too_many;
+          found := taken :: !found
+      | (event, before) :: rest ->
+          search taken rest;
+          if List.for_all (fun pred -> List.mem pred taken) before then
+            search (event :: taken) rest
+    in
+      try
+        search [] ordered;
+        Some (List.rev_map USet.of_list !found)
+      with Too_many -> None
+
+  (** The bisections {!all_bisections} enumerated before it took every down-set
+      of program order: the prefixes of the loop's events ranked by how many of
+      them precede each, kept only where every event of [left] is po-before
+      every event of [right].
+
+      Those are the down-sets of a total order. Where po on the loop is not
+      total -- a loop body copied into conflicting branches, as a do-while
+      containing a loop gives -- they are only the trivial one. Kept as the
+      fallback when the down-sets are too many to try. *)
+  let ranked_prefixes structure events_in_loop =
     let event_list = USet.to_list events_in_loop in
     let preceding event =
       List.length
@@ -376,12 +413,59 @@ module Bisection = struct
           )
         )
       |> List.filter (fun (size, left) -> USet.size left = size)
-      |> List.map (fun (_, left) -> (left, USet.set_minus events_in_loop left))
+      |> List.map snd
+      |> List.filter (fun left ->
+          USet.subset
+            (URelation.cross left (USet.set_minus events_in_loop left))
+            structure.po
+      )
+
+  (** Generate all compatible bisections of the events in a loop.
+
+      A bisection splits the loop's events into [left], the part of the body
+      moved to the end of the previous iteration, and [right], the rest. [left]
+      must be closed downwards under program order on the loop: an event cannot
+      move before one it follows in the body. That is all the order asks. In
+      particular an event of [left] need not be po-before every event of
+      [right]: events in conflicting branches are unordered, and the symbolic
+      do-while gives exactly that, one unravelled body and a residual loop, so a
+      loop with a loop inside it has its body in two conflicting copies. Asking
+      for the whole of [left × right] to lie in po would leave such a loop no
+      boundary but the trivial one.
+
+      The candidates are the down-sets of po on the loop, smallest first, so the
+      trivial bisection is tried first. A sub-loop must not be split and neither
+      may an RMW, and [right] must not be empty. Should the loop have more than
+      {!max_order_ideals} down-sets, the candidates are the prefixes of
+      {!ranked_prefixes} instead, and a warning says so. *)
+  let all_bisections structure loop_id =
+    let events_in_loop =
+      SymbolicEventStructure.events_in_loop structure loop_id
+    in
+    let lefts =
+      match
+        order_ideals ~limit:max_order_ideals structure.po events_in_loop
+      with
+      | Some ideals ->
+          let key left =
+            (USet.size left, List.sort compare (USet.values left))
+          in
+            List.sort (fun a b -> compare (key a) (key b)) ideals
+      | None ->
+          Logs_safe.warn (fun m ->
+              m
+                "Loop %d: its %d events have more than %d down-sets in program \
+                 order; trying only the prefixes of a ranking of them."
+                loop_id (USet.size events_in_loop) max_order_ideals
+          );
+          ranked_prefixes structure events_in_loop
+    in
+      lefts
+      |> List.map (fun left -> (left, USet.set_minus events_in_loop left))
       |> List.filter (fun (left, right) ->
-          USet.subset (URelation.cross left right) structure.po
+          USet.size right > 0
           && nested_loops_unsplit structure loop_id left right
           && rmw_unsplit structure left right
-          && USet.size right > 0
       )
 end
 
