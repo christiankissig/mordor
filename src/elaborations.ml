@@ -607,13 +607,22 @@ module ForwardElab = struct
         [elided]. An [sc] read is included with the [sc] fence: sinking an [sc]
         store past an [sc] load is store buffering.
       - [by] lies on [elided]'s thread or after the join: no event po-after
-        [elided], other than [by], is po-incomparable with [by] without being in
-        conflict with it. A fork synchronises like a release -- in C11 and RC11
-        the creation of a thread happens-before everything the thread does -- so
-        eliding a pre-fork store into a store of one forked thread sinks it past
-        the fork. A sibling thread's read happens-after [elided] through the
-        fork but not after [by], and with [elided] out of coherence it could
-        read a store coherence-before [elided]. In
+        [elided], other than [by], is po-incomparable with [by], unless it is in
+        conflict with [by] and has no common po-upper bound with it (no [d] with
+        [b] po= [d] and [by] po= [d]). Conflict alone does not exempt: a branch
+        inside a thread of a parallel block, with code after the join, puts both
+        outcomes po-below that code, and the outcome [by] is not on is then
+        joinable with [by] without being ordered with it. Eliding into one
+        outcome there moves [elided] into a thread whose siblings join it again,
+        as with a fork. A [Terminal] event in conflict with [by] stays exempt:
+        it ends an outcome without events, as of an [if] without [else], which
+        has nothing to order (litmus-tests/own/we-branch-before-join.lit). A
+        fork synchronises like a release -- in C11 and RC11 the creation of a
+        thread happens-before everything the thread does -- so eliding a
+        pre-fork store into a store of one forked thread sinks it past the fork.
+        A sibling thread's read happens-after [elided] through the fork but not
+        after [by], and with [elided] out of coherence it could read a store
+        coherence-before [elided]. In
         [x := 0; x := 5; { x := 1 } ||| { r1 := x }] that admitted [r1 = 0],
         which RC11 forbids ([x := 5] hb [r1 := x], and [x := 0] co [x := 5]) and
         which MoRDor forbids too without the sibling store
@@ -640,6 +649,23 @@ module ForwardElab = struct
       let after_elided =
         USet.filter (fun (a, b) -> a = elided && b <> by) structure.po
       in
+      (* a [Terminal] event ends a path and does nothing: an outcome with no
+         events but it (an [if] without [else]) is not ordered against *)
+      let terminal id =
+        match Hashtbl.find_opt structure.events id with
+        | Some { typ = Terminal; _ } -> true
+        | _ -> false
+      in
+      (* [joinable a b]: a common po-upper bound, [d] with [a] po= [d] and
+         [b] po= [d] *)
+      let joinable a b =
+        let above_or_eq x d = x = d || USet.mem structure.po (x, d) in
+          above_or_eq a b
+          || above_or_eq b a
+          || USet.exists
+               (fun (a', d) -> a' = a && USet.mem structure.po (b, d))
+               structure.po
+      in
         USet.exists
           (fun (_, b) ->
             let before_by = USet.mem structure.po (b, by) in
@@ -647,7 +673,10 @@ module ForwardElab = struct
                  not in different branches of a choice *)
               (not before_by)
               && (not (USet.mem structure.po (by, b)))
-              && not (USet.mem structure.conflict (b, by))
+              && not
+                   (USet.mem structure.conflict (b, by)
+                   && ((not (joinable b by)) || terminal b)
+                   )
               || before_by
                  &&
                  match Hashtbl.find_opt structure.events b with
