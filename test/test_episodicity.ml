@@ -1718,20 +1718,69 @@ module TestBisection = struct
         check bool "left={2},right={1} absent" false invalid_present
 
   let test_all_bisections_no_po_filters_partition () =
-    (* Events 1 and 2 with no po.
-       {left={1}, right={2}}: cross(left,right) = {(1,2)} ⊄ po → INVALID
-       {left={2}, right={1}}: cross(left,right) = {(2,1)} ⊄ po → INVALID
-       {},{1,2} : cross is empty → VALID
-       {1,2},{} : right is empty → INVALID
-       Expected: 2 valid bisections *)
+    (* Events 1 and 2 with no po, as copies of one event in conflicting
+       branches are. Every subset is a down-set of the empty order:
+       {},{1,2}  : VALID (trivial)
+       {1},{2}   : VALID
+       {2},{1}   : VALID
+       {1,2},{}  : right is empty → INVALID
+       Expected: 3 valid bisections, the trivial one first *)
     let structure = make_flat_structure 0 [ 1; 2 ] [] in
     let bisections = Bisection.all_bisections structure 0 in
-      check int "one bisections when no po" 1 (List.length bisections);
-      List.iter
+      check int "three bisections when no po" 3 (List.length bisections);
+      check bool "trivial bisection first" true
+        (USet.is_empty (fst (List.hd bisections)))
+
+  let test_all_bisections_duplicated_body () =
+    (* A loop whose body [a; b] is copied into two conflicting branches, as
+       the symbolic do-while does for a loop with a loop inside it: a1 → b1
+       in one copy, a2 → b2 in the other, nothing ordering the copies. The
+       ranked prefixes of the events give only the trivial bisection here;
+       the down-sets of po give 3 × 3 = 9 lefts, of which all but the whole
+       loop leave a non-empty right. *)
+    let structure = make_flat_structure 0 [ 1; 2; 3; 4 ] [ (1, 2); (3, 4) ] in
+    let bisections = Bisection.all_bisections structure 0 in
+    let has left right =
+      List.exists
         (fun (l, r) ->
-          check bool "one side empty" true (USet.is_empty l || USet.is_empty r)
+          USet.equal l (USet.of_list left) && USet.equal r (USet.of_list right)
         )
         bisections
+    in
+      check int "eight bisections" 8 (List.length bisections);
+      check bool "trivial bisection first" true
+        (USet.is_empty (fst (List.hd bisections)));
+      check bool "a moved in both copies" true (has [ 1; 3 ] [ 2; 4 ]);
+      check bool "a moved in one copy" true (has [ 1 ] [ 2; 3; 4 ]);
+      check bool "b never moved without a" false
+        (List.exists (fun (l, r) -> USet.mem l 2 && USet.mem r 1) bisections);
+      List.iter
+        (fun (l, _) ->
+          check bool "left is po-downward closed" true
+            (USet.for_all
+               (fun e ->
+                 USet.for_all
+                   (fun (x, y) -> y <> e || USet.mem l x)
+                   structure.po
+               )
+               l
+            )
+        )
+        bisections
+
+  let test_all_bisections_cap_falls_back () =
+    (* Fourteen unordered events have 2^14 down-sets, more than the cap. The
+       enumeration gives up on them and falls back to the ranked prefixes,
+       which for an empty order are only the trivial bisection. *)
+    let labels = List.init 14 (fun i -> i + 1) in
+    let structure = make_flat_structure 0 labels [] in
+    let bisections = Bisection.all_bisections structure 0 in
+      check bool "more down-sets than the cap" true
+        (Bisection.order_ideals ~limit:Bisection.max_order_ideals structure.po
+           structure.e
+        = None
+        );
+      check int "only the trivial bisection" 1 (List.length bisections)
 
   (* ------------------------------------------------------------------ *)
   (* Tests for all_bisections — nested-loop sub-group constraint         *)
@@ -1827,15 +1876,13 @@ module TestBisection = struct
 
   let test_nested_same_group_none_not_split () =
     (* Two events directly in loop 2 (path [2] each) have no child loop.
-       The nesting constraint does NOT apply to them — only the po filter does.
-       With no po edges, cross(left,right) is not a subset of po, so neither
-       single-event partition passes the po filter. Only the trivial all-left
-       and all-right partitions are valid. *)
+       The nesting constraint does NOT apply to them, and with no po between
+       them each alone is a down-set, so both single-event partitions are
+       bisections besides the trivial one. *)
     let structure =
       make_nested_structure [ 1; 2 ] [ (1, [ 2 ]); (2, [ 2 ]) ] [] (* no po *)
     in
     let bisections = Bisection.all_bisections structure 2 in
-    (* Neither ({1},{2}) nor ({2},{1}) should pass the po filter *)
     let split_found =
       List.exists
         (fun (l, r) ->
@@ -1843,9 +1890,9 @@ module TestBisection = struct
         )
         bisections
     in
-      check bool "direct-in-loop events blocked by po filter (not nesting)"
-        false split_found;
-      check int "only trivial bisection passes" 1 (List.length bisections)
+      check bool "direct-in-loop events not blocked by nesting" true split_found;
+      check int "trivial and both single-event bisections" 3
+        (List.length bisections)
 
   let test_complex_nested_scenario () =
     (* Full example from spec:
@@ -1908,6 +1955,10 @@ module TestBisection = struct
         test_all_bisections_po_constraint;
       test_case "all_bisections no po filters partition" `Quick
         test_all_bisections_no_po_filters_partition;
+      test_case "all_bisections duplicated loop body" `Quick
+        test_all_bisections_duplicated_body;
+      test_case "all_bisections falls back past the cap" `Quick
+        test_all_bisections_cap_falls_back;
       test_case "nested: valid sub-loop bisection" `Quick
         test_nested_loops_valid_bisection;
       test_case "nested: split sub-loop invalid" `Quick
@@ -1916,7 +1967,7 @@ module TestBisection = struct
         test_nested_loops_different_sub_loops_can_split;
       test_case "nested: direct and sub-loop can split" `Quick
         test_nested_direct_and_nested_events;
-      test_case "nested: direct events blocked by po not nesting" `Quick
+      test_case "nested: direct events not blocked by nesting" `Quick
         test_nested_same_group_none_not_split;
       test_case "nested: direct events can split with po" `Quick
         test_nested_same_group_none_can_split_with_po;
