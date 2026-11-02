@@ -828,7 +828,10 @@ module ForwardingContext = struct
   let cache_set_ppo_loc ctx predicates value =
     PpoCache.set_ppo_loc ctx.es_ctx.ppo_cache (ctx.fwd, ctx.we) predicates value
 
-  (** [compute_ppo_rmw es_ctx predicates] computes RMW-related PPO orderings.
+  (** [compute_ppo_rmw_with ~iter es_ctx state_of] computes RMW-related PPO
+      orderings, deciding each RMW's condition under [state_of e_w] for its
+      write [e_w]. [compute_ppo_rmw] and [compute_ppo_rmw_where_write_exists]
+      below fix the state.
 
       This is the episodic loops paper's ppo_rmw:
 
@@ -847,21 +850,23 @@ module ForwardingContext = struct
       before the next iteration's RMW write is ordered before that RMW's read
       too, and symmetrically. Episodicity's events condition needs this when a
       bisection starts the iteration at an RMW, as rcu-1's does at its
-      fetch-and-add.
+      fetch-and-add, and when an iteration ends at a CAS whose acquire read
+      orders the next iteration, as rcu-1's trivial bisection does.
 
       @param iter Whether to compose with ppo_iter_sync instead of ppo_sync.
       @param es_ctx The event structure context.
-      @param predicates The state under which an RMW's condition must hold.
+      @param state_of
+        The state under which an RMW's condition must hold, given the RMW's
+        write event.
       @return The computed RMW-induced PPO orderings. *)
-  let compute_ppo_rmw ?(iter = false) (es_ctx : EventStructureContext.t)
-      predicates =
+  let compute_ppo_rmw_with ~iter (es_ctx : EventStructureContext.t) state_of =
     let ppo_sync =
       if iter then es_ctx.ppo.ppo_iter_sync else es_ctx.ppo.ppo_sync
     in
     let rmw_filtered =
       USet.filter
-        (fun (er, expr, ew) ->
-          Solver.exeq ~state:predicates expr (EBoolean true)
+        (fun (_er, expr, ew) ->
+          Solver.exeq ~state:(state_of ew) expr (EBoolean true)
         )
         es_ctx.structure.rmw
     in
@@ -869,6 +874,35 @@ module ForwardingContext = struct
       USet.union
         (URelation.compose [ ppo_sync; rmw_inv ])
         (URelation.compose [ rmw_inv; ppo_sync ])
+
+  (** [compute_ppo_rmw ?iter es_ctx predicates] decides every RMW's condition
+      under one execution's [predicates]. *)
+  let compute_ppo_rmw ?(iter = false) es_ctx predicates =
+    compute_ppo_rmw_with ~iter es_ctx (fun _ -> predicates)
+
+  (** [compute_ppo_rmw_where_write_exists ?iter es_ctx] is [compute_ppo_rmw] for
+      a caller that has no execution's predicates in hand, as the episodicity
+      check has not. Each RMW's condition is decided under the conditions under
+      which its write event exists -- the write's restriction, i.e. its path
+      condition -- together with the structure's constraints.
+
+      Under the empty state a CAS's condition [α = expected] is never valid, so
+      a CAS contributed nothing; its write only exists on the success branch,
+      though, and that branch's restriction carries the condition. Deciding
+      there gives a CAS its pairs exactly where its write is present, which is
+      every execution containing it. A fetch-and-add's condition is [true] and
+      is unaffected.
+
+      @param iter Whether to compose with ppo_iter_sync instead of ppo_sync.
+      @param es_ctx The event structure context.
+      @return The RMW-induced PPO orderings. *)
+  let compute_ppo_rmw_where_write_exists ?(iter = false)
+      (es_ctx : EventStructureContext.t) =
+    let structure = es_ctx.structure in
+      compute_ppo_rmw_with ~iter es_ctx (fun ew ->
+          (Hashtbl.find_opt structure.restrict ew |> Option.value ~default:[])
+          @ structure.constraints
+      )
 
   (** {1 PPO Computation} *)
 

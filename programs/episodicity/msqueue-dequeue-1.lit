@@ -11,9 +11,9 @@ name=msqueue dequeue 1
 //
 // Not episodic. The helping CAS of D10 advances tail when an enqueue has
 // linked a node but not yet swung tail. The next iteration's D3 reads tail from
-// it, which fails the write condition, and its D2 is an acquire read of head
-// that nothing orders after D10's release write to tail, which fails the
-// events condition. Without D10 the loop is episodic
+// it, which fails the write condition. Its D2, an acquire read of head, is
+// ordered after D10's write: under sMRD the CAS's write is ordered with its
+// acquire read, which orders D2 after it. Without D10 the loop is episodic
 // (msqueue_without_helping/dequeue.lit).
 
 rdummy := malloc 2;

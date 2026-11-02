@@ -1459,8 +1459,20 @@ module EventsCondition = struct
        first. spinlock-1 was the missing-location reading above. seqlock-1 was
        the program: its reader had no ordering between the seq samples and the
        data read, and is now the C11 seqlock. rcu-1 was the missing
-       cross-iteration ppo_rmw on the ppo_iter side below. *)
-    let ppo_rmw = ForwardingContext.compute_ppo_rmw fwd_es_ctx [] in
+       cross-iteration ppo_rmw on the ppo_iter side below.
+
+       An RMW's condition c is decided under the restriction of its write --
+       the path condition under which that write exists -- and the structure's
+       constraints, not under the empty state. No single execution's predicate
+       is in hand here, and under the empty state a CAS's condition (the value
+       read equals the expected one) is never valid, so until this was changed
+       a CAS contributed no ppo_rmw to this check at all, only a fetch-and-add
+       (c = true) did. A CAS's write exists only on its success branch, whose
+       restriction carries c, so this gives the CAS its pairs in exactly the
+       executions that contain its write. *)
+    let ppo_rmw =
+      ForwardingContext.compute_ppo_rmw_where_write_exists fwd_es_ctx
+    in
     let ppo_loc_alias =
       EventStructureContext.compute_ppo_loc_alias ~keep_unlocated:true
         fwd_es_ctx.structure fwd_es_ctx.ppo.ppo_loc_base
@@ -1498,15 +1510,27 @@ module EventsCondition = struct
        fetch-and-add, as the paper's ex:episodic-rcu does: the last
        iteration's rcu marker writes were left unordered against the next
        fetch-and-add's acquire read, and no other bisection satisfies both
-       this condition and the register condition.
+       this condition and the register condition. That was while a CAS gave
+       no ppo_rmw here (see below); since it does, rcu-1 satisfies this
+       condition at the trivial bisection too, which is tried first and so
+       reported. Its CAS's write and its write of *rn, ordered before the
+       CAS's release write and so before its acquire read, are then ordered
+       before the next iteration's marker writes. The fetch-and-add bisection
+       still satisfies all four conditions: adding ppo_rmw pairs only grows
+       the relation this condition checks against.
 
        ppo_iter_loc_base is alias-filtered here, the way ForwardingContext.ppo
        filters ppo_loc_base before an execution's predicates narrow it further.
        It is half of one change: the other half is the complement that produces
        it, taken in po_iter rather than po, and neither half works alone. See
-       the note at its definition in forwarding.ml. *)
+       the note at its definition in forwarding.ml.
+
+       As for ppo_rmw above, an RMW's condition is decided where its write
+       exists, so a CAS's success branch contributes its cross-iteration pairs
+       as a fetch-and-add's does. *)
       let ppo_iter_rmw =
-        ForwardingContext.compute_ppo_rmw ~iter:true fwd_es_ctx []
+        ForwardingContext.compute_ppo_rmw_where_write_exists ~iter:true
+          fwd_es_ctx
       in
       let ppo_iter =
         fwd_es_ctx.ppo.ppo_iter_sync
