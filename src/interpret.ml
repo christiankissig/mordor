@@ -339,6 +339,16 @@ let add_rmw_edge (structure : symbolic_event_structure) (er : int) (cond : expr)
     rmw = USet.union structure.rmw (USet.singleton (er, cond, ew));
   }
 
+(** [stores_back_read ~phi written read] holds if an RMW writing [written] after
+    reading [read] stores back the value it read in every execution that
+    contains its write: [written = read] under [phi], the conditions on the
+    write's path, including a CAS's success condition. Such an RMW is a
+    read-don't-modify-write. The test is semantic, not on the instruction's
+    shape, so it covers [fadd] of an operand that is zero on the path as well as
+    a CAS whose expected and desired values agree. *)
+let stores_back_read ~phi written read =
+  Expr.equal written read || Solver.exeq ~state:phi written read
+
 (** {1 Threads as Fragments} *)
 
 (** [interpret_thread events interpret env phi] is the structure [interpret]
@@ -590,11 +600,9 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   (Expr.binop loaded_expr "+" operand)
                 |> apply_ub_constraints events
               in
-              (* if the operand evaluates to zero, this is a read-don't
-                   modify-write *)
-              let is_rdmw =
-                Expr.evaluate ~env:(Hashtbl.find_opt env) operand = ENum Z.zero
-              in
+              (* A read-don't-modify-write stores back the value it read: the
+                 sum equals the read symbol under the path condition. *)
+              let is_rdmw = stores_back_read ~phi result_expr loaded_expr in
               let evt_store =
                 {
                   (Event.create Write 0 ()) with
@@ -666,6 +674,14 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                 Expr.evaluate ~env:(Hashtbl.find_opt env) desired
                 |> apply_ub_constraints events
               in
+              (* The write exists only on success, where the value read equals
+                 [expected]: the CAS stores back what it read, and is a
+                 read-don't-modify-write, iff [desired] equals the read symbol
+                 under the path condition and the success condition. A CAS
+                 whose expected and desired values agree is one. *)
+              let is_rdmw =
+                stores_back_read ~phi:(cond_expr :: phi) wval loaded_expr
+              in
               let evt_store =
                 {
                   base_evt_store with
@@ -673,6 +689,7 @@ let interpret_statements_open ~recurse ~final_structure ~add_event
                   wval = Some wval;
                   wmod = assign_mode;
                   volatile = false;
+                  is_rdmw;
                 }
               in
               let event_store' : event =

@@ -1,0 +1,22 @@
+name=rdmw fetch and add of a path zero
+%%
+// fadd(rC,rk) adds a value read from k, which is not 0 as written but is 0 on
+// the only path that reaches the fadd. Its write stores back the value it read,
+// so it is a read-don't-modify-write: MoRDor decides it by the values under
+// the path condition, not by the operand's form, and the write condition admits
+// the next iteration's read of it.
+k := 0;
+rC := malloc 1;
+*rC := 0;
+{
+  do {
+    rk :acq= k;
+    if (rk = 0) {
+      rv := fadd(acquire,release,rC,rk);
+    } else { rv := 1 }
+  } while (rv = 0)
+}
+|||
+{
+  *rC :rel= 1;
+}

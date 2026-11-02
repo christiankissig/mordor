@@ -1,0 +1,19 @@
+name=rdmw compare and swap admits
+%%
+// A CAS whose expected and desired values agree is a read-don't-modify-write:
+// its write exists only on success, where the value read is 0, and it writes
+// 0 back. Each iteration may read the previous iteration's CAS write, and the
+// write condition admits that read as it admits one of fadd(rC,0). Before
+// MoRDor flagged a CAS by the values it writes, only fadd of 0 counted, and the
+// write condition failed here.
+rC := malloc 1;
+*rC := 0;
+{
+  do {
+    rv := cas(acquire,release,rC,0,0);
+  } while (rv = 1)
+}
+|||
+{
+  *rC :rel= 1;
+}
