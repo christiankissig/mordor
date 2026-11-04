@@ -1,0 +1,38 @@
+// Write elision into one outcome of a branch whose thread joins again.
+//
+// The first thread is load buffering through x := r1, which sMRD may elide
+// into the later x := 1, dropping the dependency of the store on r1 := y:
+// x := 1 is then read by r2 := x and y := r2 feeds r1 := y, so r1 = 1. RC11
+// forbids r1 = 1 (r1 := y po x := 1 rf r2 := x po y := r2 rf r1 := y is a
+// po ∪ rf cycle).
+//
+// x := 1 lies in one outcome of a branch on r0 := w, inside the first thread
+// of a parallel block, and z := 1 after the join is po-after both outcomes.
+// MoRDor's fork rule for write elision asks that every event po-after the
+// elided store, other than the eliding one, be po-comparable with it, and
+// exempts events in conflict with it. The else branch's x := 2 is in conflict
+// with x := 1 but shares the po-upper bound z := 1 with it.
+//
+// - Conflict exemption: x := 2 is exempt, x := r1 is elided into x := 1, and
+//   r1 = 1 is allowed, as it is without the branch or without z := 1.
+// - Strict exemption, conflict and no common po-upper bound: x := 2 is not
+//   exempt, the elision is blocked, and r1 = 1 is forbidden. Dropping z := 1
+//   allows it again.
+//
+// The strict exemption is the one this test asserts.
+x := 0; y := 0; w := 0; z := 0;
+{
+  r1 := y;
+  x := r1;
+  r0 := w;
+  if (r0 = 0) { x := 1 } else { x := 2 };
+} ||| {
+  r2 := x;
+  y := r2;
+} ||| {
+  w := 1;
+};
+z := 1;
+%%
+forbid (r1 = 1) [sMRD]
+forbid (r1 = 1) [RC11]
