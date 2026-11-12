@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 456
+Total tests: 472
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -71,6 +71,10 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - fowm2024/nullptr - use.lit
 - imm/FADD RMW Atomicity.lit
 - imm/LB+falsedep+Fsc.lit
+- lift-pred-match/acq-other-loc-nobranch.lit
+- lift-pred-match/acq-other-loc.lit
+- lift-pred-match/arms-differ.lit
+- lift-pred-match/read-and-acq.lit
 - on_thin_air_reads19/P1.lit
 - on_thin_air_reads19/P2.lit
 - on_thin_air_reads19/P3.lit
