@@ -184,6 +184,11 @@ type options = {
           (R17), unless one may be freed before the other is allocated. On by
           default; [--overlapping-regions] keeps only the bases apart. A
           stand-in until memory regions are modelled. *)
+  mutable allow_non_buechi : bool;
+      (** Accept expressions outside Büchi arithmetic -- a product of two
+          unknowns, a division or remainder by an unknown -- with a warning
+          instead of failing interpretation ({!Buechi}). Off by default: outside
+          the fragment the solver's questions are undecidable in general. *)
   mutable by_query : bool;
       (** Answer the assertion by asking, per justification combination, for one
           execution that decides it, rather than enumerating every execution
@@ -215,6 +220,7 @@ let default_options =
     futures_by_witness = false;
     semantics = Smrd;
     disjoint_regions = true;
+    allow_non_buechi = false;
     by_query = false;
   }
 

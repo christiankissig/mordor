@@ -103,7 +103,13 @@ let parse_verification_output output_lines =
 
 (* Execute CLI command and capture result *)
 let run_cli_on_file filepath =
-  let cmd = Printf.sprintf "%s run --single \"%s\"" cli_executable filepath in
+  (* The corpus checks verdicts, and some of its tests multiply two unknowns on
+     purpose (avoidoota's listings 12-15): they are outside Büchi arithmetic,
+     which interpretation otherwise refuses. test_buechi covers that refusal. *)
+  let cmd =
+    Printf.sprintf "%s run --single \"%s\" --allow-non-buechi" cli_executable
+      filepath
+  in
   let ic = Unix.open_process_in cmd in
   let output = ref [] in
     try
