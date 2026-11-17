@@ -595,6 +595,24 @@ let test_parse_assertion_allow () =
     | Some (AOutcome { outcome = "allow"; condition = EBinOp _; _ }) -> ()
     | _ -> Alcotest.fail "Expected allow assertion"
 
+(* #223: a program whose last statement ends in an expression, with no [;]
+   before [%%]: the first [%] was read as modulo. *)
+let test_parse_separator_after_expression () =
+  List.iter
+    (fun last ->
+      let src =
+        "x := 0;\n{ skip } ||| { skip };\n"
+        ^ last
+        ^ "\n%%\nforbid (@x = 1) [sMRD]"
+      in
+      let ast = parse_litmus src in
+        Alcotest.(check int) (last ^ ": statements") 3 (List.length ast.program);
+        match ast.assertion with
+        | Some (AOutcome { outcome = "forbid"; _ }) -> ()
+        | _ -> Alcotest.fail (last ^ ": expected forbid assertion")
+    )
+    [ "x := 7"; "r2 := 7"; "x := r1 % 3"; "r5 := x" ]
+
 let test_parse_assertion_forbid () =
   let src = "x := 1;\n%% forbid r0 = 1 []" in
   let ast = parse_litmus src in
@@ -835,6 +853,8 @@ let suite =
       Alcotest.test_case "Parse multiplication" `Quick test_parse_multiplication;
       Alcotest.test_case "Parse division" `Quick test_parse_division;
       Alcotest.test_case "Parse modulo" `Quick test_parse_modulo;
+      Alcotest.test_case "Parse %% after an expression" `Quick
+        test_parse_separator_after_expression;
       Alcotest.test_case "Parse comparison" `Quick test_parse_comparison;
       Alcotest.test_case "Parse inequality" `Quick test_parse_inequality;
       Alcotest.test_case "Parse less than" `Quick test_parse_less_than;

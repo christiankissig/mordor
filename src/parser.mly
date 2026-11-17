@@ -17,7 +17,7 @@ open Types
 %token <Z.t> INT
 %token <string> REGISTER ATLOC GLOBAL STRING BACKTICK
 %token QUOTE PLUS MINUS STAR SLASH RARROW
-%token AND OR PERCENT NEQ GEQ GT LEQ LT ASSIGN EQ
+%token AND OR PERCENT SEPARATOR NEQ GEQ GT LEQ LT ASSIGN EQ
 %token LPAREN RPAREN LBRACE RBRACE LDBRACKET RDBRACKET
 %token LBRACKET RBRACKET SEMICOLON COMMA BANG DOT
 %token AMPERSAND CARET PIPE TILDE IN NOTIN FORALL PARALLEL
@@ -53,7 +53,7 @@ litmus:
 
 (* Configuration *)
 config:
-  c=config_body PERCENT PERCENT { c }
+  c=config_body SEPARATOR { c }
 
 config_body:
   | name=name_section? model=config_model_section? values=values_section?
@@ -527,14 +527,14 @@ expr:
 
 (* Assertion *)
 assertion:
-  | PERCENT PERCENT a=assertion_body { a }
+  | SEPARATOR a=assertion_body { a }
   ;
 
 assertion_body:
   | LBRACKET model=model_name? RBRACKET
     { AModel { model = (match model with Some m -> m | None -> "") } }
 
-  | RARROW check=assertion_check PERCENT PERCENT rest=litmus
+  | RARROW check=assertion_check SEPARATOR rest=litmus
     { let model, outcome = check in
       AChained {
         model = (match model with Some m -> m | None -> "");
