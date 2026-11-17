@@ -811,6 +811,56 @@ let test_rdmw_flag () =
       "x := 0; k := 0; rx := &x; rk := k; r1 := cas(acquire,release,rx,rk,rk)"
 
 (** Test suite *)
+
+(** Constant-location guarantees ([MORDOR_INFER_CONST]): the facts inferred from
+    the structure, as strings. Finite semantics, no loops. *)
+let const_facts program =
+  let ctx = make_context default_options () in
+    ctx.litmus <- Some program;
+    let ctx =
+      Lwt_main.run
+        (Lwt.return ctx |> Parse.step_parse_litmus |> Interpret.step_interpret)
+    in
+      Interpret.constant_read_facts (Option.get ctx.structure)
+      |> List.map Expr.to_string
+      |> List.sort compare
+
+let test_const_facts_initialiser () =
+  (* y is stored once, by its initialiser, before the fork: the thread's read
+     of y is 1 (own/coproductReorder.lit). x is stored twice with different
+     values and gets nothing. *)
+  Alcotest.(check (list string))
+    "one fact for the read of y" [ "(β = 1)" ]
+    (const_facts
+       "x := 0; y := 1;\n\
+        { r1 := x; r2 := y } ||| { x := 1 }\n\
+        %% allow (r1 = 0) []"
+    )
+
+let test_const_facts_same_value_twice () =
+  Alcotest.(check (list string))
+    "two stores of the same numeral" [ "(α = 1)" ]
+    (const_facts "y := 1;\n{ r1 := y } ||| { y := 1 }\n%% allow (r1 = 1) []")
+
+let test_const_facts_no_store_before () =
+  (* The read has no store of y po-before it: it might read an older value. *)
+  Alcotest.(check (list string))
+    "no fact without a store po-before" []
+    (const_facts "x := 0;\n{ r1 := y } ||| { y := 1 }\n%% allow (r1 = 1) []")
+
+let test_const_facts_volatile () =
+  Alcotest.(check (list string))
+    "no fact for a volatile read" []
+    (const_facts "y := 1;\n{ r1 :v= y } ||| { skip }\n%% allow (r1 = 1) []")
+
+let test_const_facts_pointer_store () =
+  (* A store through a pointer may alias y: no facts at all. *)
+  Alcotest.(check (list string))
+    "pointer store disables" []
+    (const_facts
+       "y := 1; r0 := &y;\n{ r1 := y } ||| { *r0 := 2 }\n%% allow (r1 = 1) []"
+    )
+
 let suite =
   ( "Interpreter",
     [
@@ -875,5 +925,15 @@ let suite =
       Alcotest.test_case "Main interpret function" `Quick test_interpret_main;
       Alcotest.test_case "Main interpret with PO" `Quick
         test_interpret_main_with_po;
+      Alcotest.test_case "Constant facts: initialiser" `Quick
+        test_const_facts_initialiser;
+      Alcotest.test_case "Constant facts: same value twice" `Quick
+        test_const_facts_same_value_twice;
+      Alcotest.test_case "Constant facts: no store before" `Quick
+        test_const_facts_no_store_before;
+      Alcotest.test_case "Constant facts: volatile" `Quick
+        test_const_facts_volatile;
+      Alcotest.test_case "Constant facts: pointer store" `Quick
+        test_const_facts_pointer_store;
     ]
   )

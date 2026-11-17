@@ -2,16 +2,17 @@
 // initialiser, so r2 = 1 and the then-arm's inner branch is always taken.
 // sMRD allows r1 = 1.
 //
-// The initialiser y := 1 is ordered before both threads, and nothing on y
-// comes between it and r2 := y in thread 1, so store forwarding rewrites
-// r2 = 1 to true. The then-arm's z := 1 is then justified under r1 = 1
-// alone, lifting it with the else-arm's under r1 != 1 leaves z := 1
-// depending on nothing, and the cycle through x closes. The usual compiler
-// transformation does the same: hoist z := 1 above the read of x.
+// y is stored once, by its initialiser, which is ordered before both threads,
+// so every read of y returns 1. MoRDor infers r2 = 1 as a de facto guarantee,
+// and Weakening drops the guard r2 = 1. The then-arm's z := 1 is then
+// justified under r1 = 1 alone, lifting it with the else-arm's under r1 != 1
+// leaves z := 1 depending on nothing, and the cycle through x closes. The
+// usual compiler transformation does the same: constant-fold y (LLVM's
+// GlobalOpt) and hoist z := 1 above the read of x.
 //
-// This asserted forbid until forwarding substituted into predicates (#46):
-// before that, forwarding y := 1 into r2 left r2 = 1 in the predicate and the
-// dependency on the read of x in place.
+// Forwarding y := 1 into r2 := y used to give the same result, but forwarding
+// no longer crosses a fork or a join. This asserted forbid until forwarding
+// substituted into predicates (#46).
 x := 0; y := 1; z := 0;
 {
   r1 := x;
