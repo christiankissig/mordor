@@ -82,6 +82,9 @@ rule token = parse
   | "="                   { Parser.EQ }
   | "[["                  { Parser.LDBRACKET }
   | "]]"                  { Parser.RDBRACKET }
+  (* One token, not two [%]: a program ending in an expression, [x := 7 %%],
+     would otherwise read the first [%] as modulo (#223). *)
+  | "%%"                  { Parser.SEPARATOR }
   | "|||"                 { Parser.PARALLEL }
   | "||"                  { Parser.OR }
   | "&&"                  { Parser.AND }
