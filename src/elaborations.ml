@@ -1084,8 +1084,22 @@ end = struct
   (** [is_closed_relab_equiv elab_ctx statex relab pred_1 pred_2 p1 e1 p2 e2]
       checks closed relabeling equivalence.
 
-      Recursively checks if events [e1] and [e2] and all their predecessors are
-      equivalent under the relabeling.
+      Recursively checks that [e1] and [e2] are relabel-equivalent and that
+      their immediate predecessors match back and forth: every predecessor of
+      [e1] is closed relabel-equivalent to some predecessor of [e2], and every
+      predecessor of [e2] to some predecessor of [e1].
+
+      sMRD states the last clause for all pairs: every predecessor of [e1] with
+      every predecessor of [e2]. Two unordered predecessors on one side then
+      have to be equivalent to each other. In
+      [r :acq= y; rc := c; if (rc = 1) { z := 1 } else { z := 1 }] the initial
+      write of [z] and the acquire read are both immediate predecessors of each
+      [z := 1], a write cannot be equivalent to a read, and the two writes never
+      lift, so the control dependency on [rc] survives a branch whose arms are
+      identical (litmus-tests/lift-pred-match/). Matching the predecessors also
+      makes the relation reflexive wherever the two predicates give an event the
+      same predecessors, so the shortcut that once declared identical events
+      equivalent is gone.
 
       @param elab_ctx The elaboration context.
       @param statex Static constraints.
@@ -1105,48 +1119,44 @@ end = struct
             m "Checking closed relab equivalence between %d and %d" e1.label
               e2.label
         );
-      if e1 = e2 then true
-      else
-        let ire = is_relab_equiv elab_ctx relab p1 e1 p2 e2 in
-          if ire then (
-            let pred_e1 = pred_1 e1.label in
-            let pred_e2 = pred_2 e2.label in
-              if is_trace then (
-                Logs_safe.debug (fun m ->
-                    m "Predecessors for %d: %s" e1.label
-                      (USet.fold
-                         (fun acc e' -> Printf.sprintf "%s,%d" acc e')
-                         pred_e1 ""
-                      )
-                );
-                Logs_safe.debug (fun m ->
-                    m "Predecessors for %d: %s" e2.label
-                      (USet.fold
-                         (fun acc e' -> Printf.sprintf "%s,%d" acc e')
-                         pred_e2 ""
-                      )
-                )
-              );
-              if USet.size pred_e1 = 0 then USet.size pred_e2 = 0
-              else if USet.size pred_e2 = 0 then false
-              else
-                let pred_pairs = URelation.cross pred_e1 pred_e2 in
-                  USet.for_all
-                    (fun (l1, l2) ->
-                      (* These are arbitrary predecessors, so the structure is
-                         the only source: a justification carries one event,
-                         its own write, and none is in scope here. A predecessor
-                         that is a write whose justification concretised its
-                         value therefore compares under the symbolic one. See
-                         the note in ValueAssignElab.elab; the same holds of the
-                         origin lookup in generate_relabelings. *)
-                      let e'1 = Hashtbl.find elab_ctx.structure.events l1 in
-                      let e'2 = Hashtbl.find elab_ctx.structure.events l2 in
-                        aux p1 e'1 p2 e'2
+      let ire = is_relab_equiv elab_ctx relab p1 e1 p2 e2 in
+        if ire then (
+          let pred_e1 = pred_1 e1.label in
+          let pred_e2 = pred_2 e2.label in
+            if is_trace then (
+              Logs_safe.debug (fun m ->
+                  m "Predecessors for %d: %s" e1.label
+                    (USet.fold
+                       (fun acc e' -> Printf.sprintf "%s,%d" acc e')
+                       pred_e1 ""
                     )
-                    pred_pairs
-          )
-          else false
+              );
+              Logs_safe.debug (fun m ->
+                  m "Predecessors for %d: %s" e2.label
+                    (USet.fold
+                       (fun acc e' -> Printf.sprintf "%s,%d" acc e')
+                       pred_e2 ""
+                    )
+              )
+            );
+            (* These are arbitrary predecessors, so the structure is the
+                 only source: a justification carries one event, its own
+                 write, and none is in scope here. A predecessor that is a
+                 write whose justification concretised its value therefore
+                 compares under the symbolic one. See the note in
+                 ValueAssignElab.elab; the same holds of the origin lookup in
+                 generate_relabelings. *)
+            let ev l = Hashtbl.find elab_ctx.structure.events l in
+            let matched_in preds l1 =
+              USet.exists (fun l2 -> aux p1 (ev l1) p2 (ev l2)) preds
+            in
+            let matched_from preds l2 =
+              USet.exists (fun l1 -> aux p1 (ev l1) p2 (ev l2)) preds
+            in
+              USet.for_all (matched_in pred_e2) pred_e1
+              && USet.for_all (matched_from pred_e1) pred_e2
+        )
+        else false
     in
       Landmark_safe.enter is_closed_relab_equiv_landmark;
       let result = aux p1 e1 p2 e2 in

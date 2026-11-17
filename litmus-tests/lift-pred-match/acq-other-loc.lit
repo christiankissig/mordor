@@ -1,0 +1,25 @@
+// Both arms of the branch write z := 1, so z := 1 should not depend on rc.
+// Each z := 1 has two unordered immediate ppo-predecessors: the initial write
+// of z (same location) and the acquire read of y (an acquire read precedes
+// everything after it). Lifting compares the two writes and their
+// predecessors. Compared pair by pair, it would need the initial write of z to
+// be equivalent to the read of y, the lift would fail, and the control
+// dependency rc -> z := 1 would close the load-buffering cycle through
+// thread 2. MoRDor matches predecessors back and forth: each one on one side
+// with an equivalent one on the other. The writes lift, as the program with
+// the branch removed (acq-other-loc-nobranch.lit) is allowed.
+x := 0; y := 0; z := 0; c := 0;
+{
+  r2 :acq= y;
+  rc := c;
+  if (rc = 1) {
+    z := 1;
+  } else {
+    z := 1;
+  };
+} ||| {
+  r3 := z;
+  c := r3
+}
+%%
+allow (rc = 1 && r3 = 1) [smrd]

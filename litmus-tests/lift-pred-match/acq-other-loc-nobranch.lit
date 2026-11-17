@@ -1,0 +1,13 @@
+// acq-other-loc.lit with the branch removed: nothing orders rc := c before
+// z := 1, so load buffering through thread 2 is allowed.
+x := 0; y := 0; z := 0; c := 0;
+{
+  r2 :acq= y;
+  rc := c;
+  z := 1;
+} ||| {
+  r3 := z;
+  c := r3
+}
+%%
+allow (rc = 1 && r3 = 1) [smrd]

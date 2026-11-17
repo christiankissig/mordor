@@ -1,0 +1,20 @@
+// As acq-other-loc.lit, with a relaxed read of z before the acquire read: the
+// immediate ppo-predecessors of each z := 1 are that read and the acquire read
+// of y, unordered. Matched back and forth, each is equivalent to itself, and
+// the two writes lift.
+x := 0; y := 0; z := 0; c := 0;
+{
+  r1 := z;
+  r2 :acq= y;
+  rc := c;
+  if (rc = 1) {
+    z := 1;
+  } else {
+    z := 1;
+  };
+} ||| {
+  r3 := z;
+  c := r3
+}
+%%
+allow (rc = 1 && r3 = 1) [smrd]

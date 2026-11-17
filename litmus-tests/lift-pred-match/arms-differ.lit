@@ -1,0 +1,22 @@
+// The arms differ: only one reads y before both reach y := 1. The read of y
+// is a ppo-predecessor of y := 1 (same location) in that arm and has no
+// counterpart in the other, so the predecessors do not match, the writes do
+// not lift, and y := 1 keeps its control dependency on r0. Load buffering
+// through thread 2 is forbidden.
+x := 0;
+y := 0;
+w := 0;
+{
+  r0 := x;
+  if (r0 = 1) {
+    r2 := y;
+  };
+  p := 1;
+  q := 1;
+  y := 1
+} ||| {
+  r1 := y;
+  x := r1
+}
+%%
+forbid (r0 = 1 && r1 = 1) [smrd]
