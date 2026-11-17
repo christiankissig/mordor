@@ -839,6 +839,8 @@ module CLI = struct
         (** Addresses on distinct allocations differ, not just the bases *)
     mutable by_query : bool;
         (** [run]: answer the assertion by query, not by enumeration *)
+    mutable allow_non_buechi : bool;
+        (** Warn about expressions outside Büchi arithmetic, do not fail *)
   }
 
   (** Create initial parse state with defaults. *)
@@ -859,6 +861,7 @@ module CLI = struct
       semantics = Smrd;
       disjoint_regions = default_options.disjoint_regions;
       by_query = false;
+      allow_non_buechi = false;
     }
 
   (** Convert parse state to immutable configuration.
@@ -891,6 +894,7 @@ module CLI = struct
             semantics = state.semantics;
             disjoint_regions = state.disjoint_regions;
             by_query = state.by_query;
+            allow_non_buechi = state.allow_non_buechi;
           }
         in
           {
@@ -1047,6 +1051,13 @@ module CLI = struct
         Arg.Unit (fun () -> state.disjoint_regions <- false),
         " Keep allocations apart by their base addresses only: an address past \
          the start of one allocation may be another's"
+      );
+      ( "--allow-non-buechi",
+        Arg.Unit (fun () -> state.allow_non_buechi <- true),
+        " Interpret programs with expressions outside Büchi arithmetic -- a \
+         product of two non-constant terms, a division or remainder by a \
+         non-constant term -- with a warning, instead of failing: the solver's \
+         questions about them are undecidable in general"
       );
       ( "--by-query",
         Arg.Unit (fun () -> state.by_query <- true),

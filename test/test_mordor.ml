@@ -5,6 +5,7 @@ let () =
     [
       Test_algorithms.suite;
       Test_assertion.suite;
+      Test_buechi.suite;
       Test_types.suite;
       Test_expr.suite;
       Test_solver.suite;

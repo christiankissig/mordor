@@ -75,12 +75,16 @@ let render ?(regions = Context.default_options.disjoint_regions)
     (program : string) : string =
   (* A test may name a model MoRDor does not implement. Since #86 that is fatal
      unless the caller opts in; a golden is a record of what the pipeline does
-     today, so opt in and let the fallback verdict be recorded as before. *)
+     today, so opt in and let the fallback verdict be recorded as before.
+     Likewise for expressions outside Büchi arithmetic, which interpretation
+     refuses: the integration suite enforces that, and exempts the same tests
+     (avoidoota's listings 12-15, own/expressionPreservingSubstitution). *)
   let options =
     {
       Context.default_options with
       dependencies = true;
       allow_unknown_model = true;
+      allow_non_buechi = true;
       disjoint_regions = regions;
     }
   in
@@ -135,6 +139,7 @@ let verdict ~by_query (program : string) =
       Context.default_options with
       dependencies = true;
       allow_unknown_model = true;
+      allow_non_buechi = true;
       by_query;
     }
   in

@@ -1264,7 +1264,35 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
           ctx.structure <- Some structure;
           ctx.source_spans <- Some source_spans;
           ctx.loop_iters <- Some loop_iters;
-          Lwt.return ctx
+          (* Outside Büchi arithmetic the solver's questions are undecidable in
+             general; report every such expression, and stop unless told to
+             go on. *)
+          let violations = Buechi.check structure in
+            if violations = [] then Lwt.return ctx
+            else begin
+              let lines = List.map (Buechi.describe ~source_spans) violations in
+                if ctx.options.allow_non_buechi then begin
+                  List.iter
+                    (fun l ->
+                      Logs_safe.warn (fun m ->
+                          m "Expression outside Büchi arithmetic: %s" l
+                      )
+                    )
+                    lines;
+                  Lwt.return ctx
+                end
+                else
+                  Lwt.fail
+                    (Failure
+                       (Printf.sprintf
+                          "%s: %d expression(s) outside Büchi arithmetic \
+                           (rerun with --allow-non-buechi to continue):\n\
+                          \  %s"
+                          ctx.litmus_name (List.length lines)
+                          (String.concat "\n  " lines)
+                       )
+                    )
+            end
     | _ ->
         Logs_safe.err (fun m -> m "No program statements for interpretation.");
         Lwt.return ctx

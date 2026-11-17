@@ -18,6 +18,7 @@
   algorithms
   assertion
   ast
+  buechi
   call_site
   canonicalize
   coherence

@@ -103,7 +103,28 @@ let parse_verification_output output_lines =
 
 (* Execute CLI command and capture result *)
 let run_cli_on_file filepath =
-  let cmd = Printf.sprintf "%s run --single \"%s\"" cli_executable filepath in
+  (* Interpretation refuses expressions outside Büchi arithmetic. These tests
+     multiply two unknowns on purpose and are run with the refusal turned into
+     a warning; every other test must stay inside. test_buechi covers the
+     refusal itself. *)
+  let non_buechi =
+    [
+      "avoidoota/listing12.lit";
+      "avoidoota/listing13.lit";
+      "avoidoota/listing14.lit";
+      "avoidoota/listing15.lit";
+      "own/expressionPreservingSubstitution.lit";
+    ]
+  in
+  let exempt =
+    List.exists
+      (fun s -> String.ends_with ~suffix:("/" ^ s) filepath)
+      non_buechi
+  in
+  let cmd =
+    Printf.sprintf "%s run --single \"%s\"%s" cli_executable filepath
+      (if exempt then " --allow-non-buechi" else "")
+  in
   let ic = Unix.open_process_in cmd in
   let output = ref [] in
     try
