@@ -153,6 +153,14 @@ val interpret :
   ir_node list ->
   symbolic_event_structure * (int, source_span) Hashtbl.t
 
+(** {1 Inferred constant-location guarantees} *)
+
+(** [constant_read_facts structure]: the facts [sym(r) = c] for every
+    non-volatile read [r] of a location all of whose stores store the numeral
+    [c], with one of them po-before [r]; none at all if some store's location is
+    not a global variable. *)
+val constant_read_facts : symbolic_event_structure -> expr list
+
 (** {1 Spike Instrumentation} *)
 
 (** S8 (#20): with [compositional_po_iter] set, each interpreted occurrence of a

@@ -1,14 +1,20 @@
 // A relation membership under ! is decided like any other atom (#143).
 //
-// The execution that forwards x := 0 into r1 := x has no dependency (2,4),
-// and the one that reads x := 0 has it. !((2,4) ∈ .dp) holds in the first,
-// and (2,4) ∉ .dp with it. An assertion with a membership under ! used to
+// The execution that forwards x := 1 into r1 := x has no dependency (3,5),
+// and the one that reads x := 1 has it. !((3,5) ∈ .dp) holds in the first,
+// and (3,5) ∉ .dp with it. An assertion with a membership under ! used to
 // stop with "Unsupported unary operator in".
+//
+// x is stored twice, with different values. With one store of x, MoRDor
+// infers r1 = 0 as a de facto guarantee (a location never written again holds
+// its value), Weakening drops the guard, and no execution keeps the
+// dependency.
 x := 0;
+x := 1;
 r1 := x;
-if (r1 = 0) {
+if (r1 = 1) {
   y := 1
 }
 %%
-allow (!((2,4) ∈ .dp)) []
-allow (!((2,4) ∉ .dp) && r1 = 0) []
+allow (!((3,5) ∈ .dp)) []
+allow (!((3,5) ∉ .dp) && r1 = 1) []

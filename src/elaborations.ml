@@ -421,6 +421,41 @@ module ForwardElab = struct
               )
       )
 
+  (** [crosses_fork_join structure e1 e2]: the po-ordered pair [(e1, e2)] does
+      not lie in one thread segment. Forwarding and write elision relate events
+      within one segment only, as a compiler does that treats thread creation
+      and join as opaque calls: clang and gcc forward and eliminate no atomic
+      access across them, under pthreads or OpenMP. The semantics would allow
+      more -- forwarding a pre-fork write into a thread is valid for atomics --
+      but the one corpus outcome that needs it, own/coproductReorder.lit, rests
+      on a location that is never written again, which
+      {!Interpret.constant_read_facts} recovers as a de facto guarantee, as
+      whole-program constant propagation does. The restrictions that keep
+      forwarding out of a join ([fj] below) and elision out of a fork
+      ({!elision_blocked}) are subsumed but kept. Threads are indexed by the
+      interpreter: the code before a parallel block and its continuation after
+      the join share an index, and each forked thread gets its own. The pair
+      crosses if the two indices differ (a fork or a join lies between), or if
+      an event po-between them has another index (the whole block lies between).
+      Events without an index -- the root and terminal events -- cross nothing.
+  *)
+  let crosses_fork_join (structure : symbolic_event_structure) e1 e2 =
+    let thread = Hashtbl.find_opt structure.thread_index in
+      match (thread e1, thread e2) with
+      | Some t1, Some t2 ->
+          t1 <> t2
+          || USet.exists
+               (fun (a, c) ->
+                 a = e1
+                 && USet.mem structure.po (c, e2)
+                 &&
+                 match thread c with
+                 | Some tc -> tc <> t1
+                 | None -> false
+               )
+               structure.po
+      | _ -> false
+
   (** [acquires ev]: [ev] orders the events po-after it after what it
       synchronises with: a read of mode acquire or stronger (an RMW's included),
       a fence of mode acquire or stronger, or a [Lock]. *)
@@ -585,7 +620,8 @@ module ForwardElab = struct
         (fun (e1, e2) ->
           po_forward elab_ctx.structure e1 e2
           && fprime elab_ctx pred_fn ppo_loc just e1 e2
-          && not (forwarding_blocked elab_ctx.structure ~src:e1 ~fwd:e2)
+          && (not (forwarding_blocked elab_ctx.structure ~src:e1 ~fwd:e2))
+          && not (crosses_fork_join elab_ctx.structure e1 e2)
         )
         combined
 
@@ -684,7 +720,8 @@ module ForwardElab = struct
         (fun (e1, e2) ->
           po_forward elab_ctx.structure e1 e2
           && fprime elab_ctx pred_fn ppo_loc just e1 e2
-          && not (elision_blocked elab_ctx.structure ~elided:e1 ~by:e2)
+          && (not (elision_blocked elab_ctx.structure ~elided:e1 ~by:e2))
+          && not (crosses_fork_join elab_ctx.structure e1 e2)
         )
         w_cross_w
       |> URelation.inverse

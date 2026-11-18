@@ -1230,6 +1230,107 @@ let interpret ?(ubopt = false) ?(defacto = None) ?(constraints = None) stmts =
   in
     (structure, source_spans)
 
+(** {1 Inferred constant-location guarantees}
+
+    A location every store of which stores one constant [c] can only ever be
+    read as [c] by a read that has one of those stores po-before it: coherence
+    (CoWR) keeps the read from anything older, and there is nothing else to
+    read. This is what a compiler's whole-program constant propagation of
+    never-written globals (LLVM's GlobalOpt) knows, and it holds across forks
+    and joins, where forwarding does not reach
+    ({!Elaborations.ForwardElab.crosses_fork_join}).
+
+    The facts [sym(r) = c] are added to every write's de facto guarantees, where
+    Weakening drops the conjuncts they entail. A fact about a read outside an
+    execution constrains a symbol nothing else mentions.
+
+    Conservative:
+    - any store whose location is not a global variable (a store through a
+      pointer may alias any location) disables the inference altogether;
+    - a location qualifies only if each of its stores, read-modify-writes
+      included, stores the same closed numeral;
+    - a read gets a fact only with a qualifying store po-before it, so it cannot
+      read an undefined initial value;
+    - a volatile read gets none: it is a real access to memory, whose value a
+      compiler may not assume. *)
+
+let constant_read_facts (structure : symbolic_event_structure) : expr list =
+  let event id = Hashtbl.find_opt structure.events id in
+  let writes =
+    USet.values structure.write_events
+    |> List.filter_map (fun id -> Option.map (fun ev -> (id, ev)) (event id))
+  in
+  let global_of (ev : event) =
+    match ev.loc with
+    | Some l -> (
+        match Expr.evaluate l with
+        | EVar g -> Some g
+        | _ -> None
+      )
+    | None -> None
+  in
+    if List.exists (fun (_, ev) -> global_of ev = None) writes then []
+    else
+      (* g -> (Some c) if every store so far stores numeral c, None otherwise *)
+      let stores = Hashtbl.create 16 in
+        List.iter
+          (fun (id, ev) ->
+            let g = Option.get (global_of ev) in
+            let v =
+              match Option.map Expr.evaluate ev.wval with
+              | Some (ENum c) -> Some c
+              | _ -> None
+            in
+            let ids, cur =
+              match Hashtbl.find_opt stores g with
+              | None -> ([ id ], v)
+              | Some (ids, cur) ->
+                  ( id :: ids,
+                    match (cur, v) with
+                    | Some c, Some c' when Z.equal c c' -> cur
+                    | _ -> None
+                  )
+            in
+              Hashtbl.replace stores g (ids, cur)
+          )
+          writes;
+        USet.values structure.read_events
+        |> List.filter_map (fun r ->
+            match event r with
+            | Some ({ rval = Some (VSymbol s); volatile = false; _ } as ev) -> (
+                match global_of ev with
+                | Some g -> (
+                    match Hashtbl.find_opt stores g with
+                    | Some (ids, Some c)
+                      when List.exists
+                             (fun w -> USet.mem structure.po (w, r))
+                             ids -> Some (EBinOp (ESymbol s, "=", ENum c))
+                    | _ -> None
+                  )
+                | None -> None
+              )
+            | _ -> None
+        )
+
+let add_constant_read_facts (structure : symbolic_event_structure) =
+  begin
+    let facts = constant_read_facts structure in
+      if facts <> [] then begin
+        Logs_safe.info (fun m ->
+            m "Inferred constant-location guarantees: %s"
+              (String.concat ", " (List.map Expr.to_string facts))
+        );
+        USet.iter
+          (fun w ->
+            let old =
+              Hashtbl.find_opt structure.defacto w |> Option.value ~default:[]
+            in
+              Hashtbl.replace structure.defacto w (old @ facts)
+          )
+          structure.write_events
+      end
+  end
+
 (** {1 Pipeline Integration} *)
 
 (** Generic pipeline step for program interpretation.
@@ -1261,6 +1362,7 @@ let generic_step_interpret ~stmt_semantics (lwt_ctx : mordor_ctx Lwt.t) :
                    structure.events ""
                 )
           );
+          add_constant_read_facts structure;
           ctx.structure <- Some structure;
           ctx.source_spans <- Some source_spans;
           ctx.loop_iters <- Some loop_iters;
