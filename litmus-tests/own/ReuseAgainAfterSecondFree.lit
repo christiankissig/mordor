@@ -1,0 +1,10 @@
+// A second free of an address frees whatever allocation has come to be
+// there: rb reuses ra's region, the second free(ra) frees rb, and rc may
+// reuse the region again (#225). ReuseOnceAfterOneFree is the control.
+ra := malloc 1;
+free(ra);
+rb := malloc 1;
+free(ra);
+rc := malloc 1;
+%%
+allow (rb = ra && rc = ra) []

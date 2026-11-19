@@ -1,0 +1,23 @@
+// A region freed through a pointer loaded from memory may be reused by an
+// allocation in a thread nothing synchronises with the free (#225): C11 lets
+// the allocator hand ra's region to the second thread.
+X := 0;
+Y := 0;
+Z := 0;
+ra := malloc 1;
+X := ra;
+{
+  rp := X;
+  free(rp);
+} ||| {
+  rb := malloc 1;
+  Y := rb;
+  *rb := 1;
+  rr := *rb;
+} ||| {
+  rc := malloc 1;
+  Z := rc;
+  *rc := 2;
+}
+%%
+allow (rp = ra && rb = ra) []

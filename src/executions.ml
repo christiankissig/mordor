@@ -648,47 +648,255 @@ module ReadFromValidation = struct
     )
     |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))
 
-  (** [adjacent_same_location_allocation_events structure path rhb p] finds the
-      pairs of allocations that must have distinct addresses.
+  (** [allocation_disjointness structure path rhb p] is what an execution says
+      about the addresses of its allocations: two of them differ unless a free
+      lets one take the other's region (#225).
 
-      An allocator hands a released region back out only once it is released:
-      the malloc that reuses an address happens after the free that released it.
-      So two allocations are apart unless a free of one is [rhb]-between it and
-      the other. This used to be asked only of allocations in program order, one
-      way round; allocations in different threads, which no program order
-      relates, could share an address with no free between them at all (R17).
+      An execution comes with a {e free map} [fo], partial and injective, from
+      its frees to its allocations: [fo d] is the one allocation [d] frees. It
+      is at the address [d] frees, and [d] is not ordered before it. Two
+      allocations [a] and [a'] may share an address only if one of them, say
+      [a], is [fo d] for a free [d] that is not ordered after [a']:
+      [(a', d) ∉ rhb]. The condition is negative, since the allocator and not
+      the program orders the free before the reuse (C11 7.22.3p2). So a free
+      licenses reuse against the allocation it frees, not against every
+      allocation that comes to share its address, and an allocation is freed at
+      most once.
+
+      The free map is not given, so the constraint is that some free map
+      licenses every pair that share an address: a disjunction over the maps,
+      each a conjunction over the pairs. A map that frees more licenses more, so
+      only the maximal ones are asked; and allocations that no free relates are
+      simply distinct, so the disjunction is taken per group of related
+      allocations. Where one map remains -- each free can free one allocation --
+      the constraint is the list of pairs it leaves distinct.
+
+      The rule this replaces let a pair share an address when a free of one was
+      [rhb]-between the two. That refused reuse in a thread nothing synchronises
+      with the free, and it counted per address: one free let any number of
+      allocations share a region.
 
       @param structure The event structure.
       @param path Current path information.
       @param rhb The transitive closure of reads-happen-before (dp ∪ ppo ∪ rf).
-      @param p Predicates for semantic equality checking.
-      @return Promise of allocation event pairs requiring disjointness. *)
-  let adjacent_same_location_allocation_events structure path rhb p =
-    let e_set = path.path in
-    let malloc_events = USet.intersection structure.malloc_events e_set in
-    let free_events = USet.intersection structure.free_events e_set in
-    (* Only compute pairs from malloc events, not reads *)
-    let allocation_events = malloc_events in
-    let allocation_pairs =
-      URelation.cross allocation_events allocation_events
-      |> USet.filter (fun (e_1, e_2) -> e_1 < e_2)
+      @param p Predicates under which a free's address is compared (env_rf).
+      @return The disjointness constraints, in a fixed order. *)
+  let allocation_disjointness structure path rhb p =
+    let on_path events =
+      USet.intersection events path.path
+      |> USet.values
+      |> List.sort compare
+      |> List.filter_map (fun e ->
+          Option.map (fun loc -> (e, loc)) (get_loc structure e)
+      )
     in
-    (* A free of [e_1] between [e_1] and [e_2]. *)
-    let freed_between e_1 e_2 =
-      USet.exists
-        (fun ep ->
-          if not (USet.mem rhb (e_1, ep) && USet.mem rhb (ep, e_2)) then false
-          else
-            (* Check if loc(e_1) = loc(ep) under env_rf using semeq *)
-            match (get_loc structure e_1, get_loc structure ep) with
-            | None, _ | _, None -> false
-            | Some loc_e1, Some loc_ep -> Solver.exeq ~state:p loc_e1 loc_ep
-        )
-        free_events
-    in
-      USet.filter
-        (fun (e_1, e_2) -> not (freed_between e_1 e_2 || freed_between e_2 e_1))
-        allocation_pairs
+    let allocations = on_path structure.malloc_events in
+    let frees = on_path structure.free_events in
+    let before a b = USet.mem rhb (a, b) in
+    let loc_of = Hashtbl.create 16 in
+      List.iter (fun (e, loc) -> Hashtbl.replace loc_of e loc) allocations;
+      let apart a a' =
+        disjoint (Hashtbl.find loc_of a, ()) (Hashtbl.find loc_of a', ())
+      in
+      (* [d] may be [fo]'s free of [a] and then lets [a'] share [a]'s
+         address. *)
+      let licenses d a a' = a <> a' && not (before a' d) in
+      (* The allocations [d] may free that it would license anything for,
+         each with the condition that [d] is at its address: [None] when it
+         certainly is. *)
+      let candidates =
+        List.map
+          (fun (d, d_loc) ->
+            ( d,
+              List.filter_map
+                (fun (a, a_loc) ->
+                  if
+                    before d a
+                    || not
+                         (List.exists
+                            (fun (a', _) -> licenses d a a')
+                            allocations
+                         )
+                  then None
+                  else if Solver.exeq ~state:p d_loc a_loc then Some (a, None)
+                  else Some (a, Some (Expr.binop d_loc "=" a_loc))
+                )
+                allocations
+            )
+          )
+          frees
+        |> List.filter (fun (_, cands) -> cands <> [])
+      in
+      (* Groups of allocations related by a free: one it may free, with each
+         other it may free and each it would let share the address. *)
+      let parent = Hashtbl.create 16 in
+      let rec find a =
+        match Hashtbl.find_opt parent a with
+        | Some b when b <> a ->
+            let r = find b in
+              Hashtbl.replace parent a r;
+              r
+        | _ -> a
+      in
+      let union a b =
+        let ra = find a and rb = find b in
+          if ra <> rb then Hashtbl.replace parent (max ra rb) (min ra rb)
+      in
+        List.iter
+          (fun (d, cands) ->
+            List.iter
+              (fun (a, _) ->
+                union a (fst (List.hd cands));
+                List.iter
+                  (fun (a', _) -> if licenses d a a' then union a a')
+                  allocations
+              )
+              cands
+          )
+          candidates;
+        let rec pairs = function
+          | [] -> []
+          | a :: rest -> List.map (fun a' -> (a, a')) rest @ pairs rest
+        in
+        let labels = List.map fst allocations in
+        let across =
+          pairs labels
+          |> List.filter_map (fun (a, a') ->
+              if find a <> find a' then Some (apart a a') else None
+          )
+        in
+        (* The maximal free maps over a group's frees: every free is given an
+           allocation no other free has, unless none is left for it. *)
+        let rec maps taken = function
+          | [] -> [ [] ]
+          | (d, cands) :: rest -> (
+              let free_cands =
+                List.filter (fun (a, _) -> not (List.mem a taken)) cands
+              in
+              let chosen =
+                List.concat_map
+                  (fun (a, cond) ->
+                    List.map
+                      (fun m -> (d, a, cond) :: m)
+                      (maps (a :: taken) rest)
+                  )
+                  free_cands
+              in
+              (* Leaving [d] out is maximal only where every allocation it
+                 may free goes to a later free. *)
+              let skipped =
+                maps taken rest
+                |> List.filter (fun m ->
+                    List.for_all
+                      (fun (a, _) -> List.exists (fun (_, a', _) -> a' = a) m)
+                      free_cands
+                )
+              in
+                match (chosen, free_cands) with
+                | _, [] -> maps taken rest
+                | _ -> chosen @ skipped
+            )
+        in
+        let disjunction = function
+          | [] -> EBoolean false
+          | e :: es -> List.fold_left (fun acc e -> Expr.binop acc "||" e) e es
+        in
+        let conjunction = function
+          | [] -> EBoolean true
+          | e :: es -> List.fold_left (fun acc e -> Expr.binop acc "&&" e) e es
+        in
+        (* What the free map [m] leaves to hold of the pairs of a group. A
+           free that is at an allocation's address only on a condition
+           licenses on that condition; one that cannot hold beside the pairs
+           the map leaves distinct is dropped, which may leave more pairs
+           distinct, and so on. That is what settles a free of one allocation
+           freeing another: the two would have to share an address. *)
+        let under m group =
+          let licensed =
+            pairs group
+            |> List.map (fun (a, a') ->
+                ( apart a a',
+                  List.filter_map
+                    (fun (d, b, cond) ->
+                      if
+                        (b = a && licenses d a a') || (b = a' && licenses d a' a)
+                      then Some cond
+                      else None
+                    )
+                    m
+                )
+            )
+            |> List.filter (fun (_, conds) -> not (List.mem None conds))
+            |> List.map (fun (lit, conds) ->
+                ( lit,
+                  List.filter_map Fun.id conds |> List.sort_uniq Expr.compare
+                )
+            )
+          in
+          let rec settle licensed =
+            let distinct =
+              List.filter_map
+                (fun (lit, conds) -> if conds = [] then Some lit else None)
+                licensed
+            in
+            let possible cond =
+              Solver.is_sat_cached
+                (cond :: (distinct @ p) |> List.sort_uniq Expr.compare)
+            in
+            let licensed' =
+              List.map
+                (fun (lit, conds) -> (lit, List.filter possible conds))
+                licensed
+            in
+              if licensed' = licensed then licensed else settle licensed'
+          in
+            settle licensed
+            |> List.map (fun (lit, conds) -> disjunction (lit :: conds))
+            |> List.sort_uniq Expr.compare
+        in
+        let subset xs ys =
+          List.for_all (fun x -> List.exists (Expr.equal x) ys) xs
+        in
+        let within =
+          List.sort_uniq compare (List.map find labels)
+          |> List.concat_map (fun root ->
+              let group = List.filter (fun a -> find a = root) labels in
+              let group_frees =
+                List.filter
+                  (fun (_, cands) -> find (fst (List.hd cands)) = root)
+                  candidates
+              in
+                if List.length group < 2 then []
+                else
+                  let alternatives =
+                    maps [] group_frees
+                    |> List.map (fun m -> under m group)
+                    |> List.sort_uniq (List.compare Expr.compare)
+                  in
+                  (* An alternative that asks for all another asks for, and
+                     more, adds nothing to the disjunction. *)
+                  let alternatives =
+                    List.filter
+                      (fun alt ->
+                        not
+                          (List.exists
+                             (fun other ->
+                               other != alt
+                               && subset other alt
+                               && not (subset alt other)
+                             )
+                             alternatives
+                          )
+                      )
+                      alternatives
+                  in
+                    match alternatives with
+                    | [ alt ] -> alt
+                    | alts -> [ disjunction (List.map conjunction alts) ]
+          )
+        in
+          List.map Expr.evaluate (across @ within)
+          |> List.filter (fun e -> not (Expr.equal e (EBoolean true)))
 end
 
 (** {1 Justification Validation} *)
@@ -1993,68 +2201,14 @@ module Freeze = struct
                   rf
               in
 
-              (* atomicity constraint; a free happens before a malloc in
-                   another thread only through a chain of rhb edges, so the
-                   check takes the closure *)
-              let af =
-                ReadFromValidation.adjacent_same_location_allocation_events
-                  structure path
+              (* Allocation disjointness, up to reuse after a free. Whether a
+                 free or an allocation comes before another is a matter of
+                 chains of rhb edges, so the check takes the closure. *)
+              let disj =
+                ReadFromValidation.allocation_disjointness structure path
                   (URelation.transitive_closure rhb)
                   (USet.values env_rf)
-              in
-
-              (* Create disjointness predicates *)
-              let disj =
-                USet.map
-                  (fun (a, b) ->
-                    match
-                      ( Hashtbl.find_opt structure.events a,
-                        Hashtbl.find_opt structure.events b
-                      )
-                    with
-                    | None, _ ->
-                        failwith
-                          ("Event "
-                          ^ string_of_int a
-                          ^ " not found in structure!"
-                          )
-                    | _, None ->
-                        failwith
-                          ("Event "
-                          ^ string_of_int b
-                          ^ " not found in structure!"
-                          )
-                    | Some ea, Some eb -> (
-                        match
-                          ( get_loc structure a,
-                            get_val structure a,
-                            get_loc structure b,
-                            get_val structure b
-                          )
-                        with
-                        | None, _, _, _ ->
-                            failwith
-                              ("Event " ^ string_of_int a ^ " has no location!")
-                        | _, None, _, _ ->
-                            failwith
-                              ("Event " ^ string_of_int a ^ " has no value!")
-                        | _, _, None, _ ->
-                            failwith
-                              ("Event " ^ string_of_int b ^ " has no location!")
-                        | _, _, _, None ->
-                            failwith
-                              ("Event " ^ string_of_int b ^ " has no value!")
-                        | _ ->
-                            let loc_a = get_loc structure a |> Option.get in
-                            let val_a = get_val structure a |> Option.get in
-                            let loc_b = get_loc structure b |> Option.get in
-                            let val_b = get_val structure b |> Option.get in
-                              (* disjoint only uses location *)
-                              Expr.evaluate
-                                (disjoint (loc_a, val_a) (loc_b, val_b))
-                      )
-                  )
-                  af
+                |> USet.of_list
               in
 
               let execution_predicates =
