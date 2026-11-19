@@ -1,0 +1,8 @@
+// The control for ReuseAgainAfterSecondFree: with one free, rb and rc cannot
+// both have ra's address, being live together (#225).
+ra := malloc 1;
+free(ra);
+rb := malloc 1;
+rc := malloc 1;
+%%
+forbid (rb = ra && rc = ra) []

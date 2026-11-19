@@ -1,0 +1,17 @@
+// The free need not happen before the allocation that reuses the region: it
+// is enough that the allocation is not ordered before the free (#225). The
+// relaxed flag orders nothing here, and rq may still be rp's region.
+// NoReuseAcrossThreadsLive is the control.
+x := 0;
+rp := malloc 1;
+{
+  free(rp);
+  x := 1;
+} ||| {
+  r2 := x;
+  if (r2 = 1) {
+    rq := malloc 1;
+  }
+}
+%%
+allow (r2 = 1 && rp = rq) []

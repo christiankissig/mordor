@@ -1,6 +1,6 @@
 # Litmus Tests Index
 
-Total tests: 472
+Total tests: 477
 Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 
 > This index lists the files the integration suite scans. Litmus tests naming a
@@ -327,14 +327,19 @@ Generated: 2025-10-17T09:41:48.288Z, revised 2026-10-10
 - own/MP+fences-misplaced.lit
 - own/nonatomic-store-no-sync-relaxed.lit
 - own/nonatomic-store-no-sync.lit
-- own/NoReuseAcrossThreadsUnallocated.lit
+- own/NoReuseAcrossThreadsLive.lit
+- own/NoReuseTwiceOneFree.lit
 - own/ptr-overwrite-coherence.lit
-- own/NoReuseAcrossThreadsUnordered.lit
 - own/NoReuseUnescaped.lit
 - own/NoReuseWhileLive.lit
 - own/ReuseAcrossThreads.lit
+- own/ReuseAcrossThreadsLoadedPointer.lit
 - own/ReuseAcrossThreadsSynchronised.lit
+- own/ReuseAcrossThreadsUnordered.lit
+- own/ReuseAcrossThreadsUnsynchronised.lit
 - own/ReuseAfterFree.lit
+- own/ReuseAgainAfterSecondFree.lit
+- own/ReuseOnceAfterOneFree.lit
 - own/ReuseStalePointer.lit
 - own/ReuseThroughLoadedPointer.lit
 - own/SF-across-acquire.lit

@@ -1,0 +1,16 @@
+// The control for ReuseAcrossThreadsUnordered: thread 1's allocation happens
+// before thread 2's free of rp, through the release/acquire flag, so both
+// regions are live at once and rq cannot be rp's (#225).
+x := 0;
+rp := malloc 1;
+{
+  rq := malloc 1;
+  x.store(1, rel);
+} ||| {
+  r2 := x.load(acq);
+  if (r2 = 1) {
+    free(rp);
+  }
+}
+%%
+forbid (r2 = 1 && rp = rq) []

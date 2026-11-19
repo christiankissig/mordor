@@ -1,0 +1,14 @@
+// Two allocations in different threads, which no program order relates.
+// Thread 1 frees rp, and nothing orders thread 2's malloc before that free,
+// so rq may be rp's region handed back out: the allocator, not the program,
+// orders the free before the reuse (C11 7.22.3p2; #225). Until the free map
+// this was forbidden, for want of a free happening before the malloc (R17,
+// #103).
+{
+  rp := malloc 1;
+  free(rp);
+} ||| {
+  rq := malloc 1;
+}
+%%
+allow (rp = rq) []

@@ -146,9 +146,10 @@ type path_info = {
 val origin : symbolic_event_structure -> string -> int option
 
 (** [may_reuse structure a b] holds when the allocations whose locations are [a]
-    and [b] may be handed the same address: one may be freed before the other is
-    allocated. Allocations that may not are pairwise distinct in the structure's
-    constraints. *)
+    and [b] may be handed the same address in some execution: one may be freed
+    before the other is allocated. It errs towards reuse; an execution's free
+    map decides (#225). Allocations that may not are pairwise distinct in the
+    structure's constraints. *)
 val may_reuse : symbolic_event_structure -> expr -> expr -> bool
 
 (** {1 Path Generation} *)

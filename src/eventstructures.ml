@@ -393,22 +393,31 @@ end
 let origin structure (s : string) = Hashtbl.find_opt structure.origin s
 
 (** [may_reuse structure a b] holds when allocations [a] and [b] may be handed
-    the same address: one of them may be freed before the other is allocated,
-    and an allocator is free to hand a released region straight back out.
+    the same address in some execution: one of them may be freed before the
+    other is allocated, and an allocator is free to hand a released region
+    straight back out.
 
-    Which allocation a free releases is read off its location. A free of an
-    allocation's own symbol releases that allocation and no other. A free
-    through a pointer loaded from memory, or computed from one, may release any
-    allocation whose address escapes into memory -- is written somewhere, and so
-    may be loaded back. An address that is never written cannot be loaded:
-    rcu-3's counter cell [rC] is only ever written through, and taking its
-    reclaim loop's [free(rtemp)] to release it let the counter alias a node. The
-    order is approximated by program order: the free cannot follow the later
-    allocation in program order, the earlier allocation cannot follow the free,
-    and the free and the later allocation must be able to occur together. Across
-    threads nothing orders them yet, and a free in one thread may precede an
-    allocation in another -- the allocator synchronises the two when it reuses
-    the region. *)
+    It is decided on the structure, before there are executions, and errs
+    towards reuse: it says which pairs the structure's constraints must leave
+    open. Whether a pair does share an address in an execution is decided there,
+    by the execution's free map
+    ({!Executions.ReadFromValidation.allocation_disjointness}, #225), which
+    counts: a free frees one allocation.
+
+    Which allocation a free may release is read off its location. A free of an
+    allocation's own symbol releases that allocation, and any allocation that
+    may have come to share its address. A free through a pointer loaded from
+    memory, or computed from one, may release any allocation whose address
+    escapes into memory -- is written somewhere, and so may be loaded back. An
+    address that is never written cannot be loaded: rcu-3's counter cell [rC] is
+    only ever written through, and taking its reclaim loop's [free(rtemp)] to
+    release it let the counter alias a node. The order is approximated by
+    program order: the free cannot follow the later allocation in program order,
+    the earlier allocation cannot follow the free, and the free and the later
+    allocation must be able to occur together. Across threads nothing orders
+    them here; there the execution decides. Within a thread program order is the
+    order of the allocator's calls, so this is also what keeps apart two
+    allocations of a thread that are both made before the free. *)
 let may_reuse (structure : symbolic_event_structure) =
   let allocations =
     USet.values structure.malloc_events
@@ -437,36 +446,63 @@ let may_reuse (structure : symbolic_event_structure) =
         | _ -> []
     )
   in
-  let releases free_loc loc =
-    Expr.equal free_loc loc
-    || List.exists (fun s -> List.mem s escaped) (Expr.get_symbols loc)
-       && List.exists
-            (fun s -> not (List.mem s allocation_symbols))
-            (Expr.get_symbols free_loc)
-  in
   let before a b = USet.mem structure.po (a, b) in
   let conflicting a b =
     USet.mem structure.conflict (a, b) || USet.mem structure.conflict (b, a)
   in
-  (* [earlier] is freed by some free, and [later] is allocated after it. *)
-  let reused (earlier, earlier_loc) (later, _) =
-    (not (before later earlier))
-    && List.exists
-         (fun (free, free_loc) ->
-           releases free_loc earlier_loc
-           && (not (before free earlier))
-           && (not (before later free))
-           && not (conflicting free later)
-         )
-         frees
+  (* The pairs found to share an address so far. A free of [b]'s symbol
+     releases what shares [b]'s address, so the pairs are a least fixed
+     point. *)
+  let rec close shares =
+    let share a b = List.mem (a, b) shares || List.mem (b, a) shares in
+    let releases free_loc (label, loc) =
+      Expr.equal free_loc loc
+      || List.exists (fun s -> List.mem s escaped) (Expr.get_symbols loc)
+         && List.exists
+              (fun s -> not (List.mem s allocation_symbols))
+              (Expr.get_symbols free_loc)
+      || List.exists
+           (fun (other, other_loc) ->
+             Expr.equal free_loc other_loc && share other label
+           )
+           allocations
+    in
+    (* [earlier] is freed by some free, and [later] is allocated after it. *)
+    let reused ((earlier, _) as allocation) (later, _) =
+      (not (before later earlier))
+      && List.exists
+           (fun (free, free_loc) ->
+             releases free_loc allocation
+             && (not (before free earlier))
+             && (not (before later free))
+             && not (conflicting free later)
+           )
+           frees
+    in
+    let shares' =
+      List.concat_map
+        (fun ((a, _) as x) ->
+          List.filter_map
+            (fun ((b, _) as y) ->
+              if a < b && (share a b || reused x y || reused y x) then
+                Some (a, b)
+              else None
+            )
+            allocations
+        )
+        allocations
+    in
+      if List.length shares' = List.length shares then shares else close shares'
   in
+  let shares = close [] in
     fun a b ->
       match
         ( List.find_opt (fun (_, loc) -> Expr.equal loc a) allocations,
           List.find_opt (fun (_, loc) -> Expr.equal loc b) allocations
         )
       with
-      | Some a, Some b -> reused a b || reused b a
+      | Some (a, _), Some (b, _) ->
+          List.mem (a, b) shares || List.mem (b, a) shares
       | _ -> false
 
 (** Path type *)

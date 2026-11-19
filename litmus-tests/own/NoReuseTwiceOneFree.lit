@@ -1,0 +1,29 @@
+// One free, one reuse. rb and rc may each take ra's address once thread 1 has
+// freed ra, but not both: only ra is freed, so rb and rc are live together
+// and differ (#225). A free licenses reuse against the allocation it frees,
+// not against every allocation that later shares its address.
+//
+// The assertion is on the addresses. (rp = ra && rr = 2) is not forbidden,
+// though thread 2 never reads thread 3's write: with rb = ra, the read of *rb
+// may read the free, whose value is unconstrained, which is undefined
+// behaviour.
+X := 0;
+Y := 0;
+Z := 0;
+ra := malloc 1;
+X := ra;
+{
+  rp := X;
+  free(rp);
+} ||| {
+  rb := malloc 1;
+  Y := rb;
+  *rb := 1;
+  rr := *rb;
+} ||| {
+  rc := malloc 1;
+  Z := rc;
+  *rc := 2;
+}
+%%
+forbid (rb = ra && rc = ra) []

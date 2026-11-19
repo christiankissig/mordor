@@ -267,11 +267,11 @@ The paper's `≤^δ_P` subtracts a set written `E?_{P∧ψ_δ}`. MoRDor's `Forwa
 
 - **Paper**: Def. 4.9 and Appendix I. Two allocations' regions, an address with its size, are disjoint (`⊗`) unless a free of one is `⊴`-between them, with `⊴ = (≤ ∪ rf ∪ dp)*`.
 - **MoRDor**:
-  - `src/interpret.ml:distinctness` and `src/executions.ml:calculate_dependencies` state disequality of the base addresses, without sizes. Pairs that `src/eventstructures.ml:may_reuse` may reuse are left out. That is decided on the structure: one may be freed before the other is allocated, judged by program order within a thread, and always possible across threads.
-  - Per execution, `ReadFromValidation.adjacent_same_location_allocation_events` keeps two allocations apart unless a free of one is `rhb`-between them.
+  - Per execution, `src/executions.ml:ReadFromValidation.allocation_disjointness` asks for a free map `fo`, partial and injective, from the frees to the allocations (#225). `fo(d)` is at the address `d` frees, and `d` is not `rhb`-before it. Two allocations may share an address only if one is `fo(d)` for a free `d` that is not `rhb`-after the other. The condition is negative: the allocator orders the free before the reuse, not the program (C11 7.22.3p2). A free licenses reuse against the one allocation it frees.
+  - `src/interpret.ml:distinctness` and `src/executions.ml:calculate_dependencies` state disequality of the base addresses, without sizes. Pairs that `src/eventstructures.ml:may_reuse` may reuse are left out, for the execution to decide. That is decided on the structure and errs towards reuse, except within a thread, where program order stands for the order of the allocator's calls: two allocations of a thread both made before the free stay distinct.
   - With `--disjoint-regions` (the default), addresses based on different bases differ whatever the offsets. `--overlapping-regions` keeps only the bases apart.
-- **Why**: regions are not modelled yet. See the comment on `distinctness`.
-- **Witness**: `litmus-tests/own/ReuseAcrossThreads.lit`, `NoReuseAcrossThreadsUnordered.lit`, `ReuseStalePointer.lit`, `NoReuseWhileLive.lit`, `ABA-CAS-Reuse.lit`.
+- **Why**: regions are not modelled yet. See the comment on `distinctness`. The free between the two allocations asked for synchronisation that C does not: a region freed in one thread may be handed to any other.
+- **Witness**: `litmus-tests/own/ReuseAcrossThreads.lit`, `ReuseAcrossThreadsUnordered.lit`, `ReuseAcrossThreadsLoadedPointer.lit`, `NoReuseTwiceOneFree.lit`, `NoReuseAcrossThreadsLive.lit`, `ReuseStalePointer.lit`, `NoReuseWhileLive.lit`, `ABA-CAS-Reuse.lit`.
 
 ## Coherence (§4.6)
 
