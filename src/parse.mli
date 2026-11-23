@@ -14,7 +14,8 @@ val parse_expr : string -> ast_expr
     Besides [validate_ast], every program in the test, chained ones included, is
     checked to use only registers and constants in its expressions: a global in
     an expression, [@x], address-of outside [r := &x], and [free] of a global
-    fail with ["Parse error at line L, column C: ..."]. *)
+    fail with ["Parse error at line L, column C: ..."]. So does a thread block
+    (a fork and its join) inside a loop body or a branch. *)
 val parse_and_convert_litmus :
   validate_ast:(ast_litmus -> unit) -> string -> ir_litmus
 
@@ -26,6 +27,3 @@ val convert_expr_list : ast_expr list -> Types.expr list
 
 (** Pipeline step for parser *)
 val step_parse_litmus : mordor_ctx Lwt.t -> mordor_ctx Lwt.t
-
-(** Validate that there are no thread spawns inside loops *)
-val validate_no_threads_under_loop : ast_node list -> bool

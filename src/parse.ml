@@ -380,14 +380,6 @@ let rec statement_error : ast_stmt -> string option = function
       in
         List.find_map program_expression_error exprs
 
-let rec nested_statements : ast_stmt -> ast_node list = function
-  | SThreads { threads } -> List.concat threads
-  | SIf { then_body; else_body; _ } ->
-      then_body @ Option.value else_body ~default:[]
-  | SWhile { body; _ } | SDo { body; _ } -> body
-  | SLabeled { stmt; _ } -> nested_statements stmt
-  | _ -> []
-
 (** The 1-based column a statement starts at in [src].
 
     A span's [start_col] is not that. The lexer winds [pos_cnum] back over the
@@ -405,26 +397,77 @@ let span_column src (span : Types.source_span) =
       in
         skip_blanks span.start_col + 1
 
+(** [control_flow_children stmt] are the statements nested in [stmt], each with
+    the control flow it sits under in [stmt], if any: a loop body or a branch. A
+    thread block's threads sit under none; a label's statement under what the
+    label's statement puts it under. *)
+let rec control_flow_children : ast_stmt -> (string option * ast_node) list =
+  function
+  | SThreads { threads } -> List.map (fun n -> (None, n)) (List.concat threads)
+  | SIf { then_body; else_body; _ } ->
+      List.map
+        (fun n -> (Some "a branch", n))
+        (then_body @ Option.value else_body ~default:[])
+  | SWhile { body; _ } | SDo { body; _ } ->
+      List.map (fun n -> (Some "a loop body", n)) body
+  | SLabeled { stmt; _ } -> control_flow_children stmt
+  | _ -> []
+
+let rec is_threads : ast_stmt -> bool = function
+  | SThreads _ -> true
+  | SLabeled { stmt; _ } -> is_threads stmt
+  | _ -> false
+
 (** [validate_program src litmus] fails with a parse error naming the first
     statement, in this program or a chained one, whose expressions are not over
-    registers. *)
+    registers, or that forks threads inside a loop body or a branch.
+
+    A thread block [{ ... } ||| { ... }] is both the fork and the join, so
+    forbidding the block under a loop or a branch forbids both. Under a loop a
+    fork would spawn threads per iteration, and under a branch only on some
+    paths; the interpretation assumes neither. A thread block may still nest in
+    a thread, and a thread may hold loops and branches. *)
 let rec validate_program src (litmus : ast_litmus) =
-  let rec check (node : ast_node) =
+  let fail_at (node : ast_node) detail =
+    match node.source_span with
+    | Some span ->
+        failwith
+          (Printf.sprintf "Parse error at line %d, column %d: %s"
+             span.start_line (span_column src span) detail
+          )
+    | None -> failwith ("Parse error: " ^ detail)
+  in
+  (* [under] is the innermost loop body or branch [node] sits in within its
+     thread, if any. *)
+  let rec check under (node : ast_node) =
     ( match statement_error node.stmt with
     | None -> ()
-    | Some detail -> (
-        match node.source_span with
-        | Some span ->
-            failwith
-              (Printf.sprintf "Parse error at line %d, column %d: %s"
-                 span.start_line (span_column src span) detail
-              )
-        | None -> failwith ("Parse error: " ^ detail)
-      )
+    | Some detail -> fail_at node detail
     );
-    List.iter check (nested_statements node.stmt)
+    ( match under with
+    | Some where when is_threads node.stmt ->
+        fail_at node
+          (Printf.sprintf
+             "threads forked inside %s; a fork (and its join) must not be \
+              under a loop or a branch"
+             where
+          )
+    | _ -> ()
+    );
+    List.iter
+      (fun (inner, child) ->
+        let under =
+          if is_threads node.stmt then None
+          else
+            match inner with
+            | Some _ -> inner
+            | None -> under
+        in
+          check under child
+      )
+      (control_flow_children node.stmt)
   in
-    List.iter check litmus.program;
+    List.iter (check None) litmus.program;
     match litmus.assertion with
     | Some (AChained { rest; _ }) -> validate_program src rest
     | _ -> ()
@@ -452,50 +495,10 @@ let parse_and_convert_litmus ~validate_ast src =
       Logs_safe.err (fun m -> m "Unexpected error: %s" (Printexc.to_string e));
       failwith ("Unexpected error: " ^ Printexc.to_string e)
 
-(** Post-parse validation on ASTs *)
-
-(* Validate that there are no thread spawns inside loops *)
-let rec validate_no_threads_under_loop (ast : ast_node list) : bool =
-  let rec traverse handle_threads handle_loop nodes =
-    List.for_all
-      (fun (node : Ast.ast_node) ->
-        match node.stmt with
-        | Ast.SThreads { threads } -> handle_threads threads
-        | Ast.SWhile { condition; body } | Ast.SDo { body; condition } ->
-            handle_loop body
-        | Ast.SIf { condition; then_body; else_body } ->
-            traverse handle_threads handle_loop then_body
-            && Option.value
-                 (Option.map (traverse handle_threads handle_loop) else_body)
-                 ~default:true
-        | _ -> true
-      )
-      nodes
-  in
-  (* no_threads: forbid threads everywhere *)
-  let rec no_threads nodes =
-    traverse
-      (fun _ -> false) (* threads not allowed *)
-      no_threads (* recurse into loop bodies *)
-      nodes
-  in
-    (* Main validation: allow threads at top level, but check loop bodies *)
-    traverse
-      (* validate thread bodies *)
-      (fun threads -> List.for_all validate_no_threads_under_loop threads
-      )
-      no_threads (* inside loops, use no_threads checker *)
-      ast
-
 (** Pipeline step for parsing litmus tests *)
 
 let step_parse_litmus (ctx_lwt : mordor_ctx Lwt.t) : mordor_ctx Lwt.t =
-  let validate_ast (litmus_ast : ast_litmus) : unit =
-    if not (validate_no_threads_under_loop (litmus_ast : ast_litmus).program)
-    then
-      failwith "Validation error: Thread spawns inside loops are not allowed."
-    else ()
-  in
+  let validate_ast (_ : ast_litmus) : unit = () in
     let* ctx = ctx_lwt in
       match ctx.litmus with
       | Some program ->
