@@ -13,12 +13,13 @@
 // Volatile now keeps its accesses out of the elided position of both `fwd` and
 // `we` in Elaborations.ForwardElab. This file goes from 8 executions to 1.
 //
-// Non-elision -- and, since, non-lifting (volatile-write-not-lifted.lit) -- is
-// ALL volatile means here. It derives no ppo, dp, hb or sw edge,
-// no model reads the flag, and a volatile access takes part in co and rf just
-// as the relaxed one would -- so it still admits every relaxed outcome. This is
-// neither Java's volatile (sequentially consistent) nor C/C++'s (a constraint
-// on the abstract machine). Ordering is what rel/acq/sc are for.
+// Non-elision is ALL volatile means here; a volatile access may still be
+// lifted out of a branch (volatile-write-lifted.lit). It derives no ppo, dp,
+// hb or sw edge, no model reads the flag, and a volatile access takes part in
+// co and rf just as the relaxed one would -- so it still admits every relaxed
+// outcome. This is not Java's volatile (sequentially consistent). Like C/C++'s,
+// it keeps every access the program performs on a path, and nothing more.
+// Ordering is what rel/acq/sc are for.
 y :v= 0;
 x :v= 0;
 r1 :v= y;

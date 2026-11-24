@@ -104,9 +104,9 @@ Issue and PR numbers refer to `christiankissig/mordor`.
   - `acq_rel` (`ReleaseAcquire`), for both reads and writes. `compute_ppo_sync` and `Coherence.SMRD` count it as both acquire and release.
   - `na`, treated as relaxed under sMRD (C5).
   - `do { P } while (b)` loops, unrolled as `while` loops are (I3).
-  - The `volatile` flag (`x :v= e`). It keeps an access out of the elided position of forwarding and write elision, and out of lifting (`src/elaborations.ml:ForwardElab.fwd`, `ForwardElab.we`, `LiftElab.elab`). It gives no `ppo`, `dp` or `sw` edge. The docstrings of `compute_ppo_sync` and `ForwardingContext.ppo_sync` say volatile accesses contribute `ppo`; they do not.
+  - The `volatile` flag (`x :v= e`). It keeps an access out of the elided position of forwarding and write elision (`src/elaborations.ml:ForwardElab.fwd`, `ForwardElab.we`). Lifting treats it like any other access: every path still performs the same volatile accesses, which is what C and C++ guarantee for volatile and what GCC and Clang preserve when they hoist identical volatile stores out of an `if`/`else`. It gives no `ppo`, `dp` or `sw` edge. The docstrings of `compute_ppo_sync` and `ForwardingContext.ppo_sync` say volatile accesses contribute `ppo`; they do not.
 - **Why**: MoRDor checks the same programs under many models, and these constructs come from their corpora.
-- **Witness**: `litmus-tests/own/volatile-store-not-elided.lit` against `relaxed-store-elided.lit`, `volatile-read-not-lifted.lit`, `volatile-write-not-lifted.lit`, `litmus-tests/sevcik_thesis/LB+monitors (f1.1B).lit`.
+- **Witness**: `litmus-tests/own/volatile-store-not-elided.lit` against `relaxed-store-elided.lit`, `volatile-read-lifted.lit`, `volatile-write-lifted.lit`, `litmus-tests/sevcik_thesis/LB+monitors (f1.1B).lit`.
 
 ### I6. Addresses are unconstrained integers
 
@@ -177,7 +177,6 @@ Issue and PR numbers refer to `christiankissig/mordor`.
 - **MoRDor**: `src/elaborations.ml:LiftElab.elab`.
   - Predicates are lists of conjuncts. `find_distinguishing_predicate` lifts only `C ∧ d` against `C ∧ ¬d`: after sorting and removing duplicates, each side has exactly one conjunct the other lacks, and the two are complementary comparisons (`=`/`≠`, `<`/`≥`, `>`/`≤`, by `Expr.inverse`). The lifted predicate is `C`, which is the disjunction. Any other pair is refused, though its disjunction may still be a conjunction: a pair one of whose predicates contains both `d` and `¬d`, which the old test lifted to the other predicate, is refused too.
   - The two `δ` need not be equal: their union must be functional, and the result takes `w₂`'s.
-  - It never lifts a volatile write, or a relabelling that pairs a volatile read.
   - It skips pairs where both predicates are empty.
 - **Why**: the syntactic test is cheap and covers the common case of `C ∧ d` against `C ∧ ¬d`, where it is exact. A pair whose disjunction is a conjunction only under the solver, such as `C ∧ a ∧ b` against `C ∧ ¬a ∧ ¬b` where `C` makes `a` and `b` equivalent, is not looked for; across `litmus-tests/`, `litmus-tests-jmm/` and `programs/`, refusing such pairs changes no verdict and no execution.
 - **Witness**: #36 is the restriction. `litmus-tests-jmm/jctc/JCTC6.lit` needs a lift whose predicates are `β = 1` against `β = 0 ∧ β ≠ 1`, and it is refused. That file is annotated `[JMM]`, so the suite does not run it.

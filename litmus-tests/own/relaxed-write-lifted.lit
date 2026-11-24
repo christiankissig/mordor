@@ -1,9 +1,7 @@
-// The control for volatile-write-not-lifted.lit: both arms of the branch write
-// the same value to y, so lifting merges the two writes into one that no longer
-// depends on the read of x.
-//
-// Without it, volatile-write-not-lifted.lit alone would also pass if lifting
-// were disabled for everything rather than for volatile accesses.
+// Both arms of the branch write the same value to y, so lifting merges the two
+// writes into one that no longer depends on the read of x.
+// volatile-write-lifted.lit is the same program with volatile writes, which
+// are lifted alike.
 //
 // The read of x is volatile so that it cannot be forwarded from x := 0. A
 // forwarded read drops its dependency too, and the assertion counts a
