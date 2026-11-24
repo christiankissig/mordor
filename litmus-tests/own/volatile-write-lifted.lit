@@ -1,0 +1,27 @@
+// A volatile write is lifted out of the branch that guards it, like a
+// relaxed one.
+//
+// Both arms write 1 to y, so lifting merges the two writes into one that the
+// branch no longer guards, and the write loses its dependency on the read of
+// x. Every path still performs one volatile write of 1 to y, which is all
+// volatile keeps: C and C++ allow the same for volatile accesses, and GCC
+// and Clang hoist such a store out of the branch from -O2.
+// relaxed-write-lifted.lit is the same program without the annotations.
+//
+// Volatile keeps an access from being elided; see
+// volatile-store-not-elided.lit. A write that must stay ordered after the
+// read its branch tests needs a release store or an acquire read.
+//
+// The read of x is volatile so that it cannot be forwarded from x := 0. A
+// forwarded read drops its dependency too, and the assertion counts a
+// forwarded read as executed, so forwarding would remove (3,5) from .dp
+// without any lifting.
+x := 0;
+y := 0;
+r1 :v= x;
+if (r1 = 0) {
+  y :v= 1;
+} else {
+  y :v= 1;
+}
+%% allow ((3,5) ∉ .dp) []

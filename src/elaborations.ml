@@ -1354,12 +1354,6 @@ end = struct
         Landmark_safe.exit lift_elab_landmark;
         []
       )
-      else if just_1.w.volatile || just_2.w.volatile then (
-        (* Lifting hoists the write out of the branch that guards it, and a
-           volatile access stays where the program put it. *)
-        Landmark_safe.exit lift_elab_landmark;
-        []
-      )
       else if not (URelation.is_function (USet.union just_1.we just_2.we)) then (
         Landmark_safe.exit lift_elab_landmark;
         []
@@ -1425,29 +1419,10 @@ end = struct
           let relabs =
             generate_relabelings elab_ctx just_1 just_2 ppo_1 ppo_2 con_1 con_2
           in
-          (* A relabelling pairs a read of one arm with a read of the other,
-             and the lift then stands for both: it hoists them out of the
-             branch along with the write. A volatile read stays where the
-             program put it. A symbol the relabelling leaves alone, or maps to
-             one read by the same event -- a read before the branch, shared by
-             both arms -- is not being lifted. *)
-          let lifts_volatile_read relab =
-            let origin s = Hashtbl.find_opt elab_ctx.structure.origin s in
-              List.concat_map Expr.get_symbols just_1.p
-              |> List.append (USet.values just_1.d)
-              |> List.exists (fun s ->
-                  match
-                    (origin s, Option.bind (Hashtbl.find_opt relab s) origin)
-                  with
-                  | Some o1, Some o2 when o1 <> o2 ->
-                      Events.is_volatile elab_ctx.structure o1
-                      || Events.is_volatile elab_ctx.structure o2
-                  | _ -> false
-              )
-          in
-          let relabs =
-            USet.filter (fun relab -> not (lifts_volatile_read relab)) relabs
-          in
+          (* Volatile accesses are lifted like any other: lifting merges the
+             arms' writes, and the reads the relabelling pairs, without
+             removing an access from any path, which is all volatile
+             protects. See {!Events.is_volatile}. *)
           let lifted =
             List.map
               (fun relab ->

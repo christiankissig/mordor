@@ -324,21 +324,24 @@ let is_rdmw structure e =
     a volatile write that a later one overwrites. {!Elaborations.ForwardElab}
     keeps them out of the elided position of [fwd] and [we] on that basis.
 
-    Nor may they be lifted: a volatile access stays under the branch the program
-    put it in. {!Elaborations.LiftElab} refuses to merge a volatile write with
-    its counterpart in the other arm, or to pair a volatile read with a
-    different read of the other arm.
+    They may be lifted. Lifting merges a write on each arm of a branch, and the
+    reads it pairs by relabelling, into one that the branch no longer guards.
+    Every path still performs the same volatile accesses, so this is what C and
+    C++ allow for volatile, and what GCC and Clang do: both hoist an identical
+    volatile store out of an if/else from -O2. Only the dependency on the branch
+    is lost, and volatile does not keep dependencies.
 
-    {b Non-elision and non-lifting are all it means.} Volatile contributes no
-    ordering: no [ppo], [dp], [hb] or [sw] edge is derived from it -- keeping an
-    access in place keeps the dependencies it already has, and adds none -- and
-    no model in {!Coherence.ModelRegistry} reads the flag. A volatile access
-    participates in [co] and [rf] exactly as the same access without the
-    annotation would, and still admits every relaxed outcome. In particular this
-    is neither Java's [volatile], which is sequentially consistent, nor C/C++'s,
-    which constrains the abstract machine rather than the execution. Ordering is
-    what the [rel]/[acq]/[sc] access modes are for; use volatile only to keep an
-    access from disappearing or leaving its branch. *)
+    {b Non-elision is all it means.} Volatile contributes no ordering: no [ppo],
+    [dp], [hb] or [sw] edge is derived from it -- keeping an access in place
+    keeps the dependencies it already has, and adds none -- and no model in
+    {!Coherence.ModelRegistry} reads the flag. A volatile access participates in
+    [co] and [rf] exactly as the same access without the annotation would, and
+    still admits every relaxed outcome. In particular this is neither Java's
+    [volatile], which is sequentially consistent, nor C/C++'s, which constrains
+    the abstract machine rather than the execution. Ordering is what the
+    [rel]/[acq]/[sc] access modes are for, and what keeps a write ordered after
+    the read its branch tests; use volatile only to keep an access from
+    disappearing. *)
 let is_volatile structure e =
   match Hashtbl.find_opt structure.events e with
   | Some event -> event.volatile

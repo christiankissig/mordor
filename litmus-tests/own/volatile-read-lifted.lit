@@ -1,0 +1,33 @@
+// Volatile reads in the arms of a branch are lifted with the write, like
+// relaxed ones.
+//
+// Each arm reads y and writes y on the same inner condition. Lifting the write
+// out of the outer branch needs the relabelling that pairs the then-arm's
+// read of y with the else-arm's, and the write then no longer depends on the
+// read of x. Every path still performs one volatile read of y, which is all
+// volatile keeps; GCC and Clang merge such arms the same way.
+// relaxed-read-lifted.lit is the same program with relaxed reads.
+//
+// The read of x is volatile so that it cannot be forwarded from x := 0. A
+// forwarded read drops its dependency too, and the assertion counts a
+// forwarded read as executed, so forwarding would remove (3,7) from .dp
+// without any lifting.
+x := 0;
+y := 0;
+r1 :v= x;
+if (r1 = 0) {
+  r2 :v= y;
+  if (r2 = 0) {
+    y := 1;
+  } else {
+    skip
+  }
+} else {
+  r2 :v= y;
+  if (r2 = 0) {
+    y := 1;
+  } else {
+    skip
+  }
+}
+%% allow ((3,7) ∉ .dp) []

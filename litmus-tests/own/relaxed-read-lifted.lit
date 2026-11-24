@@ -1,7 +1,8 @@
-// The control for volatile-read-not-lifted.lit: each arm reads y and writes y
-// on the same inner condition, so lifting pairs the two reads and the two
+// Each arm reads y and writes y on the same inner condition, so lifting pairs the two reads and the two
 // writes and hoists the lot out of the outer branch. The write then depends
 // on its own arm's read of y, and no longer on the read of x.
+// volatile-read-lifted.lit is the same program with volatile reads of y,
+// which are lifted alike.
 //
 // The read of x is volatile so that it cannot be forwarded from x := 0. A
 // forwarded read drops its dependency too, and the assertion counts a
