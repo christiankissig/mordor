@@ -519,9 +519,14 @@
             document.getElementById('log').replaceChildren();
         });
 
-        // Load program from URL hash if present (e.g. #program=...)
+        // Load a program from the URL: program, action and run, URL encoded,
+        // in the fragment (#program=..., what Share writes) or the query
+        // string (?program=...); the fragment wins. With run (other than
+        // run=0 or run=false) the action runs as soon as the program loads.
         const hashParams = new URLSearchParams(window.location.hash.slice(1));
-        const programParam = hashParams.get('program');
+        const queryParams = new URLSearchParams(window.location.search);
+        const urlParam = (name) => hashParams.has(name) ? hashParams.get(name) : queryParams.get(name);
+        const programParam = urlParam('program');
         if (programParam) {
             try {
                 const textarea = document.getElementById('litmus-input');
@@ -531,17 +536,23 @@
                 textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
                 // Restore selected action from URL
-                const actionParam = hashParams.get('action');
+                const actionParam = urlParam('action');
                 if (actionParam) {
-                    const dropdownBtn = document.querySelector(
-                        `.dropdown-content button[data-action="${actionParam}"]`
-                    );
+                    const dropdownBtn = Array.from(document.querySelectorAll('.dropdown-content button[data-action]'))
+                        .find(b => b.dataset.action === actionParam);
                     if (dropdownBtn) {
                         dropdownBtn.click();
+                    } else {
+                        log('Unknown action in URL: ' + actionParam, 'error');
                     }
                 }
 
                 log('Loaded program from URL', 'success');
+
+                const runParam = urlParam('run');
+                if (runParam !== null && runParam !== '0' && runParam.toLowerCase() !== 'false') {
+                    document.getElementById('action-btn').click();
+                }
             } catch (error) {
                 console.error('Error loading program from URL:', error);
                 log('Error loading program from URL: ' + error.message, 'error');
