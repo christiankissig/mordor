@@ -833,6 +833,80 @@ let test_program_over_registers_accepted () =
      ||| { rp := p; *(rp + 1) := 3; free(rp) }\n\
      %% allow (x = 2 && @x = 2 && r1 = 1) []"
 
+(** {1 No fork or join under a loop or a branch}
+
+    A thread block is both the fork and the join; it may nest in a thread, but
+    not inside a loop body or a branch. *)
+
+let fork_under line column where =
+  Printf.sprintf
+    "Parse error at line %d, column %d: threads forked inside %s; a fork (and \
+     its join) must not be under a loop or a branch"
+    line column where
+
+let test_fork_in_while () =
+  Alcotest.(check string)
+    "while"
+    (fork_under 2 3 "a loop body")
+    (program_error "while (1 = 1) {\n  { x := 1 } ||| { x := 2 }\n}")
+
+let test_fork_in_do () =
+  Alcotest.(check string)
+    "do"
+    (fork_under 2 3 "a loop body")
+    (program_error "do {\n  { x := 1 } ||| { x := 2 }\n} while (1 = 0)")
+
+let test_fork_in_then () =
+  Alcotest.(check string)
+    "then"
+    (fork_under 2 3 "a branch")
+    (program_error "if (1 = 1) {\n  { x := 1 } ||| { x := 2 }\n}")
+
+let test_fork_in_else () =
+  Alcotest.(check string)
+    "else"
+    (fork_under 3 3 "a branch")
+    (program_error
+       "if (1 = 1) { x := 0 } else {\n  skip;\n  { x := 1 } ||| { x := 2 }\n}"
+    )
+
+let test_fork_in_thread_in_loop () =
+  Alcotest.(check string)
+    "nested in a thread under a loop"
+    (fork_under 3 5 "a loop body")
+    (program_error
+       "{ r1 := 0;\n\
+       \  while (r1 = 0) {\n\
+       \    { x := 1 } ||| { x := 2 }\n\
+       \  }\n\
+        } ||| { x := 3 }"
+    )
+
+let test_fork_in_branch_in_loop () =
+  Alcotest.(check string)
+    "branch in a loop"
+    (fork_under 2 16 "a branch")
+    (program_error
+       "while (1 = 1) {\n  if (1 = 1) { { x := 1 } ||| { x := 2 } }\n}"
+    )
+
+let test_fork_in_chained_program () =
+  Alcotest.(check string)
+    "chained program"
+    (fork_under 3 14 "a branch")
+    (program_error
+       "r1 := 0;\n\
+        %% ~~> [_=forbid] %%\n\
+        if (1 = 1) { { x := 1 } ||| { x := 2 } }"
+    )
+
+let test_nested_fork_accepted () =
+  accepts
+    "x := 0;\n\
+     { { r1 := 1; while (r1 = 0) { x := 1 } } ||| { r2 := x; if (r2 = 1) { x \
+     := 2 } } }\n\
+     ||| { x := 3 }"
+
 (** Test Suite *)
 
 let suite =
@@ -988,5 +1062,17 @@ let suite =
         test_program_chained_is_checked;
       Alcotest.test_case "Program: expressions over registers accepted" `Quick
         test_program_over_registers_accepted;
+      Alcotest.test_case "Fork in a while body" `Quick test_fork_in_while;
+      Alcotest.test_case "Fork in a do body" `Quick test_fork_in_do;
+      Alcotest.test_case "Fork in a then branch" `Quick test_fork_in_then;
+      Alcotest.test_case "Fork in an else branch" `Quick test_fork_in_else;
+      Alcotest.test_case "Fork in a thread's loop" `Quick
+        test_fork_in_thread_in_loop;
+      Alcotest.test_case "Fork in a branch in a loop" `Quick
+        test_fork_in_branch_in_loop;
+      Alcotest.test_case "Fork in a chained program" `Quick
+        test_fork_in_chained_program;
+      Alcotest.test_case "Nested fork outside control flow accepted" `Quick
+        test_nested_fork_accepted;
     ]
   )
