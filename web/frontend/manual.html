@@ -539,6 +539,7 @@
                     <li><strong>?</strong> next to the panel title opens this manual at the language reference.</li>
                 </ul>
                 <p><strong>Share</strong>, in the top bar, copies a link that carries the program and the selected action. Opening the link restores both, but does not run the action. The link does not carry the settings.</p>
+                <p>You can write such a link yourself. Put the URL-encoded program in <code>program</code>, in the fragment (<code>#program=…</code>) or in the query string (<code>?program=…</code>). Add <code>action</code> (<code>visualize</code>, <code>parse</code>, <code>interpret</code>, <code>episodicity</code> or <code>assertions</code>) to choose the action, and <code>run=1</code> to run it as soon as the page opens. For example, <code>?program=x%20%3A%3D%200%3B%20%7B%20r1%20%3A%3D%20x%20%7D&amp;action=parse&amp;run=1</code> parses <code>x := 0; { r1 := x }</code>. In the fragment the program stays in the browser. The query string reaches the server, and a server may limit its length.</p>
                 <p>Syntax is highlighted as you type.</p>
 
                 <h3 id="ui-graph">Event structure and executions</h3>
