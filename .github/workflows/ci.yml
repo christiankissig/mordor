@@ -22,7 +22,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       
       - name: Set up OCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v3
@@ -41,7 +41,7 @@ jobs:
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache opam dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: _opam
           key: opam-deps-v1-${{ matrix.os }}-${{ matrix.ocaml-compiler }}-${{ steps.week.outputs.week }}-${{ hashFiles('*.opam') }}
