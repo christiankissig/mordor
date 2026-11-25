@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
@@ -59,7 +59,7 @@ jobs:
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache opam dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: _opam
           key: opam-browser-v1-${{ steps.week.outputs.week }}-${{ hashFiles('*.opam') }}
@@ -80,7 +80,7 @@ jobs:
 
       - name: Cache Z3 for wasm
         id: z3-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/z3-wasm/out
           key: z3-wasm-v1-${{ env.Z3_VERSION }}-${{ hashFiles('wasm/z3/build.sh', 'wasm/z3/z3-polling-timer.patch', 'wasm/z3/z3_shim.js') }}
@@ -102,7 +102,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" playground.tar.gz --clobber
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: playground
           path: playground.tar.gz
@@ -118,11 +118,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: This run's playground
         if: needs.playground.result == 'success'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: playground
 
@@ -154,11 +154,11 @@ jobs:
             web/frontend/manual.html > _site/index.html
           grep -q "href=\"$ui\">Open MoRDor" _site/index.html
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

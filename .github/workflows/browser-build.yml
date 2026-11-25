@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
@@ -33,7 +33,7 @@ jobs:
           dune-cache: true
 
       - name: Set up node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -43,7 +43,7 @@ jobs:
 
       # Not ci.yml's cache: this switch also has js_of_ocaml.
       - name: Cache opam dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: _opam
           key: opam-browser-v1-${{ steps.week.outputs.week }}-${{ hashFiles('*.opam') }}
@@ -78,7 +78,7 @@ jobs:
       # build took 11 minutes on a runner.
       - name: Cache Z3 for wasm
         id: z3-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/z3-wasm/out
           key: z3-wasm-v1-${{ env.Z3_VERSION }}-${{ hashFiles('wasm/z3/build.sh', 'wasm/z3/z3-polling-timer.patch', 'wasm/z3/z3_shim.js') }}
