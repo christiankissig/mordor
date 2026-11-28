@@ -468,9 +468,69 @@ let rec validate_program src (litmus : ast_litmus) =
       (control_flow_children node.stmt)
   in
     List.iter (check None) litmus.program;
+    validate_assertion_registers litmus;
     match litmus.assertion with
     | Some (AChained { rest; _ }) -> validate_program src rest
     | _ -> ()
+
+(** [assigned_registers program] are the registers some statement of [program]
+    assigns, on any path. *)
+and assigned_registers (program : ast_node list) =
+  let rec of_stmt : ast_stmt -> string list = function
+    | SRegisterStore { register; _ }
+    | SRegisterRefAssign { register; _ }
+    | SGlobalLoad { register; _ }
+    | SLoad { register; _ }
+    | SCAS { register; _ }
+    | SFADD { register; _ }
+    | SRegMalloc { register; _ } -> [ register ]
+    | SThreads { threads } -> List.concat_map of_node (List.concat threads)
+    | SIf { then_body; else_body; _ } ->
+        List.concat_map of_node (then_body @ Option.value else_body ~default:[])
+    | SWhile { body; _ } | SDo { body; _ } -> List.concat_map of_node body
+    | SLabeled { stmt; _ } -> of_stmt stmt
+    | SGlobalStore _
+    | SStore _
+    | SFence _
+    | SLock _
+    | SUnlock _
+    | SGlobalMalloc _
+    | SFree _
+    | SSkip -> []
+  and of_node node = of_stmt node.stmt in
+    List.concat_map of_node program
+
+(** [validate_assertion_registers litmus] fails with a parse error when an
+    outcome of [litmus] names a register its program assigns nowhere.
+
+    Such a register is not part of any execution's final state, so it reached
+    the solver as a free symbol and [allow (r2 = 7)] held of every execution. It
+    is almost always a typo or a register of a thread that was removed. *)
+and validate_assertion_registers (litmus : ast_litmus) =
+  let rec registers : ast_expr -> string list = function
+    | ERegister r -> [ r ]
+    | EBinOp (l, _, r) | ETuple (l, r) -> registers l @ registers r
+    | EUnOp (_, e) -> registers e
+    | EInt _ | EBool _ | EGlobal _ | EAtLoc _ | EASet _ -> []
+  in
+  let rec conditions : ast_assertion -> ast_expr list = function
+    | AOutcome { condition; _ } -> [ condition ]
+    | AConjunction assertions -> List.concat_map conditions assertions
+    | AModel _ | AChained _ -> []
+  in
+  let assigned = assigned_registers litmus.program in
+    Option.to_list litmus.assertion
+    |> List.concat_map conditions
+    |> List.concat_map registers
+    |> List.find_opt (fun r -> not (List.mem r assigned))
+    |> Option.iter (fun r ->
+        failwith
+          (Printf.sprintf
+             "Parse error: the assertion names register %s, which the program \
+              never assigns"
+             r
+          )
+    )
 
 (** Parse litmus to AST and convert from AST to IR *)
 

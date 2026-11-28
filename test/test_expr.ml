@@ -143,6 +143,41 @@ let test_expr_inverse () =
       )
       cases
 
+(* [inverse] negates connectives too. It returned [a || b] and [a && b]
+   unchanged, so an else branch took its if's condition and the paths it guards
+   were dropped. *)
+let test_expr_inverse_connectives () =
+  let eq r n = e_binop (e_var r) "=" (e_num n) in
+  let neq r n = e_binop (e_var r) "!=" (e_num n) in
+  let cases =
+    [
+      ( "inverse of ||",
+        e_binop (neq "r1" 0) "&&" (neq "r1" 2),
+        e_binop (eq "r1" 0) "||" (eq "r1" 2)
+      );
+      ( "inverse of &&",
+        e_binop (neq "r1" 0) "||" (neq "r2" 1),
+        e_binop (eq "r1" 0) "&&" (eq "r2" 1)
+      );
+      ( "inverse of =>",
+        e_binop (eq "r1" 0) "&&" (neq "r2" 1),
+        e_binop (eq "r1" 0) "=>" (eq "r2" 1)
+      );
+      ("inverse of !", eq "r1" 0, EUnOp ("!", eq "r1" 0));
+      ("inverse of a number", EUnOp ("!", e_var "r1"), e_var "r1");
+      ("inverse of true", EBoolean false, EBoolean true);
+      ( "inverse of a disjunction",
+        e_binop (neq "r1" 0) "&&" (neq "r1" 2),
+        EOr [ eq "r1" 0; eq "r1" 2 ]
+      );
+    ]
+  in
+    List.iter
+      (fun (name, expected, expr) ->
+        Alcotest.(check bool) name true (Expr.equal expected (Expr.inverse expr))
+      )
+      cases
+
 let test_expr_flipped () =
   let e1 = e_binop (e_num 1) "<" (e_num 2) in
   let flipped = Expr.flipped e1 in
@@ -640,6 +675,8 @@ let suite =
       Alcotest.test_case "Expr get_symbols" `Quick test_expr_get_symbols;
       Alcotest.test_case "Expr is_flat" `Quick test_expr_is_flat;
       Alcotest.test_case "Expr inverse" `Quick test_expr_inverse;
+      Alcotest.test_case "Expr inverse of connectives" `Quick
+        test_expr_inverse_connectives;
       Alcotest.test_case "Expr flipped" `Quick test_expr_flipped;
       Alcotest.test_case "Expr substitution" `Quick test_expr_subst;
       Alcotest.test_case "Expr flatten" `Quick test_expr_flatten;

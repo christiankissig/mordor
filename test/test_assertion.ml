@@ -816,6 +816,32 @@ let run_litmus source =
 let check_refinement_verdict name source expected () =
   Alcotest.(check (option bool)) name (Some expected) (run_litmus source)
 
+(* An else branch under a condition with a connective is the condition's
+   negation. It took the condition itself, since [Expr.inverse] negated only
+   comparisons, so with [r1 = 1] neither branch was feasible and the program had
+   no executions. *)
+let connective_else_tests =
+  let program cond =
+    Printf.sprintf
+      "x := 1;\n\
+       r1 := x; if (%s) { y := 1 } else { y := 2 }; r2 := y\n\
+       %%%%\n\
+       allow (r1 = 1 && r2 = 2) []\n\
+       forbid (r2 = 1) []"
+      cond
+  in
+    List.map
+      (fun (name, cond) ->
+        Alcotest.test_case ("else of " ^ name) `Quick
+          (check_refinement_verdict name (program cond) true)
+      )
+      [
+        ("||", "r1 = 0 || r1 = 2");
+        ("&&", "r1 = 0 && r1 = 1");
+        ("!", "!(r1 = 1)");
+        ("nested", "(r1 = 0 || r1 = 2) && (r1 != 1 || r1 = 3)");
+      ]
+
 (* A program refines itself. *)
 let refinement_identity =
   "x := 0;\n\
@@ -1143,6 +1169,8 @@ let suite =
             (test_ub_and_valid_fields outcome has_ub exp_ub exp_valid label)
         )
         ub_validity_cases
+    (* else branches under connectives *)
+    @ connective_else_tests
     (* refinement chains *)
     @ refinement_tests
     (* globals, references and pointers *)

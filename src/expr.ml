@@ -227,20 +227,42 @@ end = struct
           List.mem op comp_ops && is_value lhs && is_value rhs
     | _ -> false
 
-  let inverse = function
-    | EBinOp (lhs, op, rhs) ->
-        let inv_op =
-          match op with
-          | "=" -> "!="
-          | "!=" -> "="
-          | "<" -> ">="
-          | ">=" -> "<"
-          | ">" -> "<="
-          | "<=" -> ">"
-          | _ -> op
-        in
-          EBinOp (lhs, inv_op, rhs)
-    | e -> e
+  (** Whether [e] denotes a truth value: a boolean, a comparison, a connective
+      or a negation. *)
+  let is_truth_valued = function
+    | EBoolean _ | EUnOp ("!", _) | EOr _ -> true
+    | EBinOp (_, ("=" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" | "=>"), _)
+      -> true
+    | _ -> false
+
+  (** [!!e]: [e] itself when [e] is a truth value, otherwise [e != 0]. On a
+      number, [!n] is [1] if [n = 0] and [0] otherwise, so [!!n] is [n != 0],
+      not [n]. *)
+  let double_negation e =
+    if is_truth_valued e then e else EBinOp (e, "!=", ENum Z.zero)
+
+  (** [inverse e] is the negation of [e]. It is pushed through the connectives
+      down to the comparisons, whose operator it swaps; anything else is negated
+      with [!]. The result is never [e] itself: an else branch or a loop exit
+      guarded by [inverse cond] must not hold together with [cond]. *)
+  let rec inverse = function
+    | EBoolean b -> EBoolean (not b)
+    | EUnOp ("!", e) -> double_negation e
+    | EBinOp (lhs, "&&", rhs) -> EBinOp (inverse lhs, "||", inverse rhs)
+    | EBinOp (lhs, "||", rhs) -> EBinOp (inverse lhs, "&&", inverse rhs)
+    | EBinOp (lhs, "=>", rhs) -> EBinOp (lhs, "&&", inverse rhs)
+    | EBinOp (lhs, "=", rhs) -> EBinOp (lhs, "!=", rhs)
+    | EBinOp (lhs, "!=", rhs) -> EBinOp (lhs, "=", rhs)
+    | EBinOp (lhs, "<", rhs) -> EBinOp (lhs, ">=", rhs)
+    | EBinOp (lhs, ">=", rhs) -> EBinOp (lhs, "<", rhs)
+    | EBinOp (lhs, ">", rhs) -> EBinOp (lhs, "<=", rhs)
+    | EBinOp (lhs, "<=", rhs) -> EBinOp (lhs, ">", rhs)
+    | EOr [] -> EBoolean true
+    | EOr (clause :: clauses) ->
+        List.fold_left
+          (fun acc c -> EBinOp (acc, "&&", inverse c))
+          (inverse clause) clauses
+    | e -> EUnOp ("!", e)
 
   let flipped = function
     | EBinOp (lhs, op, rhs) ->
@@ -372,20 +394,6 @@ end = struct
   let is_number = function
     | ENum _ -> true
     | _ -> false
-
-  (** Whether [e] denotes a truth value: a boolean, a comparison, a connective
-      or a negation. *)
-  let is_truth_valued = function
-    | EBoolean _ | EUnOp ("!", _) | EOr _ -> true
-    | EBinOp (_, ("=" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" | "=>"), _)
-      -> true
-    | _ -> false
-
-  (** [!!e]: [e] itself when [e] is a truth value, otherwise [e != 0]. On a
-      number, [!n] is [1] if [n = 0] and [0] otherwise, so [!!n] is [n != 0],
-      not [n]. *)
-  let double_negation e =
-    if is_truth_valued e then e else EBinOp (e, "!=", ENum Z.zero)
 
   (** Evaluate expression with environment for variables *)
   let rec evaluate ?(env = fun _ -> None) expr =

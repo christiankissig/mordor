@@ -833,6 +833,34 @@ let test_program_over_registers_accepted () =
      ||| { rp := p; *(rp + 1) := 3; free(rp) }\n\
      %% allow (x = 2 && @x = 2 && r1 = 1) []"
 
+(** {1 An assertion names only registers the program assigns}
+
+    One the program never assigns was a free symbol, so [allow (r2 = 7)] held of
+    every execution. *)
+
+let never_assigns r =
+  Printf.sprintf
+    "Parse error: the assertion names register %s, which the program never \
+     assigns"
+    r
+
+let test_assertion_unassigned_register () =
+  Alcotest.(check string)
+    "allow" (never_assigns "r2")
+    (program_error "x := 1;\n{ r1 := x } ||| { skip }\n%%\nallow (r2 = 7) []");
+  Alcotest.(check string)
+    "in a conjunction of outcomes" (never_assigns "r3")
+    (program_error
+       "{ r1 := x } ||| { skip }\n%%\nallow (r1 = 0) []\nforbid (r3 = 1) []"
+    )
+
+let test_assertion_registers_assigned_on_some_path () =
+  accepts
+    "{ r0 := x; if (r0 = 1) { r1 := 1 } else { do { r2 := cas(acq, rel, rx, 0, \
+     1) } while (r2 = 0) } }\n\
+     ||| { r3 := fadd(rlx, rlx, rx, 1); r4 := &x; r5 := *r4; r6 := malloc 1 }\n\
+     %% allow (r1 = 1 && r2 = 1 && r3 = 0 && r4 = r4 && r5 = 0 && r6 = r6) []"
+
 (** {1 No fork or join under a loop or a branch}
 
     A thread block is both the fork and the join; it may nest in a thread, but
@@ -1062,6 +1090,10 @@ let suite =
         test_program_chained_is_checked;
       Alcotest.test_case "Program: expressions over registers accepted" `Quick
         test_program_over_registers_accepted;
+      Alcotest.test_case "Assertion: register never assigned" `Quick
+        test_assertion_unassigned_register;
+      Alcotest.test_case "Assertion: registers assigned on some path" `Quick
+        test_assertion_registers_assigned_on_some_path;
       Alcotest.test_case "Fork in a while body" `Quick test_fork_in_while;
       Alcotest.test_case "Fork in a do body" `Quick test_fork_in_do;
       Alcotest.test_case "Fork in a then branch" `Quick test_fork_in_then;
